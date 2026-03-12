@@ -14,7 +14,6 @@ import {
   Briefcase,
   Clock,
   Edit,
-  Link2,
   Loader2,
   Mail,
   MapPin,
@@ -25,11 +24,13 @@ import {
   Users,
 } from 'lucide-react';
 import PhoneDisplay from '../shared/PhoneDisplay';
-import EmployeePermissionsDialog from './EmployeePermissionsDialog';
+// EmployeePermissionsDialog removed - permissions now managed via User Management wizard
 import { User as UserEntity } from '@/api/entities';
-import { linkEmployeeToCRMUser } from '@/api/functions';
 import { syncEmployeeUserPermissions } from '@/api/functions';
 import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
+
+const BACKEND_URL = getBackendUrl();
 
 export default function EmployeeDetailPanel({
   employee,
@@ -43,8 +44,12 @@ export default function EmployeeDetailPanel({
   // Ensure hooks are always called (moved above any early return)
   const [__showAccessDialog, __setShowAccessDialog] = React.useState(false);
   const [__currentUser, __setCurrentUser] = React.useState(null);
-  const [linking, setLinking] = React.useState(false);
-  const [isSyncing, setIsSyncing] = useState(false); // New state as per outline
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [teamMemberships, setTeamMemberships] = useState([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
+  const [reportsToEmployee, setReportsToEmployee] = useState(null);
+  const [loadingReportsTo, setLoadingReportsTo] = useState(false);
 
   React.useEffect(() => {
     let mounted = true;
@@ -62,6 +67,74 @@ export default function EmployeeDetailPanel({
     };
   }, []);
 
+  // Fetch team memberships for this employee
+  React.useEffect(() => {
+    if (!open || !employee?.id) {
+      setTeamMemberships([]);
+      return;
+    }
+
+    let mounted = true;
+    const fetchTeams = async () => {
+      setLoadingTeams(true);
+      try {
+        // Try to fetch via user_id first (if employee has linked CRM user)
+        // Otherwise fall back to employee_id
+        const res = await fetch(
+          `${BACKEND_URL}/api/v2/teams/employee-memberships?employee_id=${employee.id}`,
+          { credentials: 'include' },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted) setTeamMemberships(data.memberships || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch team memberships:', error);
+      } finally {
+        if (mounted) setLoadingTeams(false);
+      }
+    };
+    fetchTeams();
+
+    return () => {
+      mounted = false;
+    };
+  }, [open, employee?.id]);
+
+  // Fetch the manager/reports_to employee details
+  React.useEffect(() => {
+    if (!open || !employee?.reports_to) {
+      setReportsToEmployee(null);
+      return;
+    }
+
+    let mounted = true;
+    const fetchManager = async () => {
+      setLoadingReportsTo(true);
+      try {
+        const tenantId = employee?.tenant_id;
+        const url = tenantId
+          ? `${BACKEND_URL}/api/employees/${employee.reports_to}?tenant_id=${tenantId}`
+          : `${BACKEND_URL}/api/employees/${employee.reports_to}`;
+        const res = await fetch(url, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted) setReportsToEmployee(data.data || data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch reports_to employee:', error);
+      } finally {
+        if (mounted) setLoadingReportsTo(false);
+      }
+    };
+    fetchManager();
+
+    return () => {
+      mounted = false;
+    };
+  }, [open, employee?.reports_to]);
+
+  // Admins, superadmins, and managers can manage employee access
   const __canManageEmployeeAccess = React.useMemo(() => {
     if (!__currentUser) return false;
     if (__currentUser.role === 'admin' || __currentUser.role === 'superadmin') {
@@ -69,46 +142,6 @@ export default function EmployeeDetailPanel({
     }
     return __currentUser.employee_role === 'manager';
   }, [__currentUser]);
-
-  const handleLinkCRMUser = async () => {
-    if (!employee?.email) {
-      toast.error('Employee must have an email address to link to a CRM user');
-      return;
-    }
-
-    setLinking(true);
-    try {
-      const response = await linkEmployeeToCRMUser({
-        employee_id: employee.id,
-        employee_email: employee.email,
-      });
-
-      if (response.status === 200 && response.data?.success) {
-        toast.success(
-          response.data.message || `Successfully linked to CRM user: ${employee.email}`,
-        );
-
-        // Refresh the page to show updated data
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        const errorMsg = response.data?.error || 'Failed to link to CRM user';
-        toast.error(errorMsg);
-      }
-    } catch (error) {
-      let msg = 'Failed to link to CRM user';
-      try {
-        if (error?.message) msg = error.message;
-      } catch (e) {
-        void e;
-      }
-      console.error('Link error:', msg);
-      toast.error(msg);
-    } finally {
-      setLinking(false);
-    }
-  };
 
   // New function as per outline
   const handleSyncPermissions = async () => {
@@ -240,42 +273,16 @@ export default function EmployeeDetailPanel({
           </div>
         </SheetHeader>
 
-        {/* Link CRM User button - show if has email but no user_email */}
-        {employee.email && !employee.user_email && __canManageEmployeeAccess && (
-          <div className="mt-3 mb-6">
-            <Button
-              variant="outline"
-              className="w-full bg-blue-900/30 border-blue-700 text-blue-300 hover:bg-blue-900/50 hover:text-blue-200"
-              onClick={handleLinkCRMUser}
-              disabled={linking}
-            >
-              {linking ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Linking...
-                </>
-              ) : (
-                <>
-                  <Link2 className="w-4 h-4 mr-2" />
-                  Link to CRM User
-                </>
-              )}
-            </Button>
-            <p className="text-xs text-slate-400 mt-2">
-              This will link this employee to an existing CRM user account with email:{' '}
-              {employee.email}
-            </p>
-          </div>
-        )}
-
-        {/* Manage Access and Sync Permissions buttons (visible to Admin/Superadmin or Tier3/4) */}
+        {/* Manage Access button - links to User Management for CRM permissions */}
         {__canManageEmployeeAccess && (
           <div className="mt-3 mb-6 flex flex-wrap gap-2">
-            {/* Added flex gap for buttons */}
             <Button
               variant="outline"
               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 hover:text-white"
-              onClick={() => __setShowAccessDialog(true)}
+              onClick={() => {
+                // Navigate to User Management with this user's email
+                window.location.href = `/settings?tab=users&search=${encodeURIComponent(employee?.email || '')}`;
+              }}
             >
               <Shield className="w-4 h-4 mr-2" />
               Manage Access
@@ -374,6 +381,73 @@ export default function EmployeeDetailPanel({
             </CardContent>
           </Card>
 
+          {/* Team Assignment */}
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-200 flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-400" />
+                Team Assignment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingTeams ? (
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Loading teams...</span>
+                </div>
+              ) : teamMemberships.length > 0 ? (
+                <div className="space-y-2">
+                  {teamMemberships.map((tm) => (
+                    <div
+                      key={tm.team_id}
+                      className="flex items-center justify-between bg-slate-700/50 rounded-lg px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm text-slate-200">
+                          {tm.team_name || 'Unknown Team'}
+                        </span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          tm.access_level === 'manage_team'
+                            ? 'bg-green-900/30 text-green-300 border-green-700'
+                            : tm.access_level === 'view_team'
+                              ? 'bg-blue-900/30 text-blue-300 border-blue-700'
+                              : 'bg-slate-700 text-slate-300 border-slate-600'
+                        }
+                      >
+                        {tm.access_level === 'manage_team'
+                          ? 'Manager'
+                          : tm.access_level === 'view_team'
+                            ? 'View Team'
+                            : 'View Own'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-slate-500 italic">
+                  Not assigned to any team
+                  {__canManageEmployeeAccess && (
+                    <span className="block mt-1 text-xs">
+                      Assign teams via{' '}
+                      <button
+                        className="text-blue-400 hover:underline"
+                        onClick={() => {
+                          window.location.href = `/settings?tab=users&search=${encodeURIComponent(employee?.email || '')}`;
+                        }}
+                      >
+                        User Management
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Employment Details */}
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
@@ -390,6 +464,33 @@ export default function EmployeeDetailPanel({
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="text-sm text-slate-400">Reports To:</span>
+                <div className="col-span-2">
+                  {loadingReportsTo ? (
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="text-sm">Loading...</span>
+                    </div>
+                  ) : reportsToEmployee ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-slate-600 rounded-full flex items-center justify-center">
+                        <User className="w-3 h-3 text-slate-300" />
+                      </div>
+                      <span className="text-sm text-slate-200">
+                        {reportsToEmployee.first_name} {reportsToEmployee.last_name}
+                      </span>
+                      {reportsToEmployee.job_title && (
+                        <span className="text-xs text-slate-500">
+                          ({reportsToEmployee.job_title})
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-slate-500 italic">Not assigned</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Hire Date:</span>
                 <span className="col-span-2 text-sm text-slate-200">
                   {formatDate(employee.hire_date)}
@@ -398,7 +499,12 @@ export default function EmployeeDetailPanel({
               <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Hourly Rate:</span>
                 <span className="col-span-2 text-sm text-slate-200">
-                  {employee.hourly_rate ? `$${employee.hourly_rate}/hr` : 'N/A'}
+                  {employee.hourly_rate
+                    ? `$${Number(employee.hourly_rate).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}/hr`
+                    : 'N/A'}
                 </span>
               </div>
             </CardContent>
@@ -591,16 +697,7 @@ export default function EmployeeDetailPanel({
           </Card>
         </div>
 
-        {/* Access dialog mounted with current employee record */}
-        <EmployeePermissionsDialog
-          open={__showAccessDialog}
-          onOpenChange={__setShowAccessDialog}
-          employee={employee}
-          editorUser={__currentUser}
-          onSuccess={() => {
-            __setShowAccessDialog(false);
-          }}
-        />
+        {/* EmployeePermissionsDialog removed - permissions now managed via User Management wizard */}
       </SheetContent>
     </Sheet>
   );

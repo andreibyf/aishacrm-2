@@ -1,0 +1,31 @@
+{
+  "name": "tree-sitter-braid",
+  "version": "0.7.0",
+  "description": "Tree-sitter grammar for the Braid DSL (AiSHA CRM)",
+  "main": "bindings/node",
+  "scripts": {
+    "generate": ".\\node_modules\\.bin\\tree-sitter generate",
+    "build": ".\\node_modules\\.bin\\tree-sitter generate && node-gyp rebuild",
+    "test": ".\\node_modules\\.bin\\tree-sitter test"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.26.6"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.braid",
+      "file-types": [
+        "braid"
+      ],
+      "injection-regex": "^braid$"
+    }
+  ],
+  "keywords": [
+    "tree-sitter",
+    "braid",
+    "ai",
+    "dsl",
+    "parser"
+  ],
+  "license": "MIT"
+}

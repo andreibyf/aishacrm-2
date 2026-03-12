@@ -47,10 +47,12 @@ import { User, ModuleSettings } from '@/api/entities';
 import { Tenant } from '@/api/entities';
 import { Employee } from '@/api/entities';
 import { toast } from 'sonner';
+import UserFormWizard from './UserFormWizard';
+import useTeams from '@/hooks/useTeams';
 import { Badge } from '@/components/ui/badge';
 // import UserPermissions from './UserPermissions'; // Reserved for future use
 // import { Alert, AlertDescription } from "@/components/ui/alert"; // Reserved for future use
-import InviteUserDialog from './InviteUserDialog';
+// InviteUserDialog replaced by UserFormWizard for unified create/edit flow
 import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
 import { updateEmployeeSecure } from '@/api/functions';
@@ -233,6 +235,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
     navigation_permissions: initNavPerms(),
     manager_employee_id: null,
     new_password: '', // For password reset
+    // Granular permission columns (perm_* on users table)
+    perm_notes_anywhere: user?.perm_notes_anywhere ?? true,
+    perm_all_records: user?.perm_all_records ?? false,
+    perm_reports: user?.perm_reports ?? false,
+    perm_employees: user?.perm_employees ?? false,
+    perm_settings: user?.perm_settings ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -256,6 +264,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
       navigation_permissions: initNavPerms(),
       manager_employee_id: null,
       new_password: '', // Reset password field when opening dialog
+      // Granular permission columns (perm_* on users table)
+      perm_notes_anywhere: user?.perm_notes_anywhere ?? true,
+      perm_all_records: user?.perm_all_records ?? false,
+      perm_reports: user?.perm_reports ?? false,
+      perm_employees: user?.perm_employees ?? false,
+      perm_settings: user?.perm_settings ?? false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]); // initNavPerms is stable (depends only on user which is already in deps)
@@ -351,6 +365,12 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
           dashboard_scope: formData.dashboard_scope,
         },
         navigation_permissions: navPerms,
+        // Granular permission columns (perm_* on users table)
+        perm_notes_anywhere: !!formData.perm_notes_anywhere,
+        perm_all_records: !!formData.perm_all_records,
+        perm_reports: !!formData.perm_reports,
+        perm_employees: !!formData.perm_employees,
+        perm_settings: !!formData.perm_settings,
       };
 
       if (formData.full_name) {
@@ -729,6 +749,87 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
               </p>
             </div>
           </div>
+          {/* Granular Permission Columns (perm_* on users table) */}
+          <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+            <Label className="mb-3 block text-slate-200 font-semibold">Organization-wide Powers</Label>
+            <p className="text-xs text-slate-400 mb-4">These permissions apply beyond their team assignments</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Add notes anywhere</span>
+                  <p className="text-xs text-slate-500">Can add notes to any record they can view</p>
+                </div>
+                <Switch
+                  id="perm_notes_anywhere"
+                  checked={formData.perm_notes_anywhere}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_notes_anywhere: checked }))
+                  }
+                  disabled={!canEditPermissions}
+                />
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">View all records</span>
+                  <p className="text-xs text-slate-500">Can see records from all teams, not just their assigned teams</p>
+                </div>
+                <Switch
+                  id="perm_all_records"
+                  checked={formData.perm_all_records}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_all_records: checked }))
+                  }
+                  disabled={!canEditPermissions}
+                />
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Access reports & analytics</span>
+                  <p className="text-xs text-slate-500">Can view dashboards, run reports, and export data</p>
+                </div>
+                <Switch
+                  id="perm_reports"
+                  checked={formData.perm_reports}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_reports: checked }))
+                  }
+                  disabled={!canEditPermissions}
+                />
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Manage employees</span>
+                  <p className="text-xs text-slate-500">Can add/edit employee records, manage team assignments</p>
+                </div>
+                <Switch
+                  id="perm_employees"
+                  checked={formData.perm_employees}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_employees: checked }))
+                  }
+                  disabled={!canEditPermissions}
+                />
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">System settings</span>
+                  <p className="text-xs text-slate-500">Can configure tenant settings, integrations, and workflows</p>
+                </div>
+                <Switch
+                  id="perm_settings"
+                  checked={formData.perm_settings}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_settings: checked }))
+                  }
+                  disabled={!canEditPermissions}
+                />
+              </div>
+            </div>
+            {!canEditPermissions && (
+              <p className="text-xs text-slate-500 mt-2">Only Admin can change these permissions.</p>
+            )}
+          </div>
+
           <div className="mt-2">
             <Label className="mb-2 block text-slate-200">Navigation Permissions</Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto rounded-md border border-slate-600 p-2 bg-slate-800/40">
@@ -801,9 +902,11 @@ export default function EnhancedUserManagement() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
+  const [editingUserTeamMemberships, setEditingUserTeamMemberships] = useState([]);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardMode, setWizardMode] = useState('edit'); // 'create' or 'edit'
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [isInviteModalOpen, setInviteModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState(() => new Set());
@@ -822,9 +925,41 @@ export default function EnhancedUserManagement() {
   // cascade that caused tenant switching when clicking Edit (PR #295 bug fix)
   const [effectiveTenantId, setEffectiveTenantId] = useState(urlTenantId);
 
+  // Fetch teams for the effective tenant (used in UserFormWizard)
+  const { teams: availableTeams } = useTeams(effectiveTenantId);
+
   useEffect(() => {
     editingUserRef.current = editingUser;
   }, [editingUser]);
+
+  // Fetch team memberships when editing a user
+  useEffect(() => {
+    if (!editingUser?.id) {
+      setEditingUserTeamMemberships([]);
+      return;
+    }
+
+    const fetchTeamMemberships = async () => {
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/v2/teams/user-memberships?user_id=${editingUser.id}`,
+          { credentials: 'include' }
+        );
+        if (res.ok) {
+          const json = await res.json();
+          setEditingUserTeamMemberships(json.data || []);
+        } else {
+          console.warn('[UserManagement] Failed to fetch team memberships:', res.status);
+          setEditingUserTeamMemberships([]);
+        }
+      } catch (err) {
+        console.error('[UserManagement] Error fetching team memberships:', err);
+        setEditingUserTeamMemberships([]);
+      }
+    };
+
+    fetchTeamMemberships();
+  }, [editingUser?.id]);
 
   useEffect(() => {
     if (!editingUser) return;
@@ -1041,8 +1176,29 @@ export default function EnhancedUserManagement() {
 
       await User.update(userId, finalUpdateData);
 
+      // Handle team memberships if provided
+      if (cleanedData.team_memberships) {
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/v2/teams/sync-user-memberships`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: userId,
+              memberships: cleanedData.team_memberships,
+            }),
+          });
+          if (!res.ok) {
+            console.warn('[UserManagement] Failed to sync team memberships:', res.status);
+          }
+        } catch (err) {
+          console.error('[UserManagement] Error syncing team memberships:', err);
+        }
+      }
+
       toast.success('User updated successfully!');
       setEditingUser(null);
+      setEditingUserTeamMemberships([]);
 
       // Re-fetch user list to reflect changes (no full page reload needed)
       await loadData({ cacheBust: true });
@@ -1262,7 +1418,12 @@ export default function EnhancedUserManagement() {
               </CardDescription>
             </div>
             <Button
-              onClick={() => setInviteModalOpen(true)}
+              onClick={() => {
+                setEditingUser(null);
+                setEditingUserTeamMemberships([]);
+                setWizardMode('create');
+                setWizardOpen(true);
+              }}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -1405,7 +1566,7 @@ export default function EnhancedUserManagement() {
                   </TableRow>
                 ) : (
                   filteredUsers.map((user) => {
-                    const tenant = allTenants.find((t) => t.id === user.tenant_id);
+                    const tenant = allTenants.find((t) => t.id === user.tenant_id) || (user.tenant_name ? { name: user.tenant_name } : null);
                     const isCreator =
                       currentUser && user.id === currentUser.id && user.role === 'superadmin';
 
@@ -1417,7 +1578,7 @@ export default function EnhancedUserManagement() {
                     const lastActivity = user.last_seen || user.last_login;
                     let statusColor, statusText;
 
-                    if (!lastActivity && user.is_active) {
+                    if (!lastActivity && user.is_active && user.account_status === 'invited') {
                       statusColor = 'bg-amber-500';
                       statusText = 'Invited';
                     } else if (
@@ -1581,6 +1742,8 @@ export default function EnhancedUserManagement() {
                                 });
                                 editingUserRef.current = user;
                                 setEditingUser(user);
+                                setWizardMode('edit');
+                                setWizardOpen(true);
                               }}
                               disabled={!managerCanEdit}
                               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
@@ -1611,30 +1774,38 @@ export default function EnhancedUserManagement() {
         </CardContent>
       </Card>
 
-      {editingUser && (
-        <UserFormModal
-          user={editingUser}
-          tenants={allTenants}
-          currentUser={currentUser}
-          moduleSettings={moduleSettings}
-          onSave={handleSaveUser}
-          onCancel={() => {
-            console.log('[UM-EDIT-MARKER] Edit modal cancel triggered', {
-              userId: editingUser?.id,
-              at: new Date().toISOString(),
-            });
-            editingUserRef.current = null;
-            setEditingUser(null);
-          }}
-        />
-      )}
-
-      <InviteUserDialog
-        open={isInviteModalOpen}
-        onOpenChange={setInviteModalOpen}
-        onSuccess={handleInviteSuccess}
+      <UserFormWizard
+        open={wizardOpen}
+        user={editingUser}
+        mode={wizardMode}
         tenants={allTenants}
         currentUser={currentUser}
+        availableTeams={availableTeams}
+        existingTeamMemberships={editingUserTeamMemberships}
+        onSave={async (userId, data) => {
+          if (wizardMode === 'create') {
+            // For create mode, just close and refresh
+            setWizardOpen(false);
+            setEditingUser(null);
+            setEditingUserTeamMemberships([]);
+            await loadData({ cacheBust: true });
+          } else {
+            // For edit mode, use existing handler
+            await handleSaveUser(userId, data);
+            setWizardOpen(false);
+          }
+        }}
+        onCancel={() => {
+          console.log('[UM-WIZARD] Cancel triggered', {
+            mode: wizardMode,
+            userId: editingUser?.id,
+            at: new Date().toISOString(),
+          });
+          setWizardOpen(false);
+          editingUserRef.current = null;
+          setEditingUser(null);
+          setEditingUserTeamMemberships([]);
+        }}
       />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

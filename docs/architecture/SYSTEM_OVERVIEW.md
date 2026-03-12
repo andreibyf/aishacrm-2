@@ -1,6 +1,6 @@
 # AiSHA CRM — System Overview
 
-> **Version:** 3.0.x | **Updated:** 2026-03-04 | **Audience:** Developers, AI assistants, onboarding engineers
+> **Version:** 3.1.x | **Updated:** 2026-03-11 | **Audience:** Developers, AI assistants, onboarding engineers
 
 > This document is an index, not a duplication of logic.
 > Always defer to the referenced files for canonical behavior.
@@ -96,6 +96,47 @@ PEP query   → POST /api/pep/compile (English → Braid IR)
 - **Redis Cache** (port 6380): Persistent — stats, aggregations, response caches. Managed by `cacheManager.js`.
 - **Secrets:** Doppler (production), `.env` files (local), `.env.local` with `DOPPLER_TOKEN` (Docker).
 
+## User Permissions & Team Visibility
+
+AishaCRM uses a **user-centric permissions model** with team-based access control:
+
+### Key Tables
+
+| Table | Purpose |
+|-------|--------|
+| `users` | Authentication, permissions (`perm_*`), navigation (`nav_permissions`) |
+| `employees` | HR data, `reports_to` hierarchy |
+| `teams` | Team groupings |
+| `team_members` | User-team assignments with `access_level` |
+
+### Access Levels
+
+| Level | Meaning |
+|-------|---------|
+| `view_own` | See/edit only records assigned directly to user |
+| `view_team` | See all team records, edit only own |
+| `manage_team` | Full R/W on all team records |
+
+### Org-Wide Permissions (on `users` table)
+
+- `perm_notes_anywhere` — Can add notes to any record
+- `perm_all_records` — Full R/W on all tenant records
+- `perm_reports` — Access to Reports module (auto-enables nav)
+- `perm_employees` — Access to Employees module (auto-enables nav)
+- `perm_settings` — Access to Settings module (auto-enables nav)
+
+### Navigation Permissions
+
+User's `nav_permissions` JSONB controls which sidebar modules they see. Both tenant `modulesettings` AND user `nav_permissions` must be true for a module to appear.
+
+### Management Flow
+
+- **User Management** (Settings → User Management) — Create users, assign teams + access levels, set permissions
+- **Teams Page** (Settings → Teams) — Create teams, set visibility mode (read-only member list)
+- **Employee Records** — HR data only; team assignments shown read-only
+
+See [TEAM_VISIBILITY_SYSTEM.md](./TEAM_VISIBILITY_SYSTEM.md) for full details.
+
 ## Background Workers
 
 | Worker             | File                              | Purpose                     |
@@ -155,7 +196,9 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 | [CARE_SETUP_GUIDE.md](../user-guides/CARE_SETUP_GUIDE.md)                                              | C.A.R.E. engine configuration                          |
 | [CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md](./CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md)               | C.A.R.E. engine overview                               |
 | [CARE_AUTONOMY_PLAYBOOK_PLAN.md](../build/CARE_AUTONOMY_PLAYBOOK_PLAN.md)                              | C.A.R.E. Playbook design spec (parked)                 |
-| [TEAM_VISIBILITY_SYSTEM.md](./TEAM_VISIBILITY_SYSTEM.md)                                               | Two-tier team access model                             |
+| [TEAM_VISIBILITY_SYSTEM.md](./TEAM_VISIBILITY_SYSTEM.md)                                               | User permissions & team visibility system              |
+| [USER_PERMISSIONS_GUIDE.md](../admin-guides/USER_PERMISSIONS_GUIDE.md)                                 | Admin guide for user permissions & team management     |
+| [DATABASE_SCHEMA_REFERENCE.md](../developer-docs/DATABASE_SCHEMA_REFERENCE.md)                         | Database schema quick reference                        |
 | [ADMIN_GUIDE.md](../admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                      |
 | [USER_GUIDE.md](../user-guides/USER_GUIDE.md)                                                          | End-user CRM operations                                |
 | [BRANDING_GUIDE.md](../references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                   |

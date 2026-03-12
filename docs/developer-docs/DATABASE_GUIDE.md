@@ -1,7 +1,7 @@
 # Aisha CRM Database Administration Manual - Part 1
 
-**Version:** 1.0  
-**Last Updated:** November 15, 2025  
+**Version:** 2.0  
+**Last Updated:** March 2026  
 **Audience:** Database Administrators, DevOps Engineers, System Administrators
 
 ---

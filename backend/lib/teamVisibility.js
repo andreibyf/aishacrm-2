@@ -156,8 +156,14 @@ export async function getVisibilityScope(user, supabase) {
 
   const role = (user.role || '').toLowerCase();
 
-  // Admins and superadmins bypass entirely
-  if (role === 'superadmin' || role === 'admin') {
+  // Superadmins bypass entirely (system-level access)
+  if (role === 'superadmin') {
+    return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
+  }
+
+  // Users with admin-level org permissions (settings or employees) also bypass
+  // This replaces the old role === 'admin' check with granular permissions
+  if (user.perm_settings || user.perm_employees) {
     return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
   }
 
@@ -180,9 +186,10 @@ export async function getVisibilityScope(user, supabase) {
 
   try {
     // Fetch visibility mode and team memberships in parallel
+    // access_level: 'view_own' | 'view_team' | 'manage_team' (new granular permission)
     const [mode, membershipsResult] = await Promise.all([
       _getVisibilityMode(tenantId, supabase),
-      supabase.from('team_members').select('team_id, role').eq('employee_id', user.id),
+      supabase.from('team_members').select('team_id, role, access_level').eq('employee_id', user.id),
     ]);
 
     const { data: memberships, error: memErr } = membershipsResult;
@@ -214,7 +221,7 @@ export async function getVisibilityScope(user, supabase) {
       return result;
     }
 
-    // Determine highest team role
+    // Determine highest team role (kept for backward compat, but access_level is primary)
     const teamRoles = memberships.map((m) => m.role);
     const isDirector = teamRoles.includes('director');
     const isManager = teamRoles.includes('manager');
@@ -222,18 +229,35 @@ export async function getVisibilityScope(user, supabase) {
     const highestRole = isDirector ? 'director' : isManager ? 'manager' : 'member';
 
     // ── Determine which teams the user has FULL R/W access to ──
-    // In BOTH modes, all team members have full R/W on their own team's records.
-    // The difference between modes is what happens with OTHER teams' records:
-    //   Shared:       other teams → read + add notes
-    //   Hierarchical: other teams → no access
+    // Now using access_level from team_members table:
+    //   'manage_team' → full R/W on that team's records
+    //   'view_team'   → read all team records, edit own only
+    //   'view_own'    → read and edit own records only
 
-    let fullAccessTeamIds; // Teams where user has full R/W
-    let memberTeamIds; // All teams user belongs to
+    const memberTeamIds = memberships.map((m) => m.team_id);
 
-    memberTeamIds = memberships.map((m) => m.team_id);
+    // Full access teams: only where access_level = 'manage_team'
+    // Fallback to old role-based logic if access_level is null (migration transition)
+    const fullAccessTeamIds = memberships
+      .filter((m) => {
+        if (m.access_level) {
+          return m.access_level === 'manage_team';
+        }
+        // Fallback: managers/directors get manage, members get view_team
+        return m.role === 'manager' || m.role === 'director';
+      })
+      .map((m) => m.team_id);
 
-    // All members get full R/W on their own teams in both modes
-    fullAccessTeamIds = [...memberTeamIds];
+    // Teams where user can see all team records (view_team or manage_team)
+    const viewTeamIds = memberships
+      .filter((m) => {
+        if (m.access_level) {
+          return m.access_level === 'view_team' || m.access_level === 'manage_team';
+        }
+        // Fallback: all team members can view team
+        return true;
+      })
+      .map((m) => m.team_id);
 
     // For directors, also include child teams (one level of hierarchy)
     let allTeamIds = [...new Set([...memberTeamIds])];
@@ -252,8 +276,11 @@ export async function getVisibilityScope(user, supabase) {
       }
     }
 
-    // ── Shared mode: expand visibility to entire organization ──
-    if (mode === 'shared') {
+    // ── Shared mode OR perm_all_records: expand visibility to entire organization ──
+    const hasOrgWideRead = mode === 'shared' || user.perm_all_records;
+    let expandedFullAccessTeamIds = [...fullAccessTeamIds];
+
+    if (hasOrgWideRead) {
       const { data: allTenantTeams, error: atErr } = await supabase
         .from('teams')
         .select('id')
@@ -266,9 +293,9 @@ export async function getVisibilityScope(user, supabase) {
         allTeamIds = [...new Set(allTenantIds)];
         if (isDirector) {
           // Directors in shared mode: full R/W across entire org
-          fullAccessTeamIds = [...new Set(allTenantIds)];
+          expandedFullAccessTeamIds = [...new Set(allTenantIds)];
         }
-        // Members & managers keep fullAccessTeamIds = own teams only
+        // Others keep fullAccessTeamIds = teams where they have manage_team
         // (other teams = read + notes, enforced by getAccessLevel)
       }
     }
@@ -296,10 +323,12 @@ export async function getVisibilityScope(user, supabase) {
     const result = {
       bypass: false,
       teamIds: allTeamIds, // All teams visible (for list filtering)
-      fullAccessTeamIds, // Teams with full R/W (for write permission checks)
+      fullAccessTeamIds: expandedFullAccessTeamIds, // Teams with full R/W (for write permission checks)
+      viewTeamIds, // Teams where user can see all records (view_team or manage_team)
       employeeIds, // Employees visible (for dropdown scoping)
       mode,
       highestRole,
+      permNotesAnywhere: user.perm_notes_anywhere ?? true, // Can add notes to any visible record
     };
     _setCache(key, result);
     return result;
@@ -367,9 +396,10 @@ export async function applyVisibilityFilter(query, user, supabase, options = {})
  * @param {string|null} recordTeamId - The record's assigned_to_team value
  * @param {string|null} recordAssignedTo - The record's assigned_to value (employee)
  * @param {string} userId        - The current user's ID
- * @returns {'full'|'read_notes'|'none'}
+ * @returns {'full'|'read_notes'|'read_only'|'none'}
  *   'full'       → can read, edit, delete, reassign
  *   'read_notes' → can read all fields + add notes only
+ *   'read_only'  → can read all fields, no edits (when perm_notes_anywhere is false)
  *   'none'       → no access (shouldn't happen if list filter is correct)
  */
 export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
@@ -384,19 +414,29 @@ export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
   if (!recordTeamId) {
     const role = scope.highestRole;
     if (role === 'director' || role === 'manager' || role === 'admin') return 'full';
-    return 'read_notes';
+    // Check if user can add notes anywhere
+    return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
   }
 
-  // Record is on one of user's full-access teams → full R/W
+  // Record is on one of user's full-access teams (manage_team) → full R/W
   if (scope.fullAccessTeamIds && scope.fullAccessTeamIds.includes(recordTeamId)) return 'full';
 
-  // Record is on one of user's visible teams (but not full-access)
-  // This happens for hierarchical members — they can see team records but only edit own
-  if (scope.teamIds && scope.teamIds.includes(recordTeamId)) return 'read_notes';
+  // Record is on one of user's view teams (view_team) → read + notes if permitted
+  if (scope.viewTeamIds && scope.viewTeamIds.includes(recordTeamId)) {
+    return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
+  }
+
+  // Record is on one of user's visible teams (but not view_team/manage_team)
+  // This is a view_own user seeing another team member's record in shared mode
+  if (scope.teamIds && scope.teamIds.includes(recordTeamId)) {
+    return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
+  }
 
   // Record is outside user's teams entirely
-  // Shared mode: org-wide read access → read + add notes
-  if (scope.mode === 'shared') return 'read_notes';
+  // Shared mode or perm_all_records: org-wide read access
+  if (scope.mode === 'shared') {
+    return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
+  }
   // Hierarchical mode: no access to other teams' records
   return 'none';
 }

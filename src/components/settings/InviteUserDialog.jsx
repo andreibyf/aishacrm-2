@@ -77,6 +77,12 @@ export default function InviteUserDialog(
     access_level: "read_write",
     phone: "",
     navigation_permissions: { ...DEFAULT_NAV_PERMISSIONS },
+    // Granular permission columns (perm_* on users table)
+    perm_notes_anywhere: true,
+    perm_all_records: false,
+    perm_reports: false,
+    perm_employees: false,
+    perm_settings: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [tenantDefaults, setTenantDefaults] = useState(null);
@@ -151,6 +157,12 @@ export default function InviteUserDialog(
         permissions: {
           navigation_permissions: formData.navigation_permissions || {},
         },
+        // Granular permission columns (perm_* on users table)
+        perm_notes_anywhere: !!formData.perm_notes_anywhere,
+        perm_all_records: !!formData.perm_all_records,
+        perm_reports: !!formData.perm_reports,
+        perm_employees: !!formData.perm_employees,
+        perm_settings: !!formData.perm_settings,
       };
 
       const response = await fetch(`${BACKEND_URL}/api/users/invite`, {
@@ -220,6 +232,12 @@ export default function InviteUserDialog(
       navigation_permissions: tenantDefaults 
         ? { ...DEFAULT_NAV_PERMISSIONS, ...tenantDefaults }
         : { ...DEFAULT_NAV_PERMISSIONS },
+      // Reset granular permissions to defaults
+      perm_notes_anywhere: true,
+      perm_all_records: false,
+      perm_reports: false,
+      perm_employees: false,
+      perm_settings: false,
     });
     onOpenChange(false);
   };
@@ -427,6 +445,95 @@ export default function InviteUserDialog(
             <Label htmlFor="can_use_softphone" className="text-slate-200">
               Can use Softphone
             </Label>
+          </div>
+
+          {/* Organization-wide Powers (granular perm_* columns) */}
+          <div className="space-y-3 border border-slate-600 rounded-lg p-4 bg-slate-700/50">
+            <div>
+              <Label className="text-slate-200 font-semibold">
+                Organization-wide Powers
+              </Label>
+              <p className="text-sm text-slate-400 mt-1">
+                These permissions apply beyond their team assignments
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Add notes anywhere</span>
+                  <p className="text-xs text-slate-500">Can add notes to any record they can view</p>
+                </div>
+                <Switch
+                  id="perm_notes_anywhere"
+                  checked={formData.perm_notes_anywhere}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_notes_anywhere: checked }))
+                  }
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">View all records</span>
+                  <p className="text-xs text-slate-500">Can see records from all teams</p>
+                </div>
+                <Switch
+                  id="perm_all_records"
+                  checked={formData.perm_all_records}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_all_records: checked }))
+                  }
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Access reports & analytics</span>
+                  <p className="text-xs text-slate-500">Can view dashboards and run reports</p>
+                </div>
+                <Switch
+                  id="perm_reports"
+                  checked={formData.perm_reports}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_reports: checked }))
+                  }
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">Manage employees</span>
+                  <p className="text-xs text-slate-500">Can add/edit employee records</p>
+                </div>
+                <Switch
+                  id="perm_employees"
+                  checked={formData.perm_employees}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_employees: checked }))
+                  }
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
+                <div>
+                  <span className="text-sm text-slate-200">System settings</span>
+                  <p className="text-xs text-slate-500">Can configure tenant settings and integrations</p>
+                </div>
+                <Switch
+                  id="perm_settings"
+                  checked={formData.perm_settings}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, perm_settings: checked }))
+                  }
+                  className="data-[state=checked]:bg-orange-500"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="space-y-3">

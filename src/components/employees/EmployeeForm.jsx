@@ -1,5 +1,4 @@
-import { useState } from 'react';
-
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,19 +9,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-// Removed: Switch component is replaced by native checkbox
 import { Card, CardContent } from '@/components/ui/card';
-// Removed Alert and AlertDescription as messages are now handled by toast
-// import { Alert, AlertDescription } from "@/components/ui/alert";
-
+import { Badge } from '@/components/ui/badge';
 import { useTenant } from '../shared/tenantContext';
-
-import { Employee, User } from '@/api/entities';
+import { Employee } from '@/api/entities';
 import { toast } from 'sonner';
-// Removed: ResendInviteButton is removed from this form's outline
-// import ResendInviteButton from "./ResendInviteButton"; // This import is no longer needed
+import { getBackendUrl } from '@/api/backendUrl';
+import { Users, ExternalLink, Link2 } from 'lucide-react';
 
-// Standardized props: { initialData, onSubmit, onCancel, tenantId } while retaining backward compat for existing parent usage.
+const BACKEND_URL = getBackendUrl();
+
+/**
+ * EmployeeForm - HR-focused employee record form
+ *
+ * This form manages HR data only (name, phone, department, job title, etc.)
+ * CRM access and team assignments are managed via User Management.
+ *
+ * If the employee is linked to a CRM user (via email match), their team
+ * assignments are displayed as read-only badges.
+ */
 export default function EmployeeForm({
   employee: legacyEmployee,
   initialData,
@@ -31,27 +36,24 @@ export default function EmployeeForm({
   onCancel,
   tenantId,
 }) {
-  console.log('[EmployeeForm] Rendering with props:', { legacyEmployee, initialData, tenantId });
-
-  // Prefer initialData if provided; fall back to legacy 'employee' prop.
   const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
-  const { _selectedTenantId } = useTenant(); // Kept for potential future use or context check
+  useTenant(); // imported for tenant context; resolved via tenantId prop
 
+  // HR fields only - no CRM access management
   const [formData, setFormData] = useState(() => ({
     first_name: employee?.first_name || '',
     last_name: employee?.last_name || '',
     email: employee?.email || '',
     phone: employee?.phone || '',
     mobile: employee?.mobile || '',
-    department: employee?.department || 'sales', // Default "sales" if not provided
+    department: employee?.department || 'sales',
     job_title: employee?.job_title || '',
-    manager_employee_id: employee?.manager_employee_id || null,
+    reports_to: employee?.reports_to || null,
     hire_date: employee?.hire_date || '',
     employment_status: employee?.employment_status || 'active',
     employment_type: employee?.employment_type || 'full_time',
     hourly_rate: employee?.hourly_rate || '',
-    skills: employee?.skills || [],
     address_1: employee?.address_1 || '',
     address_2: employee?.address_2 || '',
     city: employee?.city || '',
@@ -61,107 +63,134 @@ export default function EmployeeForm({
     emergency_contact_phone: employee?.emergency_contact_phone || '',
     notes: employee?.notes || '',
     tags: employee?.tags || [],
-    is_active: employee?.is_active !== false, // Default to true unless explicitly false
-
-    // CRM access: 'none' | 'link_existing' | 'new_access'
-    crm_access_mode: employee?.user_id ? 'link_existing' : employee?.has_crm_access ? 'new_access' : 'none',
-    has_crm_access: employee?.has_crm_access || false,
-    linked_user_id: employee?.user_id || '',
-    crm_user_employee_role: employee?.crm_user_employee_role || 'employee',
-
-    // [2026-02-24 Claude] WhatsApp AiSHA access
-    whatsapp_number: employee?.whatsapp_number || '',
-    whatsapp_enabled: employee?.whatsapp_enabled || false,
+    is_active: employee?.is_active !== false,
   }));
 
-  // Fetch existing CRM users for the "Link Existing" dropdown
-  const [crmUsers, setCrmUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-
-  const loadCrmUsers = async () => {
-    if (!tenantId) return;
-    setLoadingUsers(true);
-    try {
-      const users = await User.listProfiles({ tenant_id: tenantId });
-      setCrmUsers(Array.isArray(users) ? users : []);
-    } catch (err) {
-      console.warn('[EmployeeForm] Failed to load CRM users:', err);
-      setCrmUsers([]);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
   const [saving, setSaving] = useState(false);
-  // Removed message state as toast is used for notifications
-  // const [message, setMessage] = useState(null);
 
-  const [_skillInput, _setSkillInput] = useState(''); // New state variable
-  const [_tagInput, _setTagInput] = useState(''); // New state variable
+  // Team assignments from linked user (read-only display)
+  const [linkedUserInfo, setLinkedUserInfo] = useState(null);
+  const [teamAssignments, setTeamAssignments] = useState([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
+
+  // Available employees for "Reports To" dropdown
+  const [employeeOptions, setEmployeeOptions] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+
+  // Fetch employees for Reports To dropdown
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const fetchEmployees = async () => {
+      setLoadingEmployees(true);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/employees?tenant_id=${tenantId}`, {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const payload = await res.json();
+          // API response shapes:
+          // - Tenant listing: { status, data: { employees: [...] } }
+          // - Email lookup variant: { status, data: [] }
+          let allEmployees = [];
+          if (Array.isArray(payload?.data?.employees)) {
+            allEmployees = payload.data.employees;
+          } else if (Array.isArray(payload?.data)) {
+            allEmployees = payload.data;
+          } else if (Array.isArray(payload)) {
+            allEmployees = payload;
+          }
+          // Filter to active employees only, then exclude self (can't report to yourself)
+          const employees = allEmployees
+            .filter((e) =>
+              e.employment_status ? e.employment_status === 'active' : e.is_active !== false,
+            )
+            .filter((e) => e.id !== employee?.id);
+          setEmployeeOptions(employees);
+        }
+      } catch (err) {
+        console.warn('[EmployeeForm] Failed to fetch employees:', err);
+      } finally {
+        setLoadingEmployees(false);
+      }
+    };
+
+    fetchEmployees();
+  }, [tenantId, employee?.id]);
+
+  // Fetch linked user info and team assignments
+  useEffect(() => {
+    if (!employee?.email || !tenantId) return;
+
+    const fetchLinkedUserInfo = async () => {
+      setLoadingTeams(true);
+      try {
+        // First, find if there's a user with matching email
+        const userRes = await fetch(`${BACKEND_URL}/api/users/profiles?tenant_id=${tenantId}`, {
+          credentials: 'include',
+        });
+
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          // API returns { status, data: { users: [...] } } or { status, data: [...] }
+          const users =
+            (Array.isArray(userData?.data?.users) && userData.data.users) ||
+            (Array.isArray(userData?.data) && userData.data) ||
+            (Array.isArray(userData) && userData) ||
+            [];
+          const linkedUser = users.find(
+            (u) => u.email?.toLowerCase() === employee.email?.toLowerCase(),
+          );
+
+          if (linkedUser) {
+            setLinkedUserInfo(linkedUser);
+
+            // Fetch team memberships for this user
+            const teamsRes = await fetch(
+              `${BACKEND_URL}/api/v2/teams/user-memberships?user_id=${linkedUser.id || linkedUser.user_id}`,
+              { credentials: 'include' },
+            );
+
+            if (teamsRes.ok) {
+              const teamsData = await teamsRes.json();
+              setTeamAssignments(teamsData.data || []);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[EmployeeForm] Failed to fetch linked user info:', err);
+      } finally {
+        setLoadingTeams(false);
+      }
+    };
+
+    fetchLinkedUserInfo();
+  }, [employee?.email, tenantId]);
 
   const onChange = (key, value) => setFormData((f) => ({ ...f, [key]: value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('[EmployeeForm] handleSubmit called', { tenantId, isEdit, formData });
-
-    // Removed setMessage(null) as message state is removed
 
     // Validation - only required fields
     if (!formData.first_name?.trim()) {
-      console.log('[EmployeeForm] Validation failed: first_name missing');
       toast.error('First name is required');
       return;
     }
     if (!formData.last_name?.trim()) {
-      console.log('[EmployeeForm] Validation failed: last_name missing');
       toast.error('Last name is required');
       return;
     }
 
-    // Validation for CRM access modes
-    if (formData.crm_access_mode === 'new_access' && !formData.email?.trim()) {
-      console.log('[EmployeeForm] Validation failed: new CRM access requires email');
-      toast.error('Email is required when creating new CRM access.');
-      return;
-    }
-    if (formData.crm_access_mode === 'link_existing' && !formData.linked_user_id) {
-      console.log('[EmployeeForm] Validation failed: link existing requires user selection');
-      toast.error('Please select an existing CRM user to link to.');
-      return;
-    }
-    if (formData.crm_access_mode === 'link_existing' && !formData.email?.trim()) {
-      console.log('[EmployeeForm] Validation failed: link existing requires email');
-      toast.error('Email is required when linking to an existing CRM user.');
-      return;
-    }
-    // WhatsApp access requires CRM access + a valid E.164 phone number
-    if (formData.whatsapp_enabled && formData.crm_access_mode === 'none') {
-      toast.error('WhatsApp access requires CRM access. Please enable CRM access first.');
-      return;
-    }
-    if (formData.whatsapp_enabled) {
-      const wa = formData.whatsapp_number?.trim();
-      if (!wa) {
-        toast.error('WhatsApp phone number is required when WhatsApp access is enabled.');
-        return;
-      }
-      if (!/^\+[1-9]\d{7,14}$/.test(wa)) {
-        toast.error('WhatsApp number must be in E.164 format (e.g. +19543488819)');
-        return;
-      }
-    }
     if (!tenantId && !isEdit) {
-      console.log('[EmployeeForm] Validation failed: tenant_id missing');
       toast.error('Cannot save employee. Tenant information is missing.');
       return;
     }
 
-    console.log('[EmployeeForm] Validation passed, starting save...');
     setSaving(true);
 
     try {
-      // Assemble normalized entity payload for standardized onSubmit callback.
+      // HR-only payload - no CRM access fields
       const entityPayload = {
         first_name: formData.first_name,
         last_name: formData.last_name,
@@ -170,12 +199,11 @@ export default function EmployeeForm({
         mobile: formData.mobile || null,
         department: formData.department,
         job_title: formData.job_title,
-        manager_employee_id: formData.manager_employee_id,
+        reports_to: formData.reports_to || null,
         hire_date: formData.hire_date || null,
         employment_status: formData.employment_status,
         employment_type: formData.employment_type,
         hourly_rate: formData.hourly_rate ? Number(formData.hourly_rate) : null,
-        skills: formData.skills,
         address_1: formData.address_1 || null,
         address_2: formData.address_2 || null,
         city: formData.city || null,
@@ -186,56 +214,19 @@ export default function EmployeeForm({
         notes: formData.notes || null,
         tags: formData.tags,
         is_active: formData.is_active,
-        // CRM access: derive has_crm_access and linked_user_id from the radio mode
-        has_crm_access: formData.crm_access_mode !== 'none',
-        linked_user_id: formData.crm_access_mode === 'link_existing' ? formData.linked_user_id || null : null,
-        crm_user_employee_role: formData.crm_access_mode === 'new_access' ? formData.crm_user_employee_role : null,
-        // [2026-02-24 Claude] WhatsApp AiSHA access — requires CRM access
-        whatsapp_number: formData.whatsapp_enabled && formData.crm_access_mode !== 'none' ? formData.whatsapp_number || null : null,
-        whatsapp_enabled: formData.whatsapp_enabled && formData.crm_access_mode !== 'none',
-        tenant_id: tenantId || null,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
       };
 
-      console.log('[EmployeeForm] Entity payload prepared:', entityPayload);
-
       let result;
-      try {
-        if (employee?.id) {
-          console.log('[EmployeeForm] Calling Employee.update...', employee.id);
-          result = await Employee.update(employee.id, entityPayload);
-        } else {
-          console.log('[EmployeeForm] Calling Employee.create...');
-          result = await Employee.create(entityPayload);
-        }
-        console.log('[EmployeeForm] API call successful:', result);
-        const isEdit = !!employee?.id;
-        if (formData.crm_access_mode === 'new_access') {
-          toast.success(
-            isEdit
-              ? 'Employee updated – CRM invitation sent'
-              : 'Employee created – CRM invitation sent',
-          );
-        } else if (formData.crm_access_mode === 'link_existing') {
-          toast.success(
-            isEdit
-              ? 'Employee updated – linked to existing CRM user'
-              : 'Employee created – linked to existing CRM user',
-          );
-        } else {
-          toast.success(isEdit ? 'Employee updated successfully' : 'Employee created successfully');
-        }
-      } catch (err) {
-        console.error('[EmployeeForm] API call failed:', err);
-        const msg =
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          'Failed to save employee';
-        toast.error(msg);
-        throw err;
+      if (employee?.id) {
+        result = await Employee.update(employee.id, entityPayload);
+      } else {
+        result = await Employee.create(entityPayload);
       }
 
-      // Prefer new standardized onSubmit(data) signature; fallback to legacy onSave() if provided.
+      toast.success(isEdit ? 'Employee updated successfully' : 'Employee created successfully');
+
+      // Call parent callback
       setTimeout(() => {
         if (onSubmit) {
           onSubmit(result);
@@ -245,7 +236,6 @@ export default function EmployeeForm({
       }, 500);
     } catch (error) {
       console.error('[EmployeeForm] Save error:', error);
-      // More robust error message extraction
       const errorMsg = error?.response?.data?.error || error?.message || 'Failed to save employee';
       toast.error(errorMsg);
     } finally {
@@ -253,15 +243,22 @@ export default function EmployeeForm({
     }
   };
 
+  const getAccessLevelLabel = (level) => {
+    switch (level) {
+      case 'manage_team':
+        return 'Manager';
+      case 'view_team':
+        return 'View Team';
+      case 'view_own':
+        return 'View Own';
+      default:
+        return level;
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Removed Alert component as message state and its display are removed */}
-      {/* {message && (
-        <Alert className="bg-slate-800 border-slate-700">
-          <AlertDescription className="text-slate-200">{message}</AlertDescription>
-        </Alert>
-      )} */}
-
+      {/* Basic Information */}
       <Card className="bg-slate-800 border-slate-700">
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
           <div>
@@ -289,20 +286,17 @@ export default function EmployeeForm({
             />
           </div>
           <div>
-            <Label className="text-slate-200">
-              Email {formData.crm_access_mode !== 'none' && <span className="text-red-400">*</span>}
-            </Label>
+            <Label className="text-slate-200">Email</Label>
             <Input
               type="email"
-              required={formData.crm_access_mode !== 'none'}
               value={formData.email}
               onChange={(e) => onChange('email', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="work@example.com"
             />
-            {formData.crm_access_mode !== 'none' && (
-              <p className="text-xs text-amber-400 mt-1">Email is required for CRM access</p>
-            )}
+            <p className="text-xs text-slate-500 mt-1">
+              Used to link this employee to a CRM user account
+            </p>
           </div>
           <div>
             <Label className="text-slate-200">Phone</Label>
@@ -311,6 +305,15 @@ export default function EmployeeForm({
               onChange={(e) => onChange('phone', e.target.value)}
               className="bg-slate-900 border-slate-700 text-slate-100"
               placeholder="(555) 123-4567"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-200">Mobile</Label>
+            <Input
+              value={formData.mobile}
+              onChange={(e) => onChange('mobile', e.target.value)}
+              className="bg-slate-900 border-slate-700 text-slate-100"
+              placeholder="(555) 987-6543"
             />
           </div>
           <div>
@@ -335,7 +338,7 @@ export default function EmployeeForm({
             </Select>
           </div>
           <div>
-            <Label className="text-slate-200">Job title</Label>
+            <Label className="text-slate-200">Job Title</Label>
             <Input
               value={formData.job_title}
               onChange={(e) => onChange('job_title', e.target.value)}
@@ -343,250 +346,148 @@ export default function EmployeeForm({
               placeholder="Role / Title"
             />
           </div>
-          {/* Note: Additional fields like mobile, hire_date, employment_status, employment_type, hourly_rate, address_1, address_2, city, state, zip, emergency_contact_name, emergency_contact_phone, notes, manager_employee_id, skills, tags, is_active are now part of formData but their corresponding UI elements are not explicitly requested in the outline. They will be saved if available in formData. */}
+          <div>
+            <Label className="text-slate-200">Reports To</Label>
+            <Select
+              value={formData.reports_to || '_none'}
+              onValueChange={(v) => onChange('reports_to', v === '_none' ? null : v)}
+              disabled={loadingEmployees}
+            >
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                <SelectValue placeholder={loadingEmployees ? 'Loading...' : 'Select manager'} />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700 text-slate-100 max-h-60">
+                <SelectItem value="_none">
+                  <span className="text-slate-400">No manager assigned</span>
+                </SelectItem>
+                {employeeOptions.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                    {emp.job_title && (
+                      <span className="text-slate-400 ml-2">({emp.job_title})</span>
+                    )}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-500 mt-1">This employee&apos;s direct supervisor</p>
+          </div>
+          <div>
+            <Label className="text-slate-200">Employment Status</Label>
+            <Select
+              value={formData.employment_status}
+              onValueChange={(v) => onChange('employment_status', v)}
+            >
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="on_leave">On Leave</SelectItem>
+                <SelectItem value="terminated">Terminated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-slate-200">Employment Type</Label>
+            <Select
+              value={formData.employment_type}
+              onValueChange={(v) => onChange('employment_type', v)}
+            >
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
+                <SelectItem value="full_time">Full Time</SelectItem>
+                <SelectItem value="part_time">Part Time</SelectItem>
+                <SelectItem value="contractor">Contractor</SelectItem>
+                <SelectItem value="intern">Intern</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-slate-200">Hire Date</Label>
+            <Input
+              type="date"
+              value={formData.hire_date}
+              onChange={(e) => onChange('hire_date', e.target.value)}
+              className="bg-slate-900 border-slate-700 text-slate-100"
+            />
+          </div>
         </CardContent>
       </Card>
 
-      {/* CRM Access Section — Three-way radio: None / Link Existing / New Access */}
-      <div className="border-t border-slate-700 pt-6">
-        <div className="mb-4">
-          <h3 className="text-lg font-medium text-slate-100">CRM Access</h3>
-          <p className="text-sm text-slate-400">Grant this employee access to the CRM system</p>
-        </div>
-
-        <div className="space-y-3">
-          {/* Option: None */}
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
-            <input
-              type="radio"
-              name="crm_access_mode"
-              value="none"
-              checked={formData.crm_access_mode === 'none'}
-              onChange={() => {
-                onChange('crm_access_mode', 'none');
-                onChange('has_crm_access', false);
-                onChange('linked_user_id', '');
-                // Also disable WhatsApp if CRM access removed
-                onChange('whatsapp_enabled', false);
-              }}
-              className="text-blue-500"
-            />
-            <div>
-              <span className="text-slate-200 font-medium">No CRM Access</span>
-              <p className="text-xs text-slate-400">Employee record only — no system login</p>
-            </div>
-          </label>
-
-          {/* Option: Link Existing */}
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
-            <input
-              type="radio"
-              name="crm_access_mode"
-              value="link_existing"
-              checked={formData.crm_access_mode === 'link_existing'}
-              onChange={() => {
-                onChange('crm_access_mode', 'link_existing');
-                onChange('has_crm_access', true);
-                loadCrmUsers();
-              }}
-              className="text-blue-500"
-            />
-            <div>
-              <span className="text-slate-200 font-medium">Link to Existing CRM User</span>
-              <p className="text-xs text-slate-400">Connect to an existing login account — no invite sent</p>
-            </div>
-          </label>
-
-          {/* Link Existing sub-form */}
-          {formData.crm_access_mode === 'link_existing' && (
-            <div className="space-y-3 pl-4 ml-4 border-l-2 border-blue-700">
-              <div>
-                <Label className="text-slate-300">Select CRM User</Label>
-                <Select
-                  value={formData.linked_user_id || 'none'}
-                  onValueChange={(val) => onChange('linked_user_id', val === 'none' ? '' : val)}
+      {/* CRM Access Info (Read-Only) */}
+      {isEdit && (
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-slate-400" />
+                <h3 className="text-lg font-medium text-slate-100">CRM Access</h3>
+              </div>
+              {linkedUserInfo && (
+                <a
+                  href={`/settings?tab=users&edit=${linkedUserInfo.id || linkedUserInfo.user_id}`}
+                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300"
                 >
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                    <SelectValue placeholder={loadingUsers ? 'Loading users...' : 'Select a user...'} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="none" className="text-slate-400">— Select —</SelectItem>
-                    {crmUsers.map((u) => (
-                      <SelectItem key={u.id || u.user_id} value={u.id || u.user_id} className="text-slate-200">
-                        {u.full_name || u.display_name || u.email} ({u.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {crmUsers.length === 0 && !loadingUsers && (
-                  <p className="text-xs text-amber-400 mt-1">No CRM users found for this tenant</p>
+                  <ExternalLink className="w-4 h-4" />
+                  Manage in User Settings
+                </a>
+              )}
+            </div>
+
+            {loadingTeams ? (
+              <p className="text-sm text-slate-400">Loading...</p>
+            ) : linkedUserInfo ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-green-400" />
+                  <span className="text-sm text-slate-300">
+                    Linked to CRM user: <strong>{linkedUserInfo.email}</strong>
+                  </span>
+                </div>
+
+                {teamAssignments.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-slate-400 mb-2">Team Assignments:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {teamAssignments.map((tm) => (
+                        <Badge
+                          key={tm.id}
+                          variant="outline"
+                          className="bg-slate-700/50 text-slate-200 border-slate-600"
+                        >
+                          {tm.teams?.name || 'Unknown Team'}
+                          <span className="ml-1 text-slate-400">
+                            ({getAccessLevelLabel(tm.access_level)})
+                          </span>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 italic">No team assignments</p>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Option: New CRM Access */}
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-700/30 transition-colors">
-            <input
-              type="radio"
-              name="crm_access_mode"
-              value="new_access"
-              checked={formData.crm_access_mode === 'new_access'}
-              onChange={() => {
-                onChange('crm_access_mode', 'new_access');
-                onChange('has_crm_access', true);
-                onChange('linked_user_id', '');
-              }}
-              className="text-blue-500"
-            />
-            <div>
-              <span className="text-slate-200 font-medium">Create New CRM Access</span>
-              <p className="text-xs text-slate-400">Send an invitation to create a new login account</p>
-            </div>
-          </label>
-
-          {/* New Access sub-form */}
-          {formData.crm_access_mode === 'new_access' && (
-            <div className="space-y-3 pl-4 ml-4 border-l-2 border-blue-700">
-              <div>
-                <Label className="text-slate-300">CRM Role</Label>
-                <Select
-                  value={formData.crm_user_employee_role || 'employee'}
-                  onValueChange={(value) => onChange('crm_user_employee_role', value)}
-                >
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="employee" className="text-slate-200">
-                      Employee (Own records only)
-                    </SelectItem>
-                    <SelectItem value="manager" className="text-slate-200">
-                      Manager (All tenant records)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-400 mt-1">
-                  {formData.crm_user_employee_role === 'manager'
-                    ? '✓ Can view all records in their tenant'
-                    : '✓ Can only view records assigned to them'}
+            ) : (
+              <div className="text-sm text-slate-400">
+                <p>No CRM user account linked to this employee.</p>
+                <p className="mt-1">
+                  To grant CRM access, create a user in{' '}
+                  <a href="/settings?tab=users" className="text-blue-400 hover:underline">
+                    User Management
+                  </a>{' '}
+                  with the same email address.
                 </p>
               </div>
-              <p className="text-xs text-amber-400">
-                An invitation email will be sent to {formData.email || 'the employee email'}
-              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-              {employee && employee.crm_invite_status && (
-                <div className="text-sm text-slate-400">
-                  <span className="font-medium">Status:</span>{' '}
-                  {employee.crm_invite_status.replace(/_/g, ' ')}
-                  {employee.crm_invite_last_sent && (
-                    <span className="ml-2">
-                      (Last sent: {new Date(employee.crm_invite_last_sent).toLocaleDateString()})
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* WhatsApp AiSHA Access Section — requires CRM access */}
-      {/* [2026-02-24 Claude] Employee WhatsApp authorization */}
-      <div className={`border-t border-slate-700 pt-6 ${formData.crm_access_mode === 'none' ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-medium text-slate-100">WhatsApp Access</h3>
-            <p className="text-sm text-slate-400">
-              {formData.crm_access_mode === 'none'
-                ? 'Requires CRM access to be enabled'
-                : 'Allow this employee to use AiSHA via WhatsApp'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="whatsapp-enabled" className="text-sm text-slate-300">
-              Enable WhatsApp
-            </label>
-            <input
-              id="whatsapp-enabled"
-              type="checkbox"
-              checked={formData.whatsapp_enabled && formData.crm_access_mode !== 'none'}
-              onChange={(e) => onChange('whatsapp_enabled', e.target.checked)}
-              disabled={formData.crm_access_mode === 'none'}
-              className="rounded border-slate-600 bg-slate-700"
-            />
-          </div>
-        </div>
-
-        {formData.whatsapp_enabled && (
-          <div className="space-y-4 pl-4 border-l-2 border-slate-700">
-            <div>
-              <Label className="text-slate-300">WhatsApp Phone Number</Label>
-              <Input
-                value={formData.whatsapp_number}
-                onChange={(e) => onChange('whatsapp_number', e.target.value)}
-                className="bg-slate-900 border-slate-700 text-slate-100"
-                placeholder="+19543488819"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                E.164 format required (e.g. +19543488819). This is the number linked to their
-                WhatsApp account.
-              </p>
-            </div>
-            {isEdit &&
-              formData.whatsapp_number &&
-              /^\+[1-9]\d{7,14}$/.test(formData.whatsapp_number.trim()) && (
-                <div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="bg-green-900/30 border-green-700 text-green-300 hover:bg-green-900/50 hover:text-green-200"
-                    disabled={saving}
-                    onClick={async () => {
-                      try {
-                        const { supabase } = await import('@/lib/supabase');
-                        const {
-                          data: { session },
-                        } = await supabase.auth.getSession();
-                        const hdrs = { 'Content-Type': 'application/json' };
-                        if (session?.access_token) {
-                          hdrs['Authorization'] = `Bearer ${session.access_token}`;
-                        }
-                        const { getBackendUrl } = await import('@/api/backendUrl');
-                        const resp = await fetch(`${getBackendUrl()}/api/whatsapp/test-employee`, {
-                          method: 'POST',
-                          headers: hdrs,
-                          body: JSON.stringify({
-                            tenant_id: tenantId,
-                            employee_id: employee.id,
-                            whatsapp_number: formData.whatsapp_number.trim(),
-                          }),
-                        });
-                        const data = await resp.json();
-                        if (data.status === 'success') {
-                          toast.success('Test message sent! Check WhatsApp.');
-                        } else {
-                          toast.error(data.message || 'Failed to send test message');
-                        }
-                      } catch (err) {
-                        toast.error(
-                          'Failed to send test message: ' + (err.message || 'network error'),
-                        );
-                      }
-                    }}
-                  >
-                    📱 Test WhatsApp Connection
-                  </Button>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Sends a test message to verify the number works with your Twilio WhatsApp setup.
-                  </p>
-                </div>
-              )}
-          </div>
-        )}
-      </div>
-
+      {/* Form Actions */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-700">
         <p className="text-xs text-slate-400">
           <span className="text-red-400">*</span> Required fields

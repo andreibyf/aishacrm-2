@@ -171,7 +171,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         const { data: usersByEmail, error: ue } = await supabase
           .from('users')
           .select(
-            'id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at',
+            'id, tenant_id, email, first_name, last_name, role, metadata, created_at, updated_at, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
           )
           .ilike('email', normalizedEmail);
         if (ue) logger.warn('[Users.get] usersByEmail error:', ue);
@@ -504,6 +504,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           p.email,
         role: p.auth_role,
         tenant_id: p.tenant_id,
+        tenant_name: p.tenant_name,
         status: p.status || 'active',
         created_at: p.created_at,
         updated_at: p.updated_at,
@@ -516,12 +517,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         tags: p.user_metadata?.tags || [],
         permissions: p.user_metadata?.permissions || {},
         navigation_permissions: p.user_metadata?.navigation_permissions || {},
+        // Granular permission columns (from users table directly)
+        perm_notes_anywhere: p.perm_notes_anywhere ?? true, // default true
+        perm_all_records: p.perm_all_records ?? false,
+        perm_reports: p.perm_reports ?? false,
+        perm_employees: p.perm_employees ?? false,
+        perm_settings: p.perm_settings ?? false,
+        nav_permissions: p.nav_permissions || {},
         // Employee linkage (if exists)
         employee_id: p.employee_id,
         employee_role: p.employee_role || p.crm_user_employee_role,
         employee_status: p.employee_status,
         has_crm_access: p.has_crm_access,
-        manager_employee_id: p.manager_employee_id,
         // Computed
         has_employee_record: !!p.employee_id,
         user_type:
@@ -1169,6 +1176,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         phone,
         permissions,
         redirect_url,
+        // Granular permission columns (perm_* on users table)
+        perm_notes_anywhere,
+        perm_all_records,
+        perm_reports,
+        perm_employees,
+        perm_settings,
       } = req.body;
 
       // Parse full_name into first/last
@@ -1261,8 +1274,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             role,
             tenant_id: normalizedTenantId,
             metadata,
+            // Granular permission columns
+            perm_notes_anywhere: perm_notes_anywhere ?? true,
+            perm_all_records: perm_all_records ?? false,
+            perm_reports: perm_reports ?? false,
+            perm_employees: perm_employees ?? false,
+            perm_settings: perm_settings ?? false,
           })
-          .select('id, email, first_name, last_name, role, tenant_id, metadata')
+          .select('id, email, first_name, last_name, role, tenant_id, metadata, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings')
           .single();
 
         if (insertError) {
@@ -1901,6 +1920,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         permissions,
         navigation_permissions,
         new_password, // Password reset field
+        // Granular permission columns (perm_* on users table)
+        perm_notes_anywhere,
+        perm_all_records,
+        perm_reports,
+        perm_employees,
+        perm_settings,
+        nav_permissions, // JSONB column on users table
         ...otherFields // Capture any unknown fields
       } = req.body;
       // Resolve tenant_id consistently: body → query → middleware-resolved tenant
@@ -2011,7 +2037,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         ...(derivedDisplayName !== undefined && { display_name: derivedDisplayName }),
         ...(is_active !== undefined && { is_active }),
         ...(tags !== undefined && { tags }),
-        ...(employee_role !== undefined && { employee_role }),
+        // employee_role is now stored as a column on users table, not in metadata
         ...(permissions !== undefined && { permissions }),
         ...(navigation_permissions !== undefined && { navigation_permissions }),
         ...otherFields, // Include any unknown fields in metadata
@@ -2048,6 +2074,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         tenant_id: finalTenantId,
         metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
+        // Employee role column (users table only - controls CRM visibility)
+        ...(tableName === 'users' && employee_role !== undefined && { employee_role }),
+        // Granular permission columns (users table only)
+        ...(tableName === 'users' && perm_notes_anywhere !== undefined && { perm_notes_anywhere }),
+        ...(tableName === 'users' && perm_all_records !== undefined && { perm_all_records }),
+        ...(tableName === 'users' && perm_reports !== undefined && { perm_reports }),
+        ...(tableName === 'users' && perm_employees !== undefined && { perm_employees }),
+        ...(tableName === 'users' && perm_settings !== undefined && { perm_settings }),
+        ...(tableName === 'users' && nav_permissions !== undefined && { nav_permissions }),
       };
 
       const { data, error } = await supabase
