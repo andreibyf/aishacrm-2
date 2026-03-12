@@ -1158,7 +1158,7 @@ export default function createAuthRoutes(_pgPool) {
    */
   router.post('/stop-impersonate', async (req, res) => {
     try {
-      const originalToken = req.cookies?.aisha_original;
+      let originalToken = req.cookies?.aisha_original;
       const currentToken = req.cookies?.aisha_access;
 
       if (!originalToken) {
