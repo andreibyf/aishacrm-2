@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.10.0] - 2026-03-12
+
+### Added
+
+- **User Impersonation:** Super-admins can now impersonate any tenant user via `POST /api/auth/impersonate` and `POST /api/auth/stop-impersonate`; active session is indicated by an `ImpersonationBanner` in the layout
+- **Employee Name Cache:** Redis-backed `employeeCache` resolves employee UUIDs to display names across tables and cards without raw UUID exposure (`AssignedToDisplay` shared component)
+- **`useEmployeeCache` hook:** Frontend hook for fast ID→name lookups with tenant-switch awareness
+- **`/api/employees/lookup` endpoint:** Tenant-isolated, auth-enforced endpoint returning cached employee name maps; supports `ids=` subset filtering
+- **Backward-compat shims:** Deprecated team membership endpoints (`/employee-memberships`, `/user-memberships`, `/sync-user-memberships`) restored as no-op shims to prevent frontend breakage during migration
+
+### Fixed
+
+- `TeamManagement`: scope call is now non-blocking; employee filter aligned to `employment_status` convention; aria-labels added to icon-only buttons
+- `BizDevSourceCard`: failed employee lookup now shows "Unknown assignee" instead of stalling in "Updating…" state
+- `employeeCache`: removed `status=active` filter so historical assigned-to references resolve correctly
+- `AssignedToDisplay`: replaced non-existent `animate-ellipsis` with built-in `animate-pulse`
+
+### Security
+
+- `GET /api/employees/lookup` now requires authentication (`requireAuth`) and enforces tenant isolation; non-superadmins receive 403 on cross-tenant requests
+
+---
+
 ## [Unreleased] - 2026-02-23
 
 ### Changed
