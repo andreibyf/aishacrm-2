@@ -342,7 +342,6 @@ export default function createAuthRoutes(_pgPool) {
           id: user.id,
           role: user.role,
           tenant_id: user.tenant_id,
-          tenant_uuid: user.tenant_uuid,
         });
       } else {
         table = 'employees';
