@@ -14,7 +14,7 @@ import { queryMemory } from './aiMemory/index.js';
 /**
  * Analyze entity and suggest next actions
  * @param {Object} params - Analysis parameters
- * @param {string} params.entity_type - Entity type (lead, contact, account, opportunity)
+ * @param {string} params.entity_type - Entity type (lead, contact, account, opportunity, bizdev_source, activity)
  * @param {string} params.entity_id - Entity UUID
  * @param {string} params.tenant_id - Tenant UUID
  * @param {number} params.limit - Max suggestions (default: 3)
@@ -88,12 +88,14 @@ export async function suggestNextActions({ entity_type, entity_id, tenant_id, li
  * Fetch entity with related notes, activities, and metadata
  */
 async function fetchEntityWithContext(supabase, entityType, entityId, tenantId) {
-  const table = entityType === 'lead' ? 'leads' 
+  const table = entityType === 'lead' ? 'leads'
     : entityType === 'contact' ? 'contacts'
     : entityType === 'account' ? 'accounts'
     : entityType === 'opportunity' ? 'opportunities'
+    : entityType === 'bizdev_source' ? 'bizdev_sources'
+    : entityType === 'activity' ? 'activities'
     : null;
-  
+
   if (!table) {
     throw new Error(`Unknown entity type: ${entityType}`);
   }
@@ -244,6 +246,37 @@ function generateRuleBasedSuggestions(entityData, entityType) {
     });
   }
   
+  // Rule 4a: BizDev source — promote if notes suggest qualified interest
+  if (entityType === 'bizdev_source') {
+    if (latestNote.toLowerCase().includes('interested') ||
+        latestNote.toLowerCase().includes('qualified') ||
+        latestNote.toLowerCase().includes('schedule')) {
+      suggestions.push({
+        action: 'Promote to Lead',
+        reasoning: 'Notes indicate qualified interest — advance this BizDev Source to a Lead',
+        priority: 10,
+        source: 'rule',
+        timing: 'immediate',
+      });
+    } else if (lastContactDays > 7) {
+      suggestions.push({
+        action: 'Follow up to qualify interest',
+        reasoning: `No contact in ${lastContactDays} days — re-engage to determine if ready to promote`,
+        priority: 7,
+        source: 'rule',
+        timing: 'urgent',
+      });
+    } else {
+      suggestions.push({
+        action: 'Add qualification notes',
+        reasoning: 'Document status and next outreach step for this potential lead',
+        priority: 5,
+        source: 'rule',
+        timing: 'normal',
+      });
+    }
+  }
+
   // Rule 4: No recent contact (leads/contacts only)
   if ((entityType === 'lead' || entityType === 'contact') && lastContactDays > 7) {
     suggestions.push({
@@ -358,5 +391,8 @@ function getEntityDisplayName(entityData, entityType) {
   if (entityType === 'lead' || entityType === 'contact') {
     return `${entityData.first_name || ''} ${entityData.last_name || ''}`.trim();
   }
-  return entityData.name || entityData.company || 'Unnamed';
+  if (entityType === 'activity') {
+    return entityData.subject || entityData.type || 'Activity';
+  }
+  return entityData.name || entityData.company || entityData.source_name || 'Unnamed';
 }
