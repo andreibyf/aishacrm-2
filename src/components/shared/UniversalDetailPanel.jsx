@@ -265,12 +265,13 @@ export default function UniversalDetailPanel({
     if (!tenantId) return;
 
     // Map entityType to the profile route segment
+    // Both 'bizdev' and 'bizdev_source' map to 'bizdev' for the backend /api/profile/bizdev/:id endpoint
     const profileTypeMap = {
       lead: 'lead',
       contact: 'contact',
       account: 'account',
       bizdev: 'bizdev',
-      bizdev_source: 'bizdev', // bizdev_source uses the same /api/profile/bizdev/:id route
+      bizdev_source: 'bizdev', // alias for bizdev - backend only supports /api/profile/bizdev/:id
       opportunity: null, // opportunities don't have a person profile
     };
     const profileType = profileTypeMap[entityType];
