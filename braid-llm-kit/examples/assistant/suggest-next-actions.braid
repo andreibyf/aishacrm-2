@@ -12,7 +12,7 @@ fn suggestNextActions(
   limit: Number
 ) -> Result<NextActionsSuggestion, CRMError> !net {
   // Analyze entity and suggest next actions using RAG memory + rule-based logic
-  // Entity types: lead, contact, account, opportunity
+  // Entity types: lead, contact, account, opportunity, bizdev_source, activity
   // Returns 2-3 prioritized actionable suggestions with reasoning
   
   let url = "/api/ai/suggest-next-actions";

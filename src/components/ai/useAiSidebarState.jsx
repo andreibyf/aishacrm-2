@@ -20,12 +20,21 @@ const ROUTE_CONTEXT_RULES = [
   { test: /^\/leads/, routeName: 'leads:list', entity: 'leads' },
   { test: /^\/accounts\/[^/]+$/, routeName: 'accounts:detail', entity: 'accounts' },
   { test: /^\/accounts/, routeName: 'accounts:list', entity: 'accounts' },
+  { test: /^\/contacts\/[^/]+$/, routeName: 'contacts:detail', entity: 'contacts' },
   { test: /^\/contacts/, routeName: 'contacts:list', entity: 'contacts' },
+  { test: /^\/opportunities\/[^/]+$/, routeName: 'opportunities:detail', entity: 'opportunities' },
   { test: /^\/opportunities/, routeName: 'opportunities:list', entity: 'opportunities' },
+  { test: /^\/activities\/[^/]+$/, routeName: 'activities:detail', entity: 'activities' },
   { test: /^\/activities/, routeName: 'activities:list', entity: 'activities' },
+  {
+    test: /^\/bizdev-sources\/[^/]+$/,
+    routeName: 'bizdev_sources:detail',
+    entity: 'bizdev_sources',
+  },
+  { test: /^\/bizdev-sources/, routeName: 'bizdev_sources:list', entity: 'bizdev_sources' },
 ];
 
-const deriveRouteContext = (path = '/') => {
+export const deriveRouteContext = (path = '/') => {
   const normalized = path || '/';
   const rule = ROUTE_CONTEXT_RULES.find((entry) => entry.test.test(normalized));
   if (!rule) {
@@ -292,6 +301,8 @@ export function AiSidebarProvider({ children }) {
           { regex: /^\/accounts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'account' },
           { regex: /^\/contacts\/([a-f0-9-]{36})(?:\/|$)/i, type: 'contact' },
           { regex: /^\/opportunities\/([a-f0-9-]{36})(?:\/|$)/i, type: 'opportunity' },
+          { regex: /^\/activities\/([a-f0-9-]{36})(?:\/|$)/i, type: 'activity' },
+          { regex: /^\/bizdev-sources\/([a-f0-9-]{36})(?:\/|$)/i, type: 'bizdev_source' },
         ];
 
         for (const pattern of entityPatterns) {

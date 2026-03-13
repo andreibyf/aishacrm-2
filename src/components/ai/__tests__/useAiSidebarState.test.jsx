@@ -14,17 +14,17 @@ vi.mock('@/api/functions', () => ({
         filters: {},
         confidence: 0.5,
         matchedKeywords: [],
-        parserResult: null
-      }
-    }
+        parserResult: null,
+      },
+    },
   }),
-  processDeveloperCommand: vi.fn()
+  processDeveloperCommand: vi.fn(),
 }));
 
 vi.mock('@/lib/suggestionEngine', () => ({
   addHistoryEntry: vi.fn(),
   getRecentHistory: vi.fn(() => []),
-  getSuggestions: vi.fn(() => [])
+  getSuggestions: vi.fn(() => []),
 }));
 
 vi.mock('@/api/conversations', () => ({
@@ -42,7 +42,7 @@ vi.mock('@/components/shared/useUser.js', () => ({
   useUser: vi.fn(() => ({ user: null, loading: false })),
 }));
 
-import { AiSidebarProvider, useAiSidebarState } from '../useAiSidebarState.jsx';
+import { AiSidebarProvider, useAiSidebarState, deriveRouteContext } from '../useAiSidebarState.jsx';
 import { processChatCommand } from '@/api/functions';
 import { addHistoryEntry, getSuggestions } from '@/lib/suggestionEngine';
 
@@ -50,6 +50,86 @@ beforeEach(() => {
   processChatCommand.mockClear();
   addHistoryEntry.mockClear();
   getSuggestions.mockReturnValue([]);
+});
+
+describe('[AISHA_CHAT] deriveRouteContext', () => {
+  it('returns leads entity for leads list path', () => {
+    expect(deriveRouteContext('/leads')).toEqual({ routeName: 'leads:list', entity: 'leads' });
+  });
+
+  it('returns leads entity for leads detail path', () => {
+    expect(deriveRouteContext('/leads/abc-123')).toEqual({
+      routeName: 'leads:detail',
+      entity: 'leads',
+    });
+  });
+
+  it('returns contacts entity for contacts detail path', () => {
+    expect(deriveRouteContext('/contacts/abc-123')).toEqual({
+      routeName: 'contacts:detail',
+      entity: 'contacts',
+    });
+  });
+
+  it('returns contacts entity for contacts list path', () => {
+    expect(deriveRouteContext('/contacts')).toEqual({
+      routeName: 'contacts:list',
+      entity: 'contacts',
+    });
+  });
+
+  it('returns opportunities entity for opportunities detail path', () => {
+    expect(deriveRouteContext('/opportunities/abc-123')).toEqual({
+      routeName: 'opportunities:detail',
+      entity: 'opportunities',
+    });
+  });
+
+  it('returns opportunities entity for opportunities list path', () => {
+    expect(deriveRouteContext('/opportunities')).toEqual({
+      routeName: 'opportunities:list',
+      entity: 'opportunities',
+    });
+  });
+
+  it('returns activities entity for activities detail path', () => {
+    expect(deriveRouteContext('/activities/abc-123')).toEqual({
+      routeName: 'activities:detail',
+      entity: 'activities',
+    });
+  });
+
+  it('returns activities entity for activities list path', () => {
+    expect(deriveRouteContext('/activities')).toEqual({
+      routeName: 'activities:list',
+      entity: 'activities',
+    });
+  });
+
+  it('returns bizdev_sources entity for bizdev-sources detail path', () => {
+    expect(deriveRouteContext('/bizdev-sources/abc-123')).toEqual({
+      routeName: 'bizdev_sources:detail',
+      entity: 'bizdev_sources',
+    });
+  });
+
+  it('returns bizdev_sources entity for bizdev-sources list path', () => {
+    expect(deriveRouteContext('/bizdev-sources')).toEqual({
+      routeName: 'bizdev_sources:list',
+      entity: 'bizdev_sources',
+    });
+  });
+
+  it('returns general entity for unknown path', () => {
+    expect(deriveRouteContext('/unknown-page')).toEqual({
+      routeName: 'general:home',
+      entity: 'general',
+    });
+  });
+
+  it('returns dashboard entity for root path', () => {
+    expect(deriveRouteContext('/')).toEqual({ routeName: 'dashboard:home', entity: 'dashboard' });
+  });
 });
 
 describe('[AISHA_CHAT] useAiSidebarState', () => {
@@ -62,7 +142,9 @@ describe('[AISHA_CHAT] useAiSidebarState', () => {
     });
 
     expect(processChatCommand).toHaveBeenCalledTimes(1);
-    const userMessage = result.current.messages.find((msg) => msg.role === 'user' && msg.content === 'Voice command text');
+    const userMessage = result.current.messages.find(
+      (msg) => msg.role === 'user' && msg.content === 'Voice command text',
+    );
     expect(userMessage?.metadata?.origin).toBe('voice');
   });
 
@@ -86,7 +168,7 @@ describe('[AISHA_CHAT] useAiSidebarState', () => {
       label: 'Dashboard overview',
       command: 'Give me a dashboard summary',
       confidence: 0.82,
-      source: 'context'
+      source: 'context',
     };
     getSuggestions.mockReturnValue([suggestion]);
     const wrapper = ({ children }) => <AiSidebarProvider>{children}</AiSidebarProvider>;
@@ -106,9 +188,9 @@ describe('[AISHA_CHAT] useAiSidebarState', () => {
         response: 'done',
         route: 'ai_chat',
         classification: {
-          parserResult: { intent: 'query', entity: 'leads' }
-        }
-      }
+          parserResult: { intent: 'query', entity: 'leads' },
+        },
+      },
     });
 
     const wrapper = ({ children }) => <AiSidebarProvider>{children}</AiSidebarProvider>;
@@ -118,6 +200,8 @@ describe('[AISHA_CHAT] useAiSidebarState', () => {
       await result.current.sendMessage('show my leads', { origin: 'text' });
     });
 
-    expect(addHistoryEntry).toHaveBeenCalledWith(expect.objectContaining({ intent: 'query', entity: 'leads' }));
+    expect(addHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: 'query', entity: 'leads' }),
+    );
   });
 });

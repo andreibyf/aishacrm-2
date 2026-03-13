@@ -99,6 +99,7 @@ elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   VITEST_MODE="changed"
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
+  set -- run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
 fi
 
 if [ "${SKIP_VITEST:-}" != "1" ]; then

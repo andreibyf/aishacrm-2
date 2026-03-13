@@ -96,8 +96,12 @@ export default function UniversalDetailPanel({
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const aiSummaryFetchedRef = useRef(null); // track entity id we last fetched for
 
-  // Map entityType to the related_type used in the DB (bizdev → bizdev_source)
-  const relatedTypeForDb = entityType === 'bizdev' ? 'bizdev_source' : entityType?.toLowerCase();
+  // Map entityType to the related_type used in the DB
+  // Both 'bizdev' and 'bizdev_source' should map to 'bizdev_source' for consistency
+  const relatedTypeForDb =
+    entityType === 'bizdev' || entityType === 'bizdev_source'
+      ? 'bizdev_source'
+      : entityType?.toLowerCase();
 
   const loadNotes = useCallback(async () => {
     if (!entity) return;
@@ -261,11 +265,13 @@ export default function UniversalDetailPanel({
     if (!tenantId) return;
 
     // Map entityType to the profile route segment
+    // Both 'bizdev' and 'bizdev_source' map to 'bizdev' for the backend /api/profile/bizdev/:id endpoint
     const profileTypeMap = {
       lead: 'lead',
       contact: 'contact',
       account: 'account',
       bizdev: 'bizdev',
+      bizdev_source: 'bizdev', // alias for bizdev - backend only supports /api/profile/bizdev/:id
       opportunity: null, // opportunities don't have a person profile
     };
     const profileType = profileTypeMap[entityType];

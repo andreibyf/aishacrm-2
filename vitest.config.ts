@@ -62,6 +62,8 @@ export default defineConfig({
             "src/ai/**/__tests__/**/*.{js,jsx,ts,tsx}",
             "src/__tests__/ai/**/*.test.{js,jsx,ts,tsx}",
             "src/__tests__/processChatCommand.test.ts",
+            "src/components/ai/**/*.test.{js,jsx,ts,tsx}",
+            "src/components/ai/**/__tests__/**/*.{js,jsx,ts,tsx}",
           ],
         },
         resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
