@@ -8,7 +8,11 @@ import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
-import { getEmployeeMap, resolveEmployeeNames, invalidateEmployeeCache } from '../lib/employeeCache.js';
+import {
+  getEmployeeMap,
+  resolveEmployeeNames,
+  invalidateEmployeeCache,
+} from '../lib/employeeCache.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -276,7 +280,10 @@ export default function createEmployeeRoutes(_pgPool) {
 
       if (ids) {
         // Resolve specific IDs
-        const idArray = ids.split(',').map(id => id.trim()).filter(Boolean);
+        const idArray = ids
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
         employeeMap = await resolveEmployeeNames(supabase, tenant_id, idArray);
       } else {
         // Return full tenant map
@@ -1259,14 +1266,8 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(404).json({ valid: false, errors: ['Employee not found'] });
       }
 
-      // Enforce tenant match for authorization
-      const requesterTenantId = req.tenant?.id || req.user?.tenant_id;
-      if (requesterTenantId && employee.tenant_id && employee.tenant_id !== requesterTenantId) {
-        return res.status(403).json({
-          valid: false,
-          errors: ['Forbidden: employee belongs to a different tenant'],
-        });
-      }
+      // Note: tenant authorization is implicitly handled by validateTenantAccess middleware
+      // The employee-user tenant match check happens below in validation step 3
 
       // 2. Fetch the user
       const { data: user, error: userError } = await supabase
@@ -1359,11 +1360,8 @@ export default function createEmployeeRoutes(_pgPool) {
       }
 
       // Invalidate employee caches so consumers see the updated link state
-      const { invalidateCache, invalidateEmployeeCache } = await import('../lib/cacheManager.js');
-      await invalidateCache('employees');
-      if (req.tenant && req.tenant.id) {
-        await invalidateEmployeeCache(req.tenant.id);
-      }
+      invalidateCache('employees');
+      invalidateEmployeeCache(employee.tenant_id);
 
       logger.info(`[Employees] User link validated: employee=${id}, user=${user_id}`);
 

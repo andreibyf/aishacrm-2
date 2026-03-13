@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AiSHA CRM - One Page Summary</title>
+  <style>
+    @page {
+      size: Letter;
+      margin: 0.42in;
+    }
+
+    :root {
+      --ink: #102032;
+      --muted: #5f6f82;
+      --line: #d8e1ea;
+      --panel: #f6f8fb;
+      --brand: #0f5aa6;
+      --accent: #0b7a75;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 10.2pt;
+      line-height: 1.25;
+      background: white;
+    }
+
+    .page {
+      width: 100%;
+      min-height: 9.7in;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 0.14in;
+    }
+
+    .header {
+      border-bottom: 2px solid var(--brand);
+      padding-bottom: 0.1in;
+    }
+
+    .eyebrow {
+      font-size: 8pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 0.04in;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 21pt;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin-top: 0.05in;
+      color: var(--muted);
+      font-size: 9.4pt;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.65fr 1fr;
+      gap: 0.18in;
+      align-content: start;
+    }
+
+    .section {
+      break-inside: avoid;
+      margin-bottom: 0.11in;
+    }
+
+    .section-title {
+      margin: 0 0 0.06in 0;
+      font-size: 9pt;
+      color: var(--brand);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.1in 0.12in;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .spaced {
+      margin-top: 0.04in;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 0.18in;
+    }
+
+    li {
+      margin: 0 0 0.045in 0;
+    }
+
+    .persona {
+      font-weight: 600;
+    }
+
+    .arch-flow {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.09in 0.1in;
+      background: white;
+      font-size: 9pt;
+      margin-top: 0.08in;
+    }
+
+    .flow-line {
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.01em;
+    }
+
+    .mini {
+      font-size: 8.5pt;
+      color: var(--muted);
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding-top: 0.08in;
+      font-size: 7.9pt;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 0.12in;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div class="eyebrow">Repository Summary</div>
+      <h1>AiSHA CRM</h1>
+      <div class="subtitle">AI-native CRM and executive-assistant workflow platform, summarized from checked-in repo evidence only.</div>
+    </header>
+
+    <section class="grid">
+      <div>
+        <section class="section">
+          <h2 class="section-title">What It Is</h2>
+          <div class="card">
+            <p>AiSHA CRM is a React + Node.js customer relationship management platform positioned in the repo as an AI-powered Executive Assistant rather than a traditional CRM with AI bolted on.</p>
+            <p class="spaced">It combines core CRM data, reporting, workflows, and AI tool execution through the custom Braid DSL and a multi-provider LLM layer.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Who It's For</h2>
+          <div class="card">
+            <p><span class="persona">Primary persona:</span> sales leaders, operators, and CRM users who need one system to manage contacts, pipeline, activities, reporting, and AI-assisted work.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">What It Does</h2>
+          <div class="card">
+            <ul>
+              <li>Manages BizDev sources, leads, contacts, accounts, and opportunities across the CRM lifecycle.</li>
+              <li>Supports AI chat, executive-assistant workflows, and natural-language actions through backend AI routes and Braid tools.</li>
+              <li>Tracks activities, tasks, meetings, and notes tied to CRM records.</li>
+              <li>Runs dashboard, reporting, and analytics views, including pipeline and performance reporting.</li>
+              <li>Provides workflow automation, webhook execution, and queued workflow processing.</li>
+              <li>Includes AI campaigns, telephony integrations, and outbound call/email workflow support.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section class="section">
+          <h2 class="section-title">How It Works</h2>
+          <div class="card">
+            <ul>
+              <li><strong>Frontend:</strong> React 18 + Vite app in <code>src/</code>; browser code resolves <code>VITE_AISHACRM_BACKEND_URL</code> and calls backend REST endpoints.</li>
+              <li><strong>Backend:</strong> Express server in <code>backend/</code> mounts domain routes for CRM, AI, reports, workflows, auth, metrics, and system operations.</li>
+              <li><strong>Data:</strong> Supabase/Postgres is the primary system of record with tenant UUID isolation and RLS; Redis memory/cache services support runtime coordination and caching.</li>
+              <li><strong>AI/Automation:</strong> Braid tool definitions live in <code>braid-llm-kit/examples/assistant/</code>; backend AI uses a multi-provider engine and can call the separate Braid MCP server.</li>
+              <li><strong>Jobs:</strong> backend workflow execution uses Bull; the distributed Braid MCP server uses BullMQ.</li>
+            </ul>
+            <div class="arch-flow">
+              <div class="flow-line">Browser UI -> Express API -> Supabase/Postgres</div>
+              <div class="mini">Parallel services: Redis memory/cache, Braid tools, AI engine, workflow queues, optional MCP server and n8n profile.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">How To Run</h2>
+          <div class="card">
+            <ul>
+              <li>Copy environment defaults: <code>.env.example</code> to <code>.env</code>; local Docker also reads <code>.env.local</code>.</li>
+              <li>Recommended start: run <code>docker compose up -d --build</code>.</li>
+              <li>Open the app at <code>http://localhost:4000</code>; backend API is at <code>http://localhost:4001</code>.</li>
+              <li>Minimal local dev alternative: <code>npm install</code>, <code>npm run dev</code>, then in <code>backend/</code> run <code>npm install</code> and <code>npm run dev</code>.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Repo Gaps</h2>
+          <div class="card">
+            <p>Explicit single-user persona naming is not formalized in one canonical file; the persona above is inferred from the README, user guide, and sales/pipeline docs.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div>Sources used: <code>README.md</code>, <code>docs/user-guides/USER_GUIDE.md</code>, <code>package.json</code>, <code>backend/package.json</code>, <code>docker-compose.yml</code>, <code>backend/server.js</code>, <code>src/api/backendUrl.js</code>, <code>backend/lib/aiEngine/README.md</code>.</div>
+      <div>Single page target</div>
+    </footer>
+  </main>
+</body>
+</html>
