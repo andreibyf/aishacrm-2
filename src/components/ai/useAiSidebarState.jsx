@@ -29,12 +29,12 @@ const ROUTE_CONTEXT_RULES = [
   {
     test: /^\/bizdev-sources\/[^/]+$/,
     routeName: 'bizdev_sources:detail',
-    entity: 'bizdev_source',
+    entity: 'bizdev_sources',
   },
-  { test: /^\/bizdev-sources/, routeName: 'bizdev_sources:list', entity: 'bizdev_source' },
+  { test: /^\/bizdev-sources/, routeName: 'bizdev_sources:list', entity: 'bizdev_sources' },
 ];
 
-const deriveRouteContext = (path = '/') => {
+export const deriveRouteContext = (path = '/') => {
   const normalized = path || '/';
   const rule = ROUTE_CONTEXT_RULES.find((entry) => entry.test.test(normalized));
   if (!rule) {

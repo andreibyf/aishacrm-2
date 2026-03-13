@@ -1,7 +1,7 @@
 export interface SuggestionContext {
   tenantId?: string;
   routeName?: string;
-  entity?: 'leads' | 'accounts' | 'contacts' | 'opportunities' | 'activities' | 'general' | 'dashboard';
+  entity?: 'leads' | 'accounts' | 'contacts' | 'opportunities' | 'activities' | 'bizdev_sources' | 'general' | 'dashboard';
   origin?: 'text' | 'voice';
 }
 
@@ -52,6 +52,10 @@ const PLAYBOOK_SUGGESTIONS: Record<string, Array<{ label: string; command: strin
   activities: [
     { label: 'Today’s tasks', command: 'Show my tasks due today' },
     { label: 'Overdue follow-ups', command: 'List overdue follow-up activities' }
+  ],
+  bizdev_sources: [
+    { label: 'Active sources', command: 'Show my active BizDev sources' },
+    { label: 'Source performance', command: 'Summarize lead conversion by BizDev source' }
   ],
   dashboard: [
     { label: 'Dashboard overview', command: 'Give me a dashboard summary' }
