@@ -35,16 +35,14 @@ echo ""
 
 # Step 3: CARE Playbook tests
 echo "Step 3/3: Running CARE Playbook tests..."
-CARE_TESTS=(
-  "lib/care/__tests__/carePlaybookRouter.test.js"
-  "lib/care/__tests__/carePlaybookExecutor.test.js"
-  "lib/care/__tests__/carePlaybooks.routes.test.js"
-)
 
 # Check if backend container is running
 if docker compose ps backend | grep -q "Up"; then
   CARE_TEST_FAILED=0
-  for test in "${CARE_TESTS[@]}"; do
+  for test in \
+    "lib/care/__tests__/carePlaybookRouter.test.js" \
+    "lib/care/__tests__/carePlaybookExecutor.test.js" \
+    "lib/care/__tests__/carePlaybooks.routes.test.js"; do
     if [ -f "backend/$test" ]; then
       echo "  Running $test..."
       docker compose exec -T backend node --test "$test"
@@ -56,7 +54,7 @@ if docker compose ps backend | grep -q "Up"; then
     fi
   done
   
-  if [ $CARE_TEST_FAILED -eq 1 ]; then
+  if [ "$CARE_TEST_FAILED" = "1" ]; then
     echo ""
     echo "FAIL: One or more CARE Playbook tests failed - fix errors above before committing"
     exit 1
