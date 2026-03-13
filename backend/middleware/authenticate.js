@@ -307,8 +307,8 @@ export async function authenticateRequest(req, _res, next) {
         try {
           const { getSupabaseClient } = await import('../lib/supabase-db.js');
           const supa = getSupabaseClient();
-          // Lookup user by email to get full user record with tenant_id, tenant_uuid, role, and name
-          // Note: users table stores display_name in metadata JSONB
+          // Lookup user by email to get full user record with tenant_id, role, name, and permissions
+          // Note: users table stores display_name and other profile data in metadata JSONB
           const [usersResult, employeesResult] = await Promise.all([
             supa
               .from('users')
