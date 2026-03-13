@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 # ============================================================
 # Pre-push hook: lint + build + tests
 # Runs before git push. Blocks push if anything fails.
 # Skip with: git push --no-verify
 # ============================================================
+# v4.9.3 — POSIX sh compat: replace bash arrays with conditionals
 # v4.9.2 — Vitest 4.x compat:
 #   - Replace --related <files> (removed in v4) with --changed origin/main
 #     (Vitest resolves affected tests itself; no file paths needed)
@@ -22,7 +23,7 @@ set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║        PRE-PUSH CHECKS (v4.9.2)             ║"
+echo "║        PRE-PUSH CHECKS (v4.9.3)             ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -86,15 +87,16 @@ vitest_zero_failures() {
 CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
 CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
-# Build vitest args: use --changed for small changesets, full run for large ones
+# Determine vitest run mode (full, changed, or skip)
 # --changed origin/main lets Vitest resolve affected tests itself (no file paths needed)
+VITEST_MODE="full"
 if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   echo "   No frontend source files changed — skipping Vitest"
   echo "✅ Frontend tests passed (no changes)"
   SKIP_VITEST=1
 elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   echo "   Running tests related to $CHANGED_SRC_COUNT changed file(s)..."
-  set -- run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
+  VITEST_MODE="changed"
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
   set -- run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
@@ -103,7 +105,11 @@ fi
 if [ "${SKIP_VITEST:-}" != "1" ]; then
   set +e
   if command -v timeout >/dev/null 2>&1; then
-    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest "$@" > "$VITEST_LOG" 2>&1
+    if [ "$VITEST_MODE" = "changed" ]; then
+      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    else
+      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    fi
     VITEST_EXIT=$?
     if [ $VITEST_EXIT -eq 124 ]; then
       echo "⚠️  Vitest timed out after ${VITEST_TIMEOUT}s"
@@ -120,7 +126,11 @@ if [ "${SKIP_VITEST:-}" != "1" ]; then
       cat "$VITEST_LOG"
     fi
   else
-    env -u NODE_OPTIONS ./node_modules/.bin/vitest "$@" > "$VITEST_LOG" 2>&1
+    if [ "$VITEST_MODE" = "changed" ]; then
+      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    else
+      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    fi
     VITEST_EXIT=$?
     cat "$VITEST_LOG"
   fi

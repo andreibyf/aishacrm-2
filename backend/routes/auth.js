@@ -687,7 +687,6 @@ export default function createAuthRoutes(_pgPool) {
             email: user.email,
             role: user.role,
             tenant_id: user.tenant_id || null,
-            tenant_uuid: user.tenant_uuid || null,
             table,
           };
           const access = signAccess(payload);
@@ -759,7 +758,6 @@ export default function createAuthRoutes(_pgPool) {
         email: user.email,
         role: user.role,
         tenant_id: user.tenant_id || null,
-        tenant_uuid: user.tenant_uuid || null,
         table: tbl,
       };
       const access = signAccess(payload);
