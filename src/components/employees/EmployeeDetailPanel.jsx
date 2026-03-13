@@ -132,7 +132,7 @@ export default function EmployeeDetailPanel({
     return () => {
       mounted = false;
     };
-  }, [open, employee?.id]);
+  }, [open, employee?.id, employee?.tenant_id]);
 
   // Fetch the manager/reports_to employee details
   React.useEffect(() => {
@@ -731,9 +731,9 @@ export default function EmployeeDetailPanel({
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Role Level:</span>
                   <span className="col-span-2">
-                    {employee.crm_user_employee_role === 'leadership' ? (
+                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership' ? (
                       <Badge className="bg-indigo-900/30 text-indigo-300 border-indigo-700">
-                        Leadership
+                        Director
                       </Badge>
                     ) : employee.crm_user_employee_role === 'manager' ? (
                       <Badge className="bg-purple-900/30 text-purple-300 border-purple-700">
@@ -767,7 +767,7 @@ export default function EmployeeDetailPanel({
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Description:</span>
                   <span className="col-span-2 text-xs text-slate-400">
-                    {employee.crm_user_employee_role === 'leadership'
+                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership'
                       ? 'Can view and manage all tenant records'
                       : employee.crm_user_employee_role === 'manager'
                         ? 'Can view and manage team records'

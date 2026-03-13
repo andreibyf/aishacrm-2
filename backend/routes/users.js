@@ -2041,7 +2041,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         ...(tags !== undefined && { tags }),
         // employee_role is now stored as a column on users table, not in metadata
         // Always ensure crm_access: true for users (by definition, users have CRM access)
-        ...(permissions !== undefined && { permissions: { ...permissions, crm_access: true } }),
+        ...(permissions !== undefined && {
+          permissions: {
+            ...((permissions && typeof permissions === 'object') ? permissions : {}),
+            crm_access: true,
+          },
+        }),
         ...(navigation_permissions !== undefined && { navigation_permissions }),
         ...otherFields, // Include any unknown fields in metadata
       };

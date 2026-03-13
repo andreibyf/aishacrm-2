@@ -76,7 +76,7 @@ export default function UserViewPanel({
     return () => {
       mounted = false;
     };
-  }, [open, user?.id]);
+  }, [open, user?.id, user?.tenant_id]);
 
   // Fetch linked employee for this user
   useEffect(() => {

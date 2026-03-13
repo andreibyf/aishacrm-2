@@ -1236,6 +1236,15 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.status(400).json({ valid: false, errors: ['User ID is required'] });
       }
 
+      // Authorization: require admin/manager and enforce tenant match
+      const requesterRole = req.user?.role;
+      if (!requesterRole || !['admin', 'manager', 'superadmin'].includes(requesterRole)) {
+        return res.status(403).json({
+          valid: false,
+          errors: ['Forbidden: only admin or manager can validate employee-user links'],
+        });
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
@@ -1248,6 +1257,15 @@ export default function createEmployeeRoutes(_pgPool) {
 
       if (empError || !employee) {
         return res.status(404).json({ valid: false, errors: ['Employee not found'] });
+      }
+
+      // Enforce tenant match for authorization
+      const requesterTenantId = req.tenant?.id || req.user?.tenant_id;
+      if (requesterTenantId && employee.tenant_id && employee.tenant_id !== requesterTenantId) {
+        return res.status(403).json({
+          valid: false,
+          errors: ['Forbidden: employee belongs to a different tenant'],
+        });
       }
 
       // 2. Fetch the user
@@ -1326,11 +1344,26 @@ export default function createEmployeeRoutes(_pgPool) {
       }
 
       // 5. Also update team_members to have user_id where employee_id matches
-      await supabase
+      const { error: teamUpdateError } = await supabase
         .from('team_members')
         .update({ user_id: user_id })
         .eq('employee_id', id)
         .is('user_id', null);
+
+      if (teamUpdateError) {
+        logger.error('Failed to update team_members with user_id for employee link:', {
+          employee_id: id,
+          user_id,
+          error: teamUpdateError,
+        });
+      }
+
+      // Invalidate employee caches so consumers see the updated link state
+      const { invalidateCache, invalidateEmployeeCache } = await import('../lib/cacheManager.js');
+      await invalidateCache('employees');
+      if (req.tenant && req.tenant.id) {
+        await invalidateEmployeeCache(req.tenant.id);
+      }
 
       logger.info(`[Employees] User link validated: employee=${id}, user=${user_id}`);
 

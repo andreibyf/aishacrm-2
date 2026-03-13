@@ -50,6 +50,16 @@ import { getBackendUrl } from '@/api/backendUrl';
 
 const BACKEND_URL = getBackendUrl();
 
+const EMPLOYEE_ROLE_LABELS = {
+  director: 'Director',
+  manager: 'Manager',
+  employee: 'Employee',
+  leadership: 'Leadership', // Legacy support
+};
+
+const getEmployeeRoleLabel = (role) =>
+  role ? EMPLOYEE_ROLE_LABELS[role] || 'User' : 'User';
+
 const STEPS = [
   { key: 'identity', label: 'Identity', icon: User },
   { key: 'teams', label: 'Teams', icon: Users },
@@ -660,7 +670,7 @@ export default function UserFormWizard({
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
                       <SelectItem value="employee">User</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="leadership">Leadership</SelectItem>
+                      <SelectItem value="director">Director</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-slate-500 mt-1">
@@ -924,7 +934,10 @@ export default function UserFormWizard({
                 <SummarySection title="Identity">
                   <SummaryItem label="Name" value={form.full_name} />
                   <SummaryItem label="Email" value={form.email} />
-                  <SummaryItem label="CRM Role" value={form.employee_role === 'leadership' ? 'Leadership' : form.employee_role === 'manager' ? 'Manager' : 'User'} />
+                  <SummaryItem
+                    label="CRM Role"
+                    value={getEmployeeRoleLabel(form.employee_role)}
+                  />
                   <SummaryItem label="Status" value={form.is_active ? 'Active' : 'Inactive'} />
                 </SummarySection>
 

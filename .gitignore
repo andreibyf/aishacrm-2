@@ -28,6 +28,9 @@ dist-ssr
 # Git worktrees (isolated workspaces)
 .worktrees/
 
+# RAG experiments / local data (not for version control)
+rag-v1/
+
 # Environment variables (security)
 .env
 .env.local
