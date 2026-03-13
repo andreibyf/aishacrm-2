@@ -1251,13 +1251,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       // Build metadata
+      // Always include crm_access: true in permissions for users (by definition, users have CRM access)
+      const basePermissions = permissions || {};
       const metadata = {
         display_name: full_name || first_name || null,
         crm_access: crm_access !== false,
         requested_access: requested_access || 'read_write',
         can_use_softphone: can_use_softphone || false,
         phone: phone || null,
-        permissions: permissions || {},
+        permissions: { ...basePermissions, crm_access: true },
       };
 
       const isGlobalUser = role === 'superadmin' && !normalizedTenantId;
@@ -2038,7 +2040,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         ...(is_active !== undefined && { is_active }),
         ...(tags !== undefined && { tags }),
         // employee_role is now stored as a column on users table, not in metadata
-        ...(permissions !== undefined && { permissions }),
+        // Always ensure crm_access: true for users (by definition, users have CRM access)
+        ...(permissions !== undefined && {
+          permissions: {
+            ...((permissions && typeof permissions === 'object') ? permissions : {}),
+            crm_access: true,
+          },
+        }),
         ...(navigation_permissions !== undefined && { navigation_permissions }),
         ...otherFields, // Include any unknown fields in metadata
       };

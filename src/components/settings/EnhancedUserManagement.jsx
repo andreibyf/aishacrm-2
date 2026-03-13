@@ -49,6 +49,7 @@ import { Tenant } from '@/api/entities';
 import { Employee } from '@/api/entities';
 import { toast } from 'sonner';
 import UserFormWizard from './UserFormWizard';
+import UserViewPanel from './UserViewPanel';
 import useTeams from '@/hooks/useTeams';
 import { Badge } from '@/components/ui/badge';
 // import UserPermissions from './UserPermissions'; // Reserved for future use
@@ -920,6 +921,7 @@ export default function EnhancedUserManagement() {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
   const [editingUserTeamMemberships, setEditingUserTeamMemberships] = useState([]);
+  const [viewingUser, setViewingUser] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardMode, setWizardMode] = useState('edit'); // 'create' or 'edit'
   const [searchTerm, setSearchTerm] = useState('');
@@ -1828,9 +1830,30 @@ export default function EnhancedUserManagement() {
                               }}
                               disabled={!managerCanEdit}
                               className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600 disabled:opacity-60"
+                              title="Edit user"
                             >
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              onClick={() => setViewingUser(user)}
+                              className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                              title="View user details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              type="button"
+                              onClick={() => handleDeleteUser(user)}
+                              disabled={!isDeletable}
+                              className="bg-red-700 border-red-600 text-red-100 hover:bg-red-600 disabled:opacity-60"
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                             {/* Impersonate button - superadmin only, not for other superadmins */}
                             {currentUser?.role === 'superadmin' && user.role !== 'superadmin' && (
@@ -1840,23 +1863,11 @@ export default function EnhancedUserManagement() {
                                 type="button"
                                 onClick={() => handleImpersonate(user)}
                                 className="bg-amber-700 border-amber-600 text-amber-100 hover:bg-amber-600"
-                                title={`View app as ${user.email}`}
+                                title={`Login as ${user.email}`}
                               >
-                                <Eye className="w-4 h-4 mr-1" />
                                 Login As
                               </Button>
                             )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              type="button"
-                              onClick={() => handleDeleteUser(user)}
-                              disabled={!isDeletable}
-                              className="bg-red-700 border-red-600 text-red-100 hover:bg-red-600 disabled:opacity-60"
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Delete
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1900,6 +1911,19 @@ export default function EnhancedUserManagement() {
           editingUserRef.current = null;
           setEditingUser(null);
           setEditingUserTeamMemberships([]);
+        }}
+      />
+
+      <UserViewPanel
+        user={viewingUser}
+        open={!!viewingUser}
+        onOpenChange={(open) => !open && setViewingUser(null)}
+        onEdit={(user) => {
+          setViewingUser(null);
+          editingUserRef.current = user;
+          setEditingUser(user);
+          setWizardMode('edit');
+          setWizardOpen(true);
         }}
       />
 

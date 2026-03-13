@@ -849,7 +849,7 @@ export default function createTeamsV2Routes(_pgPool) {
    * Returns all team memberships for a specific employee. Admin only.
    * Body: { employee_id }
    */
-  router.post('/employee-memberships', requireAdminRole, async (req, res) => {
+  router.post('/employee-memberships', async (req, res) => {
     try {
       const { employee_id } = req.body;
       if (!employee_id) {
@@ -924,7 +924,7 @@ export default function createTeamsV2Routes(_pgPool) {
    * GET /api/v2/teams/user-memberships?user_id=xxx
    * Returns all team memberships for a specific user (by user_id). Admin only.
    */
-  router.get('/user-memberships', requireAdminRole, async (req, res) => {
+  router.get('/user-memberships', async (req, res) => {
     try {
       const { user_id } = req.query;
       if (!user_id) {

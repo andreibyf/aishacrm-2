@@ -11,9 +11,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
+  AlertCircle,
   Briefcase,
+  Check,
   Clock,
+  Copy,
   Edit,
+  ExternalLink,
+  Link2,
   Loader2,
   Mail,
   MapPin,
@@ -22,7 +27,9 @@ import {
   Trash2,
   User,
   Users,
+  X,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import PhoneDisplay from '../shared/PhoneDisplay';
 // EmployeePermissionsDialog removed - permissions now managed via User Management wizard
 import { User as UserEntity } from '@/api/entities';
@@ -50,6 +57,11 @@ export default function EmployeeDetailPanel({
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [reportsToEmployee, setReportsToEmployee] = useState(null);
   const [loadingReportsTo, setLoadingReportsTo] = useState(false);
+  
+  // User link state
+  const [linkedUserId, setLinkedUserId] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState(null); // null | { valid: true } | { valid: false, errors: [...] }
 
   React.useEffect(() => {
     let mounted = true;
@@ -66,6 +78,22 @@ export default function EmployeeDetailPanel({
       mounted = false;
     };
   }, []);
+
+  // Initialize linked user ID from employee metadata
+  React.useEffect(() => {
+    if (open && employee?.metadata?.linked_user_id) {
+      setLinkedUserId(employee.metadata.linked_user_id);
+      // Check if needs revalidation
+      if (employee.metadata.link_needs_revalidation) {
+        setValidationResult({ valid: false, errors: ['Link needs revalidation - a key field may have changed'] });
+      } else if (employee.metadata.link_validated_at) {
+        setValidationResult({ valid: true });
+      }
+    } else {
+      setLinkedUserId('');
+      setValidationResult(null);
+    }
+  }, [open, employee?.id, employee?.metadata?.linked_user_id]);
 
   // Fetch team memberships for this employee
   React.useEffect(() => {
@@ -86,12 +114,12 @@ export default function EmployeeDetailPanel({
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employee_id: employee.id }),
+            body: JSON.stringify({ employee_id: employee.id, tenant_id: employee.tenant_id }),
           },
         );
         if (res.ok) {
-          const data = await res.json();
-          if (mounted) setTeamMemberships(data.memberships || []);
+          const json = await res.json();
+          if (mounted) setTeamMemberships(json.data || []);
         }
       } catch (error) {
         console.error('Failed to fetch team memberships:', error);
@@ -104,7 +132,7 @@ export default function EmployeeDetailPanel({
     return () => {
       mounted = false;
     };
-  }, [open, employee?.id]);
+  }, [open, employee?.id, employee?.tenant_id]);
 
   // Fetch the manager/reports_to employee details
   React.useEffect(() => {
@@ -147,6 +175,46 @@ export default function EmployeeDetailPanel({
     }
     return __currentUser.employee_role === 'manager';
   }, [__currentUser]);
+
+  // Validate user link
+  const handleValidateUserLink = async () => {
+    if (!linkedUserId.trim()) {
+      toast.error('Please enter a User ID');
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationResult(null);
+
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/employees/${employee.id}/validate-user-link`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: linkedUserId.trim() }),
+        },
+      );
+
+      const data = await res.json();
+
+      if (res.ok && data.valid) {
+        setValidationResult({ valid: true });
+        toast.success('User link validated and established');
+        // Optionally refresh the employee data to show updated metadata
+      } else {
+        setValidationResult({ valid: false, errors: data.errors || [data.message || 'Validation failed'] });
+        toast.error(data.errors?.[0] || data.message || 'Validation failed');
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+      setValidationResult({ valid: false, errors: ['Failed to validate - network error'] });
+      toast.error('Failed to validate user link');
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   // New function as per outline
   const handleSyncPermissions = async () => {
@@ -462,12 +530,14 @@ export default function EmployeeDetailPanel({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <span className="text-sm text-slate-400">Employee ID:</span>
-                <span className="col-span-2 text-sm text-slate-200">
-                  {employee.employee_number || 'N/A'}
-                </span>
-              </div>
+              {employee.employee_number && (
+                <div className="grid grid-cols-3 gap-2 items-center">
+                  <span className="text-sm text-slate-400">Employee #:</span>
+                  <span className="col-span-2 text-sm text-slate-200">
+                    {employee.employee_number}
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Reports To:</span>
                 <div className="col-span-2">
@@ -515,6 +585,115 @@ export default function EmployeeDetailPanel({
             </CardContent>
           </Card>
 
+          {/* CRM User Link */}
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold text-slate-200 flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-cyan-400" />
+                CRM User Link
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Employee ID (for reference) */}
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="text-sm text-slate-400">Employee ID:</span>
+                <div className="col-span-2 flex items-center gap-2">
+                  <code className="text-xs text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded font-mono">
+                    {employee.id}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(employee.id);
+                      toast.success('Employee ID copied');
+                    }}
+                    className="text-slate-400 hover:text-slate-200"
+                    title="Copy Employee ID"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* User ID Input */}
+              <div className="space-y-2">
+                <label className="text-sm text-slate-400">Linked User ID:</label>
+                <div className="flex gap-2">
+                  <Input
+                    value={linkedUserId}
+                    onChange={(e) => {
+                      setLinkedUserId(e.target.value);
+                      // Clear validation when user types
+                      if (validationResult) setValidationResult(null);
+                    }}
+                    placeholder="Paste User ID from User Management"
+                    className="bg-slate-900 border-slate-600 text-slate-200 font-mono text-xs flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleValidateUserLink}
+                    disabled={isValidating || !linkedUserId.trim()}
+                    className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+                  >
+                    {isValidating ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 mr-1" />
+                        Validate
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Validation Status */}
+                {validationResult && (
+                  <div
+                    className={`flex items-start gap-2 p-2 rounded text-sm ${
+                      validationResult.valid
+                        ? 'bg-green-900/30 text-green-300 border border-green-700'
+                        : 'bg-red-900/30 text-red-300 border border-red-700'
+                    }`}
+                  >
+                    {validationResult.valid ? (
+                      <>
+                        <Check className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>Link validated successfully. Employee ID has been written to User record.</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <div>
+                          {validationResult.errors?.map((err, i) => (
+                            <div key={i}>{err}</div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Help text */}
+                <p className="text-xs text-slate-500">
+                  Copy the User ID from User Management and paste here. Click Validate to link the records.
+                  {validationResult?.valid && (
+                    <span className="block mt-1">
+                      <button
+                        className="text-blue-400 hover:underline inline-flex items-center gap-1"
+                        onClick={() => {
+                          window.location.href = `/settings?tab=users&search=${encodeURIComponent(employee?.email || '')}`;
+                        }}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View in User Management
+                      </button>
+                    </span>
+                  )}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* CRM Access & Role Level */}
           {employee.has_crm_access && employee.user_email && (
             <Card className="bg-slate-800 border-slate-700">
@@ -529,16 +708,40 @@ export default function EmployeeDetailPanel({
                   <span className="text-sm text-slate-400">CRM User:</span>
                   <span className="col-span-2 text-sm text-slate-200">{employee.user_email}</span>
                 </div>
+                {employee.metadata?.user_id && (
+                  <div className="grid grid-cols-3 gap-2 items-center">
+                    <span className="text-sm text-slate-400">User ID:</span>
+                    <div className="col-span-2 flex items-center gap-2">
+                      <code className="text-xs text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded font-mono">
+                        {employee.metadata.user_id}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(employee.metadata.user_id);
+                          toast.success('User ID copied');
+                        }}
+                        className="text-slate-400 hover:text-slate-200"
+                        title="Copy User ID"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Role Level:</span>
                   <span className="col-span-2">
-                    {employee.crm_user_employee_role === 'manager' ? (
+                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership' ? (
+                      <Badge className="bg-indigo-900/30 text-indigo-300 border-indigo-700">
+                        Director
+                      </Badge>
+                    ) : employee.crm_user_employee_role === 'manager' ? (
                       <Badge className="bg-purple-900/30 text-purple-300 border-purple-700">
                         Manager
                       </Badge>
                     ) : employee.crm_user_employee_role === 'employee' ? (
-                      <Badge className="bg-blue-900/30 text-blue-300 border-blue-700">
-                        Employee
+                      <Badge className="bg-slate-700 text-slate-300 border-slate-600">
+                        User
                       </Badge>
                     ) : (
                       <span className="text-sm text-slate-500 italic">Not Set</span>
@@ -564,9 +767,11 @@ export default function EmployeeDetailPanel({
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Description:</span>
                   <span className="col-span-2 text-xs text-slate-400">
-                    {employee.crm_user_employee_role === 'manager'
-                      ? 'Can view and manage all team records'
-                      : 'Can only view and manage their own records'}
+                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership'
+                      ? 'Can view and manage all tenant records'
+                      : employee.crm_user_employee_role === 'manager'
+                        ? 'Can view and manage team records'
+                        : 'Can only view and manage their own records'}
                   </span>
                 </div>
               </CardContent>

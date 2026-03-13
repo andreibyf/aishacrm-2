@@ -112,7 +112,26 @@ export default function createEmployeeRoutes(_pgPool) {
   // GET /api/employees - List employees
   router.get('/', cacheList('employees', 30), async (req, res) => {
     try {
-      const { tenant_id, email, limit = 50, offset = 0 } = req.query;
+      const { tenant_id, email, linked_user_id, limit = 50, offset = 0 } = req.query;
+
+      // Allow lookup by linked_user_id (find employee linked to a specific user)
+      if (linked_user_id && tenant_id) {
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+
+        const { data, error } = await supabase
+          .from('employees')
+          .select('*')
+          .eq('tenant_id', tenant_id)
+          .eq('metadata->>linked_user_id', linked_user_id)
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+
+        const employees = (data || []).map(expandMetadata);
+
+        return res.json(employees);
+      }
 
       // Allow lookup by email without tenant_id (for auth user lookup)
       if (email) {
@@ -1204,6 +1223,159 @@ export default function createEmployeeRoutes(_pgPool) {
     } catch (err) {
       logger.error('[Employees POST /:id/sync-permissions] Error:', err.message);
       return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // POST /api/employees/:id/validate-user-link - Validate and establish user link
+  router.post('/:id/validate-user-link', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { user_id } = req.body;
+
+      if (!user_id) {
+        return res.status(400).json({ valid: false, errors: ['User ID is required'] });
+      }
+
+      // Authorization: require admin/manager and enforce tenant match
+      const requesterRole = req.user?.role;
+      if (!requesterRole || !['admin', 'manager', 'superadmin'].includes(requesterRole)) {
+        return res.status(403).json({
+          valid: false,
+          errors: ['Forbidden: only admin or manager can validate employee-user links'],
+        });
+      }
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      // 1. Fetch the employee
+      const { data: employee, error: empError } = await supabase
+        .from('employees')
+        .select('id, email, tenant_id, metadata, status')
+        .eq('id', id)
+        .single();
+
+      if (empError || !employee) {
+        return res.status(404).json({ valid: false, errors: ['Employee not found'] });
+      }
+
+      // Enforce tenant match for authorization
+      const requesterTenantId = req.tenant?.id || req.user?.tenant_id;
+      if (requesterTenantId && employee.tenant_id && employee.tenant_id !== requesterTenantId) {
+        return res.status(403).json({
+          valid: false,
+          errors: ['Forbidden: employee belongs to a different tenant'],
+        });
+      }
+
+      // 2. Fetch the user
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, email, tenant_id, status, metadata')
+        .eq('id', user_id)
+        .single();
+
+      if (userError || !user) {
+        return res.status(400).json({ valid: false, errors: ['User not found with that ID'] });
+      }
+
+      // 3. Validation checks
+      const errors = [];
+
+      // Check emails match (case-insensitive)
+      if (employee.email?.toLowerCase() !== user.email?.toLowerCase()) {
+        errors.push(`Email mismatch: Employee has "${employee.email}", User has "${user.email}"`);
+      }
+
+      // Check tenant match
+      if (employee.tenant_id !== user.tenant_id) {
+        errors.push('Tenant mismatch: Employee and User belong to different tenants');
+      }
+
+      // Check user is active
+      if (user.status !== 'active') {
+        errors.push(`User is not active (status: ${user.status})`);
+      }
+
+      // Check employee is active
+      if (employee.status !== 'active') {
+        errors.push(`Employee is not active (status: ${employee.status})`);
+      }
+
+      if (errors.length > 0) {
+        return res.json({ valid: false, errors });
+      }
+
+      // 4. All checks passed - update both records
+      const now = new Date().toISOString();
+
+      // Update employee metadata with linked_user_id
+      const employeeMetadata = {
+        ...(employee.metadata || {}),
+        linked_user_id: user_id,
+        link_validated_at: now,
+        link_needs_revalidation: false,
+      };
+
+      const { error: empUpdateError } = await supabase
+        .from('employees')
+        .update({ metadata: employeeMetadata, updated_at: now })
+        .eq('id', id);
+
+      if (empUpdateError) {
+        logger.error('Failed to update employee metadata:', empUpdateError);
+        return res.status(500).json({ valid: false, errors: ['Failed to update employee record'] });
+      }
+
+      // Update user metadata with employee_id
+      const userMetadata = {
+        ...(user.metadata || {}),
+        employee_id: id,
+      };
+
+      const { error: userUpdateError } = await supabase
+        .from('users')
+        .update({ metadata: userMetadata, updated_at: now })
+        .eq('id', user_id);
+
+      if (userUpdateError) {
+        logger.error('Failed to update user metadata:', userUpdateError);
+        return res.status(500).json({ valid: false, errors: ['Failed to update user record'] });
+      }
+
+      // 5. Also update team_members to have user_id where employee_id matches
+      const { error: teamUpdateError } = await supabase
+        .from('team_members')
+        .update({ user_id: user_id })
+        .eq('employee_id', id)
+        .is('user_id', null);
+
+      if (teamUpdateError) {
+        logger.error('Failed to update team_members with user_id for employee link:', {
+          employee_id: id,
+          user_id,
+          error: teamUpdateError,
+        });
+      }
+
+      // Invalidate employee caches so consumers see the updated link state
+      const { invalidateCache, invalidateEmployeeCache } = await import('../lib/cacheManager.js');
+      await invalidateCache('employees');
+      if (req.tenant && req.tenant.id) {
+        await invalidateEmployeeCache(req.tenant.id);
+      }
+
+      logger.info(`[Employees] User link validated: employee=${id}, user=${user_id}`);
+
+      res.json({
+        valid: true,
+        message: 'User link validated and established',
+        employee_id: id,
+        user_id: user_id,
+      });
+    } catch (error) {
+      logger.error('Error validating user link:', error);
+      res.status(500).json({ valid: false, errors: [error.message] });
     }
   });
 
