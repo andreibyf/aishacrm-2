@@ -730,7 +730,7 @@ export default function BizDevSourceDetailPanel({
   return (
     <UniversalDetailPanel
       entity={entityForPanel}
-      entityType="bizdev"
+      entityType="bizdev_source"
       open={true}
       onOpenChange={(open) => {
         if (!open) onClose?.();

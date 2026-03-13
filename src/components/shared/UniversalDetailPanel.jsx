@@ -96,8 +96,12 @@ export default function UniversalDetailPanel({
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const aiSummaryFetchedRef = useRef(null); // track entity id we last fetched for
 
-  // Map entityType to the related_type used in the DB (bizdev → bizdev_source)
-  const relatedTypeForDb = entityType === 'bizdev' ? 'bizdev_source' : entityType?.toLowerCase();
+  // Map entityType to the related_type used in the DB
+  // Both 'bizdev' and 'bizdev_source' should map to 'bizdev_source' for consistency
+  const relatedTypeForDb =
+    entityType === 'bizdev' || entityType === 'bizdev_source'
+      ? 'bizdev_source'
+      : entityType?.toLowerCase();
 
   const loadNotes = useCallback(async () => {
     if (!entity) return;

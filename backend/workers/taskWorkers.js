@@ -307,7 +307,9 @@ export function startTaskWorkers() {
                     ? 'leads'
                     : entity_type === 'opportunity'
                       ? 'opportunities'
-                      : null;
+                      : entity_type === 'bizdev_source' || entity_type === 'bizdev'
+                        ? 'bizdev_sources'
+                        : null;
 
             if (tableName) {
               const { data: entityData } = await supa
