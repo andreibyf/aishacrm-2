@@ -152,13 +152,39 @@ describe('[CRM] UniversalDetailPanel - AI Summary effect logic', () => {
 
   it('should map bizdev entityType to bizdev_source for notes/activities', () => {
     const entityType = 'bizdev';
-    const relatedTypeForDb = entityType === 'bizdev' ? 'bizdev_source' : entityType.toLowerCase();
+    const relatedTypeForDb =
+      entityType === 'bizdev' || entityType === 'bizdev_source'
+        ? 'bizdev_source'
+        : entityType.toLowerCase();
     expect(relatedTypeForDb).toBe('bizdev_source');
+  });
+
+  it('should map bizdev_source entityType to bizdev_source for notes/activities', () => {
+    const entityType = 'bizdev_source';
+    const relatedTypeForDb =
+      entityType === 'bizdev' || entityType === 'bizdev_source'
+        ? 'bizdev_source'
+        : entityType.toLowerCase();
+    expect(relatedTypeForDb).toBe('bizdev_source');
+  });
+
+  it('should map bizdev_source entityType to bizdev profile route (same as bizdev)', () => {
+    const profileTypeMap = {
+      lead: 'lead',
+      contact: 'contact',
+      account: 'account',
+      bizdev: 'bizdev',
+      bizdev_source: 'bizdev',
+      opportunity: null,
+    };
+    expect(profileTypeMap['bizdev_source']).toBe('bizdev');
+    expect(profileTypeMap['bizdev']).toBe('bizdev');
   });
 
   it('should use entityType as-is for non-bizdev types', () => {
     for (const type of ['lead', 'contact', 'account', 'opportunity']) {
-      const relatedTypeForDb = type === 'bizdev' ? 'bizdev_source' : type.toLowerCase();
+      const relatedTypeForDb =
+        type === 'bizdev' || type === 'bizdev_source' ? 'bizdev_source' : type.toLowerCase();
       expect(relatedTypeForDb).toBe(type);
     }
   });

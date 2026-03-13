@@ -86,24 +86,24 @@ vitest_zero_failures() {
 CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx' 2>/dev/null || true)
 CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
-# Build vitest args array: use --changed for small changesets, full run for large ones
+# Build vitest args: use --changed for small changesets, full run for large ones
 # --changed origin/main lets Vitest resolve affected tests itself (no file paths needed)
-VITEST_ARGS=(run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
 if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   echo "   No frontend source files changed — skipping Vitest"
   echo "✅ Frontend tests passed (no changes)"
   SKIP_VITEST=1
 elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   echo "   Running tests related to $CHANGED_SRC_COUNT changed file(s)..."
-  VITEST_ARGS=(run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON")
+  set -- run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
+  set -- run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
 fi
 
 if [ "${SKIP_VITEST:-}" != "1" ]; then
   set +e
   if command -v timeout >/dev/null 2>&1; then
-    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
+    timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest "$@" > "$VITEST_LOG" 2>&1
     VITEST_EXIT=$?
     if [ $VITEST_EXIT -eq 124 ]; then
       echo "⚠️  Vitest timed out after ${VITEST_TIMEOUT}s"
@@ -120,7 +120,7 @@ if [ "${SKIP_VITEST:-}" != "1" ]; then
       cat "$VITEST_LOG"
     fi
   else
-    env -u NODE_OPTIONS ./node_modules/.bin/vitest "${VITEST_ARGS[@]}" > "$VITEST_LOG" 2>&1
+    env -u NODE_OPTIONS ./node_modules/.bin/vitest "$@" > "$VITEST_LOG" 2>&1
     VITEST_EXIT=$?
     cat "$VITEST_LOG"
   fi

@@ -39,4 +39,12 @@ describe('[AISHA_CHAT] suggestionEngine', () => {
     expect(suggestions.some((s) => s.command.toLowerCase().includes('pipeline'))).toBe(true);
     expect(suggestions.some((s) => s.command.toLowerCase().includes('tasks'))).toBe(true);
   });
+
+  it('returns bizdev_sources context suggestions on bizdev-sources routes', () => {
+    const context: SuggestionContext = { tenantId: 't1', routeName: 'bizdev_sources:list', entity: 'bizdev_sources' };
+    const suggestions = getSuggestions({ context, history: [] });
+    expect(suggestions.length).toBeGreaterThan(0);
+    expect(suggestions.some((s) => s.source === 'context')).toBe(true);
+    expect(suggestions.some((s) => s.command.toLowerCase().includes('bizdev') || s.command.toLowerCase().includes('source'))).toBe(true);
+  });
 });

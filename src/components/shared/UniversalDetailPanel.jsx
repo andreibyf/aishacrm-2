@@ -270,6 +270,7 @@ export default function UniversalDetailPanel({
       contact: 'contact',
       account: 'account',
       bizdev: 'bizdev',
+      bizdev_source: 'bizdev', // bizdev_source uses the same /api/profile/bizdev/:id route
       opportunity: null, // opportunities don't have a person profile
     };
     const profileType = profileTypeMap[entityType];
