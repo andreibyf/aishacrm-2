@@ -4,8 +4,11 @@
  * Tests security constraints on POST /api/auth/impersonate and
  * POST /api/auth/stop-impersonate.
  *
- * These tests forge JWTs signed with the fallback secret ('change-me-access')
- * and send them as cookies to verify enforcement without requiring live DB users.
+ * These tests forge JWTs signed with JWT_SECRET and send them as cookies
+ * to verify enforcement without requiring live DB users.
+ *
+ * IMPORTANT: Run with Doppler to ensure JWT_SECRET matches the backend:
+ *   docker compose exec backend doppler run -- node --test __tests__/auth/impersonation.test.js
  */
 
 import { describe, it, before } from 'node:test';
