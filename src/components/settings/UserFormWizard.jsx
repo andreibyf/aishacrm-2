@@ -43,6 +43,7 @@ import {
   FileText,
   Workflow,
   Menu,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -541,6 +542,53 @@ export default function UserFormWizard({
                   )}
                 </div>
 
+                {/* System IDs - edit mode only */}
+                {isEdit && user?.id && (
+                  <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">System Identifiers</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-400">User ID:</span>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
+                          {user.id}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(user.id);
+                            toast.success('User ID copied');
+                          }}
+                          className="text-slate-400 hover:text-slate-200"
+                          title="Copy User ID"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    {user.metadata?.employee_id && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-400">Employee ID:</span>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
+                            {user.metadata.employee_id}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(user.metadata.employee_id);
+                              toast.success('Employee ID copied');
+                            }}
+                            className="text-slate-400 hover:text-slate-200"
+                            title="Copy Employee ID"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Full Name */}
                 <div>
                   <Label htmlFor="full_name" className="text-slate-200">
@@ -610,9 +658,9 @@ export default function UserFormWizard({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="employee">Employee</SelectItem>
+                      <SelectItem value="employee">User</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="director">Director</SelectItem>
+                      <SelectItem value="leadership">Leadership</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-slate-500 mt-1">
@@ -876,7 +924,7 @@ export default function UserFormWizard({
                 <SummarySection title="Identity">
                   <SummaryItem label="Name" value={form.full_name} />
                   <SummaryItem label="Email" value={form.email} />
-                  <SummaryItem label="CRM Role" value={form.employee_role} />
+                  <SummaryItem label="CRM Role" value={form.employee_role === 'leadership' ? 'Leadership' : form.employee_role === 'manager' ? 'Manager' : 'User'} />
                   <SummaryItem label="Status" value={form.is_active ? 'Active' : 'Inactive'} />
                 </SummarySection>
 
@@ -921,19 +969,7 @@ export default function UserFormWizard({
                   </div>
                 </SummarySection>
 
-                {/* Derived Role Badge */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-                  <span className="text-sm text-slate-400">Derived platform role</span>
-                  <Badge
-                    className={`
-                      ${derivedRole === 'Admin' ? 'bg-red-500/20 text-red-300 border-red-500/30' : ''}
-                      ${derivedRole === 'Leadership' ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : ''}
-                      ${derivedRole === 'User' ? 'bg-green-500/20 text-green-300 border-green-500/30' : ''}
-                    `}
-                  >
-                    {derivedRole}
-                  </Badge>
-                </div>
+
               </div>
             </div>
           )}
