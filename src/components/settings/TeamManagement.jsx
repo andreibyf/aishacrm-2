@@ -27,8 +27,8 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  UserPlus,
   ShieldCheck,
+  ExternalLink,
   Eye,
   EyeOff,
   Loader2,
@@ -124,10 +124,8 @@ export default function TeamManagement() {
   const [editDesc, setEditDesc] = useState('');
   const [editParent, setEditParent] = useState('');
 
-  // Add member form
-  const [addingMemberTeamId, setAddingMemberTeamId] = useState(null);
-  const [newMemberEmployeeId, setNewMemberEmployeeId] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('member');
+  // Note: Team membership is now managed via User Management wizard
+  // (add/remove members removed from this component per design spec)
 
   const tenantId = selectedTenantId;
 
@@ -872,124 +870,40 @@ export default function TeamManagement() {
                         <p className="text-sm text-slate-500 py-2">No members yet.</p>
                       )}
 
-                      {(members[team.id] || []).map((m) => (
-                        <div
-                          key={m.id}
-                          className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-slate-700/30"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm text-slate-200">
-                              {m.employee_name || 'Unknown'}
-                            </span>
-                            {m.employee_email && (
-                              <span className="text-xs text-slate-500 ml-2">
-                                {m.employee_email}
-                              </span>
-                            )}
-                          </div>
-                          <Select
-                            value={m.role}
-                            onValueChange={(val) => handleUpdateMemberRole(team.id, m.id, val)}
+                      {/* Read-only member badges */}
+                      <div className="flex flex-wrap gap-2">
+                        {(members[team.id] || []).map((m) => (
+                          <Badge
+                            key={m.id}
+                            variant="outline"
+                            className={
+                              m.role === 'director'
+                                ? 'bg-purple-900/30 text-purple-300 border-purple-700'
+                                : m.role === 'manager'
+                                  ? 'bg-blue-900/30 text-blue-300 border-blue-700'
+                                  : 'bg-slate-700 text-slate-300 border-slate-600'
+                            }
                           >
-                            <SelectTrigger className="h-7 w-28 text-xs bg-transparent border-slate-600">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700">
-                              {ROLE_OPTIONS.map((r) => (
-                                <SelectItem
-                                  key={r.value}
-                                  value={r.value}
-                                  className="text-slate-200 text-xs"
-                                >
-                                  {r.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-slate-400 hover:text-red-400"
-                            title="Remove member"
-                            onClick={() => handleRemoveMember(team.id, m.id, m.employee_name)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+                            {m.employee_name || 'Unknown'}
+                            <span className="ml-1 opacity-70 text-xs">({m.role})</span>
+                          </Badge>
+                        ))}
+                      </div>
 
-                      {/* Add member form */}
-                      {addingMemberTeamId === team.id ? (
-                        <div className="flex items-center gap-2 pt-2 border-t border-slate-600/30">
-                          <Select
-                            value={newMemberEmployeeId}
-                            onValueChange={setNewMemberEmployeeId}
-                          >
-                            <SelectTrigger className="h-8 flex-1 bg-slate-700 border-slate-600 text-slate-200 text-sm">
-                              <SelectValue placeholder="Select employee..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700 max-h-48">
-                              {getAvailableEmployees(team.id).map((e) => (
-                                <SelectItem
-                                  key={e.id}
-                                  value={e.id}
-                                  className="text-slate-200 text-sm"
-                                >
-                                  {`${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select value={newMemberRole} onValueChange={setNewMemberRole}>
-                            <SelectTrigger className="h-8 w-28 bg-slate-700 border-slate-600 text-slate-200 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700">
-                              {ROLE_OPTIONS.map((r) => (
-                                <SelectItem
-                                  key={r.value}
-                                  value={r.value}
-                                  className="text-slate-200 text-sm"
-                                >
-                                  {r.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            className="h-8 bg-green-600 hover:bg-green-700"
-                            onClick={() => handleAddMember(team.id)}
-                            disabled={!newMemberEmployeeId}
-                            aria-label="Confirm add member"
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8"
-                            onClick={() => {
-                              setAddingMemberTeamId(null);
-                              setNewMemberEmployeeId('');
-                            }}
-                            aria-label="Cancel add member"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mt-1 text-blue-400 hover:text-blue-300"
-                          onClick={() => setAddingMemberTeamId(team.id)}
-                          disabled={!team.is_active}
-                        >
-                          <UserPlus className="w-4 h-4 mr-1" />
-                          Add Member
-                        </Button>
-                      )}
+                      {/* Link to User Management */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 text-blue-400 hover:text-blue-300"
+                        onClick={() => {
+                          // Navigate to User Management filtered by this team
+                          // Users can be assigned to teams via the Edit User wizard
+                          window.location.href = `/settings?tab=users`;
+                        }}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        Manage in User Settings
+                      </Button>
                     </>
                   )}
                 </div>

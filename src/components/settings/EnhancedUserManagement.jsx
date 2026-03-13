@@ -952,8 +952,10 @@ export default function EnhancedUserManagement() {
     }
   }, [currentUser?.tenant_id, currentUser?.role, effectiveTenantId]);
 
-  // Fetch teams for the effective tenant (used in UserFormWizard)
-  const { teams: availableTeams } = useTeams(effectiveTenantId);
+  // Fetch teams for the user being edited (or effective tenant for create mode)
+  // CRITICAL: When editing a user, use THEIR tenant_id, not the global filter
+  const teamsForTenantId = editingUser?.tenant_id || effectiveTenantId;
+  const { teams: availableTeams } = useTeams(teamsForTenantId);
 
   useEffect(() => {
     editingUserRef.current = editingUser;

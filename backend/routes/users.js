@@ -1630,9 +1630,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         authUserId = authUser?.id;
 
         const result = await pgPool.query(
-          `INSERT INTO users (email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, (SELECT id FROM tenant WHERE tenant_id = $5 LIMIT 1), $6, NOW(), NOW())
-           RETURNING id, email, first_name, last_name, role, tenant_id, tenant_uuid, metadata, created_at, updated_at`,
+          `INSERT INTO users (email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING id, email, first_name, last_name, role, tenant_id, metadata, created_at, updated_at`,
           [normalizedEmail, first_name, last_name, 'admin', normalizedTenantId, combinedMetadata],
         );
 

@@ -527,20 +527,6 @@ export default function createEmployeeRoutes(_pgPool) {
 
         // Also ensure a users table record exists so employee appears in User Management
         try {
-          // Resolve tenant_uuid from tenant table for RLS compatibility
-          let resolvedTenantUuid = null;
-          try {
-            const { data: tenantRow } = await supabase
-              .from('tenant')
-              .select('id')
-              .eq('tenant_id', tenant_id)
-              .limit(1)
-              .maybeSingle();
-            resolvedTenantUuid = tenantRow?.id || tenant_id; // fallback: tenant_id IS the UUID
-          } catch {
-            resolvedTenantUuid = tenant_id;
-          }
-
           const { data: existingUser } = await supabase
             .from('users')
             .select('id')
@@ -582,7 +568,6 @@ export default function createEmployeeRoutes(_pgPool) {
               last_name,
               role: crmRole,
               tenant_id,
-              tenant_uuid: resolvedTenantUuid,
               status: 'active',
               metadata: {
                 crm_access: true,
@@ -602,14 +587,13 @@ export default function createEmployeeRoutes(_pgPool) {
               logger.info(`[EmployeeRoutes] Users record created for ${email}`);
             }
           } else {
-            // Reactivate existing user record and sync names/tenant_uuid
+            // Reactivate existing user record and sync names
             const { error: userUpdateErr } = await supabase
               .from('users')
               .update({
                 status: 'active',
                 first_name,
                 last_name,
-                tenant_uuid: resolvedTenantUuid,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', existingUser.id);
@@ -830,20 +814,6 @@ export default function createEmployeeRoutes(_pgPool) {
 
         // Ensure users table record exists (for User Management visibility)
         try {
-          // Resolve tenant_uuid from tenant table for RLS compatibility
-          let resolvedTenantUuid = null;
-          try {
-            const { data: tenantRow } = await supabase
-              .from('tenant')
-              .select('id')
-              .eq('tenant_id', tenant_id)
-              .limit(1)
-              .maybeSingle();
-            resolvedTenantUuid = tenantRow?.id || tenant_id;
-          } catch {
-            resolvedTenantUuid = tenant_id;
-          }
-
           const { data: existingUser } = await supabase
             .from('users')
             .select('id')
@@ -885,7 +855,6 @@ export default function createEmployeeRoutes(_pgPool) {
               last_name: data.last_name,
               role: crmRole,
               tenant_id,
-              tenant_uuid: resolvedTenantUuid,
               status: 'active',
               metadata: {
                 crm_access: true,
@@ -908,14 +877,13 @@ export default function createEmployeeRoutes(_pgPool) {
               logger.info(`[EmployeeRoutes] Users record created for ${employeeEmail}`);
             }
           } else {
-            // Reactivate existing user record and sync names/tenant_uuid
+            // Reactivate existing user record and sync names
             await supabase
               .from('users')
               .update({
                 status: 'active',
                 first_name: data.first_name,
                 last_name: data.last_name,
-                tenant_uuid: resolvedTenantUuid,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', existingUser.id);
