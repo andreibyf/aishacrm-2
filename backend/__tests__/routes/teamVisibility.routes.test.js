@@ -53,6 +53,7 @@ async function createTestApp(routePath, routeFactory, port) {
     req.user = {
       id: testEmployeeId || EMP_MIKE,
       role: 'admin',
+      perm_settings: true, // required for getVisibilityScope bypass (admin role alone no longer bypasses)
       tenant_id: req.tenantId,
     };
     next();
