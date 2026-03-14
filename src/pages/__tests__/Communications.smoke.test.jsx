@@ -122,7 +122,8 @@ describe('Communications page smoke test', () => {
     await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalled());
 
     expect(screen.getByText('Prospect Name')).toBeInTheDocument();
-    expect(screen.getByText('Looking forward to next week.')).toBeInTheDocument();
+    // Text appears in both thread-list preview and message detail panel
+    expect(screen.getAllByText('Looking forward to next week.').length).toBeGreaterThanOrEqual(1);
   });
 
   it('passes unread view through the thread query', async () => {
