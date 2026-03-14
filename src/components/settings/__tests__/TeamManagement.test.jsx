@@ -612,7 +612,7 @@ describe('TeamManagement — members', () => {
     fireEvent.click(screen.getByText('Sales'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Member')).toBeInTheDocument();
+      expect(screen.getByText('Manage in User Settings')).toBeInTheDocument();
     });
   });
 

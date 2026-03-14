@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Inbound Lead Capture Rules",
+  "description": "Define when unknown inbound business mail becomes a lead-capture candidate and how it is promoted through Braid.",
+  "labels": ["communications", "lead-capture", "email"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Inbound Lead Capture From Email"
+}

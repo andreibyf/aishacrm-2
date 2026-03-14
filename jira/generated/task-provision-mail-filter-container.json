@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Define Inbound Classification and Safety Contract",
+  "description": "Define how inbound safety classification and quarantine metadata are normalized from external mailbox providers.",
+  "labels": ["communications", "safety", "security"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Communications Platform Foundation"
+}

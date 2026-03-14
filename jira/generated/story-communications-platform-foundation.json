@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Story",
+  "summary": "Communications Platform Foundation",
+  "description": "Establish Docker topology, provider-adapter contracts, configuration schema, internal APIs, and Braid tool boundaries for the provider-agnostic communications stack.",
+  "labels": ["communications", "foundation", "docker", "braid"],
+  "epic": "Provider-Agnostic Communications Module"
+}

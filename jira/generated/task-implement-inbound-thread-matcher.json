@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Inbound Thread Matcher",
+  "description": "Match inbound email to an existing thread using RFC identifiers and tenant-local fallbacks.",
+  "labels": ["communications", "threading", "inbound"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Email Ingestion Service"
+}

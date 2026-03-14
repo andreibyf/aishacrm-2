@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Define Provider Adapter Runtime Contract",
+  "description": "Define the inbound and outbound provider adapter contract for communications-worker and communications-dispatcher.",
+  "labels": ["communications", "provider-adapter", "docker"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Communications Platform Foundation"
+}

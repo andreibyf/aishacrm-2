@@ -48,6 +48,7 @@ export default function UserPermissions({ userEmail, onClose }) {
     Leads: true,
     Opportunities: true,
     Activities: true,
+    Communications: true,
     Calendar: true,
     BizDevSources: true,
     CashFlow: true,

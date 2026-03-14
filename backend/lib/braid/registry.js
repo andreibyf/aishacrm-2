@@ -144,6 +144,11 @@ export const TOOL_REGISTRY = {
     function: 'searchActivities',
     policy: 'READ_ONLY',
   },
+  process_inbound_communication: {
+    file: 'communications.braid',
+    function: 'processInboundCommunication',
+    policy: 'WRITE_OPERATIONS',
+  },
 
   // Bizdev Sources
   create_bizdev_source: {
@@ -629,6 +634,8 @@ export const TOOL_DESCRIPTIONS = {
     'Get the full details of a specific Activity by its UUID. Only use when you already have the activity_id from a previous list or search.',
   delete_activity:
     'Delete an Activity by its ID. Use with caution - this permanently removes the activity.',
+  process_inbound_communication:
+    'Create the first CRM-side record for an inbound self-hosted email by storing it as an email activity with communications metadata. Use when the communications worker has already validated tenant scope and needs backend/Braid orchestration for message ingestion.',
 
   // Notes
   create_note:

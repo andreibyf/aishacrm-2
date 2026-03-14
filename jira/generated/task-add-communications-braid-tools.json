@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Add Communications Braid Tools",
+  "description": "Define the Braid tools required for thread upsert, message ingest, outbound queueing, entity linking, lead capture, and meeting reply handling.",
+  "labels": ["communications", "braid", "ai"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Communications Platform Foundation"
+}

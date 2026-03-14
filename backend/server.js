@@ -195,6 +195,7 @@ import createAISummaryRoutes from './routes/aiSummary.js';
 import createUtilsRoutes from './routes/utils.js';
 import createCacheRoutes from './routes/cache.js';
 import createClientRoutes from './routes/clients.js';
+import createInternalCommunicationsRoutes from './routes/internal-communications.js';
 import createWorkflowRoutes from './routes/workflows.js';
 import createWorkflowExecutionRoutes from './routes/workflowexecutions.js';
 // V1 activities route RETIRED (file deleted) - use /api/v2/activities
@@ -207,6 +208,7 @@ import createLeadsV2Routes from './routes/leads.v2.js';
 import createReportsV2Routes from './routes/reports.v2.js';
 import createWorkflowV2Routes from './routes/workflows.v2.js';
 import createDocumentV2Routes from './routes/documents.v2.js';
+import createCommunicationsV2Routes from './routes/communications.v2.js';
 import createWorkflowTemplateRoutes from './routes/workflow-templates.js';
 import createNotificationRoutes from './routes/notifications.js';
 import createSystemLogRoutes from './routes/system-logs.js';
@@ -334,6 +336,12 @@ app.use(
   validateTenantAccess,
   createCacheRoutes(),
 );
+app.use(
+  '/api/internal/communications',
+  defaultLimiter,
+  authenticateRequest,
+  createInternalCommunicationsRoutes(measuredPgPool),
+);
 app.use('/api/bizdevsources', defaultLimiter, createBizDevSourceRoutes(measuredPgPool));
 app.use('/api/clients', defaultLimiter, createClientRoutes(measuredPgPool));
 // Workflow routes with conditional auth: webhooks bypass auth, all other routes require auth
@@ -408,6 +416,13 @@ logger.debug('Mounting /api/v2/workflows routes (dev/internal)');
 app.use('/api/v2/workflows', defaultLimiter, createWorkflowV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/documents routes (dev/internal)');
 app.use('/api/v2/documents', defaultLimiter, createDocumentV2Routes(measuredPgPool));
+logger.debug('Mounting /api/v2/communications routes (dev/internal)');
+app.use(
+  '/api/v2/communications',
+  defaultLimiter,
+  authenticateRequest,
+  createCommunicationsV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/teams routes');
 app.use('/api/v2/teams', defaultLimiter, authenticateRequest, createTeamsV2Routes(measuredPgPool));
 logger.debug('Mounting /api/workflow-templates routes');

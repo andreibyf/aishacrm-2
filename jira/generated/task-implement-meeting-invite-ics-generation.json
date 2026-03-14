@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Meeting Invite ICS Generation",
+  "description": "Generate RFC-compliant ICS invitations from CRM meeting Activities for the self-hosted outbound flow.",
+  "labels": ["communications", "meeting", "ics"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Self-Hosted Meeting Scheduling"
+}

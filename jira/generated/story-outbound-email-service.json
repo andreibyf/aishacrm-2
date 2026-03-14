@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Story",
+  "summary": "Outbound Email Service",
+  "description": "Queue and send outbound CRM email through tenant-configured provider adapters while keeping delivery state synchronized with threads and activities.",
+  "labels": ["communications", "email", "outbound"],
+  "epic": "Provider-Agnostic Communications Module"
+}

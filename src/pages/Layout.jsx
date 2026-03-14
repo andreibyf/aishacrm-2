@@ -24,6 +24,7 @@ import {
   Building2,
   Calendar,
   CheckSquare,
+  Inbox,
   ClipboardCheck, // NEW: Added for ClientRequirements
   CreditCard,
   Database,
@@ -109,6 +110,7 @@ const navItems = [
   { href: 'Leads', icon: Target, label: 'Leads' }, // Changed icon to Target
   { href: 'Opportunities', icon: TrendingUp, label: 'Opportunities' }, // Changed icon to TrendingUp
   { href: 'Activities', icon: CheckSquare, label: 'Activities' },
+  { href: 'Communications', icon: Inbox, label: 'Communications' },
   { href: 'Calendar', icon: Calendar, label: 'Calendar' },
   { href: 'ConstructionProjects', icon: Kanban, label: 'Project Management' }, // Project management module
   { href: 'Workers', icon: Users, label: 'Workers' }, // Contractors/temp labor management

@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Epic",
+  "summary": "Provider-Agnostic Communications Module",
+  "description": "Build a Docker-native, Braid-mediated communications module that treats mailbox providers as pluggable transport while AiSHA owns inbound sync, outbound orchestration, thread storage, CRM linking, lead capture, and meeting scheduling.",
+  "labels": ["communications", "email", "provider-agnostic", "docker", "braid"],
+  "epic_name": "Provider-Agnostic Communications Module"
+}
