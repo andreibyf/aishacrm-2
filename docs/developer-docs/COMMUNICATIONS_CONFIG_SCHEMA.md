@@ -1,7 +1,7 @@
 # Communications Config Schema
 
 > **Status:** Phase 1 design
-> **Updated:** 2026-03-13
+> **Updated:** 2026-03-14
 > **Scope:** Tenant-level provider-agnostic communications configuration and environment contract
 
 ## Purpose
@@ -70,3 +70,31 @@ The module is provider-agnostic:
 - provider-specific fields must map into the normalized adapter contract
 - backend contracts must not depend on `provider_name`
 - multiple provider connections may exist per tenant, but one mailbox record resolves one tenant only
+
+## Runtime Persistence Notes
+
+The tenant configuration above describes the durable mailbox connection shape. Runtime sync state is stored separately on the same `tenant_integrations` row:
+
+```json
+{
+  "metadata": {
+    "communications": {
+      "sync": {
+        "cursor": {
+          "strategy": "uid",
+          "value": 42
+        },
+        "updated_at": "2026-03-14T13:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+Rules for runtime state:
+
+- provider credentials remain in `api_credentials`
+- normalized provider config remains in `config`
+- the worker persists mailbox cursor state in `metadata.communications.sync.cursor`
+- cursor state is tenant-scoped because it is stored on the matched `tenant_integrations` row
+- cursor advancement only happens after successful backend ingestion

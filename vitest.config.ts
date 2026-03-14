@@ -6,6 +6,22 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isWindows = process.platform === "win32";
+// forks pool on Windows times out starting worker processes when 6 projects run
+// concurrently; vmForks uses Node VM context which starts significantly faster.
+const testPool = isWindows ? "vmForks" : "threads";
+const poolOptions = isWindows
+  ? {
+      vmForks: {
+        singleFork: true,
+      },
+    }
+  : {
+      threads: {
+        singleThread: false,
+        isolate: true,
+      },
+    };
 
 export const SUBSYSTEM_TAGS = [
   "PLATFORM",
@@ -28,13 +44,8 @@ const sharedConfig = {
   hookTimeout: 30000,
   teardownTimeout: 10000,
   passWithNoTests: true,
-  pool: "threads" as const,
-  poolOptions: {
-    threads: {
-      singleThread: false,
-      isolate: true,
-    },
-  },
+  pool: testPool,
+  poolOptions,
   onConsoleLog: () => true,
 };
 

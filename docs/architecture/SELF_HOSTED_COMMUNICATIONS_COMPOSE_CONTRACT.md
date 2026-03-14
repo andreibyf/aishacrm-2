@@ -1,7 +1,7 @@
 # Provider-Agnostic Communications Compose Contract
 
 > **Status:** Phase 1 compose design
-> **Updated:** 2026-03-13
+> **Updated:** 2026-03-14
 > **Scope:** Service matrix, network attachments, hostnames, ports, volumes, secrets, and external provider contracts
 
 ## Purpose
@@ -61,3 +61,17 @@ This document translates the provider-agnostic communications topology into a co
 - `COMMUNICATIONS_INGEST_ENABLED`
 - `COMMUNICATIONS_OUTBOUND_ENABLED`
 - `COMMUNICATIONS_SCHEDULING_ENABLED`
+
+## Implemented Runtime Notes
+
+The current codebase implements these parts of the compose/runtime contract already:
+
+- `communications-worker` calls `backend` over HTTP at the internal route boundary
+- internal worker-to-backend auth uses a short-lived JWT signed with `JWT_SECRET`
+- inbound mailbox sync uses provider endpoints directly and does not depend on local mail containers
+- sync cursors are persisted on the matching `tenant_integrations` row in Postgres metadata, not on container-local disk
+
+Operational implication:
+
+- container restarts do not reset mailbox progress as long as the database row remains intact
+- the database is the durable checkpoint location for inbound polling state

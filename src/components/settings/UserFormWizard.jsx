@@ -31,6 +31,7 @@ import {
   Eye,
   Edit3,
   Settings,
+  Mail,
   BarChart3,
   UserCog,
   LayoutDashboard,
@@ -84,6 +85,7 @@ const NAV_MODULES = [
   { key: 'Leads', label: 'Leads', icon: Target, description: 'Sales leads and prospects' },
   { key: 'Opportunities', label: 'Opportunities', icon: Briefcase, description: 'Sales pipeline and deals' },
   { key: 'Activities', label: 'Activities', icon: Activity, description: 'Calls, meetings, tasks, and notes' },
+  { key: 'Communications', label: 'Communications', icon: Mail, description: 'Inbox and email thread management' },
   { key: 'Calendar', label: 'Calendar', icon: Calendar, description: 'Scheduled events and reminders' },
   { key: 'ConstructionProjects', label: 'Project Management', icon: Briefcase, description: 'Project and construction management' },
   { key: 'Workers', label: 'Workers', icon: Users, description: 'Contractors and temp labor management' },
@@ -116,6 +118,7 @@ const DEFAULT_NAV_PERMISSIONS = {
   Leads: true,
   Opportunities: true,
   Activities: true,
+  Communications: true,
   Calendar: true,
   BizDevSources: true,
   // Industry-specific modules - on by default

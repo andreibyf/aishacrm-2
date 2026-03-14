@@ -1,14 +1,14 @@
 # Self-Hosted Communications Internal API
 
 > **Status:** Phase 1 backend contract
-> **Updated:** 2026-03-13
+> **Updated:** 2026-03-14
 > **Scope:** `/api/internal/communications/*` request, auth, idempotency, and response contract
 
 ## Purpose
 
-This document defines the internal backend API used by the self-hosted communications module.
+This document defines the internal backend API used by the provider-agnostic communications module.
 
-It turns the communications config schema and compose contract into concrete backend callback surfaces without implementing route handlers yet.
+It turns the communications config schema and compose contract into concrete backend callback surfaces. The inbound route is mounted and used by `communications-worker` today; the other routes remain scaffolded.
 
 The contract covers:
 
@@ -46,6 +46,28 @@ Recommended route set:
 | `POST` | `/api/internal/communications/threads/replay` | `communications-worker` | replay failed normalization, threading, or linking work |
 | `POST` | `/api/internal/communications/scheduling/replies` | `meeting-scheduler` or `communications-worker` | submit parsed meeting reply payloads |
 | `GET` | `/api/internal/communications/health` | internal monitoring | summarize communications readiness and dependency state |
+
+## Implemented Inbound Worker Contract
+
+The currently implemented caller contract for inbound polling is:
+
+- caller: `communications-worker`
+- auth: internal bearer JWT signed with `JWT_SECRET`
+- idempotency key: `payload.message_id`
+- trace id: generated per normalized message event
+- tenant scope: supplied from the resolved mailbox connection
+
+Current worker sequence:
+
+1. resolve mailbox connection from `tenant_integrations`
+2. load stored cursor from `tenant_integrations.metadata.communications.sync.cursor`
+3. fetch new messages through the provider adapter
+4. POST each message to `/api/internal/communications/inbound`
+5. on successful `2xx` ingestion, acknowledge and persist the next cursor
+
+Failure rule:
+
+- if ingestion fails for a fetched message, the worker must not persist the advanced cursor
 
 ## Authentication Model
 
@@ -292,6 +314,14 @@ Backend responsibility:
 - resolve tenant
 - store thread/message records through backend persistence
 - invoke Braid-backed linking or classification only where needed
+
+Current implementation status:
+
+- route is mounted and validated
+- route requires authenticated internal-service access
+- route returns `202 Accepted` on successful inbound validation and service orchestration
+- current service orchestration creates/updates activity-level communications state first
+- full thread/message persistence remains a follow-on step
 
 ## `POST /api/internal/communications/outbound`
 

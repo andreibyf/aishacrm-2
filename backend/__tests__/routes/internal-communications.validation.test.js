@@ -5,6 +5,7 @@ let app;
 let server;
 const port = 3111;
 let setInboundCommunicationsToolExecutorForTests;
+let setInboundCommunicationsDependenciesForTests;
 
 async function request(method, path, body, headers = {}) {
   return fetch(`http://localhost:${port}${path}`, {
@@ -48,6 +49,9 @@ describe('Internal Communications Route Scaffolding', () => {
     ({ setInboundCommunicationsToolExecutorForTests } = await import(
       '../../services/inboundCommunicationsService.js'
     ));
+    ({ setInboundCommunicationsDependenciesForTests } = await import(
+      '../../services/inboundCommunicationsService.js'
+    ));
 
     app = express();
     app.use(express.json());
@@ -80,6 +84,43 @@ describe('Internal Communications Route Scaffolding', () => {
         },
       };
     });
+    setInboundCommunicationsDependenciesForTests({
+      resolveCanonicalTenant: async (tenantId) => ({
+        uuid: tenantId,
+        slug: tenantId,
+        source: 'test',
+      }),
+      persistInboundThreadAndMessage: async (_request, resolvedTenant) => ({
+        thread: {
+          id: 'thread-001',
+          tenant_id: resolvedTenant.id,
+        },
+        message: {
+          id: 'message-001',
+          tenant_id: resolvedTenant.id,
+        },
+      }),
+      resolveInboundEntityLinks: async (request) => {
+        const refs = Array.isArray(request.payload.entity_refs) ? request.payload.entity_refs : [];
+        return refs.map((entry) => ({
+          type: entry.type,
+          id: entry.id,
+          source: 'explicit',
+        }));
+      },
+      attachActivityToCommunicationsRecords: async ({ activity, threadId, messageId, links }) => ({
+        ...activity,
+        metadata: {
+          ...(activity.metadata || {}),
+          communications: {
+            ...(activity.metadata?.communications || {}),
+            thread_id: threadId,
+            stored_message_id: messageId,
+            link_status: links.length > 0 ? 'linked' : 'pending',
+          },
+        },
+      }),
+    });
 
     app.use('/api/internal/communications', createInternalCommunicationsRoutes(null));
     server = app.listen(port);
@@ -88,6 +129,7 @@ describe('Internal Communications Route Scaffolding', () => {
 
   after(async () => {
     setInboundCommunicationsToolExecutorForTests(null);
+    setInboundCommunicationsDependenciesForTests(null);
     if (server) {
       await new Promise((resolve) => server.close(resolve));
     }
@@ -152,6 +194,8 @@ describe('Internal Communications Route Scaffolding', () => {
     assert.equal(json.status, 'accepted');
     assert.equal(json.result.processing_status, 'accepted');
     assert.equal(json.result.message_id, '<abc123@mail.aishacrm.com>');
+    assert.equal(typeof json.result.thread_id, 'string');
+    assert.equal(typeof json.result.stored_message_id, 'string');
     assert.equal(json.result.activity_id, 'activity-inbound-001');
   });
 

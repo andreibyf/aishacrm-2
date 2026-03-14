@@ -1,8 +1,10 @@
 # Provider-Agnostic Communications Topology
 
 > **Status:** Phase 1 architecture design
-> **Updated:** 2026-03-13
+> **Updated:** 2026-03-14
 > **Scope:** Provider-backed email ingestion, outbound email, thread storage, CRM linking, and meeting scheduling
+
+> **Implementation note:** The provider-agnostic inbound polling loop is now implemented in the backend worker layer. The remaining gap is deeper thread/message persistence and richer CRM linking beyond the current accepted inbound orchestration path.
 
 ## Purpose
 
@@ -56,6 +58,24 @@ Forbidden paths:
 - direct communications-worker or dispatcher writes into Supabase/Postgres
 - provider-specific business logic embedded into CRM entity rules
 
+## Implemented Inbound Flow
+
+The current inbound email path is now concrete:
+
+1. `communications-worker` resolves the mailbox connection from `tenant_integrations`
+2. the worker reads the stored mailbox cursor from `tenant_integrations.metadata.communications.sync.cursor`
+3. the provider adapter fetches incremental IMAP messages from the configured folder using that cursor
+4. the worker normalizes each message into the internal communications envelope
+5. the worker posts each normalized payload to `/api/internal/communications/inbound` using an internal JWT
+6. the backend validates auth, idempotency, and tenant scope before invoking service/Braid orchestration
+7. only after successful ingestion does the worker acknowledge and persist the next cursor back to the same `tenant_integrations` row
+
+This preserves the intended intelligence-layer model:
+
+- the mailbox provider remains the system of record for transport and mailbox hosting
+- AiSHA owns normalization, orchestration, and CRM-side intelligence
+- no provider adapter writes directly to the database
+
 ## Tenant Isolation Model
 
 - each mailbox connection maps to exactly one tenant
@@ -73,6 +93,13 @@ Required adapter capabilities:
 - normalized provider error mapping
 - mailbox cursor or checkpoint handling
 - provider metadata passthrough for audit and replay
+
+Current implemented provider behavior:
+
+- `imap_smtp` supports incremental inbound retrieval by UID cursor
+- `imap_smtp` supports outbound SMTP delivery
+- cursor acknowledgement is explicit in the adapter contract
+- provider metadata is carried forward in normalized inbound payloads for replay and audit
 
 ## Rollout Sequence
 

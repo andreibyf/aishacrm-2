@@ -15,6 +15,7 @@ const PAGES = {
   Customers: lazy(() => import('./Customers')),
   Opportunities: lazy(() => import('./Opportunities')),
   Activities: lazy(() => import('./Activities')),
+  Communications: lazy(() => import('./Communications')),
   Settings: lazy(() => import('./Settings')),
   Reports: lazy(() => import('./Reports')),
   Documentation: lazy(() => import('./Documentation')),
@@ -134,6 +135,7 @@ function PagesContent() {
                 <Route path="/Customers" element={<PAGES.Customers />} />
                 <Route path="/Opportunities" element={<PAGES.Opportunities />} />
                 <Route path="/Activities" element={<PAGES.Activities />} />
+                <Route path="/Communications" element={<PAGES.Communications />} />
                 <Route path="/Settings" element={<PAGES.Settings />} />
                 <Route path="/Reports" element={<PAGES.Reports />} />
                 <Route path="/Documentation" element={<PAGES.Documentation />} />

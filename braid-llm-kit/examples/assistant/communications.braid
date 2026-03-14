@@ -18,6 +18,9 @@ fn processInboundCommunication(
   text_body: String,
   html_body: String,
   thread_hint: String,
+  thread_id: String,
+  stored_message_id: String,
+  link_summary: String,
   entity_type: String,
   entity_id: String
 ) -> Result<Activity, CRMError> !net {
@@ -43,8 +46,11 @@ fn processInboundCommunication(
         sender_name: sender_name,
         received_at: received_at,
         thread_hint: thread_hint,
-        thread_status: "pending",
-        link_status: "pending",
+        thread_id: thread_id,
+        stored_message_id: stored_message_id,
+        thread_status: "persisted",
+        link_status: "linked",
+        link_summary: link_summary,
         origin: "self_hosted_communications"
       }
     }

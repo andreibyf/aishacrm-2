@@ -1,9 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveMailboxConnectionForInboundJob } from '../../workers/communicationsWorker.js';
+import {
+  resolveMailboxConnectionForInboundJob,
+  processInboundMailboxJob,
+} from '../../workers/communicationsWorker.js';
 
-function buildSupabaseStub(rows) {
+function buildSupabaseStub(rows, updates = []) {
   const chain = {
     select() {
       return chain;
@@ -16,15 +19,32 @@ function buildSupabaseStub(rows) {
     },
   };
 
+  const updateChain = {
+    eq() {
+      return updateChain;
+    },
+    then(resolve) {
+      return Promise.resolve(resolve({ data: null, error: null }));
+    },
+  };
+
   return {
     from(tableName) {
       assert.equal(tableName, 'tenant_integrations');
-      return chain;
+      return {
+        select() {
+          return chain;
+        },
+        update(payload) {
+          updates.push(payload);
+          return updateChain;
+        },
+      };
     },
   };
 }
 
-function buildRow() {
+function buildRow(overrides = {}) {
   return {
     id: 'integration-001',
     tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
@@ -54,6 +74,17 @@ function buildRow() {
         from_address: 'owner@example.com',
       },
     },
+    metadata: {
+      communications: {
+        sync: {
+          cursor: {
+            strategy: 'uid',
+            value: 41,
+          },
+        },
+      },
+    },
+    ...overrides,
   };
 }
 
@@ -83,5 +114,142 @@ describe('communications worker mailbox resolution', () => {
         ),
       (error) => error.code === 'communications_provider_not_found',
     );
+  });
+
+  it('fetches inbound mail from the stored cursor and persists the next cursor after successful ingestion', async () => {
+    const updates = [];
+    const fetchCalls = [];
+    const acknowledged = [];
+    const row = buildRow();
+    const supabase = buildSupabaseStub([row], updates);
+    const adapter = {
+      async fetchInboundMessages(options) {
+        assert.deepEqual(options.cursor, { strategy: 'uid', value: 41 });
+        return {
+          messages: [
+            {
+              uid: 42,
+              provider_cursor: 42,
+              message_id: '<msg-42@example.com>',
+              subject: 'New lead',
+              received_at: '2026-03-14T13:00:00.000Z',
+              from: { email: 'lead@example.com', name: 'Lead' },
+              to: [{ email: 'owner@example.com', name: 'Owner' }],
+              text_body: 'Hello',
+              raw_source: 'raw-message',
+            },
+          ],
+          cursor: { strategy: 'uid', value: 42 },
+        };
+      },
+      async acknowledgeCursor(cursor) {
+        acknowledged.push(cursor);
+        return { ok: true };
+      },
+    };
+
+    const result = await processInboundMailboxJob(
+      {
+        tenant_id: row.tenant_id,
+        mailbox_id: 'owner-primary',
+      },
+      {
+        supabase,
+        internalToken: 'test-internal-token',
+        backendUrl: 'http://backend:3001',
+        resolveCommunicationsProviderConnection: async () => ({
+          integration: row,
+          connection: {
+            config: row.config,
+          },
+          adapter,
+        }),
+        fetchImpl: async (url, options) => {
+          fetchCalls.push({ url, options });
+          return {
+            ok: true,
+            async json() {
+              return { ok: true, status: 'accepted' };
+            },
+          };
+        },
+      },
+    );
+
+    assert.equal(result.processed_count, 1);
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].url, 'http://backend:3001/api/internal/communications/inbound');
+    assert.equal(fetchCalls[0].options.headers.Authorization, 'Bearer test-internal-token');
+    assert.deepEqual(acknowledged, [{ strategy: 'uid', value: 42 }]);
+    assert.equal(updates.length, 1);
+    assert.deepEqual(updates[0].metadata.communications.sync.cursor, { strategy: 'uid', value: 42 });
+  });
+
+  it('does not advance the stored cursor when internal ingestion fails', async () => {
+    const updates = [];
+    const acknowledged = [];
+    const row = buildRow();
+    const supabase = buildSupabaseStub([row], updates);
+    const adapter = {
+      async fetchInboundMessages() {
+        return {
+          messages: [
+            {
+              uid: 42,
+              provider_cursor: 42,
+              message_id: '<msg-42@example.com>',
+              subject: 'New lead',
+              received_at: '2026-03-14T13:00:00.000Z',
+              from: { email: 'lead@example.com', name: 'Lead' },
+              to: [{ email: 'owner@example.com', name: 'Owner' }],
+            },
+          ],
+          cursor: { strategy: 'uid', value: 42 },
+        };
+      },
+      async acknowledgeCursor(cursor) {
+        acknowledged.push(cursor);
+        return { ok: true };
+      },
+    };
+
+    await assert.rejects(
+      () =>
+        processInboundMailboxJob(
+          {
+            tenant_id: row.tenant_id,
+            mailbox_id: 'owner-primary',
+          },
+          {
+            supabase,
+            internalToken: 'test-internal-token',
+            backendUrl: 'http://backend:3001',
+            resolveCommunicationsProviderConnection: async () => ({
+              integration: row,
+              connection: {
+                config: row.config,
+              },
+              adapter,
+            }),
+            fetchImpl: async () => ({
+              ok: false,
+              status: 502,
+              async json() {
+                return {
+                  ok: false,
+                  error: {
+                    code: 'communications_orchestration_failed',
+                    message: 'orchestration failed',
+                  },
+                };
+              },
+            }),
+          },
+        ),
+      (error) => error.code === 'communications_orchestration_failed',
+    );
+
+    assert.equal(acknowledged.length, 0);
+    assert.equal(updates.length, 0);
   });
 });

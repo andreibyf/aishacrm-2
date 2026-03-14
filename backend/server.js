@@ -208,6 +208,7 @@ import createLeadsV2Routes from './routes/leads.v2.js';
 import createReportsV2Routes from './routes/reports.v2.js';
 import createWorkflowV2Routes from './routes/workflows.v2.js';
 import createDocumentV2Routes from './routes/documents.v2.js';
+import createCommunicationsV2Routes from './routes/communications.v2.js';
 import createWorkflowTemplateRoutes from './routes/workflow-templates.js';
 import createNotificationRoutes from './routes/notifications.js';
 import createSystemLogRoutes from './routes/system-logs.js';
@@ -415,6 +416,13 @@ logger.debug('Mounting /api/v2/workflows routes (dev/internal)');
 app.use('/api/v2/workflows', defaultLimiter, createWorkflowV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/documents routes (dev/internal)');
 app.use('/api/v2/documents', defaultLimiter, createDocumentV2Routes(measuredPgPool));
+logger.debug('Mounting /api/v2/communications routes (dev/internal)');
+app.use(
+  '/api/v2/communications',
+  defaultLimiter,
+  authenticateRequest,
+  createCommunicationsV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/teams routes');
 app.use('/api/v2/teams', defaultLimiter, authenticateRequest, createTeamsV2Routes(measuredPgPool));
 logger.debug('Mounting /api/workflow-templates routes');

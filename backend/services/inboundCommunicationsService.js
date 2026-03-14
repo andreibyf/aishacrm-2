@@ -1,21 +1,52 @@
 import logger from '../lib/logger.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.js';
+import {
+  attachActivityToCommunicationsRecords,
+  persistInboundThreadAndMessage,
+  resolveInboundEntityLinks,
+} from './communicationsPersistenceService.js';
 
 let inboundToolExecutor = executeBraidTool;
+let inboundTenantResolver = resolveCanonicalTenant;
+let inboundThreadMessagePersister = persistInboundThreadAndMessage;
+let inboundEntityLinkResolver = resolveInboundEntityLinks;
+let inboundActivityAttacher = attachActivityToCommunicationsRecords;
 
 export async function handleInboundCommunicationsEvent(request) {
   const traceId = request.traceId || request.meta?.trace_id || null;
   const resolvedTenant = await resolveInboundTenant(request);
-  const activity = await orchestrateInboundCommunication(request, resolvedTenant);
+  const persisted = await inboundThreadMessagePersister(request, resolvedTenant);
+  const linkedEntities = await inboundEntityLinkResolver(request, resolvedTenant, persisted);
+  const activity = await orchestrateInboundCommunication(
+    request,
+    resolvedTenant,
+    persisted,
+    linkedEntities,
+  );
+  const updatedActivity = await inboundActivityAttacher({
+    tenantId: resolvedTenant.id,
+    threadId: persisted.thread.id,
+    messageId: persisted.message.id,
+    activity,
+    links: linkedEntities,
+  });
 
   const result = {
-    thread_id: null,
+    thread_id: persisted.thread.id,
+    stored_message_id: persisted.message.id,
+    provider_message_id: request.payload.message_id,
     message_id: request.payload.message_id,
-    activity_id: activity?.id || null,
-    link_status: activity?.metadata?.communications?.link_status || 'pending',
-    linked_entities: [],
-    lead_capture_status: 'pending_evaluation',
+    activity_id: updatedActivity?.id || activity?.id || null,
+    link_status: updatedActivity?.metadata?.communications?.link_status || 'pending',
+    linked_entities: linkedEntities.map((entry) => ({
+      entity_type: entry.type,
+      entity_id: entry.id,
+      source: entry.source,
+    })),
+    lead_capture_status: linkedEntities.some((entry) => entry.type === 'lead')
+      ? 'linked_existing_lead'
+      : 'pending_evaluation',
     processing_status: 'accepted',
     accepted_at: new Date().toISOString(),
   };
@@ -54,7 +85,7 @@ async function resolveInboundTenant(request) {
     throw error;
   }
 
-  const resolved = await resolveCanonicalTenant(explicitTenantId);
+  const resolved = await inboundTenantResolver(explicitTenantId);
   if (resolved?.uuid) {
     return {
       id: resolved.uuid,
@@ -70,8 +101,8 @@ async function resolveInboundTenant(request) {
   };
 }
 
-async function orchestrateInboundCommunication(request, resolvedTenant) {
-  const relatedEntity = selectRelatedEntity(request.payload);
+async function orchestrateInboundCommunication(request, resolvedTenant, persisted, linkedEntities) {
+  const relatedEntity = selectPrimaryEntity(linkedEntities);
   const tenantRecord = {
     id: resolvedTenant.id,
     tenant_id: resolvedTenant.slug,
@@ -99,6 +130,11 @@ async function orchestrateInboundCommunication(request, resolvedTenant) {
     text_body: request.payload.text_body || '',
     html_body: request.payload.html_body || '',
     thread_hint: request.payload.thread_hint || request.payload.in_reply_to || '',
+    thread_id: persisted.thread.id,
+    stored_message_id: persisted.message.id,
+    link_summary: linkedEntities
+      .map((entry) => `${entry.type}:${entry.id}:${entry.source}`)
+      .join(','),
     entity_type: relatedEntity.type || '',
     entity_id: relatedEntity.id || '',
   };
@@ -128,22 +164,15 @@ async function orchestrateInboundCommunication(request, resolvedTenant) {
   return toolResult;
 }
 
-function selectRelatedEntity(payload = {}) {
-  const candidates = Array.isArray(payload.entity_refs)
-    ? payload.entity_refs
-    : Array.isArray(payload.related_entities)
-      ? payload.related_entities
-      : [];
-
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate === 'object' && candidate.type && candidate.id) {
+function selectPrimaryEntity(linkedEntities = []) {
+  for (const candidate of linkedEntities) {
+    if (candidate && typeof candidate === 'object' && candidate.type && candidate.id && candidate.type !== 'activity') {
       return {
         type: String(candidate.type),
         id: String(candidate.id),
       };
     }
   }
-
   return { type: null, id: null };
 }
 
@@ -151,7 +180,15 @@ export function setInboundCommunicationsToolExecutorForTests(executor) {
   inboundToolExecutor = executor || executeBraidTool;
 }
 
+export function setInboundCommunicationsDependenciesForTests(overrides = null) {
+  inboundTenantResolver = overrides?.resolveCanonicalTenant || resolveCanonicalTenant;
+  inboundThreadMessagePersister = overrides?.persistInboundThreadAndMessage || persistInboundThreadAndMessage;
+  inboundEntityLinkResolver = overrides?.resolveInboundEntityLinks || resolveInboundEntityLinks;
+  inboundActivityAttacher = overrides?.attachActivityToCommunicationsRecords || attachActivityToCommunicationsRecords;
+}
+
 export default {
   handleInboundCommunicationsEvent,
   setInboundCommunicationsToolExecutorForTests,
+  setInboundCommunicationsDependenciesForTests,
 };
