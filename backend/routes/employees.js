@@ -4,7 +4,11 @@
  */
 
 import express from 'express';
-import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
+import {
+  cacheList,
+  invalidateCache,
+  invalidateTenantAndDashboardCache,
+} from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { requireAuth } from '../middleware/authenticate.js';
 import { inviteUserByEmail, getAuthUserByEmail } from '../lib/supabaseAuth.js';
@@ -1359,9 +1363,9 @@ export default function createEmployeeRoutes(_pgPool) {
         });
       }
 
-      // Invalidate employee caches so consumers see the updated link state
-      invalidateCache('employees');
-      invalidateEmployeeCache(employee.tenant_id);
+      // This route is not wrapped in invalidateCache middleware, so invalidate manually.
+      await invalidateTenantAndDashboardCache(employee.tenant_id, 'employees');
+      await invalidateEmployeeCache(employee.tenant_id);
 
       logger.info(`[Employees] User link validated: employee=${id}, user=${user_id}`);
 

@@ -1,0 +1,60 @@
+// Self-Hosted Communications Tools
+// Inbound email orchestration for thread/message/activity linkage
+
+import { Result, Activity, CRMError } from "../../spec/types.braid"
+
+@policy(WRITE_OPERATIONS)
+fn processInboundCommunication(
+  tenant_id: String,
+  mailbox_id: String,
+  mailbox_address: String,
+  source_service: String,
+  event_type: String,
+  message_id: String,
+  subject: String,
+  sender_email: String,
+  sender_name: String,
+  received_at: String,
+  text_body: String,
+  html_body: String,
+  thread_hint: String,
+  entity_type: String,
+  entity_id: String
+) -> Result<Activity, CRMError> !net {
+  let url = "/api/v2/activities";
+
+  let payload = {
+    tenant_id: tenant_id,
+    subject: subject,
+    activity_type: "email",
+    due_date: received_at,
+    body: text_body,
+    status: "completed",
+    related_to: entity_type,
+    related_id: entity_id,
+    metadata: {
+      communications: {
+        mailbox_id: mailbox_id,
+        mailbox_address: mailbox_address,
+        source_service: source_service,
+        event_type: event_type,
+        message_id: message_id,
+        sender_email: sender_email,
+        sender_name: sender_name,
+        received_at: received_at,
+        thread_hint: thread_hint,
+        thread_status: "pending",
+        link_status: "pending",
+        origin: "self_hosted_communications"
+      }
+    }
+  };
+
+  let response = http.post(url, { body: payload });
+
+  return match response {
+    Ok{value} => Ok(value.data.activity),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "process_inbound_communication" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

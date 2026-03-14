@@ -18,6 +18,7 @@ export const TenantIntegrationSchema = {
         'google_calendar',
         'gmail',
         'gmail_smtp',
+        'communications_provider',
         'outlook_email',
         'onedrive',
         'outlook_calendar',

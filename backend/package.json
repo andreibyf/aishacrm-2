@@ -21,6 +21,7 @@
     "verify:phase3": "node scripts/run_phase3_verification.js",
     "seed": "node scripts/run_seed.js",
     "worker:email": "node workers/emailWorker.js",
+    "worker:communications": "node workers/communicationsWorker.js",
     "verify:rls": "node verify-rls.js",
     "ci:check-rls": "node scripts/checks/check-rls-ci.js"
   },
@@ -45,6 +46,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
+    "imapflow": "^1.2.13",
     "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.2",
     "minimatch": "^10.2.4",

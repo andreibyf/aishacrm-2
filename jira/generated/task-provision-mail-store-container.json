@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Define Provider Sync State and Message Retention Contract",
+  "description": "Define sync cursor persistence, message retention, and replay boundaries for provider-backed mailbox ingestion.",
+  "labels": ["communications", "sync", "retention"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Communications Platform Foundation"
+}

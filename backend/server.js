@@ -195,6 +195,7 @@ import createAISummaryRoutes from './routes/aiSummary.js';
 import createUtilsRoutes from './routes/utils.js';
 import createCacheRoutes from './routes/cache.js';
 import createClientRoutes from './routes/clients.js';
+import createInternalCommunicationsRoutes from './routes/internal-communications.js';
 import createWorkflowRoutes from './routes/workflows.js';
 import createWorkflowExecutionRoutes from './routes/workflowexecutions.js';
 // V1 activities route RETIRED (file deleted) - use /api/v2/activities
@@ -333,6 +334,12 @@ app.use(
   authenticateRequest,
   validateTenantAccess,
   createCacheRoutes(),
+);
+app.use(
+  '/api/internal/communications',
+  defaultLimiter,
+  authenticateRequest,
+  createInternalCommunicationsRoutes(measuredPgPool),
 );
 app.use('/api/bizdevsources', defaultLimiter, createBizDevSourceRoutes(measuredPgPool));
 app.use('/api/clients', defaultLimiter, createClientRoutes(measuredPgPool));

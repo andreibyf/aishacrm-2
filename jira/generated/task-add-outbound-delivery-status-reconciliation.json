@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Add Outbound Delivery Status Reconciliation",
+  "description": "Feed bounces, deferrals, and confirmations back into CRM state through backend/Braid.",
+  "labels": ["communications", "delivery", "email"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Outbound Email Service"
+}

@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Entity Linking Rules",
+  "description": "Define deterministic linking of communications to Lead, Contact, Account, Opportunity, and Activity.",
+  "labels": ["communications", "crm", "linking"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "CRM Email Threading and Linking"
+}

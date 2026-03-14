@@ -3,6 +3,10 @@ import { validateTenantScopedId } from '../lib/validation.js';
 import logger from '../lib/logger.js';
 import { supabase } from '../services/supabaseClient.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
+import {
+  isCommunicationsProviderIntegration,
+  validateCommunicationsProviderConfig,
+} from '../lib/communicationsConfig.js';
 
 /**
  * Resolve the effective tenant_id from authenticated context.
@@ -119,6 +123,22 @@ export default function createTenantIntegrationRoutes() {
         return res.status(400).json({ status: 'error', message: 'integration_type is required' });
       }
 
+      if (isCommunicationsProviderIntegration(integration_type)) {
+        const validation = validateCommunicationsProviderConfig({
+          tenant_id,
+          config: config || {},
+          api_credentials: api_credentials || {},
+        });
+
+        if (!validation.valid) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Invalid communications provider configuration',
+            errors: validation.errors,
+          });
+        }
+      }
+
       const { data, error } = await supabase
         .from('tenant_integrations')
         .insert({
@@ -164,6 +184,26 @@ export default function createTenantIntegrationRoutes() {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
+      let existingIntegrationType = null;
+      if (
+        integration_type === undefined &&
+        (config !== undefined || api_credentials !== undefined)
+      ) {
+        const { data: existingIntegration, error: existingError } = await supabase
+          .from('tenant_integrations')
+          .select('integration_type')
+          .eq('tenant_id', tenant_id)
+          .eq('id', id)
+          .limit(1)
+          .single();
+
+        if (existingError || !existingIntegration) {
+          return res.status(404).json({ status: 'error', message: 'Integration not found' });
+        }
+
+        existingIntegrationType = existingIntegration.integration_type || null;
+      }
+
       const updateData = {};
 
       if (integration_type !== undefined) updateData.integration_type = integration_type;
@@ -178,6 +218,23 @@ export default function createTenantIntegrationRoutes() {
 
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ status: 'error', message: 'No fields to update' });
+      }
+
+      const effectiveIntegrationType = integration_type || existingIntegrationType;
+      if (isCommunicationsProviderIntegration(effectiveIntegrationType)) {
+        const validation = validateCommunicationsProviderConfig({
+          tenant_id,
+          config: config || {},
+          api_credentials: api_credentials || {},
+        });
+
+        if (!validation.valid) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Invalid communications provider configuration',
+            errors: validation.errors,
+          });
+        }
       }
 
       updateData.updated_at = new Date().toISOString();

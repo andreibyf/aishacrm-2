@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Outbound Mail Queue Worker",
+  "description": "Define the outbound queue consumer that sends tenant-scoped mail through tenant-configured provider adapters.",
+  "labels": ["communications", "email", "outbound"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Outbound Email Service"
+}

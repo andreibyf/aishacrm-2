@@ -192,7 +192,12 @@ BizDev Source → promote → Lead → qualify → Lead (qualified) → convert 
 | [AI_ASSISTANT_GUIDE.md](../user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                            |
 | [AI_ARCHITECTURE_AISHA_AI.md](./AI_ARCHITECTURE_AISHA_AI.md)                                           | AI architecture deep-dive                              |
 | [BRAID_ARCHITECTURE.md](./BRAID_ARCHITECTURE.md)                                                       | Braid DSL architecture                                 |
+| [SELF_HOSTED_COMMUNICATIONS_TOPOLOGY.md](./SELF_HOSTED_COMMUNICATIONS_TOPOLOGY.md)                     | Self-hosted communications runtime topology            |
+| [SELF_HOSTED_COMMUNICATIONS_COMPOSE_CONTRACT.md](./SELF_HOSTED_COMMUNICATIONS_COMPOSE_CONTRACT.md)     | Self-hosted communications compose service contract    |
+| [SELF_HOSTED_COMMUNICATIONS_INTERNAL_API.md](./SELF_HOSTED_COMMUNICATIONS_INTERNAL_API.md)             | Self-hosted communications internal backend API        |
+| [SELF_HOSTED_COMMUNICATIONS_BRAID_TOOLS.md](./SELF_HOSTED_COMMUNICATIONS_BRAID_TOOLS.md)               | Self-hosted communications Braid tool surface          |
 | [Braid & PEP Reference](../references/AiSHA_Project_-_Braid___Plain_English_Programming__PEP_.md)      | Braid + PEP milestones, file locations, status         |
+| [COMMUNICATIONS_CONFIG_SCHEMA.md](../developer-docs/COMMUNICATIONS_CONFIG_SCHEMA.md)                   | Tenant communications config schema and env contract   |
 | [CARE_SETUP_GUIDE.md](../user-guides/CARE_SETUP_GUIDE.md)                                              | C.A.R.E. engine configuration                          |
 | [CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md](./CARE_CUSTOMER_ADAPTIVE_RESPONSE_ENGINE.md)               | C.A.R.E. engine overview                               |
 | [CARE_AUTONOMY_PLAYBOOK_PLAN.md](../build/CARE_AUTONOMY_PLAYBOOK_PLAN.md)                              | C.A.R.E. Playbook design spec (parked)                 |

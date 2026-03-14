@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Lead Capture Review Queue",
+  "description": "Define the review queue record for inbound mail that cannot be safely auto-promoted into a Lead.",
+  "labels": ["communications", "review-queue", "lead-capture"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Inbound Lead Capture From Email"
+}
