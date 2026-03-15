@@ -6,6 +6,11 @@ import {
   validateCommunicationsRequest,
 } from '../lib/communicationsApiValidation.js';
 import { handleInboundCommunicationsEvent } from '../services/inboundCommunicationsService.js';
+import {
+  processSchedulingReplyEvent,
+  reconcileOutboundDeliveryEvent,
+  replayCommunicationsThread,
+} from '../services/communicationsEventService.js';
 
 export default function createInternalCommunicationsRoutes(_pgPool) {
   const router = express.Router();
@@ -34,14 +39,16 @@ export default function createInternalCommunicationsRoutes(_pgPool) {
         '[communications] inbound handler failed',
       );
 
-      return res.status(error.statusCode || 500).json(
-        buildCommunicationsError(
-          error.code || 'communications_internal_error',
-          error.message || 'Inbound communications handling failed',
-          {},
-          traceId,
-        ),
-      );
+      return res
+        .status(error.statusCode || 500)
+        .json(
+          buildCommunicationsError(
+            error.code || 'communications_internal_error',
+            error.message || 'Inbound communications handling failed',
+            {},
+            traceId,
+          ),
+        );
     }
   });
 
@@ -53,19 +60,49 @@ export default function createInternalCommunicationsRoutes(_pgPool) {
     '/outbound/reconcile',
     validateCommunicationsRequest('outboundReconcile'),
     async (req, res) => {
-      return respondNotImplemented(req, res, 'outbound_reconcile');
+      try {
+        const response = await reconcileOutboundDeliveryEvent({
+          ...req.body,
+          user: req.user,
+          traceId: req.communications?.traceId || null,
+          idempotencyKey: req.communications?.idempotencyKey || null,
+        });
+        return res.status(202).json(response);
+      } catch (error) {
+        return handleCommunicationsError(req, res, error, 'outbound reconcile');
+      }
     },
   );
 
   router.post('/threads/replay', validateCommunicationsRequest('replay'), async (req, res) => {
-    return respondNotImplemented(req, res, 'threads_replay');
+    try {
+      const response = await replayCommunicationsThread({
+        ...req.body,
+        user: req.user,
+        traceId: req.communications?.traceId || null,
+        idempotencyKey: req.communications?.idempotencyKey || null,
+      });
+      return res.status(202).json(response);
+    } catch (error) {
+      return handleCommunicationsError(req, res, error, 'thread replay');
+    }
   });
 
   router.post(
     '/scheduling/replies',
     validateCommunicationsRequest('schedulingReplies'),
     async (req, res) => {
-      return respondNotImplemented(req, res, 'scheduling_replies');
+      try {
+        const response = await processSchedulingReplyEvent({
+          ...req.body,
+          user: req.user,
+          traceId: req.communications?.traceId || null,
+          idempotencyKey: req.communications?.idempotencyKey || null,
+        });
+        return res.status(202).json(response);
+      } catch (error) {
+        return handleCommunicationsError(req, res, error, 'scheduling reply');
+      }
     },
   );
 
@@ -99,12 +136,40 @@ function respondNotImplemented(req, res, operation) {
     '[communications] request validated but handler is not implemented',
   );
 
-  return res.status(501).json(
-    buildCommunicationsError(
-      'communications_not_implemented',
-      'Communications endpoint scaffold is mounted but business logic is not implemented yet',
-      { operation },
-      traceId,
-    ),
+  return res
+    .status(501)
+    .json(
+      buildCommunicationsError(
+        'communications_not_implemented',
+        'Communications endpoint scaffold is mounted but business logic is not implemented yet',
+        { operation },
+        traceId,
+      ),
+    );
+}
+
+function handleCommunicationsError(req, res, error, operation) {
+  const traceId = req.communications?.traceId || req.headers['x-aisha-trace-id'] || null;
+  logger.error(
+    {
+      error: error.message,
+      code: error.code,
+      operation,
+      trace_id: traceId,
+      tenant_id: req.body?.tenant_id || null,
+      mailbox_id: req.body?.mailbox_id || null,
+    },
+    `[communications] ${operation} handler failed`,
   );
+
+  return res
+    .status(error.statusCode || 500)
+    .json(
+      buildCommunicationsError(
+        error.code || 'communications_internal_error',
+        error.message || `Communications ${operation} handling failed`,
+        {},
+        traceId,
+      ),
+    );
 }

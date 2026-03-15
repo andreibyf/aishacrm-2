@@ -5,21 +5,21 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 let app;
 let server;
 const port = 3110;
 
 async function request(method, path) {
-  const res = await fetch(`http://localhost:${port}${path}`, { method });
-  return res;
+  return requestLocal({ port, path, method });
 }
 
 describe('Reports Routes', () => {
   before(async () => {
     // Initialize Supabase if credentials are available
     await initSupabaseForTests();
-    
+
     const express = (await import('express')).default;
     const createReportRoutes = (await import('../../routes/reports.js')).default;
 

@@ -73,7 +73,18 @@ describe('inbound communications service', () => {
       }),
       persistInboundThreadAndMessage: async (_request, resolvedTenant) => ({
         thread: { id: 'thread-001', tenant_id: resolvedTenant.id },
-        message: { id: 'message-001', tenant_id: resolvedTenant.id },
+        message: {
+          id: 'message-001',
+          tenant_id: resolvedTenant.id,
+          metadata: {
+            attachments: [
+              {
+                filename: 'proposal.pdf',
+                content_type: 'application/pdf',
+              },
+            ],
+          },
+        },
       }),
       resolveInboundEntityLinks: async () => [
         {
@@ -104,6 +115,7 @@ describe('inbound communications service', () => {
     assert.equal(result.result.thread_id, 'thread-001');
     assert.equal(result.result.stored_message_id, 'message-001');
     assert.equal(result.result.provider_message_id, '<abc123@mail.aishacrm.com>');
+    assert.equal(result.result.attachment_count, 1);
     assert.equal(Array.isArray(result.result.linked_entities), true);
     assert.equal(result.result.linked_entities[0].entity_type, 'lead');
   });

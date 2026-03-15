@@ -1,10 +1,7 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  processActivity,
-  setEmailWorkerDependenciesForTests,
-} from '../../workers/emailWorker.js';
+import { processActivity, setEmailWorkerDependenciesForTests } from '../../workers/emailWorker.js';
 
 describe('email worker provider adapter delivery', () => {
   after(() => {
@@ -118,5 +115,96 @@ describe('email worker provider adapter delivery', () => {
     assert.equal(activityUpdates[0].metadata.delivery.provider, 'communications_provider');
     assert.equal(notifications.length, 1);
     assert.match(notifications[0].title, /No communications provider configured/);
+  });
+
+  it('generates and sends an ICS invite for scheduled meeting activities', async () => {
+    const activityUpdates = [];
+    const webhookEvents = [];
+
+    setEmailWorkerDependenciesForTests({
+      async resolveProviderConnection() {
+        return {
+          integration: { id: 'integration-001' },
+          connection: {
+            config: {
+              provider_type: 'imap_smtp',
+              provider_name: 'zoho_mail',
+              mailbox_id: 'owner-primary',
+              outbound: { from_address: 'owner@example.com' },
+            },
+          },
+          adapter: {
+            async sendMessage(message) {
+              assert.equal(message.from, 'owner@example.com');
+              assert.deepEqual(message.to, ['prospect@example.com']);
+              assert.equal(message.subject, 'Strategy Session');
+              assert.equal(Array.isArray(message.attachments), true);
+              assert.equal(message.attachments.length, 1);
+              assert.equal(message.attachments[0].filename, 'invite.ics');
+              assert.match(message.attachments[0].contentType, /text\/calendar/);
+              assert.match(message.attachments[0].content, /BEGIN:VCALENDAR/);
+              assert.match(message.attachments[0].content, /METHOD:REQUEST/);
+              assert.match(message.attachments[0].content, /UID:invite-001/);
+              assert.match(message.attachments[0].content, /SUMMARY:Strategy Session/);
+              return {
+                ok: true,
+                message_id: '<meeting-123@example.com>',
+                accepted: ['prospect@example.com'],
+                rejected: [],
+                response: '250 queued',
+              };
+            },
+          },
+        };
+      },
+      async markActivity(activityId, status, metadata) {
+        activityUpdates.push({ activityId, status, metadata });
+      },
+      async createNotification() {
+        throw new Error(
+          'createNotification should not be called on successful meeting invite send',
+        );
+      },
+      async postStatusWebhook(payload) {
+        webhookEvents.push(payload);
+      },
+    });
+
+    await processActivity({
+      id: 'activity-003',
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      type: 'meeting',
+      status: 'scheduled',
+      subject: 'Strategy Session',
+      body: 'Discuss the proposal and next steps.',
+      due_date: '2026-03-20',
+      due_time: '15:30',
+      duration_minutes: 45,
+      location: 'Zoom',
+      related_email: 'prospect@example.com',
+      metadata: {
+        email: {
+          from: 'owner@example.com',
+          subject: 'Strategy Session',
+        },
+        communications: {
+          mailbox_id: 'owner-primary',
+        },
+        meeting: {
+          send_invite: true,
+          invite_id: 'invite-001',
+          attendees: [{ email: 'prospect@example.com', name: 'Prospect Name' }],
+        },
+      },
+    });
+
+    assert.equal(activityUpdates.length, 1);
+    assert.equal(activityUpdates[0].status, 'scheduled');
+    assert.equal(activityUpdates[0].metadata.delivery.provider, 'imap_smtp');
+    assert.equal(activityUpdates[0].metadata.meeting.invite_status, 'sent');
+    assert.equal(activityUpdates[0].metadata.meeting.invite_id, 'invite-001');
+    assert.equal(webhookEvents.length, 1);
+    assert.equal(webhookEvents[0].event, 'meeting.invite.sent');
+    assert.equal(webhookEvents[0].invite_uid, 'invite-001');
   });
 });

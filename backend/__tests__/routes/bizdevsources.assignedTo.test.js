@@ -14,6 +14,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
 import { TENANT_ID as TEST_TENANT_ID } from '../testConstants.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 let app;
 let server;
@@ -22,17 +23,17 @@ let supabaseInitialized = false;
 const createdBizDevIds = [];
 
 async function req(method, path, body, headers = {}) {
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'x-tenant-id': TEST_TENANT_ID,
-    ...headers,
-  };
-  const res = await fetch(`http://localhost:${port}${path}`, {
+  return requestLocal({
+    port,
+    path,
     method,
-    headers: defaultHeaders,
-    body: body ? JSON.stringify(body) : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': TEST_TENANT_ID,
+      ...headers,
+    },
+    body,
   });
-  return res;
 }
 
 describe('BizDev Sources — assigned_to field', () => {

@@ -15,6 +15,7 @@ import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
 import { getSupabaseClient } from '../../lib/supabase-db.js';
 import { TENANT_ID as TEST_TENANT_ID, EMP_MIKE } from '../testConstants.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 let supabaseReady = false;
 
@@ -66,17 +67,17 @@ async function createTestApp(routePath, routeFactory, port) {
 }
 
 async function req(port, method, path, body, headers = {}) {
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
-    'x-tenant-id': TEST_TENANT_ID,
-    ...headers,
-  };
-  const res = await fetch(`http://localhost:${port}${path}`, {
+  return requestLocal({
+    port,
+    path,
     method,
-    headers: defaultHeaders,
-    body: body ? JSON.stringify(body) : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tenant-id': TEST_TENANT_ID,
+      ...headers,
+    },
+    body,
   });
-  return res;
 }
 
 // ─── Entity configurations ──────────────────────────────────────────────────

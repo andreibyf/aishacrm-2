@@ -16,6 +16,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { initSupabaseForTests } from '../setup.js';
 import { getSupabaseClient } from '../../lib/supabase-db.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 let supabaseReady = false;
 const TEST_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
@@ -62,12 +63,13 @@ async function createTestApp(port, userOverride = {}) {
 }
 
 async function req(port, method, path, body, headers = {}) {
-  const opts = {
+  return requestLocal({
+    port,
+    path,
     method,
     headers: { 'Content-Type': 'application/json', ...headers },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  return fetch(`http://localhost:${port}${path}`, opts);
+    body,
+  });
 }
 
 // ─── Setup / Teardown ────────────────────────────────────────────────────────

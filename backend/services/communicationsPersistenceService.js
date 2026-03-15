@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 
 const LINKABLE_ENTITY_TYPES = new Set(['lead', 'contact', 'account', 'opportunity', 'activity']);
@@ -18,6 +17,39 @@ function normalizeSubject(subject) {
 
 function coerceArray(value) {
   return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function normalizeAttachments(value) {
+  return coerceArray(value)
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const filename =
+        typeof entry.filename === 'string' && entry.filename.trim().length > 0
+          ? entry.filename.trim()
+          : `attachment-${index + 1}`;
+      return {
+        filename,
+        content_type:
+          typeof entry.content_type === 'string' && entry.content_type.trim().length > 0
+            ? entry.content_type.trim()
+            : 'application/octet-stream',
+        size:
+          Number.isFinite(entry.size) && entry.size >= 0
+            ? entry.size
+            : Number.isFinite(Number(entry.size)) && Number(entry.size) >= 0
+              ? Number(entry.size)
+              : null,
+        content_id:
+          typeof entry.content_id === 'string' && entry.content_id.trim().length > 0
+            ? entry.content_id.trim()
+            : null,
+        disposition:
+          typeof entry.disposition === 'string' && entry.disposition.trim().length > 0
+            ? entry.disposition.trim().toLowerCase()
+            : 'attachment',
+      };
+    })
+    .filter(Boolean);
 }
 
 function extractThreadHints(payload = {}) {
@@ -93,7 +125,50 @@ async function findExistingThread(tenantId, payload, supabase) {
     throw buildPersistenceError('communications_thread_lookup_failed', error.message);
   }
 
-  return data?.[0]?.id || null;
+  if (data?.[0]?.id) {
+    return data[0].id;
+  }
+
+  const participantFallbackId = await findThreadByParticipantFallback(tenantId, payload, supabase);
+  return participantFallbackId;
+}
+
+function collectParticipantEmails(payload = {}) {
+  return new Set(
+    collectParticipants(payload)
+      .map((participant) => normalizeEmail(participant.email))
+      .filter(Boolean),
+  );
+}
+
+async function findThreadByParticipantFallback(tenantId, payload, supabase) {
+  const participantEmails = collectParticipantEmails(payload);
+  if (participantEmails.size === 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('communications_threads')
+    .select('id, participants, last_message_at')
+    .eq('tenant_id', tenantId)
+    .order('last_message_at', { ascending: false })
+    .limit(25);
+
+  if (error) {
+    throw buildPersistenceError('communications_thread_lookup_failed', error.message);
+  }
+
+  for (const row of data || []) {
+    const rowParticipants = Array.isArray(row.participants) ? row.participants : [];
+    const overlap = rowParticipants.some((participant) =>
+      participantEmails.has(normalizeEmail(participant?.email)),
+    );
+    if (overlap) {
+      return row.id;
+    }
+  }
+
+  return null;
 }
 
 function buildPersistenceError(code, message) {
@@ -103,7 +178,10 @@ function buildPersistenceError(code, message) {
   return error;
 }
 
-async function ensureThreadRecord({ tenantId, mailboxId, mailboxAddress, payload, occurredAt }, { supabase }) {
+async function ensureThreadRecord(
+  { tenantId, mailboxId, mailboxAddress, payload, occurredAt },
+  { supabase },
+) {
   const existingThreadId = await findExistingThread(tenantId, payload, supabase);
   const threadPayload = {
     tenant_id: tenantId,
@@ -169,6 +247,7 @@ async function upsertInboundMessage({ tenantId, thread, payload, occurredAt }, {
     return existing.data;
   }
 
+  const attachments = normalizeAttachments(payload.attachments);
   const messagePayload = {
     tenant_id: tenantId,
     thread_id: thread.id,
@@ -192,6 +271,8 @@ async function upsertInboundMessage({ tenantId, thread, payload, occurredAt }, {
     metadata: {
       thread_hint: payload.thread_hint || payload.headers?.in_reply_to || null,
       provider_metadata: payload.provider_metadata || {},
+      attachments,
+      attachment_count: attachments.length,
     },
   };
 
@@ -208,7 +289,11 @@ async function upsertInboundMessage({ tenantId, thread, payload, occurredAt }, {
   return data;
 }
 
-export async function persistInboundThreadAndMessage(request, resolvedTenant, { supabase = getSupabaseClient() } = {}) {
+export async function persistInboundThreadAndMessage(
+  request,
+  resolvedTenant,
+  { supabase = getSupabaseClient() } = {},
+) {
   const tenantId = resolvedTenant.id;
   const thread = await ensureThreadRecord(
     {
@@ -242,7 +327,10 @@ function normalizeExplicitEntityRefs(payload = {}) {
       : [];
 
   return refs
-    .filter((entry) => entry && LINKABLE_ENTITY_TYPES.has(String(entry.type || '').toLowerCase()) && entry.id)
+    .filter(
+      (entry) =>
+        entry && LINKABLE_ENTITY_TYPES.has(String(entry.type || '').toLowerCase()) && entry.id,
+    )
     .map((entry) => ({
       type: String(entry.type).toLowerCase(),
       id: String(entry.id),
@@ -355,10 +443,14 @@ export async function resolveInboundEntityLinks(
   { supabase = getSupabaseClient() } = {},
 ) {
   const explicit = normalizeExplicitEntityRefs(request.payload);
-  const inferred = await inferEntitiesBySenderEmail(resolvedTenant.id, request.payload, { supabase });
+  const inferred = await inferEntitiesBySenderEmail(resolvedTenant.id, request.payload, {
+    supabase,
+  });
   const historical = await hydrateThreadLinks(resolvedTenant.id, persisted.thread.id, { supabase });
   const links = dedupeEntityLinks([...explicit, ...historical, ...inferred]);
-  await persistEntityLinks(resolvedTenant.id, persisted.thread.id, persisted.message.id, links, { supabase });
+  await persistEntityLinks(resolvedTenant.id, persisted.thread.id, persisted.message.id, links, {
+    supabase,
+  });
   return links;
 }
 

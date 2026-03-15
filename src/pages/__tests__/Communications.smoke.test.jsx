@@ -19,6 +19,16 @@ const mockThreadsResponse = {
         subject: 'Re: Intro call',
         text_body: 'Looking forward to next week.',
       },
+      state: {
+        events: [
+          {
+            type: 'thread_replay_requested',
+            occurred_at: '2026-03-14T12:05:00.000Z',
+            actor: 'owner@example.com',
+            replay_job_id: 'replay-001',
+          },
+        ],
+      },
     },
   ],
   total: 1,
@@ -30,6 +40,7 @@ const mockThreadsResponse = {
     view: 'all',
     entity_type: null,
     entity_id: null,
+    delivery_state: null,
   },
 };
 
@@ -42,6 +53,16 @@ const mockThreadDetailResponse = {
     subject: 'Re: Intro call',
     status: 'unread',
     linked_entities: [{ entity_type: 'lead', entity_id: 'lead-1' }],
+    state: {
+      events: [
+        {
+          type: 'delivery_reconciled',
+          occurred_at: '2026-03-14T12:06:00.000Z',
+          actor: 'communications-worker',
+          delivery_state: 'delivered',
+        },
+      ],
+    },
   },
   messages: [
     {
@@ -88,9 +109,21 @@ vi.mock('@/components/shared/useUser.js', () => ({
 
 const listThreadsMock = vi.fn();
 const getThreadMessagesMock = vi.fn();
+const replayThreadMock = vi.fn();
+const updateThreadStatusMock = vi.fn();
+const purgeThreadMock = vi.fn();
+const createActivityMock = vi.fn();
 vi.mock('@/api/communications', () => ({
   listCommunicationThreads: (...args) => listThreadsMock(...args),
   getCommunicationThreadMessages: (...args) => getThreadMessagesMock(...args),
+  replayCommunicationThread: (...args) => replayThreadMock(...args),
+  updateCommunicationThreadStatus: (...args) => updateThreadStatusMock(...args),
+  purgeCommunicationThread: (...args) => purgeThreadMock(...args),
+}));
+vi.mock('@/api/entities', () => ({
+  Activity: {
+    create: (...args) => createActivityMock(...args),
+  },
 }));
 
 const originalScrollIntoView = window.HTMLElement.prototype.scrollIntoView;
@@ -107,8 +140,38 @@ describe('Communications page smoke test', () => {
   beforeEach(() => {
     listThreadsMock.mockReset();
     getThreadMessagesMock.mockReset();
+    replayThreadMock.mockReset();
+    updateThreadStatusMock.mockReset();
+    purgeThreadMock.mockReset();
+    createActivityMock.mockReset();
     listThreadsMock.mockResolvedValue(mockThreadsResponse);
     getThreadMessagesMock.mockResolvedValue(mockThreadDetailResponse);
+    replayThreadMock.mockResolvedValue({
+      ok: true,
+      status: 'accepted',
+      result: {
+        thread_id: 'thread-001',
+        replay_job_id: 'replay-001',
+        processing_status: 'replay_requested',
+      },
+    });
+    updateThreadStatusMock.mockResolvedValue({
+      thread: {
+        ...mockThreadDetailResponse.thread,
+        status: 'closed',
+      },
+    });
+    purgeThreadMock.mockResolvedValue({
+      thread_id: 'thread-001',
+      tenant_id: 'tenant-1',
+      purged_at: '2026-03-15T02:00:00.000Z',
+      purged_by: 'test@example.com',
+    });
+    createActivityMock.mockResolvedValue({
+      id: 'activity-email-001',
+      type: 'email',
+      status: 'queued',
+    });
   });
 
   it('renders the inbox and loads thread + message data', async () => {
@@ -124,6 +187,8 @@ describe('Communications page smoke test', () => {
     expect(screen.getByText('Prospect Name')).toBeInTheDocument();
     // Text appears in both thread-list preview and message detail panel
     expect(screen.getAllByText('Looking forward to next week.').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Recent Activity')).toBeInTheDocument();
+    expect(screen.getByText('Delivery Reconciled')).toBeInTheDocument();
   });
 
   it('passes unread view through the thread query', async () => {
@@ -140,6 +205,155 @@ describe('Communications page smoke test', () => {
         expect.objectContaining({
           tenantId: 'tenant-1',
           view: 'unread',
+        }),
+      ),
+    );
+  });
+
+  it('passes delivery state through the thread query', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('combobox', { name: /delivery state/i }));
+    fireEvent.click(await screen.findByText('Delivered'));
+
+    await waitFor(() =>
+      expect(listThreadsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          deliveryState: 'delivered',
+        }),
+      ),
+    );
+  });
+
+  it('requests a replay for the selected thread and refreshes', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: /replay thread/i }));
+
+    await waitFor(() =>
+      expect(replayThreadMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          threadId: 'thread-001',
+          mailboxId: 'owner-primary',
+        }),
+      ),
+    );
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('updates the selected thread status and refreshes', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: /mark read/i }));
+
+    await waitFor(() =>
+      expect(updateThreadStatusMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          threadId: 'thread-001',
+          status: 'open',
+        }),
+      ),
+    );
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('archives the selected thread and refreshes', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: /archive thread/i }));
+
+    await waitFor(() =>
+      expect(updateThreadStatusMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          threadId: 'thread-001',
+          status: 'archived',
+        }),
+      ),
+    );
+  });
+
+  it('purges the selected thread and refreshes', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: /purge thread/i }));
+
+    await waitFor(() =>
+      expect(purgeThreadMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          threadId: 'thread-001',
+        }),
+      ),
+    );
+
+    window.confirm = originalConfirm;
+  });
+
+  it('queues an outbound email activity from the composer', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /compose/i }));
+
+    fireEvent.change(screen.getByLabelText(/^to$/i), {
+      target: { value: 'prospect@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText(/^subject$/i), {
+      target: { value: 'Follow up from AiSHA' },
+    });
+    fireEvent.change(screen.getByLabelText(/^body$/i), {
+      target: { value: 'Thanks for taking the time to connect today.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /queue email/i }));
+
+    await waitFor(() =>
+      expect(createActivityMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          type: 'email',
+          status: 'queued',
+          subject: 'Follow up from AiSHA',
+          body: 'Thanks for taking the time to connect today.',
+          related_email: 'prospect@example.com',
+          metadata: expect.objectContaining({
+            email: expect.objectContaining({
+              to: 'prospect@example.com',
+              subject: 'Follow up from AiSHA',
+            }),
+            communications: expect.objectContaining({
+              mailbox_id: 'owner-primary',
+            }),
+          }),
         }),
       ),
     );

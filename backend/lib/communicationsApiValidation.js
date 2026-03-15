@@ -37,25 +37,29 @@ export function requireInternalCommunicationsService(req, res, next) {
   const user = req.user;
 
   if (!user?.email) {
-    return res.status(401).json(
-      buildCommunicationsError(
-        'communications_invalid_auth',
-        'Internal communications routes require authenticated service access',
-        {},
-        traceId,
-      ),
-    );
+    return res
+      .status(401)
+      .json(
+        buildCommunicationsError(
+          'communications_invalid_auth',
+          'Internal communications routes require authenticated service access',
+          {},
+          traceId,
+        ),
+      );
   }
 
   if (!user.internal && !user.service_role) {
-    return res.status(403).json(
-      buildCommunicationsError(
-        'communications_invalid_auth',
-        'Internal communications routes only allow internal service callers',
-        {},
-        traceId,
-      ),
-    );
+    return res
+      .status(403)
+      .json(
+        buildCommunicationsError(
+          'communications_invalid_auth',
+          'Internal communications routes only allow internal service callers',
+          {},
+          traceId,
+        ),
+      );
   }
 
   return next();
@@ -110,7 +114,11 @@ export function validateCommunicationsRequest(kind) {
       });
     }
 
-    if (!body.tenant_id && !isNonEmptyString(body.mailbox_id) && !hasEmailShape(body.mailbox_address)) {
+    if (
+      !body.tenant_id &&
+      !isNonEmptyString(body.mailbox_id) &&
+      !hasEmailShape(body.mailbox_address)
+    ) {
       errors.push({
         field: 'tenant_resolution',
         message: 'tenant_id, mailbox_id, or mailbox_address is required to resolve tenant scope',
@@ -137,14 +145,16 @@ export function validateCommunicationsRequest(kind) {
     }
 
     if (errors.length > 0) {
-      return res.status(400).json(
-        buildCommunicationsError(
-          'communications_payload_invalid',
-          'Communications request failed validation',
-          { errors },
-          traceId,
-        ),
-      );
+      return res
+        .status(400)
+        .json(
+          buildCommunicationsError(
+            'communications_payload_invalid',
+            'Communications request failed validation',
+            { errors },
+            traceId,
+          ),
+        );
     }
 
     req.communications = {
@@ -187,7 +197,10 @@ function validateInboundPayload(payload, errors) {
     errors.push({ field: 'payload.subject', message: 'subject is required' });
   }
   if (!isIsoDateString(payload.received_at)) {
-    errors.push({ field: 'payload.received_at', message: 'received_at must be a valid ISO timestamp' });
+    errors.push({
+      field: 'payload.received_at',
+      message: 'received_at must be a valid ISO timestamp',
+    });
   }
   if (!isPlainObject(payload.from) || !hasEmailShape(payload.from.email)) {
     errors.push({ field: 'payload.from.email', message: 'from.email is required' });
@@ -231,6 +244,9 @@ function validateOutboundReconcilePayload(payload, errors) {
 }
 
 function validateReplayPayload(payload, errors) {
+  if (!isValidUUID(payload.thread_id)) {
+    errors.push({ field: 'payload.thread_id', message: 'thread_id is required' });
+  }
   if (!isNonEmptyString(payload.replay_job_id)) {
     errors.push({ field: 'payload.replay_job_id', message: 'replay_job_id is required' });
   }
@@ -246,6 +262,9 @@ function validateReplayPayload(payload, errors) {
 }
 
 function validateSchedulingReplyPayload(payload, errors) {
+  if (!isValidUUID(payload.thread_id)) {
+    errors.push({ field: 'payload.thread_id', message: 'thread_id is required' });
+  }
   if (!isNonEmptyString(payload.invite_id)) {
     errors.push({ field: 'payload.invite_id', message: 'invite_id is required' });
   }

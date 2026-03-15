@@ -37,6 +37,9 @@ export async function handleInboundCommunicationsEvent(request) {
     stored_message_id: persisted.message.id,
     provider_message_id: request.payload.message_id,
     message_id: request.payload.message_id,
+    attachment_count: Array.isArray(persisted.message?.metadata?.attachments)
+      ? persisted.message.metadata.attachments.length
+      : 0,
     activity_id: updatedActivity?.id || activity?.id || null,
     link_status: updatedActivity?.metadata?.communications?.link_status || 'pending',
     linked_entities: linkedEntities.map((entry) => ({
@@ -166,7 +169,13 @@ async function orchestrateInboundCommunication(request, resolvedTenant, persiste
 
 function selectPrimaryEntity(linkedEntities = []) {
   for (const candidate of linkedEntities) {
-    if (candidate && typeof candidate === 'object' && candidate.type && candidate.id && candidate.type !== 'activity') {
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      candidate.type &&
+      candidate.id &&
+      candidate.type !== 'activity'
+    ) {
       return {
         type: String(candidate.type),
         id: String(candidate.id),
@@ -182,9 +191,11 @@ export function setInboundCommunicationsToolExecutorForTests(executor) {
 
 export function setInboundCommunicationsDependenciesForTests(overrides = null) {
   inboundTenantResolver = overrides?.resolveCanonicalTenant || resolveCanonicalTenant;
-  inboundThreadMessagePersister = overrides?.persistInboundThreadAndMessage || persistInboundThreadAndMessage;
+  inboundThreadMessagePersister =
+    overrides?.persistInboundThreadAndMessage || persistInboundThreadAndMessage;
   inboundEntityLinkResolver = overrides?.resolveInboundEntityLinks || resolveInboundEntityLinks;
-  inboundActivityAttacher = overrides?.attachActivityToCommunicationsRecords || attachActivityToCommunicationsRecords;
+  inboundActivityAttacher =
+    overrides?.attachActivityToCommunicationsRecords || attachActivityToCommunicationsRecords;
 }
 
 export default {

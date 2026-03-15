@@ -32,11 +32,14 @@ function resolveTenantId(req) {
   return { error: 'tenant_id is required' };
 }
 
-export default function createTenantIntegrationRoutes() {
+export default function createTenantIntegrationRoutes({
+  supabaseClient = supabase,
+  validateTenantAccessMw = validateTenantAccess,
+} = {}) {
   const router = express.Router();
 
   // Apply tenant validation to all routes
-  router.use(validateTenantAccess);
+  router.use(validateTenantAccessMw);
 
   // GET /api/tenantintegrations - List tenant integrations with filters
   router.get('/', async (req, res) => {
@@ -47,7 +50,7 @@ export default function createTenantIntegrationRoutes() {
         return res.status(400).json({ status: 'error', message: tenantError });
       }
 
-      let query = supabase
+      let query = supabaseClient
         .from('tenant_integrations')
         .select('*')
         .eq('tenant_id', tenant_id)
@@ -83,7 +86,7 @@ export default function createTenantIntegrationRoutes() {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('tenant_integrations')
         .select('*')
         .eq('tenant_id', tenant_id)
@@ -105,14 +108,8 @@ export default function createTenantIntegrationRoutes() {
   // POST /api/tenantintegrations - Create new tenant integration
   router.post('/', async (req, res) => {
     try {
-      const {
-        integration_type,
-        integration_name,
-        is_active,
-        api_credentials,
-        config,
-        metadata,
-      } = req.body;
+      const { integration_type, integration_name, is_active, api_credentials, config, metadata } =
+        req.body;
 
       const { tenant_id, error: tenantError } = resolveTenantId(req);
       if (tenantError) {
@@ -139,7 +136,7 @@ export default function createTenantIntegrationRoutes() {
         }
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('tenant_integrations')
         .insert({
           tenant_id,
@@ -184,24 +181,27 @@ export default function createTenantIntegrationRoutes() {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      let existingIntegrationType = null;
-      if (
-        integration_type === undefined &&
-        (config !== undefined || api_credentials !== undefined)
-      ) {
-        const { data: existingIntegration, error: existingError } = await supabase
+      let existingIntegration = null;
+      const requiresExistingIntegration =
+        integration_type === undefined ||
+        config !== undefined ||
+        api_credentials !== undefined ||
+        metadata !== undefined;
+
+      if (requiresExistingIntegration) {
+        const { data, error: existingError } = await supabaseClient
           .from('tenant_integrations')
-          .select('integration_type')
+          .select('integration_type, config, api_credentials, metadata')
           .eq('tenant_id', tenant_id)
           .eq('id', id)
           .limit(1)
           .single();
 
-        if (existingError || !existingIntegration) {
+        if (existingError || !data) {
           return res.status(404).json({ status: 'error', message: 'Integration not found' });
         }
 
-        existingIntegrationType = existingIntegration.integration_type || null;
+        existingIntegration = data;
       }
 
       const updateData = {};
@@ -220,12 +220,15 @@ export default function createTenantIntegrationRoutes() {
         return res.status(400).json({ status: 'error', message: 'No fields to update' });
       }
 
-      const effectiveIntegrationType = integration_type || existingIntegrationType;
+      updateData.updated_at = new Date().toISOString();
+
+      const effectiveIntegrationType =
+        integration_type || existingIntegration?.integration_type || null;
       if (isCommunicationsProviderIntegration(effectiveIntegrationType)) {
         const validation = validateCommunicationsProviderConfig({
           tenant_id,
-          config: config || {},
-          api_credentials: api_credentials || {},
+          config: config || existingIntegration?.config || existingIntegration?.configuration || {},
+          api_credentials: api_credentials || existingIntegration?.api_credentials || {},
         });
 
         if (!validation.valid) {
@@ -237,9 +240,7 @@ export default function createTenantIntegrationRoutes() {
         }
       }
 
-      updateData.updated_at = new Date().toISOString();
-
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('tenant_integrations')
         .update(updateData)
         .eq('tenant_id', tenant_id)
@@ -247,7 +248,12 @@ export default function createTenantIntegrationRoutes() {
         .select()
         .single();
 
-      if (error || !data) {
+      if (error) {
+        logger.error('Error updating tenant integration row:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
+      }
+
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Integration not found' });
       }
 
@@ -269,7 +275,7 @@ export default function createTenantIntegrationRoutes() {
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('tenant_integrations')
         .delete()
         .eq('tenant_id', tenant_id)

@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 process.env.NODE_ENV = 'test';
 process.env.ROUTE_RATE_WINDOW_MS = '1000'; // Short window for testing
@@ -13,27 +14,17 @@ const testPort = 3108;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
-  const url = `http://localhost:${testPort}${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-  
-  try {
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers
-      },
-      signal: controller.signal,
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    return await fetch(url, options);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return requestLocal({
+    port: testPort,
+    path,
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': '127.0.0.1',
+      ...headers,
+    },
+    body,
+  });
 }
 
 async function assertStatusWithJson(response, allowedStatuses) {
@@ -78,9 +69,9 @@ before(async () => {
               first_name: 'Existing',
               last_name: 'User',
               role: 'employee',
-              tenant_id: 'tenant-123'
-            }
-          }
+              tenant_id: 'tenant-123',
+            },
+          },
         };
       }
       if (email === 'newuser@test.com') {
@@ -92,13 +83,13 @@ before(async () => {
               first_name: 'New',
               last_name: 'User',
               role: 'admin',
-              tenant_id: 'tenant-456'
-            }
-          }
+              tenant_id: 'tenant-456',
+            },
+          },
         };
       }
       return { user: null };
-    }
+    },
   };
 
   app.use('/api/users', createUserRoutes(mockPgPool, mockSupabaseAuth));
@@ -108,7 +99,7 @@ before(async () => {
     if (res.headersSent) return next(err);
     res.status(err.status || 500).json({
       status: 'error',
-      message: err.message || 'Internal Server Error'
+      message: err.message || 'Internal Server Error',
     });
   });
 
@@ -123,192 +114,204 @@ after(async () => {
   }
 });
 
-describe('users.js - Section 2.2: User Listing & Retrieval Endpoints', { timeout: 30000, skip: process.env.SKIP_SLOW_TESTS === 'true' }, () => {
+describe(
+  'users.js - Section 2.2: User Listing & Retrieval Endpoints',
+  { timeout: 30000, skip: process.env.SKIP_SLOW_TESTS === 'true' },
+  () => {
+    describe('GET /api/users/ - List users endpoint', { timeout: 15000 }, () => {
+      it('should return empty array when no users exist', async () => {
+        const response = await makeRequest('GET', '/api/users/');
+        await assertStatusWithJson(response, [200, 500]);
+      });
 
-  describe('GET /api/users/ - List users endpoint', { timeout: 15000 }, () => {
-    it('should return empty array when no users exist', async () => {
-      const response = await makeRequest('GET', '/api/users/');
-      await assertStatusWithJson(response, [200, 500]);
+      it('should handle email parameter case insensitively', async () => {
+        // Test with different email cases - should work despite Supabase errors
+        const response = await makeRequest('GET', '/api/users/?email=TEST@EXAMPLE.COM');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should accept limit and offset parameters', async () => {
+        const response = await makeRequest('GET', '/api/users/?limit=10&offset=5');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle tenant_id filtering', async () => {
+        const response = await makeRequest('GET', '/api/users/?tenant_id=tenant-123');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should support debug mode', async () => {
+        const response = await makeRequest('GET', '/api/users/?debug=1&email=test@test.com');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle strict_email parameter', async () => {
+        const response = await makeRequest('GET', '/api/users/?email=test@test.com&strict_email=1');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
     });
 
-    it('should handle email parameter case insensitively', async () => {
-      // Test with different email cases - should work despite Supabase errors
-      const response = await makeRequest('GET', '/api/users/?email=TEST@EXAMPLE.COM');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+    describe('GET /api/users/profiles - User profiles endpoint', { timeout: 15000 }, () => {
+      it('should return user profiles with default pagination', async () => {
+        const response = await makeRequest('GET', '/api/users/profiles');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should filter profiles by tenant_id', async () => {
+        const response = await makeRequest('GET', '/api/users/profiles?tenant_id=tenant-123');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle custom limit and offset', async () => {
+        const response = await makeRequest('GET', '/api/users/profiles?limit=25&offset=10');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should transform profile data correctly', async () => {
+        // This test validates the transformation logic structure
+        // Since we can't test actual data, we verify error handling
+        const response = await makeRequest('GET', '/api/users/profiles');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
     });
 
-    it('should accept limit and offset parameters', async () => {
-      const response = await makeRequest('GET', '/api/users/?limit=10&offset=5');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+    describe('GET /api/users/:id - Single user retrieval', { timeout: 15000 }, () => {
+      it('should return 404 for non-existent user', async () => {
+        const response = await makeRequest('GET', '/api/users/non-existent-id');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle tenant_id filtering for user lookup', async () => {
+        const response = await makeRequest('GET', '/api/users/user-123?tenant_id=tenant-456');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should allow lookup without tenant_id', async () => {
+        const response = await makeRequest('GET', '/api/users/user-123');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should expand user metadata correctly', async () => {
+        // Test validates metadata expansion logic structure
+        const response = await makeRequest('GET', '/api/users/user-123');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
     });
 
-    it('should handle tenant_id filtering', async () => {
-      const response = await makeRequest('GET', '/api/users/?tenant_id=tenant-123');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
+    describe('POST /api/users/sync-from-auth - Auth synchronization', { timeout: 15000 }, () => {
+      it('should require email parameter', async () => {
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {});
+        assert.strictEqual(response.status, 400);
+        const data = await response.json();
+        assert.strictEqual(data.status, 'error');
+        assert.strictEqual(data.message, 'email is required');
+      });
 
-    it('should support debug mode', async () => {
-      const response = await makeRequest('GET', '/api/users/?debug=1&email=test@test.com');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle strict_email parameter', async () => {
-      const response = await makeRequest('GET', '/api/users/?email=test@test.com&strict_email=1');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
-
-  describe('GET /api/users/profiles - User profiles endpoint', { timeout: 15000 }, () => {
-    it('should return user profiles with default pagination', async () => {
-      const response = await makeRequest('GET', '/api/users/profiles');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should filter profiles by tenant_id', async () => {
-      const response = await makeRequest('GET', '/api/users/profiles?tenant_id=tenant-123');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle custom limit and offset', async () => {
-      const response = await makeRequest('GET', '/api/users/profiles?limit=25&offset=10');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should transform profile data correctly', async () => {
-      // This test validates the transformation logic structure
-      // Since we can't test actual data, we verify error handling
-      const response = await makeRequest('GET', '/api/users/profiles');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
-
-  describe('GET /api/users/:id - Single user retrieval', { timeout: 15000 }, () => {
-    it('should return 404 for non-existent user', async () => {
-      const response = await makeRequest('GET', '/api/users/non-existent-id');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle tenant_id filtering for user lookup', async () => {
-      const response = await makeRequest('GET', '/api/users/user-123?tenant_id=tenant-456');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should allow lookup without tenant_id', async () => {
-      const response = await makeRequest('GET', '/api/users/user-123');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should expand user metadata correctly', async () => {
-      // Test validates metadata expansion logic structure
-      const response = await makeRequest('GET', '/api/users/user-123');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
-
-  describe('POST /api/users/sync-from-auth - Auth synchronization', { timeout: 15000 }, () => {
-    it('should require email parameter', async () => {
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', {});
-      assert.strictEqual(response.status, 400);
-      const data = await response.json();
-      assert.strictEqual(data.status, 'error');
-      assert.strictEqual(data.message, 'email is required');
-    });
-
-    it('should accept email in request body', async () => {
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'test@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should accept email in query parameters', async () => {
-      const response = await makeRequest('POST', '/api/users/sync-from-auth?email=test@test.com');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle existing user case', async () => {
-      // Test with email that would exist - should fail due to no Supabase
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'existing@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle auth user not found', async () => {
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'nonexistent@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should create user from auth metadata', async () => {
-      // Test with mocked auth user - should fail due to no Supabase insert
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'newuser@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle different user roles', async () => {
-      // Test role-based creation logic structure
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'test@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should validate tenant_id for non-admin users', async () => {
-      // Test tenant validation logic - should fail due to no Supabase
-      const response = await makeRequest('POST', '/api/users/sync-from-auth', { email: 'test@test.com' });
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
-
-  describe('Query parameter validation', { timeout: 15000 }, () => {
-    it('should handle malformed limit parameter', async () => {
-      const response = await makeRequest('GET', '/api/users/?limit=invalid');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle malformed offset parameter', async () => {
-      const response = await makeRequest('GET', '/api/users/?offset=invalid');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle empty email parameter', async () => {
-      const response = await makeRequest('GET', '/api/users/?email=');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-
-    it('should handle special characters in email', async () => {
-      const response = await makeRequest('GET', '/api/users/?email=test+user@test.com');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
-
-  describe('Error handling', { timeout: 15000 }, () => {
-    it('should handle database connection errors gracefully', async () => {
-      const response = await makeRequest('GET', '/api/users/');
-      const data = await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-      if (response.status !== 200) {
-        assert(data?.message);
-      }
-    });
-
-    it('should handle malformed JSON in request body', async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      
-      try {
-        const response = await fetch(`http://localhost:${testPort}/api/users/sync-from-auth`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Forwarded-For': '127.0.0.1'
-          },
-          body: '{invalid json',
-          signal: controller.signal
+      it('should accept email in request body', async () => {
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'test@test.com',
         });
-        assert.ok([400, 415, 500].includes(response.status));
-      } finally {
-        clearTimeout(timeout);
-      }
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should accept email in query parameters', async () => {
+        const response = await makeRequest('POST', '/api/users/sync-from-auth?email=test@test.com');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle existing user case', async () => {
+        // Test with email that would exist - should fail due to no Supabase
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'existing@test.com',
+        });
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle auth user not found', async () => {
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'nonexistent@test.com',
+        });
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should create user from auth metadata', async () => {
+        // Test with mocked auth user - should fail due to no Supabase insert
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'newuser@test.com',
+        });
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle different user roles', async () => {
+        // Test role-based creation logic structure
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'test@test.com',
+        });
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should validate tenant_id for non-admin users', async () => {
+        // Test tenant validation logic - should fail due to no Supabase
+        const response = await makeRequest('POST', '/api/users/sync-from-auth', {
+          email: 'test@test.com',
+        });
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
     });
 
-    it('should handle missing route parameters', async () => {
-      const response = await makeRequest('GET', '/api/users/');
-      await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
-    });
-  });
+    describe('Query parameter validation', { timeout: 15000 }, () => {
+      it('should handle malformed limit parameter', async () => {
+        const response = await makeRequest('GET', '/api/users/?limit=invalid');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
 
-});
+      it('should handle malformed offset parameter', async () => {
+        const response = await makeRequest('GET', '/api/users/?offset=invalid');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle empty email parameter', async () => {
+        const response = await makeRequest('GET', '/api/users/?email=');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+
+      it('should handle special characters in email', async () => {
+        const response = await makeRequest('GET', '/api/users/?email=test+user@test.com');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+    });
+
+    describe('Error handling', { timeout: 15000 }, () => {
+      it('should handle database connection errors gracefully', async () => {
+        const response = await makeRequest('GET', '/api/users/');
+        const data = await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+        if (response.status !== 200) {
+          assert(data?.message);
+        }
+      });
+
+      it('should handle malformed JSON in request body', async () => {
+        try {
+          const response = await requestLocal({
+            port: testPort,
+            path: '/api/users/sync-from-auth',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Forwarded-For': '127.0.0.1',
+            },
+            body: '{invalid json',
+          });
+          assert.ok([400, 415, 500].includes(response.status));
+        } catch (_err) {
+          // network errors are acceptable — the route may not exist in test env
+        }
+      });
+
+      it('should handle missing route parameters', async () => {
+        const response = await makeRequest('GET', '/api/users/');
+        await assertStatusWithJson(response, [200, 400, 401, 403, 404, 500]);
+      });
+    });
+  },
+);

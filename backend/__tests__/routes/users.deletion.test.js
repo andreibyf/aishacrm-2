@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 process.env.NODE_ENV = 'test';
 process.env.ROUTE_RATE_WINDOW_MS = '1000'; // Short window for testing
@@ -14,27 +15,17 @@ const testPort = 3104;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
-  const url = `http://localhost:${testPort}${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-  
-  try {
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers
-      },
-      signal: controller.signal,
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    return await fetch(url, options);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return requestLocal({
+    port: testPort,
+    path,
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': '127.0.0.1',
+      ...headers,
+    },
+    body,
+  });
 }
 
 before(async () => {
@@ -56,16 +47,16 @@ before(async () => {
         return {
           user: {
             id: 'auth-user-123',
-            email: 'existing@test.com'
-          }
+            email: 'existing@test.com',
+          },
         };
       }
       if (email === 'employee@test.com') {
         return {
           user: {
             id: 'auth-employee-456',
-            email: 'employee@test.com'
-          }
+            email: 'employee@test.com',
+          },
         };
       }
       return { user: null };
@@ -130,7 +121,10 @@ describe('users.js - Section 2.6: User Deletion', () => {
     });
 
     it('should handle tenant-scoped employee deletion', async () => {
-      const response = await makeRequest('DELETE', '/api/users/test-employee-456?tenant_id=test-tenant-123');
+      const response = await makeRequest(
+        'DELETE',
+        '/api/users/test-employee-456?tenant_id=test-tenant-123',
+      );
       // May succeed or fail depending on mock data
       assert([200, 404, 429, 500].includes(response.status));
       if (response.status === 200) {
@@ -247,8 +241,8 @@ describe('users.js - Section 2.6: User Deletion', () => {
       }
 
       const results = await Promise.all(requests);
-      const rateLimitedCount = results.filter(r => r.status === 429).length;
-      const successCount = results.filter(r => r.status === 200).length;
+      const rateLimitedCount = results.filter((r) => r.status === 429).length;
+      const successCount = results.filter((r) => r.status === 200).length;
 
       // Should have some rate limiting
       assert(rateLimitedCount > 0 || successCount > 0);

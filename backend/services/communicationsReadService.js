@@ -5,8 +5,18 @@ const VIEW_TO_STATUS = {
   unread: 'unread',
   open: 'open',
   closed: 'closed',
+  archived: 'archived',
   all: null,
 };
+const ALLOWED_DELIVERY_STATES = new Set([
+  'queued',
+  'sent',
+  'delivered',
+  'failed',
+  'bounced',
+  'opened',
+  'clicked',
+]);
 
 function buildServiceError(statusCode, code, message) {
   const error = new Error(message);
@@ -59,8 +69,31 @@ function normalizeOptionalString(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function summarizeThreadState(thread, latestMessage) {
+  const threadMeta = thread?.metadata && typeof thread.metadata === 'object' ? thread.metadata : {};
+  const messageMeta =
+    latestMessage?.metadata && typeof latestMessage.metadata === 'object'
+      ? latestMessage.metadata
+      : {};
+
+  return {
+    delivery: messageMeta.delivery || threadMeta.delivery || null,
+    replay: threadMeta.replay || null,
+    meeting: messageMeta.meeting || threadMeta.meeting || null,
+    events: Array.isArray(threadMeta.event_log) ? threadMeta.event_log.slice(-5).reverse() : [],
+  };
+}
+
+function normalizeDeliveryState(value) {
+  return normalizeOptionalString(value)?.toLowerCase() || null;
+}
+
+function extractAttachments(metadata) {
+  return Array.isArray(metadata?.attachments) ? metadata.attachments : [];
+}
+
 export async function listCommunicationsThreads(
-  { tenantId, limit, offset, mailboxId, status, view, entityType, entityId },
+  { tenantId, limit, offset, mailboxId, status, view, entityType, entityId, deliveryState },
   { supabase = getSupabaseClient() } = {},
 ) {
   const safeLimit = normalizePositiveInt(limit, 25, 100);
@@ -70,21 +103,41 @@ export async function listCommunicationsThreads(
   const normalizedView = normalizeOptionalString(view)?.toLowerCase() || null;
   const normalizedEntityType = normalizeOptionalString(entityType)?.toLowerCase() || null;
   const normalizedEntityId = normalizeOptionalString(entityId);
+  const normalizedDeliveryState = normalizeDeliveryState(deliveryState);
 
   let effectiveStatus = normalizedStatus;
-  if (!effectiveStatus && normalizedView && Object.prototype.hasOwnProperty.call(VIEW_TO_STATUS, normalizedView)) {
+  if (
+    !effectiveStatus &&
+    normalizedView &&
+    Object.prototype.hasOwnProperty.call(VIEW_TO_STATUS, normalizedView)
+  ) {
     effectiveStatus = VIEW_TO_STATUS[normalizedView];
   }
 
   if (normalizedEntityType && !ALLOWED_ENTITY_TYPES.has(normalizedEntityType)) {
-    throw buildServiceError(400, 'communications_invalid_entity_type', 'Unsupported entity_type filter');
+    throw buildServiceError(
+      400,
+      'communications_invalid_entity_type',
+      'Unsupported entity_type filter',
+    );
   }
 
-  if ((normalizedEntityType && !normalizedEntityId) || (!normalizedEntityType && normalizedEntityId)) {
+  if (
+    (normalizedEntityType && !normalizedEntityId) ||
+    (!normalizedEntityType && normalizedEntityId)
+  ) {
     throw buildServiceError(
       400,
       'communications_invalid_entity_filter',
       'entity_type and entity_id must be provided together',
+    );
+  }
+
+  if (normalizedDeliveryState && !ALLOWED_DELIVERY_STATES.has(normalizedDeliveryState)) {
+    throw buildServiceError(
+      400,
+      'communications_invalid_delivery_state',
+      'Unsupported delivery_state filter',
     );
   }
 
@@ -101,7 +154,9 @@ export async function listCommunicationsThreads(
       throw buildServiceError(500, 'communications_links_query_failed', linkResult.error.message);
     }
 
-    permittedThreadIds = [...new Set((linkResult.data || []).map((row) => row.thread_id).filter(Boolean))];
+    permittedThreadIds = [
+      ...new Set((linkResult.data || []).map((row) => row.thread_id).filter(Boolean)),
+    ];
     if (permittedThreadIds.length === 0) {
       return {
         threads: [],
@@ -114,6 +169,7 @@ export async function listCommunicationsThreads(
           view: normalizedView,
           entity_type: normalizedEntityType,
           entity_id: normalizedEntityId,
+          delivery_state: normalizedDeliveryState,
         },
       };
     }
@@ -164,6 +220,7 @@ export async function listCommunicationsThreads(
         view: normalizedView,
         entity_type: normalizedEntityType,
         entity_id: normalizedEntityId,
+        delivery_state: normalizedDeliveryState,
       },
     };
   }
@@ -195,23 +252,30 @@ export async function listCommunicationsThreads(
   }
 
   if (linksResult.error) {
-    throw buildServiceError(
-      500,
-      'communications_links_query_failed',
-      linksResult.error.message,
-    );
+    throw buildServiceError(500, 'communications_links_query_failed', linksResult.error.message);
   }
 
   const latestMessages = firstByThread(messagesResult.data || []);
   const linkedEntities = groupLinksByThread(linksResult.data || []);
+  const hydratedThreads = threads.map((thread) => {
+    const latestMessage = latestMessages.get(thread.id) || null;
+    return {
+      ...thread,
+      event_log: Array.isArray(thread.metadata?.event_log) ? thread.metadata.event_log : [],
+      latest_message: latestMessage,
+      latest_message_attachments: extractAttachments(latestMessage?.metadata),
+      linked_entities: linkedEntities.get(thread.id) || [],
+      state: summarizeThreadState(thread, latestMessage),
+    };
+  });
+
+  const filteredThreads = normalizedDeliveryState
+    ? hydratedThreads.filter((thread) => thread.state?.delivery?.state === normalizedDeliveryState)
+    : hydratedThreads;
 
   return {
-    threads: threads.map((thread) => ({
-      ...thread,
-      latest_message: latestMessages.get(thread.id) || null,
-      linked_entities: linkedEntities.get(thread.id) || [],
-    })),
-    total: threadsResult.count || 0,
+    threads: filteredThreads,
+    total: normalizedDeliveryState ? filteredThreads.length : threadsResult.count || 0,
     limit: safeLimit,
     offset: safeOffset,
     applied_filters: {
@@ -220,6 +284,7 @@ export async function listCommunicationsThreads(
       view: normalizedView,
       entity_type: normalizedEntityType,
       entity_id: normalizedEntityId,
+      delivery_state: normalizedDeliveryState,
     },
   };
 }
@@ -274,11 +339,7 @@ export async function getCommunicationsThreadMessages(
   }
 
   if (linksResult.error) {
-    throw buildServiceError(
-      500,
-      'communications_links_query_failed',
-      linksResult.error.message,
-    );
+    throw buildServiceError(500, 'communications_links_query_failed', linksResult.error.message);
   }
 
   const links = linksResult.data || [];
@@ -305,11 +366,24 @@ export async function getCommunicationsThreadMessages(
   return {
     thread: {
       ...threadResult.data,
+      event_log: Array.isArray(threadResult.data.metadata?.event_log)
+        ? threadResult.data.metadata.event_log
+        : [],
       linked_entities: threadLevelLinks,
+      state: summarizeThreadState(
+        threadResult.data,
+        (messagesResult.data || []).slice(-1)[0] || null,
+      ),
     },
     messages: (messagesResult.data || []).map((message) => ({
       ...message,
+      event_log: Array.isArray(message.metadata?.event_log) ? message.metadata.event_log : [],
+      attachments: extractAttachments(message.metadata),
       linked_entities: linksByMessage.get(message.id) || [],
+      state: {
+        delivery: message.metadata?.delivery || null,
+        meeting: message.metadata?.meeting || null,
+      },
     })),
     limit: safeLimit,
     offset: safeOffset,

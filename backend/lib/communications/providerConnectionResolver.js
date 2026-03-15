@@ -15,7 +15,9 @@ function normalizeIntegrationRecord(record = {}) {
 function mailboxMatches(record, mailboxId, mailboxAddress) {
   const config = record.config || {};
   const normalizedMailboxId = mailboxId ? String(mailboxId).trim() : null;
-  const normalizedMailboxAddress = mailboxAddress ? String(mailboxAddress).trim().toLowerCase() : null;
+  const normalizedMailboxAddress = mailboxAddress
+    ? String(mailboxAddress).trim().toLowerCase()
+    : null;
   const recordMailboxId = config.mailbox_id ? String(config.mailbox_id).trim() : null;
   const recordMailboxAddress = config.mailbox_address
     ? String(config.mailbox_address).trim().toLowerCase()
@@ -43,27 +45,37 @@ export async function resolveCommunicationsProviderConnection(
   }
 
   if (!mailboxId && !mailboxAddress) {
-    const error = new Error('mailboxId or mailboxAddress is required to resolve communications mailbox connections');
+    const error = new Error(
+      'mailboxId or mailboxAddress is required to resolve communications mailbox connections',
+    );
     error.code = 'communications_provider_mailbox_required';
     throw error;
   }
 
   const { data, error } = await supabase
     .from('tenant_integrations')
-    .select('id, tenant_id, integration_type, integration_name, api_credentials, config, configuration, is_active, metadata')
+    .select(
+      'id, tenant_id, integration_type, integration_name, api_credentials, config, is_active, metadata',
+    )
     .eq('tenant_id', tenantId)
     .eq('integration_type', 'communications_provider')
     .eq('is_active', true);
 
   if (error) {
-    const resolutionError = new Error(`Failed to resolve communications provider connection: ${error.message}`);
+    const resolutionError = new Error(
+      `Failed to resolve communications provider connection: ${error.message}`,
+    );
     resolutionError.code = 'communications_provider_lookup_failed';
     throw resolutionError;
   }
 
   const matchingRecord = (data || [])
     .map(normalizeIntegrationRecord)
-    .find((record) => isCommunicationsProviderIntegration(record.integration_type) && mailboxMatches(record, mailboxId, mailboxAddress));
+    .find(
+      (record) =>
+        isCommunicationsProviderIntegration(record.integration_type) &&
+        mailboxMatches(record, mailboxId, mailboxAddress),
+    );
 
   if (!matchingRecord) {
     return null;

@@ -1,15 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, RefreshCw, Inbox, Search, Link2, AlertCircle } from 'lucide-react';
+import {
+  Mail,
+  RefreshCw,
+  Inbox,
+  Search,
+  Link2,
+  AlertCircle,
+  RotateCcw,
+  CalendarCheck2,
+  Truck,
+  Send,
+  SquarePen,
+  Archive,
+  Trash2,
+} from 'lucide-react';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
-import { listCommunicationThreads, getCommunicationThreadMessages } from '@/api/communications';
+import { Activity } from '@/api/entities';
+import {
+  listCommunicationThreads,
+  getCommunicationThreadMessages,
+  purgeCommunicationThread,
+  replayCommunicationThread,
+  updateCommunicationThreadStatus,
+} from '@/api/communications';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -17,12 +39,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { toast } from 'sonner';
 
 const VIEW_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
   { value: 'open', label: 'Open' },
   { value: 'closed', label: 'Closed' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const DELIVERY_OPTIONS = [
+  { value: 'all', label: 'All delivery states' },
+  { value: 'queued', label: 'Queued' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'delivered', label: 'Delivered' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'bounced', label: 'Bounced' },
+  { value: 'opened', label: 'Opened' },
+  { value: 'clicked', label: 'Clicked' },
 ];
 
 const ENTITY_OPTIONS = [
@@ -42,6 +77,17 @@ const ENTITY_PAGE = {
   activity: 'Activities',
 };
 
+const COMPOSE_ENTITY_OPTIONS = [
+  { value: 'none', label: 'No linked entity' },
+  { value: 'lead', label: 'Lead' },
+  { value: 'contact', label: 'Contact' },
+  { value: 'account', label: 'Account' },
+  { value: 'opportunity', label: 'Opportunity' },
+  { value: 'activity', label: 'Activity' },
+];
+
+const DEFAULT_MAILBOX_ID = 'owner-primary';
+
 function formatDateTime(value) {
   if (!value) return 'No timestamp';
   const parsed = new Date(value);
@@ -60,10 +106,23 @@ function summarizeMessage(message) {
     .trim();
 }
 
+function stateValue(state, key) {
+  return state && typeof state === 'object' ? state[key] || null : null;
+}
+
+function formatEventLabel(type) {
+  return String(type || 'event')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function CommunicationsPage() {
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
   const [view, setView] = useState('all');
+  const [deliveryState, setDeliveryState] = useState('all');
   const [mailboxId, setMailboxId] = useState('all');
   const [entityType, setEntityType] = useState('all');
   const [entityId, setEntityId] = useState('');
@@ -76,7 +135,24 @@ export default function CommunicationsPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [threadsError, setThreadsError] = useState(null);
   const [messagesError, setMessagesError] = useState(null);
+  const [replaySubmitting, setReplaySubmitting] = useState(false);
+  const [replayError, setReplayError] = useState(null);
+  const [statusSubmitting, setStatusSubmitting] = useState(false);
+  const [statusError, setStatusError] = useState(null);
+  const [purgeSubmitting, setPurgeSubmitting] = useState(false);
+  const [purgeError, setPurgeError] = useState(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composeSubmitting, setComposeSubmitting] = useState(false);
+  const [composeError, setComposeError] = useState(null);
+  const [composeForm, setComposeForm] = useState({
+    mailboxId: DEFAULT_MAILBOX_ID,
+    to: '',
+    subject: '',
+    body: '',
+    relatedTo: 'none',
+    relatedId: '',
+  });
 
   const effectiveTenantId = selectedTenantId || user?.tenant_id || null;
 
@@ -86,11 +162,12 @@ export default function CommunicationsPage() {
       mailboxId: mailboxId === 'all' ? undefined : mailboxId,
       entityType: entityType === 'all' ? undefined : entityType,
       entityId: entityType === 'all' ? undefined : entityId.trim() || undefined,
+      deliveryState: deliveryState === 'all' ? undefined : deliveryState,
       view,
       limit: 50,
       offset: 0,
     }),
-    [effectiveTenantId, mailboxId, entityType, entityId, view, refreshNonce],
+    [effectiveTenantId, mailboxId, entityType, entityId, deliveryState, view, refreshNonce],
   );
 
   useEffect(() => {
@@ -104,7 +181,9 @@ export default function CommunicationsPage() {
         if (isCancelled) return;
         const nextThreads = Array.isArray(data?.threads) ? data.threads : [];
         setThreads(nextThreads);
-        const nextMailboxOptions = [...new Set(nextThreads.map((thread) => thread.mailbox_id).filter(Boolean))];
+        const nextMailboxOptions = [
+          ...new Set(nextThreads.map((thread) => thread.mailbox_id).filter(Boolean)),
+        ];
         setMailboxOptions(nextMailboxOptions);
         setSelectedThreadId((current) => {
           if (current && nextThreads.some((thread) => thread.id === current)) {
@@ -167,10 +246,175 @@ export default function CommunicationsPage() {
     };
   }, [effectiveTenantId, selectedThreadId]);
 
+  useEffect(() => {
+    setComposeForm((current) => ({
+      ...current,
+      mailboxId:
+        current.mailboxId ||
+        (mailboxId !== 'all' ? mailboxId : '') ||
+        selectedThread?.mailbox_id ||
+        DEFAULT_MAILBOX_ID,
+      relatedTo:
+        current.relatedTo !== 'none'
+          ? current.relatedTo
+          : entityType !== 'all'
+            ? entityType
+            : 'none',
+      relatedId: current.relatedId || (entityType !== 'all' ? entityId.trim() : '') || '',
+    }));
+  }, [entityId, entityType, mailboxId, selectedThread]);
+
   const handleRefresh = () => {
     setThreadsError(null);
     setMessagesError(null);
+    setReplayError(null);
+    setStatusError(null);
+    setPurgeError(null);
     setRefreshNonce((current) => current + 1);
+  };
+
+  const handleComposeChange = (field, value) => {
+    setComposeForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleQueueOutboundEmail = async () => {
+    const mailboxIdValue = composeForm.mailboxId.trim();
+    const toValue = composeForm.to.trim();
+    const subjectValue = composeForm.subject.trim();
+    const bodyValue = composeForm.body.trim();
+    const relatedToValue = composeForm.relatedTo === 'none' ? null : composeForm.relatedTo;
+    const relatedIdValue = composeForm.relatedId.trim() || null;
+
+    if (!effectiveTenantId) {
+      setComposeError('Select a tenant before sending outbound email.');
+      return;
+    }
+    if (!mailboxIdValue) {
+      setComposeError('Mailbox ID is required.');
+      return;
+    }
+    if (!toValue) {
+      setComposeError('Recipient email is required.');
+      return;
+    }
+    if (!subjectValue) {
+      setComposeError('Subject is required.');
+      return;
+    }
+    if (!bodyValue) {
+      setComposeError('Body is required.');
+      return;
+    }
+    if (relatedToValue && !relatedIdValue) {
+      setComposeError('Linked entity ID is required when a linked entity type is selected.');
+      return;
+    }
+
+    setComposeSubmitting(true);
+    setComposeError(null);
+    try {
+      await Activity.create({
+        tenant_id: effectiveTenantId,
+        type: 'email',
+        status: 'queued',
+        subject: subjectValue,
+        body: bodyValue,
+        related_to: relatedToValue,
+        related_id: relatedIdValue,
+        related_email: toValue,
+        metadata: {
+          email: {
+            to: toValue,
+            subject: subjectValue,
+            body: bodyValue,
+          },
+          communications: {
+            mailbox_id: mailboxIdValue,
+          },
+        },
+      });
+
+      toast.success('Outbound email queued for delivery.');
+      setComposerOpen(false);
+      setComposeForm({
+        mailboxId: mailboxIdValue,
+        to: '',
+        subject: '',
+        body: '',
+        relatedTo: entityType !== 'all' ? entityType : 'none',
+        relatedId: entityType !== 'all' ? entityId.trim() : '',
+      });
+      handleRefresh();
+    } catch (error) {
+      setComposeError(error.message || 'Failed to queue outbound email');
+    } finally {
+      setComposeSubmitting(false);
+    }
+  };
+
+  const handleReplayThread = async () => {
+    if (!effectiveTenantId || !selectedThread?.id || replaySubmitting) return;
+    setReplaySubmitting(true);
+    setReplayError(null);
+    try {
+      await replayCommunicationThread({
+        tenantId: effectiveTenantId,
+        threadId: selectedThread.id,
+        mailboxId: selectedThread.mailbox_id,
+      });
+      setRefreshNonce((current) => current + 1);
+    } catch (error) {
+      setReplayError(error.message || 'Failed to request thread replay');
+    } finally {
+      setReplaySubmitting(false);
+    }
+  };
+
+  const handleThreadStatusUpdate = async (nextStatus) => {
+    if (!effectiveTenantId || !selectedThread?.id || statusSubmitting) return;
+    setStatusSubmitting(true);
+    setStatusError(null);
+    try {
+      await updateCommunicationThreadStatus({
+        tenantId: effectiveTenantId,
+        threadId: selectedThread.id,
+        status: nextStatus,
+      });
+      setRefreshNonce((current) => current + 1);
+    } catch (error) {
+      setStatusError(error.message || 'Failed to update communication thread status');
+    } finally {
+      setStatusSubmitting(false);
+    }
+  };
+
+  const handleThreadPurge = async () => {
+    if (!effectiveTenantId || !selectedThread?.id || purgeSubmitting) return;
+    const confirmed = window.confirm(
+      'Permanently purge this communication thread and its stored messages from AiSHA CRM?',
+    );
+    if (!confirmed) return;
+
+    setPurgeSubmitting(true);
+    setPurgeError(null);
+    try {
+      await purgeCommunicationThread({
+        tenantId: effectiveTenantId,
+        threadId: selectedThread.id,
+      });
+      setSelectedThreadId(null);
+      setSelectedThread(null);
+      setMessages([]);
+      setRefreshNonce((current) => current + 1);
+      toast.success('Communication thread purged.');
+    } catch (error) {
+      setPurgeError(error.message || 'Failed to purge communication thread');
+    } finally {
+      setPurgeSubmitting(false);
+    }
   };
 
   if (!effectiveTenantId) {
@@ -199,24 +443,151 @@ export default function CommunicationsPage() {
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Inbox</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Review tenant email threads, filter by mailbox or linked CRM entity, and work through unread, open, and closed views.
+            Review tenant email threads, filter by mailbox or linked CRM entity, and work through
+            unread, open, and closed views.
           </p>
         </div>
-        <Button
-          onClick={handleRefresh}
-          variant="outline"
-          className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setComposerOpen((current) => !current)}
+            variant="outline"
+            className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+          >
+            <SquarePen className="mr-2 h-4 w-4" />
+            {composerOpen ? 'Hide Composer' : 'Compose'}
+          </Button>
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {composerOpen && (
+        <Card className="border-slate-800 bg-slate-900 text-slate-100">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Compose Outbound Email</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="communications-compose-mailbox">Mailbox ID</Label>
+                <Input
+                  id="communications-compose-mailbox"
+                  value={composeForm.mailboxId}
+                  onChange={(event) => handleComposeChange('mailboxId', event.target.value)}
+                  placeholder={DEFAULT_MAILBOX_ID}
+                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="communications-compose-to">To</Label>
+                <Input
+                  id="communications-compose-to"
+                  type="email"
+                  value={composeForm.to}
+                  onChange={(event) => handleComposeChange('to', event.target.value)}
+                  placeholder="recipient@example.com"
+                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="communications-compose-subject">Subject</Label>
+                <Input
+                  id="communications-compose-subject"
+                  value={composeForm.subject}
+                  onChange={(event) => handleComposeChange('subject', event.target.value)}
+                  placeholder="Intro from AiSHA CRM"
+                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="communications-compose-related-to">Linked Entity</Label>
+                <Select
+                  value={composeForm.relatedTo}
+                  onValueChange={(value) => handleComposeChange('relatedTo', value)}
+                >
+                  <SelectTrigger
+                    id="communications-compose-related-to"
+                    className="border-slate-700 bg-slate-950"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                    {COMPOSE_ENTITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="communications-compose-body">Body</Label>
+                <Textarea
+                  id="communications-compose-body"
+                  value={composeForm.body}
+                  onChange={(event) => handleComposeChange('body', event.target.value)}
+                  placeholder="Write the email body here."
+                  className="min-h-[160px] border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="communications-compose-related-id">Linked Entity ID</Label>
+                <Input
+                  id="communications-compose-related-id"
+                  value={composeForm.relatedId}
+                  onChange={(event) => handleComposeChange('relatedId', event.target.value)}
+                  disabled={composeForm.relatedTo === 'none'}
+                  placeholder="Optional UUID"
+                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+                <p className="text-xs text-slate-500">
+                  Queueing uses the existing activity email worker. Link a CRM entity when you want
+                  the email tracked directly against it.
+                </p>
+              </div>
+            </div>
+
+            {composeError ? (
+              <div className="rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4" />
+                  <span>{composeError}</span>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={handleQueueOutboundEmail}
+                disabled={composeSubmitting}
+                className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {composeSubmitting ? 'Queueing...' : 'Queue Email'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-slate-800 bg-slate-900 text-slate-100">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4">
+        <CardContent className="grid gap-4 md:grid-cols-5">
           <div className="space-y-2">
             <Label htmlFor="communications-view">View</Label>
             <Select value={view} onValueChange={setView}>
@@ -225,6 +596,25 @@ export default function CommunicationsPage() {
               </SelectTrigger>
               <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
                 {VIEW_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="communications-delivery-state">Delivery State</Label>
+            <Select value={deliveryState} onValueChange={setDeliveryState}>
+              <SelectTrigger
+                id="communications-delivery-state"
+                className="border-slate-700 bg-slate-950"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                {DELIVERY_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -253,7 +643,10 @@ export default function CommunicationsPage() {
           <div className="space-y-2">
             <Label htmlFor="communications-entity-type">Linked Entity</Label>
             <Select value={entityType} onValueChange={setEntityType}>
-              <SelectTrigger id="communications-entity-type" className="border-slate-700 bg-slate-950">
+              <SelectTrigger
+                id="communications-entity-type"
+                className="border-slate-700 bg-slate-950"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
@@ -312,8 +705,12 @@ export default function CommunicationsPage() {
             ) : threads.length === 0 ? (
               <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
                 <Search className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                <p className="text-sm font-medium text-slate-200">No threads matched these filters.</p>
-                <p className="mt-2 text-sm text-slate-500">Try a different mailbox, entity, or view.</p>
+                <p className="text-sm font-medium text-slate-200">
+                  No threads matched these filters.
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Try a different mailbox, entity, or view.
+                </p>
               </div>
             ) : (
               threads.map((thread) => {
@@ -341,9 +738,11 @@ export default function CommunicationsPage() {
                         className={`shrink-0 ${
                           thread.status === 'unread'
                             ? 'bg-amber-500/15 text-amber-200'
-                            : thread.status === 'closed'
-                              ? 'bg-slate-700 text-slate-200'
-                              : 'bg-emerald-500/15 text-emerald-200'
+                            : thread.status === 'archived'
+                              ? 'bg-violet-500/15 text-violet-200'
+                              : thread.status === 'closed'
+                                ? 'bg-slate-700 text-slate-200'
+                                : 'bg-emerald-500/15 text-emerald-200'
                         }`}
                       >
                         {thread.status || 'open'}
@@ -398,22 +797,141 @@ export default function CommunicationsPage() {
             ) : !selectedThread ? (
               <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
                 <Inbox className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                <p className="text-sm font-medium text-slate-200">Select a thread to inspect the conversation.</p>
+                <p className="text-sm font-medium text-slate-200">
+                  Select a thread to inspect the conversation.
+                </p>
               </div>
             ) : (
               <>
                 <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-xl font-semibold">{selectedThread.subject || '(no subject)'}</h2>
+                      <h2 className="text-xl font-semibold">
+                        {selectedThread.subject || '(no subject)'}
+                      </h2>
                       <p className="mt-2 text-sm text-slate-400">
                         Mailbox {selectedThread.mailbox_id}
-                        {selectedThread.mailbox_address ? ` · ${selectedThread.mailbox_address}` : ''}
+                        {selectedThread.mailbox_address
+                          ? ` · ${selectedThread.mailbox_address}`
+                          : ''}
                       </p>
                     </div>
                     <Badge variant="secondary" className="bg-slate-800 text-slate-200">
                       {selectedThread.status || 'open'}
                     </Badge>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {stateValue(selectedThread.state, 'delivery')?.state && (
+                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-200">
+                        <Truck className="mr-1 h-3 w-3" />
+                        Delivery: {stateValue(selectedThread.state, 'delivery').state}
+                      </Badge>
+                    )}
+                    {stateValue(selectedThread.state, 'replay')?.replay_job_id && (
+                      <Badge variant="outline" className="border-amber-500/30 text-amber-200">
+                        <RotateCcw className="mr-1 h-3 w-3" />
+                        Replay queued
+                      </Badge>
+                    )}
+                    {stateValue(selectedThread.state, 'meeting')?.reply_state && (
+                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                        <CalendarCheck2 className="mr-1 h-3 w-3" />
+                        Meeting reply: {stateValue(selectedThread.state, 'meeting').reply_state}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleReplayThread}
+                      disabled={replaySubmitting}
+                      className="border-amber-500/30 bg-transparent text-amber-200 hover:bg-amber-500/10"
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      {replaySubmitting ? 'Queueing Replay...' : 'Replay Thread'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        handleThreadStatusUpdate(
+                          selectedThread.status === 'unread' ? 'open' : 'unread',
+                        )
+                      }
+                      disabled={statusSubmitting}
+                      className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                    >
+                      {statusSubmitting && selectedThread.status === 'unread'
+                        ? 'Marking Read...'
+                        : statusSubmitting
+                          ? 'Marking Unread...'
+                          : selectedThread.status === 'unread'
+                            ? 'Mark Read'
+                            : 'Mark Unread'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        handleThreadStatusUpdate(
+                          selectedThread.status === 'closed' ? 'open' : 'closed',
+                        )
+                      }
+                      disabled={statusSubmitting}
+                      className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                    >
+                      {statusSubmitting && selectedThread.status === 'closed'
+                        ? 'Reopening...'
+                        : statusSubmitting
+                          ? 'Closing...'
+                          : selectedThread.status === 'closed'
+                            ? 'Reopen Thread'
+                            : 'Close Thread'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        handleThreadStatusUpdate(
+                          selectedThread.status === 'archived' ? 'open' : 'archived',
+                        )
+                      }
+                      disabled={statusSubmitting}
+                      className="border-violet-500/30 bg-transparent text-violet-200 hover:bg-violet-500/10"
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      {statusSubmitting && selectedThread.status === 'archived'
+                        ? 'Restoring...'
+                        : statusSubmitting
+                          ? 'Archiving...'
+                          : selectedThread.status === 'archived'
+                            ? 'Restore Thread'
+                            : 'Archive Thread'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleThreadPurge}
+                      disabled={purgeSubmitting}
+                      className="border-red-500/30 bg-transparent text-red-200 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {purgeSubmitting ? 'Purging...' : 'Purge Thread'}
+                    </Button>
+                    {replayError ? (
+                      <span className="text-sm text-red-300">{replayError}</span>
+                    ) : stateValue(selectedThread.state, 'replay')?.replay_job_id ? (
+                      <span className="text-sm text-slate-400">
+                        Latest replay job {stateValue(selectedThread.state, 'replay').replay_job_id}
+                      </span>
+                    ) : null}
+                    {statusError ? (
+                      <span className="text-sm text-red-300">{statusError}</span>
+                    ) : null}
+                    {purgeError ? <span className="text-sm text-red-300">{purgeError}</span> : null}
                   </div>
 
                   {(selectedThread.linked_entities || []).length > 0 && (
@@ -447,6 +965,42 @@ export default function CommunicationsPage() {
                   )}
                 </div>
 
+                {(stateValue(selectedThread.state, 'events') || []).length > 0 && (
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Recent Activity
+                    </h3>
+                    <div className="mt-4 space-y-3">
+                      {stateValue(selectedThread.state, 'events').map((event, index) => (
+                        <div
+                          key={`${event.type || 'event'}-${event.occurred_at || index}-${index}`}
+                          className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-slate-100">
+                              {formatEventLabel(event.type)}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {formatDateTime(event.occurred_at)}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+                            {event.delivery_state ? (
+                              <span>Delivery: {event.delivery_state}</span>
+                            ) : null}
+                            {event.reply_state ? <span>Reply: {event.reply_state}</span> : null}
+                            {event.replay_job_id ? (
+                              <span>Replay Job: {event.replay_job_id}</span>
+                            ) : null}
+                            {event.actor ? <span>By: {event.actor}</span> : null}
+                            {event.review_required ? <span>Review required</span> : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   {messages.map((message) => (
                     <div
@@ -464,7 +1018,9 @@ export default function CommunicationsPage() {
                               ? 'Outbound message'
                               : message.sender_name || message.sender_email || 'Inbound message'}
                           </p>
-                          <p className="mt-1 text-xs text-slate-400">{formatDateTime(message.received_at)}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {formatDateTime(message.received_at)}
+                          </p>
                         </div>
                         <Badge variant="outline" className="border-slate-700 text-slate-300">
                           {message.direction}
@@ -486,6 +1042,21 @@ export default function CommunicationsPage() {
                           ))}
                         </div>
                       )}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {stateValue(message.state, 'delivery')?.state && (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-500/30 text-emerald-200"
+                          >
+                            Delivery: {stateValue(message.state, 'delivery').state}
+                          </Badge>
+                        )}
+                        {stateValue(message.state, 'meeting')?.reply_state && (
+                          <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                            Meeting: {stateValue(message.state, 'meeting').reply_state}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

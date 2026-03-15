@@ -17,6 +17,7 @@ import assert from 'node:assert';
 import express from 'express';
 import { createServer } from 'node:http';
 import { TENANT_ID as MOCK_TENANT_ID, OTHER_TENANT_ID } from '../testConstants.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -78,9 +79,13 @@ async function buildServer(port, supabaseMock) {
 }
 
 function req(port, method, path, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
-  return fetch(`http://localhost:${port}${path}`, opts);
+  return requestLocal({
+    port,
+    path,
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
 }
 
 // ─── GET /api/pep/saved-reports ──────────────────────────────────────────────
