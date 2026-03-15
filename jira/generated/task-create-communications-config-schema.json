@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Create Communications Config Schema",
+  "description": "Define tenant-scoped provider connection, mailbox, sync, and sending configuration for the communications module.",
+  "labels": ["communications", "schema", "tenant"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Communications Platform Foundation"
+}

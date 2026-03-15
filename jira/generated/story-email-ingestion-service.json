@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Story",
+  "summary": "Email Ingestion Service",
+  "description": "Ingest inbound email through provider adapters, normalize MIME payloads, reconstruct threads, and hand off to backend Braid orchestration.",
+  "labels": ["communications", "email", "inbound"],
+  "epic": "Provider-Agnostic Communications Module"
+}

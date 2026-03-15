@@ -6,8 +6,16 @@
 import express from 'express';
 import { sendSms, checkTwilioStatus, getTwilioCredentials } from '../lib/twilioService.js';
 import logger from '../lib/logger.js';
+import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { resolveCommunicationsProviderConnection } from '../lib/communications/providerConnectionResolver.js';
 
-export default function createIntegrationRoutes(_pgPool) {
+export default function createIntegrationRoutes(
+  _pgPool,
+  {
+    validateTenantAccessMw = validateTenantAccess,
+    resolveCommunicationsProviderConnectionFn = resolveCommunicationsProviderConnection,
+  } = {},
+) {
   const router = express.Router();
 
   // Index route for service discovery and health
@@ -16,10 +24,7 @@ export default function createIntegrationRoutes(_pgPool) {
       return res.json({
         status: 'success',
         service: 'integrations',
-        endpoints: [
-          'GET /api/integrations/n8n/workflows',
-          'GET /api/integrations/n8n/status'
-        ],
+        endpoints: ['GET /api/integrations/n8n/workflows', 'GET /api/integrations/n8n/status'],
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -30,7 +35,12 @@ export default function createIntegrationRoutes(_pgPool) {
   function requireSuperadmin(req, res, next) {
     // Dev-friendly fallback like validateTenantAccess: create mock superadmin when unauthenticated in dev
     if (!req.user && process.env.NODE_ENV === 'development') {
-      req.user = { id: 'local-dev-superadmin', email: 'dev@localhost', role: 'superadmin', tenant_id: null };
+      req.user = {
+        id: 'local-dev-superadmin',
+        email: 'dev@localhost',
+        role: 'superadmin',
+        tenant_id: null,
+      };
     }
     const role = req.user?.role;
     if (role !== 'superadmin') {
@@ -65,7 +75,11 @@ export default function createIntegrationRoutes(_pgPool) {
 
   function normalizeWorkflows(raw) {
     // Support both Public API shape and legacy /rest shape
-    const list = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : raw?.workflows || [];
+    const list = Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw)
+        ? raw
+        : raw?.workflows || [];
     return list.map((w) => ({
       id: w.id ?? w?.id?.toString?.() ?? w?.workflowId ?? w?.staticData?.id ?? null,
       name: w.name,
@@ -142,7 +156,9 @@ export default function createIntegrationRoutes(_pgPool) {
       const { baseUrl } = getN8nConfig();
       // health endpoint returns plain text "ok" in many n8n versions
       const url = `${baseUrl}/healthz`;
-      const ping = await fetch(url).then(async (r) => ({ ok: r.ok, status: r.status, text: await r.text().catch(() => '') })).catch((e) => ({ ok: false, error: e.message }));
+      const ping = await fetch(url)
+        .then(async (r) => ({ ok: r.ok, status: r.status, text: await r.text().catch(() => '') }))
+        .catch((e) => ({ ok: false, error: e.message }));
       res.json({ status: 'success', data: { baseUrl, health: ping } });
     } catch (error) {
       res.status(502).json({ status: 'error', message: error.message });
@@ -406,7 +422,9 @@ export default function createIntegrationRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
       if (!to) {
-        return res.status(400).json({ status: 'error', message: 'Recipient phone number (to) is required' });
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'Recipient phone number (to) is required' });
       }
       if (!body) {
         return res.status(400).json({ status: 'error', message: 'Message body is required' });
@@ -508,9 +526,7 @@ export default function createIntegrationRoutes(_pgPool) {
           configured: true,
           source: creds.source,
           // Mask account SID – show last 4 chars
-          account_sid_hint: creds.account_sid
-            ? `...${creds.account_sid.slice(-4)}`
-            : null,
+          account_sid_hint: creds.account_sid ? `...${creds.account_sid.slice(-4)}` : null,
           has_from_number: !!creds.from_number,
           from_number: creds.from_number || null,
           has_messaging_service: !!creds.config?.messaging_service_sid,
@@ -520,6 +536,57 @@ export default function createIntegrationRoutes(_pgPool) {
     } catch (error) {
       logger.error('[Integrations] Twilio config error:', error);
       res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  router.get('/communications/status', validateTenantAccessMw, async (req, res) => {
+    try {
+      const tenantId = req.tenant?.id || req.query?.tenant_id;
+      const mailboxId =
+        typeof req.query?.mailbox_id === 'string' ? req.query.mailbox_id.trim() : null;
+      const mailboxAddress =
+        typeof req.query?.mailbox_address === 'string' ? req.query.mailbox_address.trim() : null;
+
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      if (!mailboxId && !mailboxAddress) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'mailbox_id or mailbox_address is required',
+        });
+      }
+
+      const resolved = await resolveCommunicationsProviderConnectionFn({
+        tenantId,
+        mailboxId,
+        mailboxAddress,
+      });
+
+      if (!resolved) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Communications mailbox integration not found',
+        });
+      }
+
+      const health = await resolved.adapter.getConnectionHealth();
+      return res.json({
+        status: 'success',
+        data: {
+          ...health,
+          integration_id: resolved.integration.id,
+          integration_name: resolved.integration.integration_name || null,
+        },
+      });
+    } catch (error) {
+      logger.error('[Integrations] Communications status error:', error);
+      return res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to validate communications mailbox',
+        code: error.code || 'communications_status_failed',
+      });
     }
   });
 

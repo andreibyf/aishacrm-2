@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 process.env.NODE_ENV = 'test';
 process.env.ROUTE_RATE_WINDOW_MS = '1000'; // Short window for testing
@@ -14,27 +15,17 @@ const testPort = 3107;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
-  const url = `http://localhost:${testPort}${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-  
-  try {
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers
-      },
-      signal: controller.signal,
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    return await fetch(url, options);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return requestLocal({
+    port: testPort,
+    path,
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': '127.0.0.1',
+      ...headers,
+    },
+    body,
+  });
 }
 
 before(async () => {
@@ -57,9 +48,9 @@ before(async () => {
           user: {
             id: 'auth-invited-' + Date.now(),
             email: email,
-            user_metadata: metadata
+            user_metadata: metadata,
           },
-          error: null
+          error: null,
         };
       }
       return { user: null, error: { message: 'Invalid email' } };
@@ -71,7 +62,7 @@ before(async () => {
           user: {
             id: 'auth-existing-123',
             email: 'existing@test.com',
-          }
+          },
         };
       }
       return null;
@@ -120,14 +111,14 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         'audit.test.user@example.com',
         'e2e.temp.user@example.com',
         'user@playwright.test',
-        'user@example.com'
+        'user@example.com',
       ];
 
       for (const email of testEmails) {
         const response = await makeRequest('POST', '/api/users', {
           email,
           first_name: 'Test',
-          last_name: 'User'
+          last_name: 'User',
         });
         // May be rate limited, but if not, should be blocked
         if (response.status !== 429) {
@@ -146,7 +137,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         first_name: 'Original',
         last_name: 'User',
         role: 'admin',
-        tenant_id: 'test-tenant-123'
+        tenant_id: 'test-tenant-123',
       });
 
       // Mock should allow first creation
@@ -157,7 +148,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
           first_name: 'Duplicate',
           last_name: 'User',
           role: 'user',
-          tenant_id: 'test-tenant-456'
+          tenant_id: 'test-tenant-456',
         });
         assert.strictEqual(duplicateResponse.status, 409);
         const data = await duplicateResponse.json();
@@ -173,7 +164,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         last_name: 'User',
         role: 'admin',
         tenant_id: 'test-tenant-123',
-        metadata: { department: 'IT' }
+        metadata: { department: 'IT' },
       });
 
       // May be rate limited or succeed
@@ -196,7 +187,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         role: 'manager',
         tenant_id: 'test-tenant-123',
         status: 'active',
-        metadata: { department: 'Sales' }
+        metadata: { department: 'Sales' },
       });
 
       // May be rate limited or succeed
@@ -216,7 +207,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         email: 'notenant@test.com',
         first_name: 'No',
         last_name: 'Tenant',
-        role: 'user'
+        role: 'user',
       });
 
       // May be rate limited, but if not, should fail due to missing tenant_id
@@ -237,8 +228,8 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         metadata: {
           tags: ['test', 'metadata'],
           permissions: { read: true, write: false },
-          custom_field: 'value'
-        }
+          custom_field: 'value',
+        },
       });
 
       if (response.status === 200) {
@@ -258,7 +249,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         first_name: 'Error',
         last_name: 'Test',
         role: 'admin',
-        tenant_id: 'test-tenant-123'
+        tenant_id: 'test-tenant-123',
       });
 
       // Either succeeds, fails, or is rate limited
@@ -273,7 +264,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         first_name: 'Audit',
         last_name: 'Log',
         role: 'admin',
-        tenant_id: 'test-tenant-123'
+        tenant_id: 'test-tenant-123',
       });
 
       if (response.status === 200) {
@@ -296,7 +287,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
 
     it('should require tenant_id', async () => {
       const response = await makeRequest('POST', '/api/users/register', {
-        email: 'register@test.com'
+        email: 'register@test.com',
       });
       assert.strictEqual(response.status, 400);
       const data = await response.json();
@@ -306,7 +297,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
 
     it('should require email', async () => {
       const response = await makeRequest('POST', '/api/users/register', {
-        tenant_id: 'test-tenant-123'
+        tenant_id: 'test-tenant-123',
       });
       // May be rate limited, but if not, should require email
       assert([400, 429].includes(response.status));
@@ -323,7 +314,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         tenant_id: 'test-tenant-123',
         email: 'existing@test.com',
         first_name: 'Existing',
-        last_name: 'User'
+        last_name: 'User',
       });
       // May be rate limited, but if not, should reject duplicate
       assert([409, 429].includes(response.status));
@@ -340,7 +331,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         email: 'newregister@test.com',
         first_name: 'New',
         last_name: 'Register',
-        role: 'user'
+        role: 'user',
       });
 
       // May be rate limited or succeed
@@ -361,7 +352,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         tenant_id: 'test-tenant-123',
         email: 'defaultrole@test.com',
         first_name: 'Default',
-        last_name: 'Role'
+        last_name: 'Role',
       });
 
       if (response.status === 200) {
@@ -376,7 +367,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         email: 'customrole@test.com',
         first_name: 'Custom',
         last_name: 'Role',
-        role: 'manager'
+        role: 'manager',
       });
 
       if (response.status === 200) {
@@ -390,7 +381,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         tenant_id: 'test-tenant-123',
         email: 'nolastname@test.com',
         first_name: 'No',
-        role: 'user'
+        role: 'user',
       });
 
       if (response.status === 200) {
@@ -406,7 +397,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         tenant_id: 'test-tenant-123',
         email: 'error@test.com',
         first_name: 'Error',
-        last_name: 'Test'
+        last_name: 'Test',
       });
 
       // Either succeeds, fails, or is rate limited
@@ -428,7 +419,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         first_name: 'Integration',
         last_name: 'Test',
         role: 'admin',
-        tenant_id: 'test-tenant-123'
+        tenant_id: 'test-tenant-123',
       });
 
       // Then try to register same email (should fail)
@@ -436,7 +427,7 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
         tenant_id: 'test-tenant-456',
         email: 'integration@test.com',
         first_name: 'Integration',
-        last_name: 'Register'
+        last_name: 'Register',
       });
 
       // Should fail due to duplicate, rate limiting, or other server-side error under load
@@ -447,23 +438,29 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
       // Test concurrent requests (simplified)
       const promises = [];
       for (let i = 0; i < 3; i++) {
-        promises.push(makeRequest('POST', '/api/users/register', {
-          tenant_id: 'test-tenant-123',
-          email: `concurrent${i}@test.com`,
-          first_name: 'Concurrent',
-          last_name: `Test${i}`
-        }));
+        promises.push(
+          makeRequest('POST', '/api/users/register', {
+            tenant_id: 'test-tenant-123',
+            email: `concurrent${i}@test.com`,
+            first_name: 'Concurrent',
+            last_name: `Test${i}`,
+          }),
+        );
       }
 
       const results = await Promise.all(promises);
-      const successCount = results.filter(r => r.status === 200).length;
-      const duplicateCount = results.filter(r => r.status === 409).length;
-      const rateLimitedCount = results.filter(r => r.status === 429).length;
-      const serverErrorCount = results.filter(r => r.status === 500).length;
+      const successCount = results.filter((r) => r.status === 200).length;
+      const duplicateCount = results.filter((r) => r.status === 409).length;
+      const rateLimitedCount = results.filter((r) => r.status === 429).length;
+      const serverErrorCount = results.filter((r) => r.status === 500).length;
       const handledCount = successCount + duplicateCount + rateLimitedCount + serverErrorCount;
 
       // All 3 requests should get a valid HTTP response under load
-      assert.strictEqual(handledCount, 3, `Expected all 3 handled, got ${handledCount} (200:${successCount} 409:${duplicateCount} 429:${rateLimitedCount} 500:${serverErrorCount})`);
+      assert.strictEqual(
+        handledCount,
+        3,
+        `Expected all 3 handled, got ${handledCount} (200:${successCount} 409:${duplicateCount} 429:${rateLimitedCount} 500:${serverErrorCount})`,
+      );
     });
   });
 
@@ -472,45 +469,57 @@ describe('users.js - Section 2.4: User Creation & Registration', { timeout: 3000
       const requests = [];
       // Make multiple requests quickly
       for (let i = 0; i < 10; i++) {
-        requests.push(makeRequest('POST', '/api/users', {
-          email: `ratelimit${i}@test.com`,
-          first_name: 'Rate',
-          last_name: 'Limit',
-          role: 'admin',
-          tenant_id: 'test-tenant-123'
-        }));
+        requests.push(
+          makeRequest('POST', '/api/users', {
+            email: `ratelimit${i}@test.com`,
+            first_name: 'Rate',
+            last_name: 'Limit',
+            role: 'admin',
+            tenant_id: 'test-tenant-123',
+          }),
+        );
       }
 
       const results = await Promise.all(requests);
-      const rateLimited = results.filter(r => r.status === 429).length;
-      const successful = results.filter(r => r.status === 200 || r.status === 409).length;
-      const serverErrors = results.filter(r => r.status === 500).length;
+      const rateLimited = results.filter((r) => r.status === 429).length;
+      const successful = results.filter((r) => r.status === 200 || r.status === 409).length;
+      const serverErrors = results.filter((r) => r.status === 500).length;
       const handled = rateLimited + successful + serverErrors;
 
       // All 10 requests should get a valid HTTP response
-      assert.strictEqual(handled, 10, `Expected all 10 handled, got ${handled} (success:${successful} 429:${rateLimited} 500:${serverErrors})`);
+      assert.strictEqual(
+        handled,
+        10,
+        `Expected all 10 handled, got ${handled} (success:${successful} 429:${rateLimited} 500:${serverErrors})`,
+      );
     });
 
     it('should apply rate limiting to POST /register', async () => {
       const requests = [];
       // Make multiple requests quickly
       for (let i = 0; i < 5; i++) {
-        requests.push(makeRequest('POST', '/api/users/register', {
-          tenant_id: 'test-tenant-123',
-          email: `registerlimit${i}@test.com`,
-          first_name: 'Register',
-          last_name: 'Limit'
-        }));
+        requests.push(
+          makeRequest('POST', '/api/users/register', {
+            tenant_id: 'test-tenant-123',
+            email: `registerlimit${i}@test.com`,
+            first_name: 'Register',
+            last_name: 'Limit',
+          }),
+        );
       }
 
       const results = await Promise.all(requests);
-      const rateLimited = results.filter(r => r.status === 429).length;
-      const successful = results.filter(r => r.status === 200 || r.status === 409).length;
-      const serverErrors = results.filter(r => r.status === 500).length;
+      const rateLimited = results.filter((r) => r.status === 429).length;
+      const successful = results.filter((r) => r.status === 200 || r.status === 409).length;
+      const serverErrors = results.filter((r) => r.status === 500).length;
       const handled = rateLimited + successful + serverErrors;
 
       // All 5 requests should get a valid HTTP response
-      assert.strictEqual(handled, 5, `Expected all 5 handled, got ${handled} (success:${successful} 429:${rateLimited} 500:${serverErrors})`);
+      assert.strictEqual(
+        handled,
+        5,
+        `Expected all 5 handled, got ${handled} (success:${successful} 429:${rateLimited} 500:${serverErrors})`,
+      );
     });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 process.env.NODE_ENV = 'test';
 process.env.USER_MUTATE_RATE_LIMIT_MAX = '5'; // Low limit for mutation testing
@@ -11,27 +12,17 @@ const testPort = 3106; // Different port from password tests
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
-  const url = `http://localhost:${testPort}${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-  
-  try {
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers
-      },
-      signal: controller.signal,
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    return await fetch(url, options);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return requestLocal({
+    port: testPort,
+    path,
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': '127.0.0.1',
+      ...headers,
+    },
+    body,
+  });
 }
 
 before(async () => {
@@ -49,19 +40,19 @@ before(async () => {
       select: () => ({
         eq: () => ({
           limit: () => ({
-            single: () => Promise.resolve({ data: null, error: null })
-          })
-        })
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
       }),
       insert: () => ({
         select: () => ({
-          single: () => Promise.resolve({ data: { id: 123 }, error: null })
-        })
+          single: () => Promise.resolve({ data: { id: 123 }, error: null }),
+        }),
       }),
       delete: () => ({
-        eq: () => Promise.resolve({ error: null })
-      })
-    })
+        eq: () => Promise.resolve({ error: null }),
+      }),
+    }),
   });
 
   // Mock pgPool and supabaseAuth for testing
@@ -86,10 +77,10 @@ before(async () => {
           user: {
             id: 'new-auth-user-123',
             email,
-            user_metadata: metadata
-          }
+            user_metadata: metadata,
+          },
         },
-        error: null
+        error: null,
       };
     },
     sendPasswordResetEmail: async (email) => {
@@ -177,7 +168,7 @@ describe('users.js - Section 2.8: User Invitations', () => {
       }
 
       const responses = await Promise.all(requests);
-      const rateLimitedResponses = responses.filter(r => r.status === 429);
+      const rateLimitedResponses = responses.filter((r) => r.status === 429);
 
       // Should have at least some rate limited responses
       assert(rateLimitedResponses.length > 0, 'Expected some requests to be rate limited');
@@ -187,18 +178,25 @@ describe('users.js - Section 2.8: User Invitations', () => {
   describe('POST /api/users/:id/resend-invite - Alias endpoint for backward compatibility', () => {
     it('should work identically to /invite endpoint and not return 404', async () => {
       const response = await makeRequest('POST', '/api/users/99999/resend-invite');
-      
+
       // Log for debugging
       const responseStatus = response.status;
-      
+
       // Should not return 404 - the endpoint must exist
-      assert.notStrictEqual(responseStatus, 404, `resend-invite endpoint should exist and not return 404, got ${responseStatus}`);
-      
+      assert.notStrictEqual(
+        responseStatus,
+        404,
+        `resend-invite endpoint should exist and not return 404, got ${responseStatus}`,
+      );
+
       // The endpoint should behave like /invite
       // May return 429 if rate limited, 500 due to Supabase client not initialized in test environment,
       // or 404 for non-existent users in production
-      assert([404, 429, 500].includes(responseStatus), `Expected 404, 429, or 500, got ${responseStatus}`);
-      
+      assert(
+        [404, 429, 500].includes(responseStatus),
+        `Expected 404, 429, or 500, got ${responseStatus}`,
+      );
+
       if (responseStatus === 404) {
         const data = await response.json();
         assert.strictEqual(data.status, 'error');
@@ -214,10 +212,13 @@ describe('users.js - Section 2.8: User Invitations', () => {
       }
 
       const responses = await Promise.all(requests);
-      const rateLimitedResponses = responses.filter(r => r.status === 429);
+      const rateLimitedResponses = responses.filter((r) => r.status === 429);
 
       // Should have at least some rate limited responses
-      assert(rateLimitedResponses.length > 0, 'Expected some requests to be rate limited on resend-invite endpoint');
+      assert(
+        rateLimitedResponses.length > 0,
+        'Expected some requests to be rate limited on resend-invite endpoint',
+      );
     });
   });
 });

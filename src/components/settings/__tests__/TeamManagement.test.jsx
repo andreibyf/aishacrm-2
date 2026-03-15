@@ -601,7 +601,7 @@ describe('TeamManagement — members', () => {
     });
   });
 
-  it('shows Add Member button in expanded team', async () => {
+  it('shows Manage in User Settings action in expanded team', async () => {
     globalThis.fetch = mockFetch();
     render(<TeamManagement />);
 
@@ -612,7 +612,7 @@ describe('TeamManagement — members', () => {
     fireEvent.click(screen.getByText('Sales'));
 
     await waitFor(() => {
-      expect(screen.getByText('Add Member')).toBeInTheDocument();
+      expect(screen.getByText('Manage in User Settings')).toBeInTheDocument();
     });
   });
 

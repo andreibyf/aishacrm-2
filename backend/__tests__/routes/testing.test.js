@@ -6,6 +6,7 @@
 import { describe, it, before, after, mock } from 'node:test';
 import assert from 'node:assert';
 import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 // Mock environment variables for tests
 process.env.GITHUB_REPO_OWNER = 'test-owner';
@@ -16,16 +17,13 @@ let app;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null) {
-  // Simple fetch-based request helper for testing
-  const url = `http://localhost:${testPort}${path}`;
-  const options = {
+  return requestLocal({
+    port: testPort,
+    path,
     method,
     headers: { 'Content-Type': 'application/json' },
-  };
-  if (body) {
-    options.body = JSON.stringify(body);
-  }
-  return fetch(url, options);
+    body,
+  });
 }
 
 const testPort = 3099;
@@ -35,11 +33,11 @@ before(async () => {
   // Import after env vars are set
   const express = (await import('express')).default;
   const createTestingRoutes = (await import('../../routes/testing.js')).default;
-  
+
   app = express();
   app.use(express.json());
   app.use('/api/testing', createTestingRoutes(null)); // null pgPool for these tests
-  
+
   server = app.listen(testPort);
   await new Promise((resolve) => server.on('listening', resolve));
 });
@@ -60,7 +58,7 @@ describe('Testing Routes', () => {
     timeoutTest('should return pong with timestamp', async () => {
       const res = await makeRequest('GET', '/api/testing/ping');
       assert.strictEqual(res.status, 200);
-      
+
       const data = await res.json();
       assert.strictEqual(data.status, 'success');
       assert.strictEqual(data.data.message, 'pong');
@@ -72,12 +70,12 @@ describe('Testing Routes', () => {
     timeoutTest('should return available test suites', async () => {
       const res = await makeRequest('GET', '/api/testing/suites');
       assert.strictEqual(res.status, 200);
-      
+
       const data = await res.json();
       assert.strictEqual(data.status, 'success');
       assert.ok(Array.isArray(data.data.suites));
       assert.ok(data.data.suites.length > 0);
-      
+
       // Check suite structure
       const firstSuite = data.data.suites[0];
       assert.ok(firstSuite.id);
@@ -105,7 +103,7 @@ describe('Testing Routes', () => {
         suite: 'metrics',
         ref: 'main',
       });
-      
+
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.status, 'success');
@@ -137,10 +135,10 @@ describe('Testing Routes', () => {
       const res = await makeRequest('POST', '/api/testing/trigger-e2e', {
         suite: 'metrics',
       });
-      
+
       // Verify the response
       assert.strictEqual(res.status, 404);
-      
+
       // Check if response is JSON
       const contentType = res.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -199,7 +197,7 @@ describe('Testing Routes', () => {
 
       const res = await makeRequest('GET', '/api/testing/workflow-status?ref=main&per_page=5');
       assert.strictEqual(res.status, 200);
-      
+
       const data = await res.json();
       assert.strictEqual(data.status, 'success');
       assert.ok(Array.isArray(data.data.runs));
@@ -250,9 +248,12 @@ describe('Testing Routes', () => {
       });
 
       const cutoff = new Date(now - 3600000).toISOString(); // 1 hour ago
-      const res = await makeRequest('GET', `/api/testing/workflow-status?ref=main&created_after=${encodeURIComponent(cutoff)}`);
+      const res = await makeRequest(
+        'GET',
+        `/api/testing/workflow-status?ref=main&created_after=${encodeURIComponent(cutoff)}`,
+      );
       assert.strictEqual(res.status, 200);
-      
+
       const data = await res.json();
       assert.strictEqual(data.status, 'success');
       assert.strictEqual(data.data.total, 1); // Only the recent run
@@ -269,8 +270,8 @@ describe('Testing Routes', () => {
       delete process.env.GH_TOKEN;
 
       const res = await makeRequest('GET', '/api/testing/workflow-status?ref=main');
-        assert.ok([404, 503].includes(res.status)); // Accept 404 or 503 when token is missing
-      
+      assert.ok([404, 503].includes(res.status)); // Accept 404 or 503 when token is missing
+
       const data = await res.json();
       assert.strictEqual(data.status, 'unavailable');
       assert.ok(data.message.includes('GitHub'));

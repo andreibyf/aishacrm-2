@@ -1,204 +1,290 @@
 /**
  * Email Worker
- * Polls activities table for queued email activities and sends them via SMTP
+ * Polls activities table for queued email activities and sends them through
+ * tenant-scoped communications provider adapters.
  */
 
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
 import { pool as pgPool, getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
+import { resolveCommunicationsProviderConnection } from '../lib/communications/providerConnectionResolver.js';
+import {
+  attachActivityToCommunicationsRecords,
+  persistOutboundThreadAndMessage,
+} from '../services/communicationsPersistenceService.js';
 
-// Load environment (.env.local first, then .env)
 dotenv.config({ path: '.env.local' });
 dotenv.config();
 
-// Database connection via Supabase pool wrapper (replaces direct pg.Pool)
 if (!pgPool) {
   logger.error('[EmailWorker] No database configured (ensure Supabase client is initialized)');
 }
 
-/**
- * Get tenant-specific SMTP configuration from tenant_integrations
- * Returns null if not configured
- */
-async function getTenantSMTPConfig(tenantId) {
-  if (!tenantId) return null;
-  
-  try {
-    // Debug: Check ALL gmail_smtp integrations first
-    const debugQuery = `SELECT tenant_id, integration_type, is_active FROM tenant_integrations WHERE integration_type = 'gmail_smtp'`;
-    const debugResult = await pgPool.query(debugQuery);
-    logger.info(`[EmailWorker] 📧 Found ${debugResult.rows.length} gmail_smtp integrations total:`);
-    debugResult.rows.forEach((row, idx) => {
-      logger.info(`[EmailWorker]   ${idx + 1}. Tenant: ${row.tenant_id} | Active: ${row.is_active}`);
-    });
-    logger.info(`[EmailWorker] 🎯 Looking for tenant_id: ${tenantId}`);
-    
-    const query = `
-      SELECT api_credentials, configuration, is_active
-      FROM tenant_integrations
-      WHERE tenant_id = $1
-        AND integration_type = 'gmail_smtp'
-        AND is_active = true
-      LIMIT 1
-    `;
-    const result = await pgPool.query(query, [tenantId]);
-    
-    if (result.rows.length === 0) {
-      logger.debug(`[EmailWorker] ❌ No Gmail SMTP integration found for tenant ${tenantId}`);
-      return null;
-    }
-    
-    const integration = result.rows[0];
-    const credentials = integration.api_credentials || {};
-    const config = integration.configuration || {};
-    
-    if (!credentials.smtp_user || !credentials.smtp_password) {
-      logger.warn(`[EmailWorker] Incomplete Gmail SMTP credentials for tenant ${tenantId}`);
-      return null;
-    }
-    
+const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_WORKER_POLL_MS || '5000', 10);
+const BATCH_LIMIT = parseInt(process.env.EMAIL_WORKER_BATCH_LIMIT || '10', 10);
+const MAX_ATTEMPTS = parseInt(process.env.EMAIL_MAX_ATTEMPTS || '5', 10);
+const BACKOFF_BASE_MS = parseInt(process.env.EMAIL_BACKOFF_BASE_MS || '10000', 10);
+const BACKOFF_FACTOR = parseFloat(process.env.EMAIL_BACKOFF_FACTOR || '2');
+const BACKOFF_JITTER_MS = parseInt(process.env.EMAIL_BACKOFF_JITTER_MS || '2000', 10);
+const STATUS_WEBHOOK = process.env.EMAIL_STATUS_WEBHOOK_URL;
+const ICS_PROD_ID =
+  process.env.COMMUNICATIONS_ICS_PROD_ID || '-//AiSHA CRM//Communications Module//EN';
+
+function parseEmailMeta(metadata) {
+  const meta = metadata && typeof metadata === 'object' ? metadata : {};
+  return meta.email && typeof meta.email === 'object' ? meta.email : {};
+}
+
+function parseCommunicationsMeta(metadata) {
+  const meta = metadata && typeof metadata === 'object' ? metadata : {};
+  return meta.communications && typeof meta.communications === 'object' ? meta.communications : {};
+}
+
+function parseMeetingMeta(metadata) {
+  const meta = metadata && typeof metadata === 'object' ? metadata : {};
+  return meta.meeting && typeof meta.meeting === 'object' ? meta.meeting : {};
+}
+
+function sanitizeEmailHeaders(headers) {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const sanitized = { ...headers };
+  delete sanitized.references;
+  delete sanitized.References;
+  delete sanitized['in-reply-to'];
+  delete sanitized['In-Reply-To'];
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function getActivityDescription(activity, email) {
+  return activity.body || email.body || '';
+}
+
+function normalizeAttendee(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'string') {
+    const trimmed = entry.trim();
+    return trimmed ? { email: trimmed, name: null } : null;
+  }
+  if (typeof entry === 'object') {
+    const email = typeof entry.email === 'string' ? entry.email.trim() : '';
+    if (!email) return null;
     return {
-      host: config.smtp_host || 'smtp.gmail.com',
-      port: parseInt(config.smtp_port || '587'),
-      secure: config.smtp_secure === true || config.smtp_port === '465',
-      auth: {
-        user: credentials.smtp_user,
-        pass: credentials.smtp_password
-      },
-      from: config.smtp_from || credentials.smtp_user
+      email,
+      name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : null,
     };
-  } catch (err) {
-    logger.error(`[EmailWorker] Error fetching tenant SMTP config: ${err.message}`);
-    return null;
   }
+  return null;
 }
 
-/**
- * Create SMTP transporter for specific configuration
- * Returns null if config invalid
- */
-function createTransporter(config) {
-  if (!config || !config.host || !config.auth?.user) {
-    return null;
+function collectMeetingAttendees(activity, email, meeting) {
+  const candidates = Array.isArray(meeting.attendees)
+    ? meeting.attendees
+    : Array.isArray(activity.metadata?.attendees)
+      ? activity.metadata.attendees
+      : Array.isArray(email.to)
+        ? email.to
+        : typeof email.to === 'string'
+          ? email.to.split(',').map((value) => value.trim())
+          : activity.related_email
+            ? [activity.related_email]
+            : [];
+
+  const attendees = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const normalized = normalizeAttendee(candidate);
+    if (!normalized?.email) continue;
+    const key = normalized.email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    attendees.push(normalized);
   }
-  
-  try {
-    return nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: config.auth
-    });
-  } catch (err) {
-    logger.error(`[EmailWorker] Error creating transporter: ${err.message}`);
-    return null;
-  }
+  return attendees;
 }
 
-// SYSADMIN SMTP transporter (NEVER use for tenant workflows)
-let sysadminTransporter = null;
-function _getSysadminTransporter() {
-  if (!process.env.SMTP_HOST) {
-    logger.warn('[EmailWorker] Sysadmin SMTP_HOST is not configured');
-    sysadminTransporter = null;
-    return null;
-  }
-  if (sysadminTransporter) return sysadminTransporter;
-  sysadminTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: (process.env.SMTP_USER || process.env.SMTP_PASS) ? {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    } : undefined,
-  });
-  return sysadminTransporter;
+function formatIcsDate(date) {
+  const year = date.getUTCFullYear();
+  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getUTCDate()}`.padStart(2, '0');
+  const hours = `${date.getUTCHours()}`.padStart(2, '0');
+  const minutes = `${date.getUTCMinutes()}`.padStart(2, '0');
+  const seconds = `${date.getUTCSeconds()}`.padStart(2, '0');
+  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
 }
 
-const _FROM_DEFAULT_SYSADMIN = process.env.SMTP_FROM || 'no-reply@localhost';
-const POLL_INTERVAL_MS = parseInt(process.env.EMAIL_WORKER_POLL_MS || '5000');
-const BATCH_LIMIT = parseInt(process.env.EMAIL_WORKER_BATCH_LIMIT || '10');
+function escapeIcsText(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\r?\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+}
+
+function combineActivityDateTime(activity) {
+  if (!activity?.due_date) return null;
+  const dueTime =
+    typeof activity.due_time === 'string' && activity.due_time.trim()
+      ? activity.due_time.trim()
+      : '00:00';
+  const candidate = new Date(`${activity.due_date}T${dueTime}:00Z`);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
+}
+
+function buildMeetingInviteArtifacts(activity, email, meeting, organizerEmail) {
+  const startAt = combineActivityDateTime(activity);
+  if (!startAt) {
+    throw new Error('Meeting invite requires due_date and due_time on the meeting activity');
+  }
+
+  const durationMinutes = Number.isFinite(Number(activity.duration_minutes))
+    ? Number(activity.duration_minutes)
+    : Number.isFinite(Number(meeting.duration_minutes))
+      ? Number(meeting.duration_minutes)
+      : 30;
+  const endAt = new Date(startAt.getTime() + durationMinutes * 60 * 1000);
+  const attendees = collectMeetingAttendees(activity, email, meeting);
+  if (attendees.length === 0) {
+    throw new Error('Meeting invite requires at least one attendee email');
+  }
+
+  const inviteUid =
+    meeting.invite_uid || meeting.invite_id || `meeting-${activity.id}@aishacrm.local`;
+  const now = new Date();
+  const description = getActivityDescription(activity, email);
+  const summary = email.subject || activity.subject || 'Meeting Invitation';
+  const organizer = organizerEmail || email.from || 'no-reply@aishacrm.local';
+  const location = meeting.location || activity.location || '';
+  const status = String(meeting.status || 'CONFIRMED').toUpperCase();
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    `PRODID:${ICS_PROD_ID}`,
+    'CALSCALE:GREGORIAN',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    `UID:${escapeIcsText(inviteUid)}`,
+    `DTSTAMP:${formatIcsDate(now)}`,
+    `DTSTART:${formatIcsDate(startAt)}`,
+    `DTEND:${formatIcsDate(endAt)}`,
+    `SUMMARY:${escapeIcsText(summary)}`,
+    `DESCRIPTION:${escapeIcsText(description)}`,
+    `STATUS:${escapeIcsText(status)}`,
+    `ORGANIZER:mailto:${escapeIcsText(organizer)}`,
+  ];
+
+  if (location) {
+    lines.push(`LOCATION:${escapeIcsText(location)}`);
+  }
+
+  for (const attendee of attendees) {
+    const params = ['ROLE=REQ-PARTICIPANT', 'RSVP=TRUE'];
+    if (attendee.name) {
+      params.push(`CN=${escapeIcsText(attendee.name)}`);
+    }
+    lines.push(`ATTENDEE;${params.join(';')}:mailto:${escapeIcsText(attendee.email)}`);
+  }
+
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+
+  return {
+    inviteUid,
+    attendees,
+    attachment: {
+      filename: 'invite.ics',
+      content: lines.join('\r\n'),
+      contentType: 'text/calendar; method=REQUEST; charset=UTF-8',
+    },
+  };
+}
 
 async function fetchQueuedEmails() {
   const supabase = getSupabaseClient();
   const now = new Date().toISOString();
-  
-  const { data: activities, error } = await supabase
+
+  const { data: emailActivities, error: emailError } = await supabase
     .from('activities')
     .select('*')
     .eq('type', 'email')
     .eq('status', 'queued')
-    // Fixed JSONB path: use -> for nested navigation, ->> only for final text extraction
-    .or(`metadata->delivery->next_attempt_at.is.null,metadata->delivery->>next_attempt_at.lte.${now}`)
+    .or(
+      `metadata->delivery->next_attempt_at.is.null,metadata->delivery->>next_attempt_at.lte.${now}`,
+    )
     .order('created_date', { ascending: true })
     .limit(BATCH_LIMIT);
-  
-  if (error) {
-    // Enhanced error logging with full error details
+
+  if (emailError) {
     logger.error('[fetchQueuedEmails] Error fetching queued emails:', {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
-      fullError: error
+      message: emailError.message,
+      code: emailError.code,
+      details: emailError.details,
+      hint: emailError.hint,
+      fullError: emailError,
     });
     return [];
   }
-  
-  if (activities && activities.length > 0) {
-    logger.debug(`[fetchQueuedEmails] Found ${activities.length} queued emails:`, activities.map(a => ({ id: a.id, status: a.status })));
-  }
-  return activities || [];
-}
 
-function parseEmailMeta(metadata) {
-  const meta = (metadata && typeof metadata === 'object') ? metadata : {};
-  const email = (meta.email && typeof meta.email === 'object') ? meta.email : {};
-  return email;
+  const { data: meetingActivities, error: meetingError } = await supabase
+    .from('activities')
+    .select('*')
+    .eq('type', 'meeting')
+    .eq('status', 'scheduled')
+    .eq('metadata->meeting->>send_invite', 'true')
+    .is('metadata->meeting->>invite_sent_at', null)
+    .order('created_date', { ascending: true })
+    .limit(BATCH_LIMIT);
+
+  if (meetingError) {
+    logger.error('[fetchQueuedEmails] Error fetching pending meeting invites:', {
+      message: meetingError.message,
+      code: meetingError.code,
+      details: meetingError.details,
+      hint: meetingError.hint,
+      fullError: meetingError,
+    });
+  }
+
+  return [...(emailActivities || []), ...(meetingActivities || []).slice(0, BATCH_LIMIT)].slice(
+    0,
+    BATCH_LIMIT,
+  );
 }
 
 async function markActivity(activityId, status, newMeta) {
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('activities')
-      .update({
-        status: status,
-        metadata: newMeta || {}
-      })
-      .eq('id', activityId)
-      .select();
-    
-    if (error) {
-      logger.error(`[markActivity] Failed to update activity ${activityId} to status '${status}':`, error.message);
-      throw error;
-    }
-    
-    logger.debug(`[markActivity] Updated activity ${activityId} to status '${status}', rows affected: ${data?.length || 0}`);
-  } catch (err) {
-    logger.error(`[markActivity] Failed to update activity ${activityId} to status '${status}':`, err.message);
-    throw err;
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from('activities')
+    .update({
+      status,
+      metadata: newMeta || {},
+    })
+    .eq('id', activityId)
+    .select();
+
+  if (error) {
+    logger.error(
+      `[markActivity] Failed to update activity ${activityId} to status '${status}':`,
+      error.message,
+    );
+    throw error;
   }
 }
 
-const MAX_ATTEMPTS = parseInt(process.env.EMAIL_MAX_ATTEMPTS || '5');
-const BACKOFF_BASE_MS = parseInt(process.env.EMAIL_BACKOFF_BASE_MS || '10000'); // 10s
-const BACKOFF_FACTOR = parseFloat(process.env.EMAIL_BACKOFF_FACTOR || '2');
-const BACKOFF_JITTER_MS = parseInt(process.env.EMAIL_BACKOFF_JITTER_MS || '2000');
-const STATUS_WEBHOOK = process.env.EMAIL_STATUS_WEBHOOK_URL;
-
 async function postStatusWebhook(payload) {
   if (!STATUS_WEBHOOK) return;
+
   try {
     await fetch(STATUS_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-  } catch (e) {
-    logger.warn('[EmailWorker] Status webhook failed:', e?.message);
+  } catch (error) {
+    logger.warn('[EmailWorker] Status webhook failed:', error?.message);
   }
 }
 
@@ -207,10 +293,10 @@ async function createNotification({ tenant_id, title, message, type = 'info', us
     await pgPool.query(
       `INSERT INTO notifications (tenant_id, user_email, title, message, type, is_read, created_date)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [tenant_id, user_email, title, message, type, false]
+      [tenant_id, user_email, title, message, type, false],
     );
-  } catch (e) {
-    logger.warn('[EmailWorker] Failed to create notification:', e?.message);
+  } catch (error) {
+    logger.warn('[EmailWorker] Failed to create notification:', error?.message);
   }
 }
 
@@ -220,224 +306,351 @@ function computeNextAttempt(attempts) {
   return new Date(Date.now() + delay + jitter).toISOString();
 }
 
-async function processActivity(activity) {
-  const meta = (activity.metadata && typeof activity.metadata === 'object') ? activity.metadata : {};
+const emailWorkerDeps = {
+  resolveProviderConnection: resolveCommunicationsProviderConnection,
+  markActivity,
+  createNotification,
+  postStatusWebhook,
+  persistOutboundThreadAndMessage,
+  attachActivityToCommunicationsRecords,
+};
+
+export async function processActivity(activity) {
+  const meta = activity.metadata && typeof activity.metadata === 'object' ? activity.metadata : {};
   const email = parseEmailMeta(meta);
+  const communications = parseCommunicationsMeta(meta);
+  const meeting = parseMeetingMeta(meta);
+  const isMeetingInvite = activity.type === 'meeting';
 
-  // 🔍 DEBUG: Log activity tenant_id
-  logger.info(`[EmailWorker] Processing email activity ${activity.id} with tenant_id: ${activity.tenant_id}`);
-  logger.info(`[EmailWorker] 📧 Email metadata:`, { email, subject: activity.subject });
+  logger.info(
+    `[EmailWorker] Processing email activity ${activity.id} with tenant_id: ${activity.tenant_id}`,
+  );
 
-  const toValue = email.to || activity.subject; // fallback if needed
+  const toValue = email.to || (isMeetingInvite ? undefined : activity.subject);
   const subject = email.subject || activity.subject || 'Notification';
-  const body = activity.body || email.body || '';
+  const body = getActivityDescription(activity, email);
 
-  if (!toValue) {
-    const failedMeta = { ...meta, delivery: { error: 'Missing recipient', failed_at: new Date().toISOString() } };
-    await markActivity(activity.id, 'failed', failedMeta);
+  if (!toValue && !isMeetingInvite) {
+    const failedMeta = {
+      ...meta,
+      delivery: {
+        error: 'Missing recipient',
+        failed_at: new Date().toISOString(),
+      },
+    };
+    await emailWorkerDeps.markActivity(activity.id, 'failed', failedMeta);
     logger.warn('[EmailWorker] Skipping email activity due to missing recipient', activity.id);
     return;
   }
 
-  const toList = Array.isArray(toValue) ? toValue : String(toValue).split(',').map(s => s.trim()).filter(Boolean);
-  
-  // Get tenant-specific SMTP configuration
-  logger.info(`[EmailWorker] Looking up Gmail SMTP config for tenant_id: ${activity.tenant_id}`);
-  const tenantSMTPConfig = await getTenantSMTPConfig(activity.tenant_id);
-  
-  // Log SMTP config details (masking password)
-  if (tenantSMTPConfig) {
-    logger.info(`[EmailWorker] 🔧 SMTP Config: host=${tenantSMTPConfig.host}, port=${tenantSMTPConfig.port}, user=${tenantSMTPConfig.auth?.user}, from=${tenantSMTPConfig.from}`);
-  }
-  
-  if (!tenantSMTPConfig) {
-    // No tenant SMTP configured - fail with helpful error
-    logger.error(`[EmailWorker] ❌ No Gmail SMTP configured for tenant ${activity.tenant_id}, activity ${activity.id}`);
-    const failedMeta = { 
-      ...meta, 
-      delivery: { 
-        error: 'No Gmail SMTP integration configured for this client. Please configure Gmail SMTP in Settings > Client Integrations.',
-        failed_at: new Date().toISOString() 
-      } 
+  const mailboxId = communications.mailbox_id || meta.mailbox_id || email.mailbox_id || null;
+  const mailboxAddress =
+    communications.mailbox_address || meta.mailbox_address || email.from || null;
+
+  const providerConnection = await emailWorkerDeps.resolveProviderConnection({
+    tenantId: activity.tenant_id,
+    mailboxId,
+    mailboxAddress,
+  });
+
+  if (!providerConnection) {
+    const failedMeta = {
+      ...meta,
+      delivery: {
+        ...(meta.delivery || {}),
+        provider: 'communications_provider',
+        error:
+          'No communications provider mailbox is configured for this outbound email. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
+        failed_at: new Date().toISOString(),
+      },
     };
-    await markActivity(activity.id, 'failed', failedMeta);
-    logger.error(`[EmailWorker] No Gmail SMTP configured for tenant ${activity.tenant_id}, activity ${activity.id}`);
-    
-    // Create notification for admins
-    await createNotification({
+
+    await emailWorkerDeps.markActivity(activity.id, 'failed', failedMeta);
+    await emailWorkerDeps.createNotification({
       tenant_id: activity.tenant_id,
-      title: 'Email delivery failed - No SMTP configured',
-      message: `Email could not be sent. Please configure Gmail SMTP in Settings > Client Integrations.`,
+      title: 'Email delivery failed - No communications provider configured',
+      message:
+        'Email could not be sent. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
       type: 'error',
     });
     return;
   }
 
-  // Create transporter with tenant-specific config
-  const transporter = createTransporter(tenantSMTPConfig);
-  
-  if (!transporter) {
-    const failedMeta = { 
-      ...meta, 
-      delivery: { 
-        error: 'Invalid SMTP configuration',
-        failed_at: new Date().toISOString() 
-      } 
-    };
-    await markActivity(activity.id, 'failed', failedMeta);
-    logger.error(`[EmailWorker] Invalid SMTP config for tenant ${activity.tenant_id}, activity ${activity.id}`);
-    return;
-  }
-
-  // Use tenant SMTP from address or email.from override
-  const from = email.from || tenantSMTPConfig.from;
-
-  // Log email details before sending
-  logger.info(`[EmailWorker] 📤 Attempting to send email:`, {
-    from,
-    to: toList,
-    subject,
-    smtp_host: tenantSMTPConfig.host,
-    smtp_port: tenantSMTPConfig.port,
-    smtp_user: tenantSMTPConfig.auth?.user
-  });
+  const providerType = providerConnection.connection?.config?.provider_type || 'unknown';
+  const providerName = providerConnection.connection?.config?.provider_name || 'unknown';
+  const from = email.from || providerConnection.connection?.config?.outbound?.from_address;
+  let toList = Array.isArray(toValue)
+    ? toValue
+    : toValue
+      ? String(toValue)
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+  let inviteArtifacts = null;
 
   try {
-    const info = await transporter.sendMail({
+    if (isMeetingInvite) {
+      inviteArtifacts = buildMeetingInviteArtifacts(activity, email, meeting, from);
+      toList = inviteArtifacts.attendees.map((entry) => entry.email);
+    }
+
+    const result = await providerConnection.adapter.sendMessage({
       from,
-      to: toList.join(','),
+      to: toList,
+      cc: email.cc || undefined,
+      bcc: email.bcc || undefined,
+      reply_to: email.reply_to || communications.reply_to_address || undefined,
       subject,
-      text: body,
-      html: /<\w+/.test(body) ? body : undefined,
+      text_body: body,
+      html_body: email.html_body || (/<\w+/.test(body) ? body : undefined),
+      in_reply_to: email.in_reply_to || undefined,
+      references: Array.isArray(email.references) ? email.references : undefined,
+      headers: {
+        ...(sanitizeEmailHeaders(email.headers) || {}),
+        ...(isMeetingInvite ? { 'Content-Class': 'urn:content-classes:calendarmessage' } : {}),
+      },
+      attachments: inviteArtifacts ? [inviteArtifacts.attachment] : undefined,
     });
-    
+
     const sentMeta = {
       ...meta,
       delivery: {
         ...(meta.delivery || {}),
-        provider: 'gmail_smtp',
-        smtp_user: tenantSMTPConfig.auth.user,
-        messageId: info?.messageId,
+        provider: providerType,
+        provider_name: providerName,
+        provider_integration_id: providerConnection.integration?.id || null,
+        mailbox_id: providerConnection.connection?.config?.mailbox_id || mailboxId,
+        messageId: result?.message_id || null,
         sent_at: new Date().toISOString(),
         attempts: ((meta.delivery && meta.delivery.attempts) || 0) + 1,
-      }
+      },
+      ...(isMeetingInvite
+        ? {
+            meeting: {
+              ...meeting,
+              send_invite: true,
+              invite_id: meeting.invite_id || inviteArtifacts?.inviteUid || null,
+              invite_uid: inviteArtifacts?.inviteUid || meeting.invite_uid || null,
+              invite_sent_at: new Date().toISOString(),
+              invite_status: 'sent',
+              attendees:
+                inviteArtifacts?.attendees || collectMeetingAttendees(activity, email, meeting),
+            },
+          }
+        : {}),
     };
-    await markActivity(activity.id, 'sent', sentMeta);
-    logger.info(`[EmailWorker] ✅ Email sent successfully`, {
+
+    await emailWorkerDeps.markActivity(
+      activity.id,
+      isMeetingInvite ? activity.status || 'scheduled' : 'sent',
+      sentMeta,
+    );
+    if (!isMeetingInvite) {
+      const persisted = await emailWorkerDeps.persistOutboundThreadAndMessage({
+        activity: {
+          ...activity,
+          metadata: sentMeta,
+        },
+        mailboxId: providerConnection.connection?.config?.mailbox_id || mailboxId,
+        mailboxAddress: providerConnection.connection?.config?.mailbox_address || mailboxAddress,
+        from,
+        toList,
+        subject,
+        body,
+        htmlBody: email.html_body || (/<\w+/.test(body) ? body : ''),
+        messageId: result?.message_id || null,
+        sentAt: sentMeta.delivery.sent_at,
+      });
+
+      await emailWorkerDeps.attachActivityToCommunicationsRecords({
+        tenantId: activity.tenant_id,
+        threadId: persisted.thread.id,
+        messageId: persisted.message.id,
+        activity: {
+          ...activity,
+          metadata: sentMeta,
+        },
+        links: persisted.links || [],
+      });
+    }
+    await emailWorkerDeps.postStatusWebhook({
+      event: isMeetingInvite ? 'meeting.invite.sent' : 'email.sent',
       activity_id: activity.id,
-      messageId: info?.messageId,
-      response: info?.response,
-      accepted: info?.accepted,
-      rejected: info?.rejected,
-      to: toList
+      tenant_id: activity.tenant_id,
+      to: toList,
+      subject,
+      messageId: result?.message_id || null,
+      provider_type: providerType,
+      provider_name: providerName,
+      invite_uid: inviteArtifacts?.inviteUid || null,
     });
-    await postStatusWebhook({ 
-      event: 'email.sent', 
-      activity_id: activity.id, 
-      tenant_id: activity.tenant_id, 
-      to: toList, 
-      subject, 
-      messageId: info?.messageId,
-      smtp_user: tenantSMTPConfig.auth.user
-    });
-  } catch (err) {
-    const prevAttempts = (meta.delivery && meta.delivery.attempts) ? parseInt(meta.delivery.attempts) : 0;
+  } catch (error) {
+    const prevAttempts =
+      meta.delivery && meta.delivery.attempts ? parseInt(meta.delivery.attempts, 10) : 0;
     const attempts = prevAttempts + 1;
     const delivery = {
       ...(meta.delivery || {}),
-      provider: 'smtp',
-      error: err.message,
+      provider: providerType,
+      provider_name: providerName,
+      error: error?.message || 'Provider send failed',
       last_error_at: new Date().toISOString(),
       attempts,
+    };
+    const failureMeta = {
+      ...meta,
+      delivery,
+      ...(isMeetingInvite
+        ? {
+            meeting: {
+              ...meeting,
+              send_invite: true,
+              invite_status: 'failed',
+              invite_failed_at: new Date().toISOString(),
+            },
+          }
+        : {}),
     };
 
     if (attempts < MAX_ATTEMPTS) {
       delivery.next_attempt_at = computeNextAttempt(attempts);
-      const queuedMeta = { ...meta, delivery };
-      await markActivity(activity.id, 'queued', queuedMeta);
-      logger.warn('[EmailWorker] Email send failed, will retry', { activity_id: activity.id, attempts, next_attempt_at: delivery.next_attempt_at });
-      await postStatusWebhook({ event: 'email.retry_scheduled', activity_id: activity.id, tenant_id: activity.tenant_id, attempts, next_attempt_at: delivery.next_attempt_at, error: err.message });
-    } else {
-      const failedMeta = { ...meta, delivery: { ...delivery, failed_at: new Date().toISOString() } };
-      await markActivity(activity.id, 'failed', failedMeta);
-      logger.error(`[EmailWorker] ❌ Failed to send email activity (max attempts reached). Activity: ${activity.id}, Error: ${err.message}`, { stack: err.stack });
-      await postStatusWebhook({ event: 'email.failed', activity_id: activity.id, tenant_id: activity.tenant_id, attempts, error: err.message });
-      await createNotification({
+      await emailWorkerDeps.markActivity(
+        activity.id,
+        isMeetingInvite ? activity.status || 'scheduled' : 'queued',
+        failureMeta,
+      );
+      await emailWorkerDeps.postStatusWebhook({
+        event: isMeetingInvite ? 'meeting.invite.retry_scheduled' : 'email.retry_scheduled',
+        activity_id: activity.id,
         tenant_id: activity.tenant_id,
-        title: 'Email delivery failed',
-        message: `Could not deliver email to ${toList.join(', ')} after ${attempts} attempts. Subject: ${subject}`,
-        type: 'error',
+        attempts,
+        next_attempt_at: delivery.next_attempt_at,
+        error: error?.message || 'Provider send failed',
+        provider_type: providerType,
+        provider_name: providerName,
       });
+      return;
     }
+
+    await emailWorkerDeps.markActivity(activity.id, 'failed', {
+      ...failureMeta,
+      delivery: {
+        ...delivery,
+        failed_at: new Date().toISOString(),
+      },
+    });
+    await emailWorkerDeps.postStatusWebhook({
+      event: isMeetingInvite ? 'meeting.invite.failed' : 'email.failed',
+      activity_id: activity.id,
+      tenant_id: activity.tenant_id,
+      attempts,
+      error: error?.message || 'Provider send failed',
+      provider_type: providerType,
+      provider_name: providerName,
+    });
+    await emailWorkerDeps.createNotification({
+      tenant_id: activity.tenant_id,
+      title: isMeetingInvite ? 'Meeting invite delivery failed' : 'Email delivery failed',
+      message: `Could not deliver ${isMeetingInvite ? 'meeting invite' : 'email'} to ${toList.join(', ')} after ${attempts} attempts. Subject: ${subject}`,
+      type: 'error',
+    });
   }
 }
 
 async function loop() {
   if (!pgPool) return;
+
   try {
     const rows = await fetchQueuedEmails();
     for (const row of rows) {
       await processActivity(row);
     }
-  } catch (err) {
-    logger.error('[EmailWorker] Loop error:', err.message);
+  } catch (error) {
+    logger.error('[EmailWorker] Loop error:', error.message);
   } finally {
     setTimeout(loop, POLL_INTERVAL_MS);
   }
 }
 
-/**
- * Start the email worker (called from server.js)
- * @param {object} pool - PostgreSQL connection pool (optional, uses module-level pgPool if not provided)
- */
-// Singleton guard to prevent multiple worker loops
 let workerStarted = false;
 
 export function startEmailWorker(pool) {
-  // Prevent double initialization
   if (workerStarted) {
     logger.warn('[EmailWorker] Worker already started - ignoring duplicate init');
     return {
       stop: () => {
         logger.debug('[EmailWorker] Stop called on already-running worker');
-      }
+      },
     };
   }
-  
+
   workerStarted = true;
-  
+
   if (pool) {
-    // Use provided pool (when called from server.js)
     Object.assign(pgPool, pool);
   }
-  
-  logger.info('[EmailWorker] Starting email worker (singleton)...');
+
+  logger.info('[EmailWorker] Starting email worker (provider-backed)...');
   logger.info(`[EmailWorker] Poll interval: ${POLL_INTERVAL_MS}ms, Batch limit: ${BATCH_LIMIT}`);
   loop();
-  
+
   return {
     stop: () => {
       logger.info('[EmailWorker] Stopping email worker...');
-      workerStarted = false; // Allow restart after stop
-      // The setTimeout in loop() will naturally stop being scheduled
-    }
+      workerStarted = false;
+    },
   };
 }
 
-// Auto-start if run directly (for standalone mode)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  logger.debug('[EmailWorker] Running in standalone mode');
   startEmailWorker();
-  
+
   process.on('SIGTERM', async () => {
-    logger.debug('[EmailWorker] SIGTERM received, shutting down...');
     try {
       if (pgPool) {
         await pgPool.end();
       }
-    } catch (e) {
-      logger.warn('[EmailWorker] Error during pool shutdown:', e?.message);
+    } catch (error) {
+      logger.warn('[EmailWorker] Error during pool shutdown:', error?.message);
     }
     process.exit(0);
   });
 }
+
+export function setEmailWorkerDependenciesForTests(overrides = {}) {
+  if (overrides === null) {
+    emailWorkerDeps.resolveProviderConnection = resolveCommunicationsProviderConnection;
+    emailWorkerDeps.markActivity = markActivity;
+    emailWorkerDeps.createNotification = createNotification;
+    emailWorkerDeps.postStatusWebhook = postStatusWebhook;
+    emailWorkerDeps.persistOutboundThreadAndMessage = persistOutboundThreadAndMessage;
+    emailWorkerDeps.attachActivityToCommunicationsRecords = attachActivityToCommunicationsRecords;
+    return;
+  }
+
+  if (overrides.resolveProviderConnection) {
+    emailWorkerDeps.resolveProviderConnection = overrides.resolveProviderConnection;
+  }
+  if (overrides.markActivity) {
+    emailWorkerDeps.markActivity = overrides.markActivity;
+  }
+  if (overrides.createNotification) {
+    emailWorkerDeps.createNotification = overrides.createNotification;
+  }
+  if (overrides.postStatusWebhook) {
+    emailWorkerDeps.postStatusWebhook = overrides.postStatusWebhook;
+  }
+  if (overrides.persistOutboundThreadAndMessage) {
+    emailWorkerDeps.persistOutboundThreadAndMessage = overrides.persistOutboundThreadAndMessage;
+  }
+  if (overrides.attachActivityToCommunicationsRecords) {
+    emailWorkerDeps.attachActivityToCommunicationsRecords =
+      overrides.attachActivityToCommunicationsRecords;
+  }
+}
+
+export default {
+  startEmailWorker,
+  processActivity,
+  setEmailWorkerDependenciesForTests,
+};

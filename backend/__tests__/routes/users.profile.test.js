@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
+import { requestLocal } from '../helpers/httpRequest.js';
 
 process.env.NODE_ENV = 'test';
 process.env.ROUTE_RATE_WINDOW_MS = '1000'; // Short window for testing
@@ -14,27 +15,17 @@ const testPort = 3109;
 
 // Helper to make requests to the app
 async function makeRequest(method, path, body = null, headers = {}) {
-  const url = `http://localhost:${testPort}${path}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
-
-  try {
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Forwarded-For': '127.0.0.1', // Simulate IP for rate limiting
-        ...headers,
-      },
-      signal: controller.signal,
-    };
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
-    return await fetch(url, options);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return requestLocal({
+    port: testPort,
+    path,
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Forwarded-For': '127.0.0.1',
+      ...headers,
+    },
+    body,
+  });
 }
 
 before(async () => {

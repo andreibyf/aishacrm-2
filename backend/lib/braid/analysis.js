@@ -272,6 +272,15 @@ export const TOOL_GRAPH = {
     effects: ['delete'],
     description: 'Delete an activity',
   },
+  process_inbound_communication: {
+    category: 'ACTIVITIES',
+    dependencies: [],
+    inputs: ['tenant_id', 'message_id', 'subject', 'sender_email', 'received_at'],
+    outputs: ['activity'],
+    effects: ['create'],
+    description:
+      'Persist an inbound self-hosted email as an email activity and attach communications metadata for later thread and entity linking',
+  },
 
   // ========== CONTACTS ==========
   create_contact: {

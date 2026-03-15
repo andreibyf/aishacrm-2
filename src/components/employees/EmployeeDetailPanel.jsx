@@ -708,16 +708,16 @@ export default function EmployeeDetailPanel({
                   <span className="text-sm text-slate-400">CRM User:</span>
                   <span className="col-span-2 text-sm text-slate-200">{employee.user_email}</span>
                 </div>
-                {employee.metadata?.user_id && (
+                {employee.metadata?.linked_user_id && (
                   <div className="grid grid-cols-3 gap-2 items-center">
                     <span className="text-sm text-slate-400">User ID:</span>
                     <div className="col-span-2 flex items-center gap-2">
                       <code className="text-xs text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded font-mono">
-                        {employee.metadata.user_id}
+                        {employee.metadata.linked_user_id}
                       </code>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(employee.metadata.user_id);
+                          navigator.clipboard.writeText(employee.metadata.linked_user_id);
                           toast.success('User ID copied');
                         }}
                         className="text-slate-400 hover:text-slate-200"

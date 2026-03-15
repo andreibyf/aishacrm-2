@@ -26,6 +26,7 @@ import {
   CreditCard,
   Calendar,
   HardDrive,
+  Server,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -48,6 +49,82 @@ import { getTenantFilter } from '../shared/tenantUtils';
 import { useTenant } from '../shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 
+export function createCommunicationsProviderTemplate(mailboxAddress = '') {
+  const normalizedMailboxAddress = mailboxAddress || '';
+  return {
+    provider_type: 'imap_smtp',
+    provider_name: 'zoho_mail',
+    mailbox_id: 'owner-primary',
+    mailbox_address: normalizedMailboxAddress,
+    inbound: {
+      host: 'imap.zoho.com',
+      port: 993,
+      secure: true,
+      auth_mode: 'password',
+      folder: 'INBOX',
+      poll_interval_ms: 60000,
+    },
+    outbound: {
+      host: 'smtp.zoho.com',
+      port: 587,
+      secure: false,
+      auth_mode: 'password',
+      from_address: normalizedMailboxAddress,
+      reply_to_address: normalizedMailboxAddress,
+    },
+    sync: {
+      cursor_strategy: 'uid',
+      raw_retention_days: 30,
+      replay_enabled: true,
+    },
+    features: {
+      inbound_enabled: true,
+      outbound_enabled: true,
+      lead_capture_enabled: true,
+      meeting_scheduling_enabled: true,
+    },
+  };
+}
+
+export function applyIntegrationTypeDefaults(formData, nextType) {
+  if (nextType !== 'communications_provider') {
+    return {
+      ...formData,
+      integration_type: nextType,
+    };
+  }
+
+  const existingMailboxAddress =
+    formData?.config?.mailbox_address || formData?.config?.outbound?.from_address || '';
+  const template = createCommunicationsProviderTemplate(existingMailboxAddress);
+
+  return {
+    ...formData,
+    integration_type: nextType,
+    integration_name: formData.integration_name || 'Zoho Mail',
+    config: {
+      ...template,
+      ...formData.config,
+      inbound: {
+        ...template.inbound,
+        ...(formData.config?.inbound || {}),
+      },
+      outbound: {
+        ...template.outbound,
+        ...(formData.config?.outbound || {}),
+      },
+      sync: {
+        ...template.sync,
+        ...(formData.config?.sync || {}),
+      },
+      features: {
+        ...template.features,
+        ...(formData.config?.features || {}),
+      },
+    },
+  };
+}
+
 export default function TenantIntegrationSettings() {
   const [integrations, setIntegrations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +133,18 @@ export default function TenantIntegrationSettings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [testingIntegration, setTestingIntegration] = useState(null);
   const { selectedTenantId } = useTenant(); // Add this line
+
+  const normalizeIntegration = useCallback((integration) => {
+    if (!integration) return integration;
+
+    const normalizedConfig = integration.config || integration.configuration || {};
+
+    return {
+      ...integration,
+      config: normalizedConfig,
+      configuration: integration.configuration || normalizedConfig,
+    };
+  }, []);
 
   const loadIntegrations = useCallback(async () => {
     if (!currentUser) return;
@@ -73,7 +162,7 @@ export default function TenantIntegrationSettings() {
       ) {
         const tenantIntegrations = await TenantIntegration.filter(tenantFilter);
         console.log('Loaded tenant integrations:', tenantIntegrations.length);
-        setIntegrations(tenantIntegrations);
+        setIntegrations((tenantIntegrations || []).map(normalizeIntegration));
       } else {
         console.log('No valid tenant filter, showing empty integrations');
         setIntegrations([]);
@@ -85,13 +174,13 @@ export default function TenantIntegrationSettings() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, selectedTenantId]); // Depend on currentUser and selectedTenantId
+  }, [currentUser, normalizeIntegration, selectedTenantId]); // Depend on currentUser and selectedTenantId
 
   useEffect(() => {
     loadIntegrations();
   }, [loadIntegrations]); // Now loadIntegrations is a stable function due to useCallback
 
-  const testableTypes = ['openai_llm', 'twilio'];
+  const testableTypes = ['openai_llm', 'twilio', 'communications_provider'];
 
   const handleTestConnection = async (integration) => {
     if (!testableTypes.includes(integration.integration_type)) {
@@ -125,7 +214,7 @@ export default function TenantIntegrationSettings() {
         success = !!response.data?.success;
         errorMessage = response.data?.details || response.data?.error || null;
       } else if (integration.integration_type === 'twilio') {
-        // Twilio test — call the status endpoint
+        // Twilio test - call the status endpoint
         const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
         const BACKEND_URL = getBackendUrl();
         const res = await fetch(
@@ -136,13 +225,31 @@ export default function TenantIntegrationSettings() {
         errorMessage =
           json.data?.message ||
           (!success ? `Twilio status: ${json.data?.status || 'unknown'}` : null);
+      } else if (integration.integration_type === 'communications_provider') {
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
+        const BACKEND_URL = getBackendUrl();
+        const mailboxId = integration.config?.mailbox_id || '';
+        const mailboxAddress = integration.config?.mailbox_address || '';
+        const query = new URLSearchParams({
+          tenant_id: tenantFilter.tenant_id,
+          ...(mailboxId ? { mailbox_id: mailboxId } : {}),
+          ...(mailboxAddress ? { mailbox_address: mailboxAddress } : {}),
+        });
+        const res = await fetch(`${BACKEND_URL}/api/integrations/communications/status?${query}`, {
+          credentials: 'include',
+        });
+        const json = await res.json();
+        success = res.ok && json.data?.ok === true && json.data?.status === 'connected';
+        errorMessage =
+          json.message ||
+          json.data?.message ||
+          (!success ? `Communications status: ${json.data?.status || 'unknown'}` : null);
       }
 
       if (success) {
         // Update the integration status to 'connected'
         await TenantIntegration.update(integration.id, {
           sync_status: 'connected',
-          last_sync: new Date().toISOString(),
           error_message: null,
         });
         toast.success('Connection test successful! Integration is now active.');
@@ -250,6 +357,7 @@ export default function TenantIntegrationSettings() {
     const iconMap = {
       webhook_email: Mail,
       gmail_smtp: Mail,
+      communications_provider: Server,
       openai_llm: Bot,
       google_drive: Cloud,
       onedrive: HardDrive,
@@ -484,7 +592,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
     integration_type: integration?.integration_type || 'twilio',
     integration_name: integration?.integration_name || '',
     is_active: integration?.is_active ?? true,
-    config: integration?.config || {},
+    config: integration?.config || integration?.configuration || {},
     api_credentials: integration?.api_credentials || {},
   });
 
@@ -517,6 +625,30 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('WhatsApp number is required.');
       return;
     }
+    if (formData.integration_type === 'communications_provider') {
+      if (!formData.config?.mailbox_address?.trim()) {
+        toast.error('Mailbox address is required for communications providers.');
+        return;
+      }
+      if (!formData.config?.mailbox_id?.trim()) {
+        toast.error('Mailbox ID is required for communications providers.');
+        return;
+      }
+      if (
+        !formData.api_credentials?.inbound_username ||
+        !formData.api_credentials?.inbound_password
+      ) {
+        toast.error('Inbound username and password are required for communications providers.');
+        return;
+      }
+      if (
+        !formData.api_credentials?.outbound_username ||
+        !formData.api_credentials?.outbound_password
+      ) {
+        toast.error('Outbound username and password are required for communications providers.');
+        return;
+      }
+    }
     onSave(formData);
   };
 
@@ -531,6 +663,19 @@ function IntegrationForm({ integration, onSave, onCancel }) {
     setFormData((prev) => ({
       ...prev,
       config: { ...prev.config, [key]: value },
+    }));
+  };
+
+  const handleNestedConfigChange = (section, key, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      config: {
+        ...prev.config,
+        [section]: {
+          ...(prev.config?.[section] || {}),
+          [key]: value,
+        },
+      },
     }));
   };
 
@@ -553,12 +698,17 @@ function IntegrationForm({ integration, onSave, onCancel }) {
         <Label htmlFor="integration_type">Integration Type</Label>
         <Select
           value={formData.integration_type}
-          onValueChange={(value) => setFormData({ ...formData, integration_type: value })}
+          onValueChange={(value) =>
+            setFormData((prev) => applyIntegrationTypeDefaults(prev, value))
+          }
         >
           <SelectTrigger>
             <SelectValue placeholder="Select an integration type" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="communications_provider">
+              Communications Mailbox (IMAP/SMTP)
+            </SelectItem>
             <SelectItem value="twilio">Twilio (SMS & Voice)</SelectItem>
             <SelectItem value="whatsapp">WhatsApp (via Twilio)</SelectItem>
             <SelectItem value="whatsapp_business">WhatsApp Business (Meta API)</SelectItem>
@@ -575,6 +725,361 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       </div>
 
       {/* ── Twilio ── */}
+      {formData.integration_type === 'communications_provider' && (
+        <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+          <CardContent className="space-y-5 pt-4">
+            <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <AlertDescription className="text-sm">
+                Connect a provider-backed mailbox here for AiSHA communications. Zoho defaults are
+                prefilled, and the saved record uses the backend-supported communications provider
+                contract.
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="communications_provider_name">Mailbox Provider</Label>
+                <Select
+                  value={formData.config.provider_name || 'zoho_mail'}
+                  onValueChange={(value) => {
+                    const template = createCommunicationsProviderTemplate(
+                      formData.config?.mailbox_address || '',
+                    );
+                    const nextTemplate =
+                      value === 'zoho_mail'
+                        ? template
+                        : {
+                            ...template,
+                            provider_name: value,
+                          };
+                    setFormData((prev) => ({
+                      ...prev,
+                      config: {
+                        ...nextTemplate,
+                        ...prev.config,
+                        provider_name: value,
+                        inbound: {
+                          ...nextTemplate.inbound,
+                          ...(prev.config?.inbound || {}),
+                        },
+                        outbound: {
+                          ...nextTemplate.outbound,
+                          ...(prev.config?.outbound || {}),
+                        },
+                        sync: {
+                          ...nextTemplate.sync,
+                          ...(prev.config?.sync || {}),
+                        },
+                        features: {
+                          ...nextTemplate.features,
+                          ...(prev.config?.features || {}),
+                        },
+                      },
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="communications_provider_name">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="zoho_mail">Zoho Mail</SelectItem>
+                    <SelectItem value="generic_imap_smtp">Generic IMAP/SMTP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="communications_mailbox_id">Mailbox ID</Label>
+                <Input
+                  id="communications_mailbox_id"
+                  value={formData.config.mailbox_id || ''}
+                  onChange={(e) => handleConfigChange('mailbox_id', e.target.value)}
+                  placeholder="owner-primary"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Stable mailbox key used by workers and thread matching.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="communications_mailbox_address">Mailbox Address</Label>
+                <Input
+                  id="communications_mailbox_address"
+                  value={formData.config.mailbox_address || ''}
+                  onChange={(e) => {
+                    const nextAddress = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      config: {
+                        ...prev.config,
+                        mailbox_address: nextAddress,
+                        outbound: {
+                          ...(prev.config?.outbound || {}),
+                          from_address: prev.config?.outbound?.from_address || nextAddress,
+                          reply_to_address: prev.config?.outbound?.reply_to_address || nextAddress,
+                        },
+                      },
+                    }));
+                  }}
+                  placeholder="aisha@aishacrm.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="communications_inbound_folder">Inbound Folder</Label>
+                <Input
+                  id="communications_inbound_folder"
+                  value={formData.config.inbound?.folder || ''}
+                  onChange={(e) => handleNestedConfigChange('inbound', 'folder', e.target.value)}
+                  placeholder="INBOX"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+              <h4 className="font-medium">Inbound IMAP</h4>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="communications_inbound_host">Host</Label>
+                  <Input
+                    id="communications_inbound_host"
+                    value={formData.config.inbound?.host || ''}
+                    onChange={(e) => handleNestedConfigChange('inbound', 'host', e.target.value)}
+                    placeholder="imap.zoho.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_inbound_port">Port</Label>
+                  <Input
+                    id="communications_inbound_port"
+                    type="number"
+                    value={formData.config.inbound?.port || 993}
+                    onChange={(e) =>
+                      handleNestedConfigChange('inbound', 'port', Number(e.target.value))
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_poll_interval">Poll Interval (ms)</Label>
+                  <Input
+                    id="communications_poll_interval"
+                    type="number"
+                    value={formData.config.inbound?.poll_interval_ms || 60000}
+                    onChange={(e) =>
+                      handleNestedConfigChange(
+                        'inbound',
+                        'poll_interval_ms',
+                        Number(e.target.value),
+                      )
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="communications_inbound_username">Inbound Username</Label>
+                  <Input
+                    id="communications_inbound_username"
+                    value={formData.api_credentials.inbound_username || ''}
+                    onChange={(e) => handleCredentialChange('inbound_username', e.target.value)}
+                    placeholder="aisha@aishacrm.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_inbound_password">
+                    Inbound Password / App Password
+                  </Label>
+                  <Input
+                    id="communications_inbound_password"
+                    type="password"
+                    value={formData.api_credentials.inbound_password || ''}
+                    onChange={(e) => handleCredentialChange('inbound_password', e.target.value)}
+                    placeholder="Zoho app password"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="communications_inbound_secure"
+                  checked={formData.config.inbound?.secure !== false}
+                  onCheckedChange={(checked) =>
+                    handleNestedConfigChange('inbound', 'secure', checked)
+                  }
+                />
+                <Label htmlFor="communications_inbound_secure">Use secure IMAP</Label>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+              <h4 className="font-medium">Outbound SMTP</h4>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="communications_outbound_host">Host</Label>
+                  <Input
+                    id="communications_outbound_host"
+                    value={formData.config.outbound?.host || ''}
+                    onChange={(e) => handleNestedConfigChange('outbound', 'host', e.target.value)}
+                    placeholder="smtp.zoho.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_outbound_port">Port</Label>
+                  <Input
+                    id="communications_outbound_port"
+                    type="number"
+                    value={formData.config.outbound?.port || 587}
+                    onChange={(e) =>
+                      handleNestedConfigChange('outbound', 'port', Number(e.target.value))
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_from_address">From Address</Label>
+                  <Input
+                    id="communications_from_address"
+                    value={formData.config.outbound?.from_address || ''}
+                    onChange={(e) =>
+                      handleNestedConfigChange('outbound', 'from_address', e.target.value)
+                    }
+                    placeholder="aisha@aishacrm.com"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="communications_reply_to">Reply-To Address</Label>
+                  <Input
+                    id="communications_reply_to"
+                    value={formData.config.outbound?.reply_to_address || ''}
+                    onChange={(e) =>
+                      handleNestedConfigChange('outbound', 'reply_to_address', e.target.value)
+                    }
+                    placeholder="aisha@aishacrm.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_outbound_username">Outbound Username</Label>
+                  <Input
+                    id="communications_outbound_username"
+                    value={formData.api_credentials.outbound_username || ''}
+                    onChange={(e) => handleCredentialChange('outbound_username', e.target.value)}
+                    placeholder="aisha@aishacrm.com"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_outbound_password">
+                    Outbound Password / App Password
+                  </Label>
+                  <Input
+                    id="communications_outbound_password"
+                    type="password"
+                    value={formData.api_credentials.outbound_password || ''}
+                    onChange={(e) => handleCredentialChange('outbound_password', e.target.value)}
+                    placeholder="Zoho app password"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="communications_outbound_secure"
+                  checked={formData.config.outbound?.secure === true}
+                  onCheckedChange={(checked) =>
+                    handleNestedConfigChange('outbound', 'secure', checked)
+                  }
+                />
+                <Label htmlFor="communications_outbound_secure">
+                  Use SMTPS (leave off for STARTTLS on port 587)
+                </Label>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 p-4 space-y-4">
+              <h4 className="font-medium">Sync & Features</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="communications_raw_retention">Raw Retention (days)</Label>
+                  <Input
+                    id="communications_raw_retention"
+                    type="number"
+                    value={formData.config.sync?.raw_retention_days ?? 30}
+                    onChange={(e) =>
+                      handleNestedConfigChange('sync', 'raw_retention_days', Number(e.target.value))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="communications_cursor_strategy">Cursor Strategy</Label>
+                  <Input
+                    id="communications_cursor_strategy"
+                    value={formData.config.sync?.cursor_strategy || 'uid'}
+                    onChange={(e) =>
+                      handleNestedConfigChange('sync', 'cursor_strategy', e.target.value)
+                    }
+                    placeholder="uid"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <Label htmlFor="communications_feature_inbound">Inbound enabled</Label>
+                  <Switch
+                    id="communications_feature_inbound"
+                    checked={formData.config.features?.inbound_enabled !== false}
+                    onCheckedChange={(checked) =>
+                      handleNestedConfigChange('features', 'inbound_enabled', checked)
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <Label htmlFor="communications_feature_outbound">Outbound enabled</Label>
+                  <Switch
+                    id="communications_feature_outbound"
+                    checked={formData.config.features?.outbound_enabled !== false}
+                    onCheckedChange={(checked) =>
+                      handleNestedConfigChange('features', 'outbound_enabled', checked)
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <Label htmlFor="communications_feature_lead_capture">Lead capture enabled</Label>
+                  <Switch
+                    id="communications_feature_lead_capture"
+                    checked={formData.config.features?.lead_capture_enabled !== false}
+                    onCheckedChange={(checked) =>
+                      handleNestedConfigChange('features', 'lead_capture_enabled', checked)
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2">
+                  <Label htmlFor="communications_feature_meetings">
+                    Meeting scheduling enabled
+                  </Label>
+                  <Switch
+                    id="communications_feature_meetings"
+                    checked={formData.config.features?.meeting_scheduling_enabled !== false}
+                    onCheckedChange={(checked) =>
+                      handleNestedConfigChange('features', 'meeting_scheduling_enabled', checked)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {formData.integration_type === 'twilio' && (
         <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
           <CardContent className="space-y-4 pt-4">

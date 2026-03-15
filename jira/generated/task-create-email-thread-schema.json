@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Create Email Thread Schema",
+  "description": "Define the tenant-scoped `communications_threads` schema and indexes.",
+  "labels": ["communications", "schema", "threading"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "CRM Email Threading and Linking"
+}

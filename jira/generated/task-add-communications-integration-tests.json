@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Add Communications Integration Tests",
+  "description": "Define the Docker-based integration test plan for inbound ingest, outbound send, linking, lead capture, meeting replies, and tenant isolation.",
+  "labels": ["communications", "testing", "integration"],
+  "epic": "Self-Hosted Communications Module",
+  "story": "Communications Platform Foundation"
+}

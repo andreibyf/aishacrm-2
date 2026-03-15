@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Inbound Message Normalizer",
+  "description": "Normalize provider-retrieved MIME messages into a structured tenant-scoped envelope for backend ingestion.",
+  "labels": ["communications", "email", "inbound"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Email Ingestion Service"
+}

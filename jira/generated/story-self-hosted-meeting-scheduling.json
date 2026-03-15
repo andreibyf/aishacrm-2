@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Story",
+  "summary": "Provider-Agnostic Meeting Scheduling",
+  "description": "Generate and process provider-backed meeting invitations through the communications module using CRM Activities and ICS payloads.",
+  "labels": ["communications", "meeting", "calendar"],
+  "epic": "Provider-Agnostic Communications Module"
+}

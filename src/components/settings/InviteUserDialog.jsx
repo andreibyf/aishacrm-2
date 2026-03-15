@@ -39,6 +39,7 @@ const DEFAULT_NAV_PERMISSIONS = {
   Leads: true,
   Opportunities: true,
   Activities: true,
+  Communications: true,
   Calendar: true,
   BizDevSources: false,
   CashFlow: false,

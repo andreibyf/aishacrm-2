@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Define Docker Topology and Network Contract",
+  "description": "Document service topology, network attachments, ports, volumes, and dependencies for the provider-agnostic communications stack.",
+  "labels": ["communications", "docker", "network"],
+  "epic": "Provider-Agnostic Communications Module",
+  "story": "Communications Platform Foundation"
+}
