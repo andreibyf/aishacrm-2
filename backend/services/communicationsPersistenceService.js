@@ -182,6 +182,38 @@ async function ensureThreadRecord(
   { tenantId, mailboxId, mailboxAddress, payload, occurredAt },
   { supabase },
 ) {
+  const explicitThreadId =
+    payload?.communications?.thread_id || payload?.thread_id || payload?.explicit_thread_id || null;
+  if (explicitThreadId) {
+    const { data, error } = await supabase
+      .from('communications_threads')
+      .update({
+        mailbox_id: mailboxId || 'unknown-mailbox',
+        mailbox_address: mailboxAddress || null,
+        subject: payload.subject || '(no subject)',
+        normalized_subject: normalizeSubject(payload.subject),
+        participants: collectParticipants(payload, mailboxAddress),
+        last_message_at: payload.received_at || occurredAt,
+        metadata: {
+          latest_message_id: payload.message_id,
+          latest_thread_hint: payload.thread_hint || payload.headers?.in_reply_to || null,
+          source_service:
+            payload.direction === 'outbound' ? 'email-worker' : 'communications-worker',
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('tenant_id', tenantId)
+      .eq('id', explicitThreadId)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw buildPersistenceError('communications_thread_update_failed', error.message);
+    }
+
+    return data;
+  }
+
   const existingThreadId = await findExistingThread(tenantId, payload, supabase);
   const threadPayload = {
     tenant_id: tenantId,
@@ -317,6 +349,186 @@ export async function persistInboundThreadAndMessage(
   );
 
   return { thread, message };
+}
+
+function normalizeOutboundRecipients(recipients = []) {
+  return coerceArray(recipients)
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const email = normalizeEmail(entry);
+        return email ? { email, name: null } : null;
+      }
+      if (entry && typeof entry === 'object') {
+        const email = normalizeEmail(entry.email);
+        if (!email) return null;
+        return {
+          email,
+          name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : null,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function normalizeOutboundEntityLinks(activity = {}) {
+  const entityType =
+    typeof activity.related_to === 'string' ? activity.related_to.trim().toLowerCase() : '';
+  const entityId =
+    activity.related_id !== undefined && activity.related_id !== null
+      ? String(activity.related_id).trim()
+      : '';
+
+  if (!LINKABLE_ENTITY_TYPES.has(entityType) || !entityId) {
+    return [];
+  }
+
+  return [
+    {
+      type: entityType,
+      id: entityId,
+      source: 'activity_relation',
+      confidence: 1,
+    },
+  ];
+}
+
+async function upsertOutboundMessage(
+  {
+    tenantId,
+    thread,
+    activity,
+    mailboxAddress,
+    messageId,
+    subject,
+    body,
+    htmlBody,
+    from,
+    toList,
+    sentAt,
+  },
+  { supabase },
+) {
+  const existing = messageId
+    ? await supabase
+        .from('communications_messages')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .eq('internet_message_id', messageId)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  if (existing.error && existing.error.code !== 'PGRST116') {
+    throw buildPersistenceError('communications_message_lookup_failed', existing.error.message);
+  }
+
+  if (existing.data) {
+    return existing.data;
+  }
+
+  const recipients = normalizeOutboundRecipients(toList);
+  const messagePayload = {
+    tenant_id: tenantId,
+    thread_id: thread.id,
+    internet_message_id: messageId || `activity-${activity.id}@aishacrm.local`,
+    activity_id: activity.id,
+    direction: 'outbound',
+    provider_cursor: null,
+    subject: subject || '(no subject)',
+    sender_email: normalizeEmail(from) || mailboxAddress || null,
+    sender_name: null,
+    recipients,
+    cc: coerceArray(activity.metadata?.email?.cc),
+    bcc: coerceArray(activity.metadata?.email?.bcc),
+    received_at: sentAt,
+    text_body: body || '',
+    html_body: htmlBody || '',
+    raw_source: null,
+    headers: activity.metadata?.email?.headers || {},
+    metadata: {
+      activity_id: activity.id,
+      source_service: 'email-worker',
+      delivery: activity.metadata?.delivery || {},
+      attachments: [],
+      attachment_count: 0,
+    },
+  };
+
+  const { data, error } = await supabase
+    .from('communications_messages')
+    .insert([messagePayload])
+    .select('*')
+    .single();
+
+  if (error) {
+    throw buildPersistenceError('communications_message_create_failed', error.message);
+  }
+
+  return data;
+}
+
+export async function persistOutboundThreadAndMessage(
+  { activity, mailboxId, mailboxAddress, from, toList, subject, body, htmlBody, messageId, sentAt },
+  { supabase = getSupabaseClient() } = {},
+) {
+  const tenantId = activity?.tenant_id;
+  if (!tenantId) {
+    throw buildPersistenceError(
+      'communications_outbound_invalid_activity',
+      'tenant_id is required',
+    );
+  }
+
+  const payload = {
+    message_id: messageId || `activity-${activity.id}@aishacrm.local`,
+    subject: subject || activity.subject || '(no subject)',
+    from: { email: from || mailboxAddress || null, name: null },
+    to: normalizeOutboundRecipients(toList),
+    cc: coerceArray(activity.metadata?.email?.cc),
+    bcc: coerceArray(activity.metadata?.email?.bcc),
+    received_at: sentAt,
+    thread_hint: activity.metadata?.email?.in_reply_to || null,
+    communications: activity.metadata?.communications || {},
+    direction: 'outbound',
+    headers: activity.metadata?.email?.headers || {},
+    text_body: body || '',
+    html_body: htmlBody || '',
+  };
+
+  const thread = await ensureThreadRecord(
+    {
+      tenantId,
+      mailboxId,
+      mailboxAddress,
+      payload,
+      occurredAt: sentAt,
+    },
+    { supabase },
+  );
+
+  const message = await upsertOutboundMessage(
+    {
+      tenantId,
+      thread,
+      activity,
+      mailboxAddress,
+      messageId,
+      subject: payload.subject,
+      body: payload.text_body,
+      htmlBody: payload.html_body,
+      from: payload.from?.email,
+      toList,
+      sentAt,
+    },
+    { supabase },
+  );
+
+  const links = normalizeOutboundEntityLinks(activity);
+  if (links.length > 0) {
+    await persistEntityLinks(tenantId, thread.id, message.id, links, { supabase });
+  }
+
+  return { thread, message, links };
 }
 
 function normalizeExplicitEntityRefs(payload = {}) {
@@ -541,6 +753,7 @@ export async function attachActivityToCommunicationsRecords(
 }
 
 export default {
+  persistOutboundThreadAndMessage,
   persistInboundThreadAndMessage,
   resolveInboundEntityLinks,
   attachActivityToCommunicationsRecords,

@@ -8,6 +8,10 @@ import dotenv from 'dotenv';
 import { pool as pgPool, getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
 import { resolveCommunicationsProviderConnection } from '../lib/communications/providerConnectionResolver.js';
+import {
+  attachActivityToCommunicationsRecords,
+  persistOutboundThreadAndMessage,
+} from '../services/communicationsPersistenceService.js';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -39,6 +43,20 @@ function parseCommunicationsMeta(metadata) {
 function parseMeetingMeta(metadata) {
   const meta = metadata && typeof metadata === 'object' ? metadata : {};
   return meta.meeting && typeof meta.meeting === 'object' ? meta.meeting : {};
+}
+
+function sanitizeEmailHeaders(headers) {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const sanitized = { ...headers };
+  delete sanitized.references;
+  delete sanitized.References;
+  delete sanitized['in-reply-to'];
+  delete sanitized['In-Reply-To'];
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
 function getActivityDescription(activity, email) {
@@ -293,6 +311,8 @@ const emailWorkerDeps = {
   markActivity,
   createNotification,
   postStatusWebhook,
+  persistOutboundThreadAndMessage,
+  attachActivityToCommunicationsRecords,
 };
 
 export async function processActivity(activity) {
@@ -384,8 +404,10 @@ export async function processActivity(activity) {
       subject,
       text_body: body,
       html_body: email.html_body || (/<\w+/.test(body) ? body : undefined),
+      in_reply_to: email.in_reply_to || undefined,
+      references: Array.isArray(email.references) ? email.references : undefined,
       headers: {
-        ...(email.headers || {}),
+        ...(sanitizeEmailHeaders(email.headers) || {}),
         ...(isMeetingInvite ? { 'Content-Class': 'urn:content-classes:calendarmessage' } : {}),
       },
       attachments: inviteArtifacts ? [inviteArtifacts.attachment] : undefined,
@@ -424,6 +446,34 @@ export async function processActivity(activity) {
       isMeetingInvite ? activity.status || 'scheduled' : 'sent',
       sentMeta,
     );
+    if (!isMeetingInvite) {
+      const persisted = await emailWorkerDeps.persistOutboundThreadAndMessage({
+        activity: {
+          ...activity,
+          metadata: sentMeta,
+        },
+        mailboxId: providerConnection.connection?.config?.mailbox_id || mailboxId,
+        mailboxAddress: providerConnection.connection?.config?.mailbox_address || mailboxAddress,
+        from,
+        toList,
+        subject,
+        body,
+        htmlBody: email.html_body || (/<\w+/.test(body) ? body : ''),
+        messageId: result?.message_id || null,
+        sentAt: sentMeta.delivery.sent_at,
+      });
+
+      await emailWorkerDeps.attachActivityToCommunicationsRecords({
+        tenantId: activity.tenant_id,
+        threadId: persisted.thread.id,
+        messageId: persisted.message.id,
+        activity: {
+          ...activity,
+          metadata: sentMeta,
+        },
+        links: persisted.links || [],
+      });
+    }
     await emailWorkerDeps.postStatusWebhook({
       event: isMeetingInvite ? 'meeting.invite.sent' : 'email.sent',
       activity_id: activity.id,
@@ -573,6 +623,8 @@ export function setEmailWorkerDependenciesForTests(overrides = {}) {
     emailWorkerDeps.markActivity = markActivity;
     emailWorkerDeps.createNotification = createNotification;
     emailWorkerDeps.postStatusWebhook = postStatusWebhook;
+    emailWorkerDeps.persistOutboundThreadAndMessage = persistOutboundThreadAndMessage;
+    emailWorkerDeps.attachActivityToCommunicationsRecords = attachActivityToCommunicationsRecords;
     return;
   }
 
@@ -587,6 +639,13 @@ export function setEmailWorkerDependenciesForTests(overrides = {}) {
   }
   if (overrides.postStatusWebhook) {
     emailWorkerDeps.postStatusWebhook = overrides.postStatusWebhook;
+  }
+  if (overrides.persistOutboundThreadAndMessage) {
+    emailWorkerDeps.persistOutboundThreadAndMessage = overrides.persistOutboundThreadAndMessage;
+  }
+  if (overrides.attachActivityToCommunicationsRecords) {
+    emailWorkerDeps.attachActivityToCommunicationsRecords =
+      overrides.attachActivityToCommunicationsRecords;
   }
 }
 

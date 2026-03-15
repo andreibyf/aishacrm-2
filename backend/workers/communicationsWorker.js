@@ -402,11 +402,21 @@ export async function processCommunicationsPollCycle(deps = {}) {
       );
 
       const polledAt = new Date(now).toISOString();
+      const nextMetadata = {
+        ...(integration.metadata || {}),
+        communications: {
+          ...((integration.metadata || {})?.communications || {}),
+          sync: {
+            ...((integration.metadata || {})?.communications?.sync || {}),
+            ...(result.next_cursor ? { cursor: result.next_cursor } : {}),
+          },
+        },
+      };
       await persistMailboxPollMetadata(
         {
           tenantId,
           integrationId: integration.id,
-          metadata: integration.metadata || {},
+          metadata: nextMetadata,
           syncPatch: {
             last_polled_at: polledAt,
             last_result: 'success',

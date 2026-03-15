@@ -11,6 +11,8 @@ describe('email worker provider adapter delivery', () => {
   it('delivers queued email through the resolved communications provider adapter', async () => {
     const activityUpdates = [];
     const webhookEvents = [];
+    const persistedOutbound = [];
+    const attachedActivities = [];
 
     setEmailWorkerDependenciesForTests({
       async resolveProviderConnection() {
@@ -49,6 +51,17 @@ describe('email worker provider adapter delivery', () => {
       async postStatusWebhook(payload) {
         webhookEvents.push(payload);
       },
+      async persistOutboundThreadAndMessage(payload) {
+        persistedOutbound.push(payload);
+        return {
+          thread: { id: 'thread-001' },
+          message: { id: 'message-001' },
+          links: [{ type: 'lead', id: 'lead-001', source: 'activity_relation', confidence: 1 }],
+        };
+      },
+      async attachActivityToCommunicationsRecords(payload) {
+        attachedActivities.push(payload);
+      },
     });
 
     await processActivity({
@@ -72,8 +85,90 @@ describe('email worker provider adapter delivery', () => {
     assert.equal(activityUpdates[0].status, 'sent');
     assert.equal(activityUpdates[0].metadata.delivery.provider, 'imap_smtp');
     assert.equal(activityUpdates[0].metadata.delivery.provider_name, 'zoho_mail');
+    assert.equal(persistedOutbound.length, 1);
+    assert.equal(persistedOutbound[0].messageId, '<sent-123@example.com>');
+    assert.equal(persistedOutbound[0].mailboxId, 'owner-primary');
+    assert.deepEqual(persistedOutbound[0].toList, ['prospect@example.com']);
+    assert.equal(persistedOutbound[0].activity.metadata.communications.mailbox_id, 'owner-primary');
+    assert.equal(attachedActivities.length, 1);
+    assert.equal(attachedActivities[0].threadId, 'thread-001');
+    assert.equal(attachedActivities[0].messageId, 'message-001');
     assert.equal(webhookEvents.length, 1);
     assert.equal(webhookEvents[0].event, 'email.sent');
+  });
+
+  it('persists a reply onto the selected communications thread', async () => {
+    const persistedOutbound = [];
+
+    setEmailWorkerDependenciesForTests({
+      async resolveProviderConnection() {
+        return {
+          integration: { id: 'integration-001' },
+          connection: {
+            config: {
+              provider_type: 'imap_smtp',
+              provider_name: 'zoho_mail',
+              mailbox_id: 'owner-primary',
+              outbound: { from_address: 'owner@example.com' },
+            },
+          },
+          adapter: {
+            async sendMessage(message) {
+              assert.equal(message.in_reply_to, '<msg-002@example.com>');
+              assert.deepEqual(message.references, [
+                '<msg-001@example.com>',
+                '<msg-002@example.com>',
+              ]);
+              assert.equal(message.headers?.references, undefined);
+              assert.equal(message.headers?.['in-reply-to'], undefined);
+              return {
+                ok: true,
+                message_id: '<sent-reply@example.com>',
+                accepted: ['prospect@example.com'],
+                rejected: [],
+                response: '250 queued',
+              };
+            },
+          },
+        };
+      },
+      async markActivity() {},
+      async createNotification() {},
+      async postStatusWebhook() {},
+      async persistOutboundThreadAndMessage(payload) {
+        persistedOutbound.push(payload);
+        return {
+          thread: { id: 'thread-001' },
+          message: { id: 'message-002' },
+          links: [],
+        };
+      },
+      async attachActivityToCommunicationsRecords() {},
+    });
+
+    await processActivity({
+      id: 'activity-004',
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      subject: 'Re: Intro call',
+      body: 'Thanks for the quick reply.',
+      metadata: {
+        email: {
+          to: 'prospect@example.com',
+          from: 'owner@example.com',
+          subject: 'Re: Intro call',
+          in_reply_to: '<msg-002@example.com>',
+          references: ['<msg-001@example.com>', '<msg-002@example.com>'],
+        },
+        communications: {
+          mailbox_id: 'owner-primary',
+          thread_id: 'thread-001',
+        },
+      },
+    });
+
+    assert.equal(persistedOutbound.length, 1);
+    assert.equal(persistedOutbound[0].activity.metadata.communications.thread_id, 'thread-001');
+    assert.equal(persistedOutbound[0].activity.metadata.email.in_reply_to, '<msg-002@example.com>');
   });
 
   it('fails queued email when no communications provider mailbox matches', async () => {

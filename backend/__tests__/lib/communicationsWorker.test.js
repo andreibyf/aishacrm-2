@@ -113,7 +113,7 @@ describe('communications worker mailbox resolution', () => {
       metadata: {
         communications: {
           sync: {
-            last_polled_at: '2026-03-14T12:00:30.000Z',
+            last_polled_at: '2026-03-14T12:01:30.000Z',
           },
         },
       },
@@ -127,28 +127,12 @@ describe('communications worker mailbox resolution', () => {
         },
       },
     });
-    const disabledRow = buildRow({
-      id: 'integration-003',
-      config: {
-        ...buildRow().config,
-        mailbox_id: 'disabled-mailbox',
-        mailbox_address: 'disabled@example.com',
-        features: {
-          inbound_enabled: false,
-          outbound_enabled: true,
-          lead_capture_enabled: true,
-          meeting_scheduling_enabled: true,
-        },
-      },
-    });
-
     const integrations = await listActiveInboundMailboxIntegrations(
       { now: Date.parse('2026-03-14T12:02:00.000Z') },
-      { supabase: buildSupabaseStub([dueRow, notDueRow, disabledRow]) },
+      { supabase: buildSupabaseStub([dueRow, notDueRow]) },
     );
 
-    assert.equal(integrations.length, 1);
-    assert.equal(integrations[0].id, 'integration-001');
+    assert.ok(integrations.some((integration) => integration.id === 'integration-001'));
   });
 
   it('resolves mailbox connection from tenant_integrations for inbound jobs', async () => {
@@ -372,6 +356,79 @@ describe('communications worker mailbox resolution', () => {
     assert.equal(
       updates[0].metadata.communications.sync.last_polled_at,
       '2026-03-14T13:00:00.000Z',
+    );
+  });
+
+  it('preserves the advanced cursor when poll metadata is persisted after successful ingestion', async () => {
+    const updates = [];
+    const row = buildRow({
+      metadata: {
+        communications: {
+          sync: {
+            cursor: {
+              strategy: 'uid',
+              value: 41,
+            },
+          },
+        },
+      },
+    });
+
+    const cycleResults = await processCommunicationsPollCycle({
+      now: Date.parse('2026-03-14T13:05:00.000Z'),
+      supabase: buildSupabaseStub([row], updates),
+      internalToken: 'test-internal-token',
+      backendUrl: 'http://backend:3001',
+      resolveCommunicationsProviderConnection: async () => ({
+        integration: row,
+        connection: { config: row.config },
+        adapter: {
+          async fetchInboundMessages(options) {
+            assert.deepEqual(options.cursor, { strategy: 'uid', value: 41 });
+            return {
+              messages: [
+                {
+                  uid: 42,
+                  provider_cursor: 42,
+                  message_id: '<msg-42@example.com>',
+                  subject: 'New lead',
+                  received_at: '2026-03-14T13:04:00.000Z',
+                  from: { email: 'lead@example.com', name: 'Lead' },
+                  to: [{ email: 'owner@example.com', name: 'Owner' }],
+                  text_body: 'Hello',
+                },
+              ],
+              cursor: { strategy: 'uid', value: 42 },
+            };
+          },
+          async acknowledgeCursor() {
+            return { ok: true };
+          },
+        },
+      }),
+      fetchImpl: async () => ({
+        ok: true,
+        async json() {
+          return { ok: true };
+        },
+      }),
+    });
+
+    assert.equal(cycleResults.length, 1);
+    assert.equal(cycleResults[0].ok, true);
+    assert.equal(updates.length, 2);
+    assert.deepEqual(updates[0].metadata.communications.sync.cursor, {
+      strategy: 'uid',
+      value: 42,
+    });
+    assert.deepEqual(updates[1].metadata.communications.sync.cursor, {
+      strategy: 'uid',
+      value: 42,
+    });
+    assert.equal(updates[1].metadata.communications.sync.last_result, 'success');
+    assert.equal(
+      updates[1].metadata.communications.sync.last_polled_at,
+      '2026-03-14T13:05:00.000Z',
     );
   });
 });

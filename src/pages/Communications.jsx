@@ -106,6 +106,24 @@ function summarizeMessage(message) {
     .trim();
 }
 
+function formatMessageBody(message) {
+  const textBody =
+    typeof message?.text_body === 'string' ? message.text_body.replace(/\r\n/g, '\n').trim() : '';
+  if (textBody) {
+    return textBody;
+  }
+
+  const htmlFallback =
+    typeof message?.html_body === 'string'
+      ? message.html_body
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : '';
+
+  return htmlFallback || message?.subject || 'No message body available.';
+}
+
 function stateValue(state, key) {
   return state && typeof state === 'object' ? state[key] || null : null;
 }
@@ -116,6 +134,51 @@ function formatEventLabel(type) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function formatReplySubject(subject) {
+  const normalized = String(subject || '').trim();
+  if (!normalized) return 'Re:';
+  return /^re:\s*/i.test(normalized) ? normalized : `Re: ${normalized}`;
+}
+
+function extractReplySourceBody(message) {
+  const raw = String(message?.text_body || '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+  if (!raw) return '';
+
+  const lines = raw.split('\n');
+  const cleaned = [];
+
+  for (const line of lines) {
+    if (/^On .+ wrote:$/i.test(line.trim())) {
+      break;
+    }
+    if (/^>/.test(line.trim())) {
+      break;
+    }
+    cleaned.push(line);
+  }
+
+  return cleaned.join('\n').trim() || raw;
+}
+
+function buildReplyQuote(message) {
+  if (!message) return '';
+
+  const sender =
+    message?.sender_name ||
+    message?.sender_email ||
+    (message?.direction === 'outbound' ? 'You' : 'Unknown sender');
+  const timestamp = formatDateTime(message?.received_at);
+  const sourceBody = extractReplySourceBody(message);
+  const quotedBody = sourceBody
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+
+  return [`On ${timestamp}, ${sender} wrote:`, quotedBody].join('\n').trim();
 }
 
 export default function CommunicationsPage() {
@@ -146,12 +209,16 @@ export default function CommunicationsPage() {
   const [composeSubmitting, setComposeSubmitting] = useState(false);
   const [composeError, setComposeError] = useState(null);
   const [composeForm, setComposeForm] = useState({
+    mode: 'compose',
     mailboxId: DEFAULT_MAILBOX_ID,
     to: '',
     subject: '',
     body: '',
     relatedTo: 'none',
     relatedId: '',
+    threadId: '',
+    inReplyTo: '',
+    references: [],
   });
 
   const effectiveTenantId = selectedTenantId || user?.tenant_id || null;
@@ -244,7 +311,7 @@ export default function CommunicationsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [effectiveTenantId, selectedThreadId]);
+  }, [effectiveTenantId, selectedThreadId, refreshNonce]);
 
   useEffect(() => {
     setComposeForm((current) => ({
@@ -278,6 +345,36 @@ export default function CommunicationsPage() {
       ...current,
       [field]: value,
     }));
+  };
+
+  const handleReplyToThread = () => {
+    if (!selectedThread) return;
+
+    const latestInbound = [...messages]
+      .reverse()
+      .find((message) => message?.direction === 'inbound' && message?.sender_email);
+    const latestMessage = [...messages].reverse().find(Boolean);
+    const referenceIds = messages.map((message) => message?.internet_message_id).filter(Boolean);
+    const quotedBody = buildReplyQuote(latestMessage);
+
+    setComposerOpen(true);
+    setComposeError(null);
+    setComposeForm({
+      mode: 'reply',
+      mailboxId: selectedThread.mailbox_id || DEFAULT_MAILBOX_ID,
+      to: latestInbound?.sender_email || '',
+      subject: formatReplySubject(selectedThread.subject),
+      body: quotedBody ? `\n\n${quotedBody}` : '',
+      relatedTo:
+        selectedThread.linked_entities?.[0]?.entity_type ||
+        (entityType !== 'all' ? entityType : 'none'),
+      relatedId:
+        selectedThread.linked_entities?.[0]?.entity_id ||
+        (entityType !== 'all' ? entityId.trim() : ''),
+      threadId: selectedThread.id,
+      inReplyTo: latestMessage?.internet_message_id || '',
+      references: referenceIds,
+    });
   };
 
   const handleQueueOutboundEmail = async () => {
@@ -330,9 +427,16 @@ export default function CommunicationsPage() {
             to: toValue,
             subject: subjectValue,
             body: bodyValue,
+            ...(composeForm.inReplyTo
+              ? {
+                  in_reply_to: composeForm.inReplyTo,
+                  references: composeForm.references,
+                }
+              : {}),
           },
           communications: {
             mailbox_id: mailboxIdValue,
+            ...(composeForm.threadId ? { thread_id: composeForm.threadId } : {}),
           },
         },
       });
@@ -340,12 +444,16 @@ export default function CommunicationsPage() {
       toast.success('Outbound email queued for delivery.');
       setComposerOpen(false);
       setComposeForm({
+        mode: 'compose',
         mailboxId: mailboxIdValue,
         to: '',
         subject: '',
         body: '',
         relatedTo: entityType !== 'all' ? entityType : 'none',
         relatedId: entityType !== 'all' ? entityId.trim() : '',
+        threadId: '',
+        inReplyTo: '',
+        references: [],
       });
       handleRefresh();
     } catch (error) {
@@ -576,7 +684,11 @@ export default function CommunicationsPage() {
                 className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
               >
                 <Send className="mr-2 h-4 w-4" />
-                {composeSubmitting ? 'Queueing...' : 'Queue Email'}
+                {composeSubmitting
+                  ? 'Queueing...'
+                  : composeForm.mode === 'reply'
+                    ? 'Queue Reply'
+                    : 'Queue Email'}
               </Button>
             </div>
           </CardContent>
@@ -846,6 +958,15 @@ export default function CommunicationsPage() {
                     <Button
                       type="button"
                       variant="outline"
+                      onClick={handleReplyToThread}
+                      className="border-cyan-500/30 bg-transparent text-cyan-200 hover:bg-cyan-500/10"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Reply
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={handleReplayThread}
                       disabled={replaySubmitting}
                       className="border-amber-500/30 bg-transparent text-amber-200 hover:bg-amber-500/10"
@@ -1026,8 +1147,8 @@ export default function CommunicationsPage() {
                           {message.direction}
                         </Badge>
                       </div>
-                      <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-300">
-                        {summarizeMessage(message)}
+                      <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">
+                        {formatMessageBody(message)}
                       </p>
                       {(message.linked_entities || []).length > 0 && (
                         <div className="mt-4 flex flex-wrap gap-2">

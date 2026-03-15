@@ -68,16 +68,18 @@ const mockThreadDetailResponse = {
     {
       id: 'msg-001',
       thread_id: 'thread-001',
+      internet_message_id: '<msg-001@example.com>',
       direction: 'inbound',
       sender_name: 'Prospect Name',
       sender_email: 'prospect@example.com',
       received_at: '2026-03-14T11:00:00.000Z',
-      text_body: 'Thanks for the intro call.',
+      text_body: 'Thanks for the intro call.\n\nOn an earlier thread:\n> Prior quoted line',
       linked_entities: [],
     },
     {
       id: 'msg-002',
       thread_id: 'thread-001',
+      internet_message_id: '<msg-002@example.com>',
       direction: 'outbound',
       received_at: '2026-03-14T12:00:00.000Z',
       text_body: 'Looking forward to next week.',
@@ -187,6 +189,7 @@ describe('Communications page smoke test', () => {
     expect(screen.getByText('Prospect Name')).toBeInTheDocument();
     // Text appears in both thread-list preview and message detail panel
     expect(screen.getAllByText('Looking forward to next week.').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/On an earlier thread:/)).toBeInTheDocument();
     expect(screen.getByText('Recent Activity')).toBeInTheDocument();
     expect(screen.getByText('Delivery Reconciled')).toBeInTheDocument();
   });
@@ -352,6 +355,50 @@ describe('Communications page smoke test', () => {
             }),
             communications: expect.objectContaining({
               mailbox_id: 'owner-primary',
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
+  it('prefills and queues a reply tied to the selected thread', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: /^reply$/i }));
+
+    expect(screen.getByLabelText(/^to$/i)).toHaveValue('prospect@example.com');
+    expect(screen.getByLabelText(/^subject$/i)).toHaveValue('Re: Intro call');
+    expect(screen.getByLabelText(/^body$/i)).toHaveValue(
+      '\n\nOn 3/14/2026, 12:00:00 PM, Unknown sender wrote:\n> Looking forward to next week.',
+    );
+
+    fireEvent.change(screen.getByLabelText(/^body$/i), {
+      target: { value: 'Thanks for the quick reply.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /queue reply/i }));
+
+    await waitFor(() =>
+      expect(createActivityMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          type: 'email',
+          status: 'queued',
+          related_email: 'prospect@example.com',
+          metadata: expect.objectContaining({
+            email: expect.objectContaining({
+              to: 'prospect@example.com',
+              subject: 'Re: Intro call',
+              in_reply_to: '<msg-002@example.com>',
+              references: ['<msg-001@example.com>', '<msg-002@example.com>'],
+            }),
+            communications: expect.objectContaining({
+              mailbox_id: 'owner-primary',
+              thread_id: 'thread-001',
             }),
           }),
         }),

@@ -91,6 +91,12 @@ export function loadImapSmtpAdapter(connection) {
         subject: message.subject || '',
         text: message.text_body || '',
         html: message.html_body || undefined,
+        inReplyTo: message.in_reply_to || undefined,
+        references: Array.isArray(message.references)
+          ? message.references
+          : message.references
+            ? [message.references]
+            : undefined,
         headers: message.headers || undefined,
         attachments: Array.isArray(message.attachments) ? message.attachments : undefined,
       };
