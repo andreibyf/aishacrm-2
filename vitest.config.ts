@@ -1,5 +1,5 @@
 /// <reference types="node" />
-/* eslint-disable no-undef */
+/* eslint-env node */
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
@@ -40,14 +40,16 @@ export const SUBSYSTEM_TAGS = [
 // @reduxjs/toolkit is aliased to its CJS bundle because recharts requires it
 // via CJS but Vite's SSR module runner resolves the 'module' export condition
 // which points to an ESM .modern.mjs file, causing "Unexpected token 'export'".
+const sharedAlias = {
+  "@": path.resolve(__dirname, "./src"),
+  "@reduxjs/toolkit": path.resolve(
+    __dirname,
+    "node_modules/@reduxjs/toolkit/dist/cjs/index.js"
+  ),
+};
+
 const sharedResolve = {
-  alias: {
-    "@": path.resolve(__dirname, "./src"),
-    "@reduxjs/toolkit": path.resolve(
-      __dirname,
-      "node_modules/@reduxjs/toolkit/dist/cjs/index.js"
-    ),
-  },
+  alias: sharedAlias,
 };
 
 
@@ -79,16 +81,7 @@ const sharedConfig = {
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      // Force CJS bundle to avoid 'Unexpected token export' when recharts
-      // requires @reduxjs/toolkit and Vite resolves the ESM .modern.mjs via
-      // the 'module' export condition on the vmForks SSR module runner.
-      '@reduxjs/toolkit': path.resolve(
-        __dirname,
-        'node_modules/@reduxjs/toolkit/dist/cjs/index.js',
-      ),
-    },
+    alias: sharedAlias,
     // Drop 'module' condition so the Vite module-runner (vmForks) doesn't
     // resolve ESM-only builds of CJS packages like @reduxjs/toolkit.
     conditions: ['browser', 'import', 'default'],

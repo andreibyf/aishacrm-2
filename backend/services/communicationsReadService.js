@@ -92,6 +92,17 @@ function extractAttachments(metadata) {
   return Array.isArray(metadata?.attachments) ? metadata.attachments : [];
 }
 
+function buildAppliedFilters({ mailboxId, status, view, entityType, entityId, deliveryState }) {
+  return {
+    mailbox_id: mailboxId,
+    status,
+    view,
+    entity_type: entityType,
+    entity_id: entityId,
+    delivery_state: deliveryState,
+  };
+}
+
 export async function listCommunicationsThreads(
   { tenantId, limit, offset, mailboxId, status, view, entityType, entityId, deliveryState },
   { supabase = getSupabaseClient() } = {},
@@ -142,6 +153,15 @@ export async function listCommunicationsThreads(
   }
 
   let permittedThreadIds = null;
+  const appliedFilters = buildAppliedFilters({
+    mailboxId: normalizedMailboxId,
+    status: effectiveStatus,
+    view: normalizedView,
+    entityType: normalizedEntityType,
+    entityId: normalizedEntityId,
+    deliveryState: normalizedDeliveryState,
+  });
+
   if (normalizedEntityType && normalizedEntityId) {
     const linkResult = await supabase
       .from('communications_entity_links')
@@ -163,14 +183,7 @@ export async function listCommunicationsThreads(
         total: 0,
         limit: safeLimit,
         offset: safeOffset,
-        applied_filters: {
-          mailbox_id: normalizedMailboxId,
-          status: effectiveStatus,
-          view: normalizedView,
-          entity_type: normalizedEntityType,
-          entity_id: normalizedEntityId,
-          delivery_state: normalizedDeliveryState,
-        },
+        applied_filters: appliedFilters,
       };
     }
   }
@@ -195,9 +208,15 @@ export async function listCommunicationsThreads(
     threadsQuery = threadsQuery.in('id', permittedThreadIds);
   }
 
-  const threadsResult = await threadsQuery
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .range(safeOffset, safeOffset + safeLimit - 1);
+  let orderedThreadsQuery = threadsQuery.order('last_message_at', {
+    ascending: false,
+    nullsFirst: false,
+  });
+  if (!normalizedDeliveryState) {
+    orderedThreadsQuery = orderedThreadsQuery.range(safeOffset, safeOffset + safeLimit - 1);
+  }
+
+  const threadsResult = await orderedThreadsQuery;
 
   if (threadsResult.error) {
     throw buildServiceError(
@@ -214,34 +233,20 @@ export async function listCommunicationsThreads(
       total: threadsResult.count || 0,
       limit: safeLimit,
       offset: safeOffset,
-      applied_filters: {
-        mailbox_id: normalizedMailboxId,
-        status: effectiveStatus,
-        view: normalizedView,
-        entity_type: normalizedEntityType,
-        entity_id: normalizedEntityId,
-        delivery_state: normalizedDeliveryState,
-      },
+      applied_filters: appliedFilters,
     };
   }
 
   const threadIds = threads.map((thread) => thread.id);
 
-  const [messagesResult, linksResult] = await Promise.all([
-    supabase
-      .from('communications_messages')
-      .select(
-        'id, thread_id, internet_message_id, direction, subject, sender_email, sender_name, received_at, activity_id, metadata',
-      )
-      .eq('tenant_id', tenantId)
-      .in('thread_id', threadIds)
-      .order('received_at', { ascending: false, nullsFirst: false }),
-    supabase
-      .from('communications_entity_links')
-      .select('thread_id, entity_type, entity_id, link_scope, source, confidence')
-      .eq('tenant_id', tenantId)
-      .in('thread_id', threadIds),
-  ]);
+  const messagesResult = await supabase
+    .from('communications_messages')
+    .select(
+      'id, thread_id, internet_message_id, direction, subject, sender_email, sender_name, received_at, activity_id, metadata',
+    )
+    .eq('tenant_id', tenantId)
+    .in('thread_id', threadIds)
+    .order('received_at', { ascending: false, nullsFirst: false });
 
   if (messagesResult.error) {
     throw buildServiceError(
@@ -251,41 +256,52 @@ export async function listCommunicationsThreads(
     );
   }
 
-  if (linksResult.error) {
-    throw buildServiceError(500, 'communications_links_query_failed', linksResult.error.message);
-  }
-
   const latestMessages = firstByThread(messagesResult.data || []);
-  const linkedEntities = groupLinksByThread(linksResult.data || []);
-  const hydratedThreads = threads.map((thread) => {
+  const threadsWithState = threads.map((thread) => {
     const latestMessage = latestMessages.get(thread.id) || null;
     return {
       ...thread,
       event_log: Array.isArray(thread.metadata?.event_log) ? thread.metadata.event_log : [],
       latest_message: latestMessage,
       latest_message_attachments: extractAttachments(latestMessage?.metadata),
-      linked_entities: linkedEntities.get(thread.id) || [],
       state: summarizeThreadState(thread, latestMessage),
     };
   });
 
   const filteredThreads = normalizedDeliveryState
-    ? hydratedThreads.filter((thread) => thread.state?.delivery?.state === normalizedDeliveryState)
-    : hydratedThreads;
+    ? threadsWithState.filter((thread) => thread.state?.delivery?.state === normalizedDeliveryState)
+    : threadsWithState;
+
+  const pagedThreads = normalizedDeliveryState
+    ? filteredThreads.slice(safeOffset, safeOffset + safeLimit)
+    : filteredThreads;
+
+  const pagedThreadIds = pagedThreads.map((thread) => thread.id);
+  const linksResult =
+    pagedThreadIds.length > 0
+      ? await supabase
+          .from('communications_entity_links')
+          .select('thread_id, entity_type, entity_id, link_scope, source, confidence')
+          .eq('tenant_id', tenantId)
+          .in('thread_id', pagedThreadIds)
+      : { data: [], error: null };
+
+  if (linksResult.error) {
+    throw buildServiceError(500, 'communications_links_query_failed', linksResult.error.message);
+  }
+
+  const linkedEntities = groupLinksByThread(linksResult.data || []);
+  const hydratedThreads = pagedThreads.map((thread) => ({
+    ...thread,
+    linked_entities: linkedEntities.get(thread.id) || [],
+  }));
 
   return {
-    threads: filteredThreads,
+    threads: hydratedThreads,
     total: normalizedDeliveryState ? filteredThreads.length : threadsResult.count || 0,
     limit: safeLimit,
     offset: safeOffset,
-    applied_filters: {
-      mailbox_id: normalizedMailboxId,
-      status: effectiveStatus,
-      view: normalizedView,
-      entity_type: normalizedEntityType,
-      entity_id: normalizedEntityId,
-      delivery_state: normalizedDeliveryState,
-    },
+    applied_filters: appliedFilters,
   };
 }
 

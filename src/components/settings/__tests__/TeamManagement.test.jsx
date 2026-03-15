@@ -601,7 +601,7 @@ describe('TeamManagement — members', () => {
     });
   });
 
-  it('shows Add Member button in expanded team', async () => {
+  it('shows Manage in User Settings action in expanded team', async () => {
     globalThis.fetch = mockFetch();
     render(<TeamManagement />);
 

@@ -674,12 +674,35 @@ export async function attachActivityToCommunicationsRecords(
     return null;
   }
 
+  const existingMessage = await supabase
+    .from('communications_messages')
+    .select('metadata')
+    .eq('tenant_id', tenantId)
+    .eq('id', messageId)
+    .maybeSingle();
+
+  if (existingMessage.error && existingMessage.error.code !== 'PGRST116') {
+    throw buildPersistenceError(
+      'communications_message_lookup_failed',
+      existingMessage.error.message,
+    );
+  }
+
+  const existingMessageMetadata =
+    existingMessage.data?.metadata && typeof existingMessage.data.metadata === 'object'
+      ? existingMessage.data.metadata
+      : {};
+
   const { error: messageError } = await supabase
     .from('communications_messages')
     .update({
       activity_id: activity.id,
       metadata: {
-        ...(activity.metadata?.communications || {}),
+        ...existingMessageMetadata,
+        communications: {
+          ...(existingMessageMetadata.communications || {}),
+          ...(activity.metadata?.communications || {}),
+        },
         activity_id: activity.id,
       },
       updated_at: new Date().toISOString(),
