@@ -1,4 +1,5 @@
 /// <reference types="node" />
+/* eslint-disable no-undef */
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
