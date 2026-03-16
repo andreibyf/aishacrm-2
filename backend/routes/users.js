@@ -19,6 +19,7 @@ import {
 } from '../lib/supabaseAuth.js';
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from '../lib/auditLogger.js';
 import logger from '../lib/logger.js';
+import { redactEmail, summarizeRowsForLog, toSafeErrorMeta } from '../lib/logger.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
@@ -194,12 +195,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
         // DEDUP: If same email exists in both users and employees, keep user record
         // and enrich it with employee linkage, suppressing the employee duplicate.
-        const u1EmailSet = new Set(
-          u1.map((u) => (u.email || '').toLowerCase()).filter(Boolean),
-        );
-        const dedupedU2 = u2.filter(
-          (e) => !u1EmailSet.has((e.email || '').toLowerCase()),
-        );
+        const u1EmailSet = new Set(u1.map((u) => (u.email || '').toLowerCase()).filter(Boolean));
+        const dedupedU2 = u2.filter((e) => !u1EmailSet.has((e.email || '').toLowerCase()));
         const empByEmailLookup = new Map();
         u2.forEach((e) => {
           if (e.email) empByEmailLookup.set(e.email.toLowerCase(), e);
@@ -1192,12 +1189,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Normalize email
       const normalizedEmail = email ? email.toLowerCase().trim() : email;
 
-      logger.debug('[POST /api/users/invite] Creating and inviting user:', {
-        email: normalizedEmail,
-        full_name,
-        role,
-        tenant_id,
-      });
+      logger.debug(
+        {
+          email: redactEmail(normalizedEmail),
+          hasFullName: Boolean(full_name),
+          role,
+          tenant_id,
+        },
+        '[POST /api/users/invite] Creating and inviting user',
+      );
 
       if (!normalizedEmail || !first_name) {
         return res.status(400).json({
@@ -1283,11 +1283,16 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             perm_employees: perm_employees ?? false,
             perm_settings: perm_settings ?? false,
           })
-          .select('id, email, first_name, last_name, role, tenant_id, metadata, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings')
+          .select(
+            'id, email, first_name, last_name, role, tenant_id, metadata, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings',
+          )
           .single();
 
         if (insertError) {
-          logger.error('[POST /api/users/invite] Users insert error:', insertError);
+          logger.error(
+            { error: toSafeErrorMeta(insertError) },
+            '[POST /api/users/invite] Users insert error',
+          );
           return res.status(500).json({
             status: 'error',
             success: false,
@@ -1312,7 +1317,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .single();
 
         if (insertError) {
-          logger.error('[POST /api/users/invite] Employees insert error:', insertError);
+          logger.error(
+            { error: toSafeErrorMeta(insertError) },
+            '[POST /api/users/invite] Employees insert error',
+          );
           return res.status(500).json({
             status: 'error',
             success: false,
@@ -1322,10 +1330,13 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         createdUser = insertedEmployee;
       }
 
-      logger.debug('[POST /api/users/invite] User created:', {
-        id: createdUser.id,
-        email: createdUser.email,
-      });
+      logger.debug(
+        {
+          id: createdUser.id,
+          email: redactEmail(createdUser.email),
+        },
+        '[POST /api/users/invite] User created',
+      );
 
       // Now send the invitation via Supabase Auth
       const { data: authData, error: authError } = await inviteUserByEmail(
@@ -1341,7 +1352,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       );
 
       if (authError) {
-        logger.error('[POST /api/users/invite] Supabase Auth invitation error:', authError);
+        logger.error(
+          { error: toSafeErrorMeta(authError) },
+          '[POST /api/users/invite] Supabase Auth invitation error',
+        );
         // User was created but invitation failed - report as partial failure
         return res.status(207).json({
           status: 'partial',
@@ -1356,8 +1370,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       logger.info(
-        '[POST /api/users/invite] User created and invited successfully:',
-        normalizedEmail,
+        { email: redactEmail(normalizedEmail) },
+        '[POST /api/users/invite] User created and invited successfully',
       );
 
       return res.status(201).json({
@@ -1371,7 +1385,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         },
       });
     } catch (error) {
-      logger.error('[POST /api/users/invite] Error:', error);
+      logger.error({ error: toSafeErrorMeta(error) }, '[POST /api/users/invite] Error');
       return res.status(500).json({
         status: 'error',
         success: false,
@@ -1405,7 +1419,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       ];
 
       if (testEmailPatterns.some((pattern) => pattern.test(email))) {
-        logger.warn(`[POST /api/users] BLOCKED test email pattern: ${email}`);
+        logger.warn({ email: redactEmail(email) }, '[POST /api/users] Blocked test email pattern');
         return res.status(403).json({
           status: 'error',
           message: 'Test email patterns are not allowed in production database',
@@ -1417,13 +1431,16 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // 🔒 CRITICAL: Normalize email to lowercase for consistent storage and lookups
       const normalizedEmail = email ? email.toLowerCase().trim() : email;
 
-      logger.debug('[POST /api/users] Creating user:', {
-        email: normalizedEmail,
-        first_name,
-        last_name,
-        role,
-        tenant_id,
-      });
+      logger.debug(
+        {
+          email: redactEmail(normalizedEmail),
+          hasFirstName: Boolean(first_name),
+          hasLastName: Boolean(last_name),
+          role,
+          tenant_id,
+        },
+        '[POST /api/users] Creating user',
+      );
 
       if (!normalizedEmail || !first_name) {
         return res.status(400).json({
@@ -1438,8 +1455,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const supabase = getSupabaseClient();
 
       logger.debug(
-        '[POST /api/users] Running direct Supabase duplicate check for:',
-        normalizedEmail,
+        { email: redactEmail(normalizedEmail) },
+        '[POST /api/users] Running direct Supabase duplicate check',
       );
 
       const { data: existingUsers, error: usersError } = await supabase
@@ -1452,8 +1469,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         .select('id, email, tenant_id')
         .eq('email', normalizedEmail);
 
-      if (usersError) logger.error('[POST /api/users] Users query error:', usersError);
-      if (employeesError) logger.error('[POST /api/users] Employees query error:', employeesError);
+      if (usersError) {
+        logger.error({ error: toSafeErrorMeta(usersError) }, '[POST /api/users] Users query error');
+      }
+      if (employeesError) {
+        logger.error(
+          { error: toSafeErrorMeta(employeesError) },
+          '[POST /api/users] Employees query error',
+        );
+      }
 
       const existingInUsers = { rows: existingUsers || [], rowCount: existingUsers?.length || 0 };
       const existingInEmployees = {
@@ -1461,21 +1485,28 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         rowCount: existingEmployees?.length || 0,
       };
 
-      logger.debug(`[POST /api/users] Duplicate check for ${normalizedEmail}:`, {
-        usersCount: existingInUsers.rows.length,
-        employeesCount: existingInEmployees.rows.length,
-        usersRows: existingInUsers.rows,
-        employeesRows: existingInEmployees.rows,
-      });
+      logger.debug(
+        {
+          email: redactEmail(normalizedEmail),
+          usersCount: existingInUsers.rows.length,
+          employeesCount: existingInEmployees.rows.length,
+          usersRows: summarizeRowsForLog(existingInUsers.rows),
+          employeesRows: summarizeRowsForLog(existingInEmployees.rows),
+        },
+        '[POST /api/users] Duplicate check summary',
+      );
 
       logger.debug(
         `[POST /api/users] Checking if condition: usersLength=${existingInUsers.rows.length}, employeesLength=${existingInEmployees.rows.length}`,
       );
 
       if (existingInUsers.rows.length > 0 || existingInEmployees.rows.length > 0) {
-        logger.error(`[POST /api/users] ⚠️ ENTERING DUPLICATE BLOCK - THIS SHOULD NOT HAPPEN!`);
+        logger.error('[POST /api/users] Entering duplicate block');
         const existingRecord = existingInUsers.rows[0] || existingInEmployees.rows[0];
-        logger.warn(`[POST /api/users] Duplicate email rejected: ${normalizedEmail}`);
+        logger.warn(
+          { email: redactEmail(normalizedEmail) },
+          '[POST /api/users] Duplicate email rejected',
+        );
         return res.status(409).json({
           status: 'error',
           message: 'An account with this email already exists',
@@ -1589,7 +1620,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         // Create tenant-scoped admin in users table WITH tenant_id
         // NOTE: Global email uniqueness already checked above
         // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
-        logger.debug(`[POST /api/users] Admin path - checking users table for ${normalizedEmail}`);
+        logger.debug(
+          { email: redactEmail(normalizedEmail) },
+          '[POST /api/users] Admin path duplicate check',
+        );
         const { getSupabaseClient } = await import('../lib/supabase-db.js');
         const supabase = getSupabaseClient();
         const { data: existingUser } = await supabase
@@ -1597,9 +1631,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .select('id')
           .eq('email', normalizedEmail);
 
-        logger.debug(`[POST /api/users] Admin duplicate check result:`, existingUser);
+        logger.debug(
+          { rows: summarizeRowsForLog(existingUser) },
+          '[POST /api/users] Admin duplicate check result',
+        );
         if (existingUser && existingUser.length > 0) {
-          logger.warn(`[POST /api/users] DUPLICATE FOUND in users table for ${normalizedEmail}`);
+          logger.warn(
+            { email: redactEmail(normalizedEmail) },
+            '[POST /api/users] Duplicate found in users table',
+          );
           return res.status(409).json({
             status: 'error',
             message: 'User already exists',
@@ -1622,7 +1662,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         );
 
         if (authError) {
-          logger.error('[User Creation] Supabase Auth error:', authError);
+          logger.error(
+            { error: toSafeErrorMeta(authError) },
+            '[User Creation] Supabase Auth error',
+          );
           return res.status(500).json({
             status: 'error',
             message: `Failed to invite user: ${authError.message}`,
@@ -1719,7 +1762,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         );
 
         if (authError) {
-          logger.error('[User Creation] Supabase Auth error:', authError);
+          logger.error(
+            { error: toSafeErrorMeta(authError) },
+            '[User Creation] Supabase Auth error',
+          );
           return res.status(500).json({
             status: 'error',
             message: `Failed to invite user: ${authError.message}`,
@@ -1785,14 +1831,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         });
       }
     } catch (error) {
-      logger.error('[POST /api/users] EXCEPTION caught:', error);
-      logger.error('[POST /api/users] Error stack:', error.stack);
-      logger.error('[POST /api/users] Error details:', {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        status: error.status,
-      });
+      logger.error({ error: toSafeErrorMeta(error) }, '[POST /api/users] Exception caught');
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -2043,7 +2082,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         // Always ensure crm_access: true for users (by definition, users have CRM access)
         ...(permissions !== undefined && {
           permissions: {
-            ...((permissions && typeof permissions === 'object') ? permissions : {}),
+            ...(permissions && typeof permissions === 'object' ? permissions : {}),
             crm_access: true,
           },
         }),
@@ -2411,12 +2450,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       const userEmail = userResult.rows[0].email;
-      logger.debug(`[DELETE /api/users/:id] Row to delete:`, {
-        id: userResult.rows[0].id,
-        email: userEmail,
-        tenant_id: userResult.rows[0].tenant_id,
-        tableName,
-      });
+      logger.debug(
+        {
+          id: userResult.rows[0].id,
+          email: redactEmail(userEmail),
+          tenant_id: userResult.rows[0].tenant_id,
+          tableName,
+        },
+        '[DELETE /api/users/:id] Row to delete',
+      );
 
       // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
       const IMMUTABLE_SUPERADMINS = [
@@ -2431,7 +2473,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         )
       ) {
         logger.warn(
-          `[DELETE /api/users/:id] BLOCKED attempt to delete immutable superadmin: ${userEmail}`,
+          { email: redactEmail(userEmail) },
+          '[DELETE /api/users/:id] Blocked attempt to delete immutable superadmin',
         );
         return res.status(403).json({
           status: 'error',
@@ -2460,16 +2503,28 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Delete from Supabase Auth
       try {
-        logger.debug(`[DELETE /api/users/:id] Attempting auth delete for`, userEmail);
+        logger.debug(
+          { email: redactEmail(userEmail) },
+          '[DELETE /api/users/:id] Attempting auth delete',
+        );
         const { user: authUser } = await getAuthUserByEmail(userEmail);
         if (authUser?.id) {
           await deleteAuthUser(authUser.id);
-          logger.debug(`✓ Deleted auth user: ${userEmail}`);
+          logger.debug(
+            { email: redactEmail(userEmail) },
+            '[DELETE /api/users/:id] Deleted auth user',
+          );
         } else {
-          logger.debug(`[DELETE /api/users/:id] No auth user found for`, userEmail);
+          logger.debug(
+            { email: redactEmail(userEmail) },
+            '[DELETE /api/users/:id] No auth user found',
+          );
         }
       } catch (authError) {
-        logger.warn(`⚠ Could not delete auth user ${userEmail}:`, authError.message);
+        logger.warn(
+          { email: redactEmail(userEmail), error: authError.message },
+          '[DELETE /api/users/:id] Could not delete auth user',
+        );
         // Continue with database deletion even if auth deletion fails
       }
 
@@ -2504,7 +2559,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         });
       }
 
-      logger.debug(`✓ Deleted user from ${tableName} table: ${userEmail}`);
+      logger.debug(
+        { tableName, email: redactEmail(userEmail) },
+        '[DELETE /api/users/:id] Deleted user from table',
+      );
 
       // Create audit log for user deletion
       try {
@@ -2566,7 +2624,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { data, error } = await sendPasswordResetEmail(email);
 
       if (error) {
-        logger.error('[Password Reset] Error:', error);
+        logger.error({ error: toSafeErrorMeta(error) }, '[Password Reset] Error');
         return res.status(500).json({
           status: 'error',
           message: error.message || 'Failed to send reset email',
@@ -2579,7 +2637,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         data,
       });
     } catch (error) {
-      logger.error('Error sending password reset:', error);
+      logger.error({ error: toSafeErrorMeta(error) }, 'Error sending password reset');
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -2651,7 +2709,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { error: confirmError } = await confirmUserEmail(authUser.id);
 
       if (confirmError) {
-        logger.warn('[Admin Password Reset] Could not confirm email:', confirmError);
+        logger.warn(
+          { error: toSafeErrorMeta(confirmError) },
+          '[Admin Password Reset] Could not confirm email',
+        );
         // Don't fail - password was updated successfully
       }
 
@@ -2666,11 +2727,17 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { error: metadataError } = await updateAuthUserMetadata(authUser.id, updatedMetadata);
 
       if (metadataError) {
-        logger.warn('[Admin Password Reset] Could not clear expiration metadata:', metadataError);
+        logger.warn(
+          { error: toSafeErrorMeta(metadataError) },
+          '[Admin Password Reset] Could not clear expiration metadata',
+        );
         // Don't fail the request - password was updated successfully
       }
 
-      logger.debug(`✓ Password reset for: ${email} (email confirmed, expiration cleared)`);
+      logger.debug(
+        { email: redactEmail(email) },
+        '[Admin Password Reset] Password reset completed',
+      );
 
       res.json({
         status: 'success',
@@ -2678,7 +2745,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         data: { email, userId: authUser.id },
       });
     } catch (error) {
-      logger.error('Error in admin password reset:', error);
+      logger.error({ error: toSafeErrorMeta(error) }, 'Error in admin password reset');
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
@@ -2699,14 +2766,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         .select('id, email, first_name, last_name, role, tenant_id, metadata')
         .eq('id', id)
         .limit(1);
-      if (userErr) logger.warn('[User Invite] users select error:', userErr);
+      if (userErr) {
+        logger.warn({ error: toSafeErrorMeta(userErr) }, '[User Invite] users select error');
+      }
 
       const userFound = userRows && userRows.length > 0;
-      logger.debug(`[User Invite] Query result:`, {
-        found: userFound,
-        email: userFound ? userRows[0]?.email : undefined,
-        name: userFound ? `${userRows[0]?.first_name} ${userRows[0]?.last_name}` : undefined,
-      });
+      logger.debug(
+        {
+          found: userFound,
+          email: userFound ? redactEmail(userRows[0]?.email) : undefined,
+        },
+        '[User Invite] Query result',
+      );
 
       if (!userFound) {
         // Try employees table
@@ -2715,7 +2786,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           .select('id, email, first_name, last_name, role, tenant_id, metadata')
           .eq('id', id)
           .limit(1);
-        if (empErr) logger.warn('[User Invite] employees select error:', empErr);
+        if (empErr) {
+          logger.warn({ error: toSafeErrorMeta(empErr) }, '[User Invite] employees select error');
+        }
 
         if (!employeeRows || employeeRows.length === 0) {
           return res.status(404).json({
@@ -2733,7 +2806,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         if (existingAuthUser) {
           // User already exists in Auth - send password reset instead
           logger.debug(
-            `[User Invite] User ${employee.email} already registered, sending password reset`,
+            { email: redactEmail(employee.email) },
+            '[User Invite] User already registered, sending password reset',
           );
 
           const { error: resetError } = await sendPasswordResetEmail(employee.email);
@@ -2770,7 +2844,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         );
 
         if (error) {
-          logger.error('[User Invite] Supabase Auth error:', error);
+          logger.error({ error: toSafeErrorMeta(error) }, '[User Invite] Supabase Auth error');
           return res.status(500).json({
             status: 'error',
             message: `Failed to send invitation: ${error.message}`,
@@ -2787,18 +2861,27 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const user = userRows[0];
 
       // Check if user already exists in Supabase Auth
-      logger.debug(`[User Invite] Checking if ${user.email} exists in Supabase Auth...`);
+      logger.debug(
+        { email: redactEmail(user.email) },
+        '[User Invite] Checking whether user exists in Supabase Auth',
+      );
       const authResult = await getAuthUserByEmail(user.email);
-      logger.debug(`[User Invite] Auth check result:`, {
-        user: authResult?.user ? 'found' : 'not found',
-        email: authResult?.user?.email,
-        error: authResult?.error,
-      });
+      logger.debug(
+        {
+          user: authResult?.user ? 'found' : 'not found',
+          email: authResult?.user?.email ? redactEmail(authResult.user.email) : undefined,
+          error: authResult?.error ? toSafeErrorMeta(authResult.error) : null,
+        },
+        '[User Invite] Auth check result',
+      );
       const existingAuthUser = authResult?.user;
 
       if (existingAuthUser) {
         // User already exists in Auth - send password reset instead
-        logger.debug(`[User Invite] User ${user.email} already registered, sending password reset`);
+        logger.debug(
+          { email: redactEmail(user.email) },
+          '[User Invite] User already registered, sending password reset',
+        );
 
         const { error: resetError } = await sendPasswordResetEmail(user.email);
 
@@ -2834,7 +2917,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       );
 
       if (error) {
-        logger.error('[User Invite] Supabase Auth error:', error);
+        logger.error({ error: toSafeErrorMeta(error) }, '[User Invite] Supabase Auth error');
         return res.status(500).json({
           status: 'error',
           message: `Failed to send invitation: ${error.message}`,
@@ -2847,7 +2930,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         data: { email: user.email, auth_user: data },
       });
     } catch (error) {
-      logger.error('[User Invite] Error:', error);
+      logger.error({ error: toSafeErrorMeta(error) }, '[User Invite] Error');
       res.status(500).json({
         status: 'error',
         message: error.message,
