@@ -1086,10 +1086,11 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
           activity.assigned_to,
           req.user.id,
         );
-        if (access === 'none') {
-          return res
-            .status(403)
-            .json({ status: 'error', message: 'You do not have access to this record' });
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to generate AI email drafts for this record',
+          });
         }
       }
 

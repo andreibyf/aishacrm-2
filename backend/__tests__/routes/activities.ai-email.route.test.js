@@ -146,7 +146,7 @@ describe('Activities scheduled AI email route', () => {
     assert.equal(generateScheduledAiEmailDraftCalls.at(-1).tenantId, 'tenant-1');
   });
 
-  it('POST /:id/generate-ai-email rejects users without visibility access', async () => {
+  it('POST /:id/generate-ai-email rejects users without full access', async () => {
     getAccessLevelResult = 'none';
 
     const res = await requestWithBody('POST', '/api/v2/activities/activity-001/generate-ai-email', {
@@ -156,6 +156,25 @@ describe('Activities scheduled AI email route', () => {
     assert.equal(res.status, 403);
     const body = res.json();
     assert.equal(body.status, 'error');
-    assert.equal(body.message, 'You do not have access to this record');
+    assert.equal(
+      body.message,
+      'You do not have permission to generate AI email drafts for this record',
+    );
+  });
+
+  it('POST /:id/generate-ai-email rejects read-notes access', async () => {
+    getAccessLevelResult = 'read_notes';
+
+    const res = await requestWithBody('POST', '/api/v2/activities/activity-001/generate-ai-email', {
+      tenant_id: 'tenant-1',
+    });
+
+    assert.equal(res.status, 403);
+    const body = res.json();
+    assert.equal(body.status, 'error');
+    assert.equal(
+      body.message,
+      'You do not have permission to generate AI email drafts for this record',
+    );
   });
 });
