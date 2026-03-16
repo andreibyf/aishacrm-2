@@ -335,3 +335,83 @@ test('generateScheduledAiEmailDraft resolves opportunity recipients from linked 
   assert.equal(supabase.calls.executeSendEmailAction[0][4].to, 'buyer@example.com');
   assert.equal(result.activity.metadata.ai_email_generation.recipient_email, 'buyer@example.com');
 });
+
+test('generateScheduledAiEmailDraft uses bizdev_source-specific select columns', async () => {
+  const supabase = createSupabaseStub({
+    activityOverrides: {
+      related_to: 'bizdev_source',
+      related_id: 'bizdev-001',
+      related_email: null,
+    },
+    relatedEntities: {
+      bizdev_sources: {
+        id: 'bizdev-001',
+        first_name: 'Taylor',
+        last_name: 'Prospect',
+        company_name: 'Outbound Co',
+        email: 'taylor@example.com',
+      },
+    },
+  });
+
+  const result = await generateScheduledAiEmailDraft(
+    {
+      tenantId: 'tenant-1',
+      activityId: 'activity-001',
+      user: { id: 'user-1', email: 'owner@example.com' },
+    },
+    {
+      supabase,
+      executeSendEmailAction: async (...args) => {
+        supabase.calls.executeSendEmailAction.push(args);
+        return {
+          status: 'pending_approval',
+          suggestion_id: 'suggestion-bizdev',
+        };
+      },
+    },
+  );
+
+  const selects = supabase.calls.tableQueries.filter(
+    (entry) => entry.table === 'bizdev_sources' && entry.action === 'select',
+  );
+  assert.deepEqual(selects, [
+    {
+      table: 'bizdev_sources',
+      action: 'select',
+      columns: 'id, first_name, last_name, company_name, email',
+    },
+  ]);
+  assert.equal(supabase.calls.executeSendEmailAction[0][4].to, 'taylor@example.com');
+  assert.equal(result.activity.metadata.ai_email_generation.recipient_email, 'taylor@example.com');
+});
+
+test('generateScheduledAiEmailDraft throws when CARE returns an error status', async () => {
+  const supabase = createSupabaseStub();
+
+  await assert.rejects(
+    () =>
+      generateScheduledAiEmailDraft(
+        {
+          tenantId: 'tenant-1',
+          activityId: 'activity-001',
+          user: { id: 'user-1', email: 'owner@example.com' },
+        },
+        {
+          supabase,
+          executeSendEmailAction: async () => ({
+            status: 'error',
+            error: 'insert failed',
+          }),
+        },
+      ),
+    (error) => {
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.code, 'scheduled_ai_email_generation_failed');
+      assert.match(error.message, /insert failed/);
+      return true;
+    },
+  );
+
+  assert.equal(supabase.calls.updatedActivity, null);
+});

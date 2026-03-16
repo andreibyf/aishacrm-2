@@ -33,6 +33,7 @@ function buildEntityTableName(entityType) {
 function buildEntitySelectColumns(entityType) {
   if (entityType === 'account') return 'id, name, email';
   if (entityType === 'opportunity') return 'id, name, contact_id, lead_id';
+  if (entityType === 'bizdev_source') return 'id, first_name, last_name, company_name, email';
   return 'id, first_name, last_name, company, email';
 }
 
@@ -292,6 +293,16 @@ export async function generateScheduledAiEmailDraft(
     },
   );
 
+
+  if (generationResult?.status === 'error') {
+    throw buildServiceError(
+      502,
+      'scheduled_ai_email_generation_failed',
+      cleanString(generationResult.error) ||
+        cleanString(generationResult.message) ||
+        'AI email draft generation failed',
+    );
+  }
   const nextMetadata = {
     ...metadata,
     ai_email_generation: {
