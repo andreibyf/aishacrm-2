@@ -149,7 +149,13 @@ function createLeadCaptureSupabaseStub({ duplicate = null, insertError = null } 
           filters.sender_email === duplicate.senderEmail) ||
           (duplicate.scope === 'message' && filters.message_id) ||
           (duplicate.scope === 'sender' && filters.sender_email) ||
-          (duplicate.scope === 'domain' && filters.sender_domain))
+          (duplicate.scope === 'domain' &&
+            filters.sender_domain &&
+            filters.normalized_subject &&
+            filters.sender_email &&
+            filters.sender_domain === duplicate.senderDomain &&
+            filters.normalized_subject === duplicate.normalizedSubject &&
+            filters.sender_email === duplicate.senderEmail))
           ? [duplicate.row]
           : [];
       return Promise.resolve({ data: matches, error: null });
@@ -264,6 +270,38 @@ test('queueInboundLeadCapture does not suppress a different sender on the same t
   assert.equal(result.status, 'queued_for_review');
   assert.equal(result.queue_item_id, 'queue-001');
   assert.equal(supabase.inserts.queue[0].thread_id, 'thread-001');
+  assert.equal(supabase.inserts.queue[0].sender_email, 'second-prospect@example.com');
+});
+
+test('queueInboundLeadCapture does not suppress a different sender from the same domain and subject', async () => {
+  const supabase = createLeadCaptureSupabaseStub({
+    duplicate: {
+      scope: 'domain',
+      senderDomain: 'example.com',
+      normalizedSubject: 'interested in your services',
+      senderEmail: 'first-prospect@example.com',
+      row: { id: 'queue-existing', reason: 'unknown_sender' },
+    },
+  });
+
+  const result = await queueInboundLeadCapture(
+    {
+      mailbox_id: 'owner-primary',
+      mailbox_address: 'owner@example.com',
+      payload: {
+        subject: 'Interested in your services',
+        from: { email: 'second-prospect@example.com', name: 'Second Prospect' },
+      },
+    },
+    { id: 'tenant-1' },
+    { thread: { id: 'thread-001' }, message: { id: 'message-003' } },
+    [],
+    { supabase },
+  );
+
+  assert.equal(result.status, 'queued_for_review');
+  assert.equal(result.queue_item_id, 'queue-001');
+  assert.equal(supabase.inserts.queue[0].sender_domain, 'example.com');
   assert.equal(supabase.inserts.queue[0].sender_email, 'second-prospect@example.com');
 });
 

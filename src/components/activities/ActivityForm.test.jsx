@@ -10,6 +10,7 @@ vi.mock('@/api/entities', () => ({
   Activity: {
     create: vi.fn(),
     update: vi.fn(),
+    generateAiEmailDraft: vi.fn(),
   },
   Contact: {
     filter: vi.fn(),
@@ -49,7 +50,11 @@ vi.mock('../shared/timezoneUtils', () => ({
 
 vi.mock('../shared/EmployeeSelector', () => ({
   default: ({ value, onChange }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} data-testid="employee-selector">
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      data-testid="employee-selector"
+    >
       <option value="">Select Employee</option>
       <option value="user@example.com">User</option>
     </select>
@@ -112,13 +117,7 @@ describe('[CRM] ActivityForm', () => {
   });
 
   test('renders form with default values for new activity', () => {
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
-    );
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     expect(screen.getByLabelText(/subject/i)).toBeInTheDocument();
     expect(screen.getByTestId('activity-type-select')).toBeInTheDocument();
@@ -146,7 +145,7 @@ describe('[CRM] ActivityForm', () => {
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
 
     expect(screen.getByDisplayValue('Test Activity')).toBeInTheDocument();
@@ -160,13 +159,7 @@ describe('[CRM] ActivityForm', () => {
     Contact.filter.mockResolvedValue(mockContacts);
     Account.filter.mockResolvedValue(mockAccounts);
 
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
-    );
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     await waitFor(() => {
       expect(Contact.filter).toHaveBeenCalledWith({ tenant_id: mockTenantId });
@@ -175,13 +168,7 @@ describe('[CRM] ActivityForm', () => {
   });
 
   test('validates required subject field', async () => {
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
-    );
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     const form = screen.getByTestId('activity-form');
     fireEvent.submit(form);
@@ -198,14 +185,16 @@ describe('[CRM] ActivityForm', () => {
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
 
     const form = screen.getByTestId('activity-form');
     fireEvent.submit(form);
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('Due Date is required for calls, meetings, demos, and AI scheduled calls.');
+      expect(toast.error).toHaveBeenCalledWith(
+        'Due Date is required for calls, meetings, demos, and AI scheduled calls.',
+      );
     });
   });
 
@@ -216,7 +205,7 @@ describe('[CRM] ActivityForm', () => {
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
 
     const form = screen.getByTestId('activity-form');
@@ -232,13 +221,7 @@ describe('[CRM] ActivityForm', () => {
     Activity.create.mockResolvedValue(mockActivity);
     localToUtc.mockReturnValue('2024-01-15T14:30:00.000Z');
 
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
-    );
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     // Fill form
     const subjectInput = screen.getByLabelText(/subject/i);
@@ -258,7 +241,7 @@ describe('[CRM] ActivityForm', () => {
           description: 'Test description',
           tenant_id: mockTenantId,
           created_by: mockUser.email,
-        })
+        }),
       );
       expect(toast.success).toHaveBeenCalledWith('Created: New Activity');
       expect(mockOnSave).toHaveBeenCalledWith(mockActivity);
@@ -281,7 +264,7 @@ describe('[CRM] ActivityForm', () => {
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
 
     // Update subject
@@ -293,26 +276,70 @@ describe('[CRM] ActivityForm', () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(Activity.update).toHaveBeenCalledWith('activity-1',
+      expect(Activity.update).toHaveBeenCalledWith(
+        'activity-1',
         expect.objectContaining({
           subject: 'Updated Subject',
-        })
+        }),
       );
       expect(toast.success).toHaveBeenCalledWith('Updated: Updated Subject');
       expect(mockOnSave).toHaveBeenCalledWith(mockUpdatedActivity);
     });
   });
 
-  test('handles submission errors gracefully', async () => {
-    Activity.create.mockRejectedValue(new Error('Database error'));
+  test('generates a scheduled AI email draft for an existing activity', async () => {
+    const existingActivity = {
+      id: 'activity-ai-1',
+      subject: 'AI Follow Up',
+      type: 'scheduled_ai_email',
+      metadata: {},
+      ai_email_config: {
+        subject_template: 'Follow up',
+        body_prompt: 'Write a short follow-up email.',
+      },
+    };
+
+    Activity.generateAiEmailDraft.mockResolvedValue({
+      activity: {
+        ...existingActivity,
+        metadata: {
+          ai_email_generation: {
+            status: 'pending_approval',
+            recipient_email: 'prospect@example.com',
+            requested_at: '2026-03-16T17:00:00.000Z',
+            suggestion_id: 'suggestion-001',
+          },
+        },
+      },
+      generation_result: {
+        status: 'pending_approval',
+        suggestion_id: 'suggestion-001',
+      },
+    });
 
     render(
       <ActivityForm
+        activity={existingActivity}
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
+
+    fireEvent.click(screen.getByTestId('activity-generate-ai-email-button'));
+
+    await waitFor(() => {
+      expect(Activity.generateAiEmailDraft).toHaveBeenCalledWith('activity-ai-1', mockTenantId);
+      expect(toast.success).toHaveBeenCalledWith('AI email draft sent for approval.');
+      expect(screen.getByText('pending_approval')).toBeInTheDocument();
+      expect(screen.getByText(/Approval suggestion suggestion-001/)).toBeInTheDocument();
+    });
+  });
+
+  test('handles submission errors gracefully', async () => {
+    Activity.create.mockRejectedValue(new Error('Database error'));
+
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     // Fill required field
     const subjectInput = screen.getByLabelText(/subject/i);
@@ -328,15 +355,9 @@ describe('[CRM] ActivityForm', () => {
   });
 
   test('prevents double submission', async () => {
-    Activity.create.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
+    Activity.create.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 100)));
 
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
-    );
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     // Fill required field
     const subjectInput = screen.getByLabelText(/subject/i);
@@ -365,27 +386,26 @@ describe('[CRM] ActivityForm', () => {
         tenantId={mockTenantId}
         onSave={mockOnSave}
         onCancel={mockOnCancel}
-      />
+      />,
     );
 
     await waitFor(() => {
-      expect(Note.filter).toHaveBeenCalledWith({
-        related_to: 'activity',
-        related_id: 'activity-1'
-      }, '-created_date');
+      expect(Note.filter).toHaveBeenCalledWith(
+        {
+          related_to: 'activity',
+          related_id: 'activity-1',
+        },
+        '-created_date',
+      );
     });
   });
 
   test('shows loading state during submission', async () => {
-    Activity.create.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({}), 100)));
-
-    render(
-      <ActivityForm
-        tenantId={mockTenantId}
-        onSave={mockOnSave}
-        onCancel={mockOnCancel}
-      />
+    Activity.create.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({}), 100)),
     );
+
+    render(<ActivityForm tenantId={mockTenantId} onSave={mockOnSave} onCancel={mockOnCancel} />);
 
     // Fill required field
     const subjectInput = screen.getByLabelText(/subject/i);

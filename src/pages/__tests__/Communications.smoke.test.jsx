@@ -13,11 +13,25 @@ const mockThreadsResponse = {
       status: 'unread',
       last_message_at: '2026-03-14T12:00:00.000Z',
       linked_entities: [{ entity_type: 'lead', entity_id: 'lead-1' }],
+      linked_activities: [
+        {
+          id: 'act-1',
+          type: 'email',
+          subject: 'Follow-up email',
+          status: 'sent',
+        },
+      ],
       latest_message: {
         id: 'msg-002',
         thread_id: 'thread-001',
         subject: 'Re: Intro call',
         text_body: 'Looking forward to next week.',
+        activity: {
+          id: 'act-1',
+          type: 'email',
+          subject: 'Follow-up email',
+          status: 'sent',
+        },
       },
       state: {
         events: [
@@ -53,6 +67,14 @@ const mockThreadDetailResponse = {
     subject: 'Re: Intro call',
     status: 'unread',
     linked_entities: [{ entity_type: 'lead', entity_id: 'lead-1' }],
+    linked_activities: [
+      {
+        id: 'act-1',
+        type: 'email',
+        subject: 'Follow-up email',
+        status: 'sent',
+      },
+    ],
     state: {
       events: [
         {
@@ -84,10 +106,67 @@ const mockThreadDetailResponse = {
       received_at: '2026-03-14T12:00:00.000Z',
       text_body: 'Looking forward to next week.',
       linked_entities: [{ entity_type: 'activity', entity_id: 'act-1' }],
+      linked_activities: [
+        {
+          id: 'act-1',
+          type: 'email',
+          subject: 'Follow-up email',
+          status: 'sent',
+        },
+      ],
     },
   ],
   limit: 100,
   offset: 0,
+};
+
+const mockLeadCaptureQueueResponse = {
+  queue_items: [
+    {
+      id: 'queue-001',
+      tenant_id: 'tenant-1',
+      thread_id: 'thread-001',
+      message_id: 'msg-001',
+      sender_email: 'prospect@example.com',
+      sender_name: 'Prospect Name',
+      sender_domain: 'example.com',
+      subject: 'Interested in your services',
+      status: 'pending_review',
+      reason: 'unknown_sender',
+      created_at: '2026-03-15T14:00:00.000Z',
+    },
+  ],
+  total: 1,
+  limit: 50,
+  offset: 0,
+};
+
+const mockLeadCaptureQueueItemResponse = {
+  id: 'queue-001',
+  tenant_id: 'tenant-1',
+  thread_id: 'thread-001',
+  message_id: 'msg-001',
+  mailbox_id: 'owner-primary',
+  mailbox_address: 'owner@example.com',
+  sender_email: 'prospect@example.com',
+  sender_name: 'Prospect Name',
+  sender_domain: 'example.com',
+  subject: 'Interested in your services',
+  normalized_subject: 'interested in your services',
+  status: 'pending_review',
+  reason: 'unknown_sender',
+  metadata: {
+    proposed_company: 'Example Co',
+  },
+  thread: {
+    id: 'thread-001',
+    subject: 'Interested in your services',
+  },
+  message: {
+    id: 'msg-001',
+    subject: 'Interested in your services',
+    text_body: 'I would love to learn more about your services.',
+  },
 };
 
 vi.mock('react-router-dom', () => ({
@@ -114,6 +193,10 @@ const getThreadMessagesMock = vi.fn();
 const replayThreadMock = vi.fn();
 const updateThreadStatusMock = vi.fn();
 const purgeThreadMock = vi.fn();
+const listLeadCaptureQueueMock = vi.fn();
+const getLeadCaptureQueueItemMock = vi.fn();
+const updateLeadCaptureQueueItemStatusMock = vi.fn();
+const promoteLeadCaptureQueueItemMock = vi.fn();
 const createActivityMock = vi.fn();
 vi.mock('@/api/communications', () => ({
   listCommunicationThreads: (...args) => listThreadsMock(...args),
@@ -121,6 +204,10 @@ vi.mock('@/api/communications', () => ({
   replayCommunicationThread: (...args) => replayThreadMock(...args),
   updateCommunicationThreadStatus: (...args) => updateThreadStatusMock(...args),
   purgeCommunicationThread: (...args) => purgeThreadMock(...args),
+  listLeadCaptureQueue: (...args) => listLeadCaptureQueueMock(...args),
+  getLeadCaptureQueueItem: (...args) => getLeadCaptureQueueItemMock(...args),
+  updateLeadCaptureQueueItemStatus: (...args) => updateLeadCaptureQueueItemStatusMock(...args),
+  promoteLeadCaptureQueueItem: (...args) => promoteLeadCaptureQueueItemMock(...args),
 }));
 vi.mock('@/api/entities', () => ({
   Activity: {
@@ -145,6 +232,10 @@ describe('Communications page smoke test', () => {
     replayThreadMock.mockReset();
     updateThreadStatusMock.mockReset();
     purgeThreadMock.mockReset();
+    listLeadCaptureQueueMock.mockReset();
+    getLeadCaptureQueueItemMock.mockReset();
+    updateLeadCaptureQueueItemStatusMock.mockReset();
+    promoteLeadCaptureQueueItemMock.mockReset();
     createActivityMock.mockReset();
     listThreadsMock.mockResolvedValue(mockThreadsResponse);
     getThreadMessagesMock.mockResolvedValue(mockThreadDetailResponse);
@@ -169,6 +260,33 @@ describe('Communications page smoke test', () => {
       purged_at: '2026-03-15T02:00:00.000Z',
       purged_by: 'test@example.com',
     });
+    listLeadCaptureQueueMock.mockResolvedValue(mockLeadCaptureQueueResponse);
+    getLeadCaptureQueueItemMock.mockResolvedValue(mockLeadCaptureQueueItemResponse);
+    updateLeadCaptureQueueItemStatusMock.mockResolvedValue({
+      queue_item: {
+        ...mockLeadCaptureQueueItemResponse,
+        status: 'duplicate',
+      },
+    });
+    promoteLeadCaptureQueueItemMock.mockResolvedValue({
+      queue_item: {
+        ...mockLeadCaptureQueueItemResponse,
+        status: 'promoted',
+        metadata: {
+          promotion: {
+            entity_type: 'lead',
+            entity_id: 'lead-99',
+          },
+        },
+      },
+      lead: {
+        id: 'lead-99',
+        first_name: 'Prospect',
+        last_name: 'Name',
+        email: 'prospect@example.com',
+      },
+      already_promoted: false,
+    });
     createActivityMock.mockResolvedValue({
       id: 'activity-email-001',
       type: 'email',
@@ -180,7 +298,7 @@ describe('Communications page smoke test', () => {
     const CommunicationsPage = (await import('../Communications.jsx')).default;
     render(<CommunicationsPage />);
 
-    expect(screen.getByText('Inbox')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeInTheDocument();
 
     await waitFor(() => expect(listThreadsMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText('Re: Intro call')).toBeInTheDocument());
@@ -192,6 +310,9 @@ describe('Communications page smoke test', () => {
     expect(screen.getByText(/On an earlier thread:/)).toBeInTheDocument();
     expect(screen.getByText('Recent Activity')).toBeInTheDocument();
     expect(screen.getByText('Delivery Reconciled')).toBeInTheDocument();
+    expect(screen.getAllByText('Activity: Follow-up email (sent)').length).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   it('passes unread view through the thread query', async () => {
@@ -373,9 +494,10 @@ describe('Communications page smoke test', () => {
 
     expect(screen.getByLabelText(/^to$/i)).toHaveValue('prospect@example.com');
     expect(screen.getByLabelText(/^subject$/i)).toHaveValue('Re: Intro call');
-    expect(screen.getByLabelText(/^body$/i)).toHaveValue(
-      '\n\nOn 3/14/2026, 12:00:00 PM, Unknown sender wrote:\n> Looking forward to next week.',
-    );
+    const replyBody = screen.getByLabelText(/^body$/i).value;
+    expect(replyBody).toContain('On ');
+    expect(replyBody).toContain(', You wrote:');
+    expect(replyBody).toContain('> Looking forward to next week.');
 
     fireEvent.change(screen.getByLabelText(/^body$/i), {
       target: { value: 'Thanks for the quick reply.' },
@@ -400,6 +522,41 @@ describe('Communications page smoke test', () => {
               mailbox_id: 'owner-primary',
               thread_id: 'thread-001',
             }),
+          }),
+        }),
+      ),
+    );
+  });
+
+  it('renders the lead capture queue and promotes a reviewed sender to a lead', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /lead capture queue/i }));
+
+    await waitFor(() => expect(listLeadCaptureQueueMock).toHaveBeenCalled());
+    await waitFor(() => expect(getLeadCaptureQueueItemMock).toHaveBeenCalled());
+
+    expect(screen.getByText('Queue Review')).toBeInTheDocument();
+    expect(screen.getByText('I would love to learn more about your services.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^company$/i), {
+      target: { value: 'Example Holdings' },
+    });
+    fireEvent.change(screen.getByLabelText(/^review note$/i), {
+      target: { value: 'Qualified from inbound email' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /promote to lead/i }));
+
+    await waitFor(() =>
+      expect(promoteLeadCaptureQueueItemMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          queueItemId: 'queue-001',
+          lead: expect.objectContaining({
+            company: 'Example Holdings',
+            note: 'Qualified from inbound email',
+            email: 'prospect@example.com',
           }),
         }),
       ),

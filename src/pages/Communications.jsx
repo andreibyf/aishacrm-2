@@ -25,6 +25,7 @@ import {
   replayCommunicationThread,
   updateCommunicationThreadStatus,
 } from '@/api/communications';
+import LeadCaptureQueueView from '@/components/communications/LeadCaptureQueueView';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -181,9 +182,17 @@ function buildReplyQuote(message) {
   return [`On ${timestamp}, ${sender} wrote:`, quotedBody].join('\n').trim();
 }
 
+function renderActivityLabel(activity) {
+  const subject = String(activity?.subject || '').trim();
+  const status = String(activity?.status || '').trim();
+  if (subject && status) return `${subject} (${status})`;
+  return subject || status || 'Linked activity';
+}
+
 export default function CommunicationsPage() {
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
+  const [workspaceView, setWorkspaceView] = useState('inbox');
   const [view, setView] = useState('all');
   const [deliveryState, setDeliveryState] = useState('all');
   const [mailboxId, setMailboxId] = useState('all');
@@ -549,21 +558,52 @@ export default function CommunicationsPage() {
             <Mail className="h-3.5 w-3.5" />
             Communications
           </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Inbox</h1>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+            {workspaceView === 'queue' ? 'Lead Capture Queue' : 'Inbox'}
+          </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Review tenant email threads, filter by mailbox or linked CRM entity, and work through
-            unread, open, and closed views.
+            {workspaceView === 'queue'
+              ? 'Review unknown inbound senders, inspect source message context, and promote only when the CRM entity should be created.'
+              : 'Review tenant email threads, filter by mailbox or linked CRM entity, and work through unread, open, and closed views.'}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setComposerOpen((current) => !current)}
-            variant="outline"
-            className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
-          >
-            <SquarePen className="mr-2 h-4 w-4" />
-            {composerOpen ? 'Hide Composer' : 'Compose'}
-          </Button>
+          <div className="inline-flex rounded-xl border border-slate-800 bg-slate-950 p-1">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setWorkspaceView('inbox')}
+              className={`h-9 px-3 text-sm ${
+                workspaceView === 'inbox'
+                  ? 'bg-cyan-500 text-slate-950 hover:bg-cyan-400'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              Inbox
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setWorkspaceView('queue')}
+              className={`h-9 px-3 text-sm ${
+                workspaceView === 'queue'
+                  ? 'bg-cyan-500 text-slate-950 hover:bg-cyan-400'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              Lead Capture Queue
+            </Button>
+          </div>
+          {workspaceView === 'inbox' ? (
+            <Button
+              onClick={() => setComposerOpen((current) => !current)}
+              variant="outline"
+              className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+            >
+              <SquarePen className="mr-2 h-4 w-4" />
+              {composerOpen ? 'Hide Composer' : 'Compose'}
+            </Button>
+          ) : null}
           <Button
             onClick={handleRefresh}
             variant="outline"
@@ -575,7 +615,7 @@ export default function CommunicationsPage() {
         </div>
       </div>
 
-      {composerOpen && (
+      {workspaceView === 'inbox' && composerOpen && (
         <Card className="border-slate-800 bg-slate-900 text-slate-100">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Compose Outbound Email</CardTitle>
@@ -695,466 +735,186 @@ export default function CommunicationsPage() {
         </Card>
       )}
 
-      <Card className="border-slate-800 bg-slate-900 text-slate-100">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Filters</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-5">
-          <div className="space-y-2">
-            <Label htmlFor="communications-view">View</Label>
-            <Select value={view} onValueChange={setView}>
-              <SelectTrigger id="communications-view" className="border-slate-700 bg-slate-950">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
-                {VIEW_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="communications-delivery-state">Delivery State</Label>
-            <Select value={deliveryState} onValueChange={setDeliveryState}>
-              <SelectTrigger
-                id="communications-delivery-state"
-                className="border-slate-700 bg-slate-950"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
-                {DELIVERY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="communications-mailbox">Mailbox</Label>
-            <Select value={mailboxId} onValueChange={setMailboxId}>
-              <SelectTrigger id="communications-mailbox" className="border-slate-700 bg-slate-950">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
-                <SelectItem value="all">All mailboxes</SelectItem>
-                {mailboxOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="communications-entity-type">Linked Entity</Label>
-            <Select value={entityType} onValueChange={setEntityType}>
-              <SelectTrigger
-                id="communications-entity-type"
-                className="border-slate-700 bg-slate-950"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
-                {ENTITY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="communications-entity-id">Entity ID</Label>
-            <div className="relative">
-              <Link2 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
-              <Input
-                id="communications-entity-id"
-                value={entityId}
-                onChange={(event) => setEntityId(event.target.value)}
-                placeholder="Optional UUID"
-                disabled={entityType === 'all'}
-                className="border-slate-700 bg-slate-950 pl-9 text-slate-100 placeholder:text-slate-500"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[360px,1fr]">
-        <Card className="border-slate-800 bg-slate-900 text-slate-100">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-base">Threads</CardTitle>
-            <Badge variant="secondary" className="bg-slate-800 text-slate-200">
-              {threads.length}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loadingThreads ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="h-4 w-2/3 animate-pulse rounded bg-slate-800" />
-                    <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
-                    <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-slate-800" />
-                  </div>
-                ))}
+      {workspaceView === 'inbox' ? (
+        <>
+          <Card className="border-slate-800 bg-slate-900 text-slate-100">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Filters</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-5">
+              <div className="space-y-2">
+                <Label htmlFor="communications-view">View</Label>
+                <Select value={view} onValueChange={setView}>
+                  <SelectTrigger id="communications-view" className="border-slate-700 bg-slate-950">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                    {VIEW_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            ) : threadsError ? (
-              <div className="rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 h-4 w-4" />
-                  <span>{threadsError}</span>
+
+              <div className="space-y-2">
+                <Label htmlFor="communications-delivery-state">Delivery State</Label>
+                <Select value={deliveryState} onValueChange={setDeliveryState}>
+                  <SelectTrigger
+                    id="communications-delivery-state"
+                    className="border-slate-700 bg-slate-950"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                    {DELIVERY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="communications-mailbox">Mailbox</Label>
+                <Select value={mailboxId} onValueChange={setMailboxId}>
+                  <SelectTrigger
+                    id="communications-mailbox"
+                    className="border-slate-700 bg-slate-950"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                    <SelectItem value="all">All mailboxes</SelectItem>
+                    {mailboxOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="communications-entity-type">Linked Entity</Label>
+                <Select value={entityType} onValueChange={setEntityType}>
+                  <SelectTrigger
+                    id="communications-entity-type"
+                    className="border-slate-700 bg-slate-950"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                    {ENTITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="communications-entity-id">Entity ID</Label>
+                <div className="relative">
+                  <Link2 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                  <Input
+                    id="communications-entity-id"
+                    value={entityId}
+                    onChange={(event) => setEntityId(event.target.value)}
+                    placeholder="Optional UUID"
+                    disabled={entityType === 'all'}
+                    className="border-slate-700 bg-slate-950 pl-9 text-slate-100 placeholder:text-slate-500"
+                  />
                 </div>
               </div>
-            ) : threads.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
-                <Search className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                <p className="text-sm font-medium text-slate-200">
-                  No threads matched these filters.
-                </p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Try a different mailbox, entity, or view.
-                </p>
-              </div>
-            ) : (
-              threads.map((thread) => {
-                const isSelected = selectedThreadId === thread.id;
-                return (
-                  <button
-                    key={thread.id}
-                    type="button"
-                    onClick={() => setSelectedThreadId(thread.id)}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${
-                      isSelected
-                        ? 'border-cyan-400/60 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(34,211,238,0.18)]'
-                        : 'border-slate-800 bg-slate-950 hover:border-slate-700 hover:bg-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-100">
-                          {thread.subject || '(no subject)'}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-400">{thread.mailbox_id}</p>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 xl:grid-cols-[360px,1fr]">
+            <Card className="border-slate-800 bg-slate-900 text-slate-100">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <CardTitle className="text-base">Threads</CardTitle>
+                <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+                  {threads.length}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingThreads ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((item) => (
+                      <div
+                        key={item}
+                        className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                      >
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-slate-800" />
+                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
+                        <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-slate-800" />
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={`shrink-0 ${
-                          thread.status === 'unread'
-                            ? 'bg-amber-500/15 text-amber-200'
-                            : thread.status === 'archived'
-                              ? 'bg-violet-500/15 text-violet-200'
-                              : thread.status === 'closed'
-                                ? 'bg-slate-700 text-slate-200'
-                                : 'bg-emerald-500/15 text-emerald-200'
+                    ))}
+                  </div>
+                ) : threadsError ? (
+                  <div className="rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4" />
+                      <span>{threadsError}</span>
+                    </div>
+                  </div>
+                ) : threads.length === 0 ? (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
+                    <Search className="mx-auto mb-3 h-8 w-8 text-slate-500" />
+                    <p className="text-sm font-medium text-slate-200">
+                      No threads matched these filters.
+                    </p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Try a different mailbox, entity, or view.
+                    </p>
+                  </div>
+                ) : (
+                  threads.map((thread) => {
+                    const isSelected = selectedThreadId === thread.id;
+                    return (
+                      <button
+                        key={thread.id}
+                        type="button"
+                        onClick={() => setSelectedThreadId(thread.id)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          isSelected
+                            ? 'border-cyan-400/60 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(34,211,238,0.18)]'
+                            : 'border-slate-800 bg-slate-950 hover:border-slate-700 hover:bg-slate-900'
                         }`}
                       >
-                        {thread.status || 'open'}
-                      </Badge>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-400">
-                      {summarizeMessage(thread.latest_message)}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(thread.linked_entities || []).slice(0, 3).map((link) => (
-                        <Badge
-                          key={`${thread.id}-${link.entity_type}-${link.entity_id}`}
-                          variant="outline"
-                          className="border-slate-700 text-slate-300"
-                        >
-                          {link.entity_type}
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="mt-3 text-xs text-slate-500">
-                      Last message {formatDateTime(thread.last_message_at)}
-                    </p>
-                  </button>
-                );
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-800 bg-slate-900 text-slate-100">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Conversation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingMessages ? (
-              <div className="space-y-4">
-                {[1, 2].map((item) => (
-                  <div key={item} className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                    <div className="h-4 w-1/3 animate-pulse rounded bg-slate-800" />
-                    <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
-                    <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-slate-800" />
-                  </div>
-                ))}
-              </div>
-            ) : messagesError ? (
-              <div className="rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 h-4 w-4" />
-                  <span>{messagesError}</span>
-                </div>
-              </div>
-            ) : !selectedThread ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
-                <Inbox className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                <p className="text-sm font-medium text-slate-200">
-                  Select a thread to inspect the conversation.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-xl font-semibold">
-                        {selectedThread.subject || '(no subject)'}
-                      </h2>
-                      <p className="mt-2 text-sm text-slate-400">
-                        Mailbox {selectedThread.mailbox_id}
-                        {selectedThread.mailbox_address
-                          ? ` · ${selectedThread.mailbox_address}`
-                          : ''}
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="bg-slate-800 text-slate-200">
-                      {selectedThread.status || 'open'}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {stateValue(selectedThread.state, 'delivery')?.state && (
-                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-200">
-                        <Truck className="mr-1 h-3 w-3" />
-                        Delivery: {stateValue(selectedThread.state, 'delivery').state}
-                      </Badge>
-                    )}
-                    {stateValue(selectedThread.state, 'replay')?.replay_job_id && (
-                      <Badge variant="outline" className="border-amber-500/30 text-amber-200">
-                        <RotateCcw className="mr-1 h-3 w-3" />
-                        Replay queued
-                      </Badge>
-                    )}
-                    {stateValue(selectedThread.state, 'meeting')?.reply_state && (
-                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
-                        <CalendarCheck2 className="mr-1 h-3 w-3" />
-                        Meeting reply: {stateValue(selectedThread.state, 'meeting').reply_state}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleReplyToThread}
-                      className="border-cyan-500/30 bg-transparent text-cyan-200 hover:bg-cyan-500/10"
-                    >
-                      <Send className="mr-2 h-4 w-4" />
-                      Reply
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleReplayThread}
-                      disabled={replaySubmitting}
-                      className="border-amber-500/30 bg-transparent text-amber-200 hover:bg-amber-500/10"
-                    >
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      {replaySubmitting ? 'Queueing Replay...' : 'Replay Thread'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        handleThreadStatusUpdate(
-                          selectedThread.status === 'unread' ? 'open' : 'unread',
-                        )
-                      }
-                      disabled={statusSubmitting}
-                      className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
-                    >
-                      {statusSubmitting && selectedThread.status === 'unread'
-                        ? 'Marking Read...'
-                        : statusSubmitting
-                          ? 'Marking Unread...'
-                          : selectedThread.status === 'unread'
-                            ? 'Mark Read'
-                            : 'Mark Unread'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        handleThreadStatusUpdate(
-                          selectedThread.status === 'closed' ? 'open' : 'closed',
-                        )
-                      }
-                      disabled={statusSubmitting}
-                      className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
-                    >
-                      {statusSubmitting && selectedThread.status === 'closed'
-                        ? 'Reopening...'
-                        : statusSubmitting
-                          ? 'Closing...'
-                          : selectedThread.status === 'closed'
-                            ? 'Reopen Thread'
-                            : 'Close Thread'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        handleThreadStatusUpdate(
-                          selectedThread.status === 'archived' ? 'open' : 'archived',
-                        )
-                      }
-                      disabled={statusSubmitting}
-                      className="border-violet-500/30 bg-transparent text-violet-200 hover:bg-violet-500/10"
-                    >
-                      <Archive className="mr-2 h-4 w-4" />
-                      {statusSubmitting && selectedThread.status === 'archived'
-                        ? 'Restoring...'
-                        : statusSubmitting
-                          ? 'Archiving...'
-                          : selectedThread.status === 'archived'
-                            ? 'Restore Thread'
-                            : 'Archive Thread'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleThreadPurge}
-                      disabled={purgeSubmitting}
-                      className="border-red-500/30 bg-transparent text-red-200 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      {purgeSubmitting ? 'Purging...' : 'Purge Thread'}
-                    </Button>
-                    {replayError ? (
-                      <span className="text-sm text-red-300">{replayError}</span>
-                    ) : stateValue(selectedThread.state, 'replay')?.replay_job_id ? (
-                      <span className="text-sm text-slate-400">
-                        Latest replay job {stateValue(selectedThread.state, 'replay').replay_job_id}
-                      </span>
-                    ) : null}
-                    {statusError ? (
-                      <span className="text-sm text-red-300">{statusError}</span>
-                    ) : null}
-                    {purgeError ? <span className="text-sm text-red-300">{purgeError}</span> : null}
-                  </div>
-
-                  {(selectedThread.linked_entities || []).length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {selectedThread.linked_entities.map((link) => {
-                        const page = ENTITY_PAGE[link.entity_type];
-                        return page ? (
-                          <Link
-                            key={`${link.entity_type}-${link.entity_id}`}
-                            to={createPageUrl(`${page}?id=${link.entity_id}`)}
-                            className="inline-flex"
-                          >
-                            <Badge
-                              variant="outline"
-                              className="cursor-pointer border-cyan-400/30 text-cyan-200 hover:bg-cyan-400/10"
-                            >
-                              {link.entity_type}: {link.entity_id.slice(0, 8)}
-                            </Badge>
-                          </Link>
-                        ) : (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-100">
+                              {thread.subject || '(no subject)'}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">{thread.mailbox_id}</p>
+                          </div>
                           <Badge
-                            key={`${link.entity_type}-${link.entity_id}`}
-                            variant="outline"
-                            className="border-slate-700 text-slate-300"
+                            variant="secondary"
+                            className={`shrink-0 ${
+                              thread.status === 'unread'
+                                ? 'bg-amber-500/15 text-amber-200'
+                                : thread.status === 'archived'
+                                  ? 'bg-violet-500/15 text-violet-200'
+                                  : thread.status === 'closed'
+                                    ? 'bg-slate-700 text-slate-200'
+                                    : 'bg-emerald-500/15 text-emerald-200'
+                            }`}
                           >
-                            {link.entity_type}: {link.entity_id.slice(0, 8)}
+                            {thread.status || 'open'}
                           </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {(stateValue(selectedThread.state, 'events') || []).length > 0 && (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-                    <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      Recent Activity
-                    </h3>
-                    <div className="mt-4 space-y-3">
-                      {stateValue(selectedThread.state, 'events').map((event, index) => (
-                        <div
-                          key={`${event.type || 'event'}-${event.occurred_at || index}-${index}`}
-                          className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm font-medium text-slate-100">
-                              {formatEventLabel(event.type)}
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              {formatDateTime(event.occurred_at)}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
-                            {event.delivery_state ? (
-                              <span>Delivery: {event.delivery_state}</span>
-                            ) : null}
-                            {event.reply_state ? <span>Reply: {event.reply_state}</span> : null}
-                            {event.replay_job_id ? (
-                              <span>Replay Job: {event.replay_job_id}</span>
-                            ) : null}
-                            {event.actor ? <span>By: {event.actor}</span> : null}
-                            {event.review_required ? <span>Review required</span> : null}
-                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`rounded-2xl border p-5 ${
-                        message.direction === 'outbound'
-                          ? 'border-cyan-500/30 bg-cyan-500/10'
-                          : 'border-slate-800 bg-slate-950'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-100">
-                            {message.direction === 'outbound'
-                              ? 'Outbound message'
-                              : message.sender_name || message.sender_email || 'Inbound message'}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {formatDateTime(message.received_at)}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="border-slate-700 text-slate-300">
-                          {message.direction}
-                        </Badge>
-                      </div>
-                      <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">
-                        {formatMessageBody(message)}
-                      </p>
-                      {(message.linked_entities || []).length > 0 && (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {message.linked_entities.map((link) => (
+                        <p className="mt-3 line-clamp-2 text-sm text-slate-400">
+                          {summarizeMessage(thread.latest_message)}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(thread.linked_entities || []).slice(0, 3).map((link) => (
                             <Badge
-                              key={`${message.id}-${link.entity_type}-${link.entity_id}`}
+                              key={`${thread.id}-${link.entity_type}-${link.entity_id}`}
                               variant="outline"
                               className="border-slate-700 text-slate-300"
                             >
@@ -1162,30 +922,370 @@ export default function CommunicationsPage() {
                             </Badge>
                           ))}
                         </div>
-                      )}
+                        <p className="mt-3 text-xs text-slate-500">
+                          Last message {formatDateTime(thread.last_message_at)}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-800 bg-slate-900 text-slate-100">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Conversation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loadingMessages ? (
+                  <div className="space-y-4">
+                    {[1, 2].map((item) => (
+                      <div
+                        key={item}
+                        className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
+                      >
+                        <div className="h-4 w-1/3 animate-pulse rounded bg-slate-800" />
+                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
+                        <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-slate-800" />
+                      </div>
+                    ))}
+                  </div>
+                ) : messagesError ? (
+                  <div className="rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4" />
+                      <span>{messagesError}</span>
+                    </div>
+                  </div>
+                ) : !selectedThread ? (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
+                    <Inbox className="mx-auto mb-3 h-8 w-8 text-slate-500" />
+                    <p className="text-sm font-medium text-slate-200">
+                      Select a thread to inspect the conversation.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h2 className="text-xl font-semibold">
+                            {selectedThread.subject || '(no subject)'}
+                          </h2>
+                          <p className="mt-2 text-sm text-slate-400">
+                            Mailbox {selectedThread.mailbox_id}
+                            {selectedThread.mailbox_address
+                              ? ` · ${selectedThread.mailbox_address}`
+                              : ''}
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+                          {selectedThread.status || 'open'}
+                        </Badge>
+                      </div>
+
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {stateValue(message.state, 'delivery')?.state && (
+                        {stateValue(selectedThread.state, 'delivery')?.state && (
                           <Badge
                             variant="outline"
                             className="border-emerald-500/30 text-emerald-200"
                           >
-                            Delivery: {stateValue(message.state, 'delivery').state}
+                            <Truck className="mr-1 h-3 w-3" />
+                            Delivery: {stateValue(selectedThread.state, 'delivery').state}
                           </Badge>
                         )}
-                        {stateValue(message.state, 'meeting')?.reply_state && (
+                        {stateValue(selectedThread.state, 'replay')?.replay_job_id && (
+                          <Badge variant="outline" className="border-amber-500/30 text-amber-200">
+                            <RotateCcw className="mr-1 h-3 w-3" />
+                            Replay queued
+                          </Badge>
+                        )}
+                        {stateValue(selectedThread.state, 'meeting')?.reply_state && (
                           <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
-                            Meeting: {stateValue(message.state, 'meeting').reply_state}
+                            <CalendarCheck2 className="mr-1 h-3 w-3" />
+                            Meeting reply: {stateValue(selectedThread.state, 'meeting').reply_state}
                           </Badge>
                         )}
                       </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleReplyToThread}
+                          className="border-cyan-500/30 bg-transparent text-cyan-200 hover:bg-cyan-500/10"
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Reply
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleReplayThread}
+                          disabled={replaySubmitting}
+                          className="border-amber-500/30 bg-transparent text-amber-200 hover:bg-amber-500/10"
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          {replaySubmitting ? 'Queueing Replay...' : 'Replay Thread'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            handleThreadStatusUpdate(
+                              selectedThread.status === 'unread' ? 'open' : 'unread',
+                            )
+                          }
+                          disabled={statusSubmitting}
+                          className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                        >
+                          {statusSubmitting && selectedThread.status === 'unread'
+                            ? 'Marking Read...'
+                            : statusSubmitting
+                              ? 'Marking Unread...'
+                              : selectedThread.status === 'unread'
+                                ? 'Mark Read'
+                                : 'Mark Unread'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            handleThreadStatusUpdate(
+                              selectedThread.status === 'closed' ? 'open' : 'closed',
+                            )
+                          }
+                          disabled={statusSubmitting}
+                          className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                        >
+                          {statusSubmitting && selectedThread.status === 'closed'
+                            ? 'Reopening...'
+                            : statusSubmitting
+                              ? 'Closing...'
+                              : selectedThread.status === 'closed'
+                                ? 'Reopen Thread'
+                                : 'Close Thread'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            handleThreadStatusUpdate(
+                              selectedThread.status === 'archived' ? 'open' : 'archived',
+                            )
+                          }
+                          disabled={statusSubmitting}
+                          className="border-violet-500/30 bg-transparent text-violet-200 hover:bg-violet-500/10"
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
+                          {statusSubmitting && selectedThread.status === 'archived'
+                            ? 'Restoring...'
+                            : statusSubmitting
+                              ? 'Archiving...'
+                              : selectedThread.status === 'archived'
+                                ? 'Restore Thread'
+                                : 'Archive Thread'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleThreadPurge}
+                          disabled={purgeSubmitting}
+                          className="border-red-500/30 bg-transparent text-red-200 hover:bg-red-500/10"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {purgeSubmitting ? 'Purging...' : 'Purge Thread'}
+                        </Button>
+                        {replayError ? (
+                          <span className="text-sm text-red-300">{replayError}</span>
+                        ) : stateValue(selectedThread.state, 'replay')?.replay_job_id ? (
+                          <span className="text-sm text-slate-400">
+                            Latest replay job{' '}
+                            {stateValue(selectedThread.state, 'replay').replay_job_id}
+                          </span>
+                        ) : null}
+                        {statusError ? (
+                          <span className="text-sm text-red-300">{statusError}</span>
+                        ) : null}
+                        {purgeError ? (
+                          <span className="text-sm text-red-300">{purgeError}</span>
+                        ) : null}
+                      </div>
+
+                      {(selectedThread.linked_entities || []).length > 0 && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {selectedThread.linked_entities.map((link) => {
+                            const page = ENTITY_PAGE[link.entity_type];
+                            return page ? (
+                              <Link
+                                key={`${link.entity_type}-${link.entity_id}`}
+                                to={createPageUrl(`${page}?id=${link.entity_id}`)}
+                                className="inline-flex"
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className="cursor-pointer border-cyan-400/30 text-cyan-200 hover:bg-cyan-400/10"
+                                >
+                                  {link.entity_type}: {link.entity_id.slice(0, 8)}
+                                </Badge>
+                              </Link>
+                            ) : (
+                              <Badge
+                                key={`${link.entity_type}-${link.entity_id}`}
+                                variant="outline"
+                                className="border-slate-700 text-slate-300"
+                              >
+                                {link.entity_type}: {link.entity_id.slice(0, 8)}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {(selectedThread.linked_activities || []).length > 0 && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {selectedThread.linked_activities.map((activity) => (
+                            <Link
+                              key={`thread-activity-${activity.id}`}
+                              to={createPageUrl(`Activities?id=${activity.id}`)}
+                              className="inline-flex"
+                            >
+                              <Badge
+                                variant="outline"
+                                className="cursor-pointer border-amber-500/30 text-amber-200 hover:bg-amber-500/10"
+                              >
+                                Activity: {renderActivityLabel(activity)}
+                              </Badge>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+                    {(stateValue(selectedThread.state, 'events') || []).length > 0 && (
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+                        <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          Recent Activity
+                        </h3>
+                        <div className="mt-4 space-y-3">
+                          {stateValue(selectedThread.state, 'events').map((event, index) => (
+                            <div
+                              key={`${event.type || 'event'}-${event.occurred_at || index}-${index}`}
+                              className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-sm font-medium text-slate-100">
+                                  {formatEventLabel(event.type)}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {formatDateTime(event.occurred_at)}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+                                {event.delivery_state ? (
+                                  <span>Delivery: {event.delivery_state}</span>
+                                ) : null}
+                                {event.reply_state ? <span>Reply: {event.reply_state}</span> : null}
+                                {event.replay_job_id ? (
+                                  <span>Replay Job: {event.replay_job_id}</span>
+                                ) : null}
+                                {event.actor ? <span>By: {event.actor}</span> : null}
+                                {event.review_required ? <span>Review required</span> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      {messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`rounded-2xl border p-5 ${
+                            message.direction === 'outbound'
+                              ? 'border-cyan-500/30 bg-cyan-500/10'
+                              : 'border-slate-800 bg-slate-950'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-100">
+                                {message.direction === 'outbound'
+                                  ? 'Outbound message'
+                                  : message.sender_name ||
+                                    message.sender_email ||
+                                    'Inbound message'}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {formatDateTime(message.received_at)}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="border-slate-700 text-slate-300">
+                              {message.direction}
+                            </Badge>
+                          </div>
+                          <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">
+                            {formatMessageBody(message)}
+                          </p>
+                          {(message.linked_entities || []).length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {message.linked_entities.map((link) => (
+                                <Badge
+                                  key={`${message.id}-${link.entity_type}-${link.entity_id}`}
+                                  variant="outline"
+                                  className="border-slate-700 text-slate-300"
+                                >
+                                  {link.entity_type}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          {(message.linked_activities || []).length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {message.linked_activities.map((activity) => (
+                                <Link
+                                  key={`${message.id}-activity-${activity.id}`}
+                                  to={createPageUrl(`Activities?id=${activity.id}`)}
+                                  className="inline-flex"
+                                >
+                                  <Badge
+                                    variant="outline"
+                                    className="cursor-pointer border-amber-500/30 text-amber-200 hover:bg-amber-500/10"
+                                  >
+                                    Activity: {renderActivityLabel(activity)}
+                                  </Badge>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {stateValue(message.state, 'delivery')?.state && (
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-500/30 text-emerald-200"
+                              >
+                                Delivery: {stateValue(message.state, 'delivery').state}
+                              </Badge>
+                            )}
+                            {stateValue(message.state, 'meeting')?.reply_state && (
+                              <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                                Meeting: {stateValue(message.state, 'meeting').reply_state}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      ) : (
+        <LeadCaptureQueueView tenantId={effectiveTenantId} refreshToken={refreshNonce} />
+      )}
     </div>
   );
 }

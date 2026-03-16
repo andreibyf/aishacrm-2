@@ -24,6 +24,15 @@ import { Calendar as CalendarIcon, Mail, Phone, Loader2, FileText } from 'lucide
 import { toast } from 'sonner';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
+function formatGenerationTimestamp(value) {
+  if (!value) return 'Not requested yet';
+  try {
+    return format(new Date(value), 'MMM d, yyyy h:mm a');
+  } catch {
+    return value;
+  }
+}
+
 // Helper to generate time options with 15-minute increments
 const generateTimeOptions = () => {
   const options = [];
@@ -70,6 +79,10 @@ export default function ActivityForm({
   const [notes, setNotes] = useState([]);
   const [newNote, setNewNote] = useState('');
   const [loadingNotes, setLoadingNotes] = useState(false);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [aiEmailGenerationState, setAiEmailGenerationState] = useState(
+    activity?.metadata?.ai_email_generation || null,
+  );
 
   // Initialize form data using a function, memoized with useCallback
   const getInitialFormData = useCallback(() => {
@@ -174,6 +187,10 @@ export default function ActivityForm({
   useEffect(() => {
     setFormData(getInitialFormData());
   }, [activity, relatedTo, relatedId, getInitialFormData]);
+
+  useEffect(() => {
+    setAiEmailGenerationState(activity?.metadata?.ai_email_generation || null);
+  }, [activity]);
 
   // Remove local User.me fetch; rely on global context
 
@@ -391,6 +408,33 @@ export default function ActivityForm({
     } catch (error) {
       console.error('Failed to add note:', error);
       toast.error('Failed to add note');
+    }
+  };
+
+  const handleGenerateAiEmailDraft = async () => {
+    if (!activity?.id) {
+      toast.error('Save the scheduled AI email activity before generating a draft.');
+      return;
+    }
+
+    setIsGeneratingDraft(true);
+    try {
+      const result = await Activity.generateAiEmailDraft(activity.id, tenantId);
+      const nextGenerationState = result?.activity?.metadata?.ai_email_generation || null;
+      setAiEmailGenerationState(nextGenerationState);
+
+      if (result?.generation_result?.status === 'pending_approval') {
+        toast.success('AI email draft sent for approval.');
+      } else if (result?.generation_result?.activity_id) {
+        toast.success('AI email draft generated and queued for delivery.');
+      } else {
+        toast.success('AI email draft generated.');
+      }
+    } catch (error) {
+      console.error('Failed to generate AI email draft:', error);
+      toast.error(error?.message || 'Failed to generate AI email draft');
+    } finally {
+      setIsGeneratingDraft(false);
     }
   };
 
@@ -1114,6 +1158,70 @@ export default function ActivityForm({
                 rows={4}
                 required
               />
+            </div>
+            <div className="rounded-lg border border-slate-600 bg-slate-800/70 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-200">Draft Generation</p>
+                  <p className="text-xs text-slate-400">
+                    Generate through the existing C.A.R.E. approval and send path.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleGenerateAiEmailDraft}
+                  disabled={!activity?.id || isGeneratingDraft}
+                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                  data-testid="activity-generate-ai-email-button"
+                >
+                  {isGeneratingDraft ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 mr-2" />
+                      Generate Draft
+                    </>
+                  )}
+                </Button>
+              </div>
+              {!activity?.id && (
+                <p className="text-xs text-amber-300">
+                  Save this activity first so the draft can be tracked back to it.
+                </p>
+              )}
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                <div>
+                  <span className="text-slate-400">Status:</span>{' '}
+                  <span className="text-slate-200">
+                    {aiEmailGenerationState?.status || 'Not requested'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Recipient:</span>{' '}
+                  <span className="text-slate-200">
+                    {aiEmailGenerationState?.recipient_email || 'Not resolved yet'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Requested:</span>{' '}
+                  <span className="text-slate-200">
+                    {formatGenerationTimestamp(aiEmailGenerationState?.requested_at)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Result:</span>{' '}
+                  <span className="text-slate-200">
+                    {aiEmailGenerationState?.suggestion_id
+                      ? `Approval suggestion ${aiEmailGenerationState.suggestion_id}`
+                      : aiEmailGenerationState?.generated_activity_id
+                        ? `Queued email ${aiEmailGenerationState.generated_activity_id}`
+                        : 'No draft generated yet'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}
