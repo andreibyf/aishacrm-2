@@ -127,22 +127,29 @@ function createLeadCaptureSupabaseStub({ duplicate = null, insertError = null } 
 
   const queueTable = {
     select() {
+      this._eqFilters = {};
       return this;
     },
-    eq(field) {
-      this._lastField = field;
+    eq(field, value) {
+      this._eqFilters = this._eqFilters || {};
+      this._eqFilters[field] = value;
       return this;
     },
     order() {
       return this;
     },
     limit() {
+      const filters = this._eqFilters || {};
       const matches =
         duplicate &&
-        ((duplicate.scope === 'thread' && this._lastField === 'thread_id') ||
-          (duplicate.scope === 'message' && this._lastField === 'message_id') ||
-          (duplicate.scope === 'sender' && this._lastField === 'sender_email') ||
-          (duplicate.scope === 'domain' && this._lastField === 'sender_domain'))
+        ((duplicate.scope === 'thread' &&
+          filters.thread_id &&
+          filters.sender_email &&
+          filters.thread_id === duplicate.threadId &&
+          filters.sender_email === duplicate.senderEmail) ||
+          (duplicate.scope === 'message' && filters.message_id) ||
+          (duplicate.scope === 'sender' && filters.sender_email) ||
+          (duplicate.scope === 'domain' && filters.sender_domain))
           ? [duplicate.row]
           : [];
       return Promise.resolve({ data: matches, error: null });
@@ -227,6 +234,37 @@ test('queueInboundLeadCapture suppresses duplicates for matching sender history'
   assert.equal(result.status, 'duplicate_suppressed');
   assert.equal(result.queue_item_id, 'queue-existing');
   assert.equal(supabase.inserts.queue, null);
+});
+
+test('queueInboundLeadCapture does not suppress a different sender on the same thread', async () => {
+  const supabase = createLeadCaptureSupabaseStub({
+    duplicate: {
+      scope: 'thread',
+      threadId: 'thread-001',
+      senderEmail: 'first-prospect@example.com',
+      row: { id: 'queue-existing', reason: 'unknown_sender' },
+    },
+  });
+
+  const result = await queueInboundLeadCapture(
+    {
+      mailbox_id: 'owner-primary',
+      mailbox_address: 'owner@example.com',
+      payload: {
+        subject: 'Re: Intro thread',
+        from: { email: 'second-prospect@example.com', name: 'Second Prospect' },
+      },
+    },
+    { id: 'tenant-1' },
+    { thread: { id: 'thread-001' }, message: { id: 'message-002' } },
+    [],
+    { supabase },
+  );
+
+  assert.equal(result.status, 'queued_for_review');
+  assert.equal(result.queue_item_id, 'queue-001');
+  assert.equal(supabase.inserts.queue[0].thread_id, 'thread-001');
+  assert.equal(supabase.inserts.queue[0].sender_email, 'second-prospect@example.com');
 });
 
 test('queueInboundLeadCapture skips review queue when opportunity is already linked', async () => {

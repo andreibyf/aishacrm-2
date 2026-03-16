@@ -648,13 +648,14 @@ async function findExistingLeadCaptureQueueEntry(
     );
   }
 
-  if (threadId) {
+  if (threadId && senderEmail) {
     lookups.push(
       supabase
         .from('communications_lead_capture_queue')
         .select('id, reason')
         .eq('tenant_id', tenantId)
         .eq('thread_id', threadId)
+        .eq('sender_email', senderEmail)
         .order('created_at', { ascending: false })
         .limit(1),
     );
