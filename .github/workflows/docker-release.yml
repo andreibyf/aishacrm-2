@@ -537,7 +537,7 @@ jobs:
             phase "Recreating main production services"
             run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms redpanda telemetry-sidecar office-viz
             phase "Waiting for aisha-comms to become healthy"
-            run_timed 3m sh -c '
+            run_timed 4m sh -c '
               for i in $(seq 1 36); do
                 STATUS=$(docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" aishacrm-comms 2>/dev/null || true)
                 if [ "$STATUS" = "healthy" ]; then
