@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Enforce Human Email Style Guardrails",
+  "description": "Define and enforce guardrails that keep AI-generated email concise, human-sounding, and reviewable.",
+  "labels": ["ai", "email", "guardrails", "quality"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

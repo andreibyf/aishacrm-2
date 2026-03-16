@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { listCommunicationsThreads } from '../../services/communicationsReadService.js';
+import {
+  getCommunicationsThreadMessages,
+  listCommunicationsThreads,
+} from '../../services/communicationsReadService.js';
 
 function createQueryResult(data, error = null, count = null) {
   return { data, error, count };
@@ -172,4 +175,137 @@ test('listCommunicationsThreads paginates after delivery_state filtering', async
   assert.equal(result.threads.length, 1);
   assert.equal(result.threads[0].id, 'thread-delivered');
   assert.equal(result.threads[0].state.delivery.state, 'delivered');
+});
+
+function createThreadMessagesSupabaseStub() {
+  const threadRow = {
+    id: 'thread-001',
+    tenant_id: 'tenant-1',
+    mailbox_id: 'owner-primary',
+    mailbox_address: 'aisha@aishacrm.com',
+    subject: 'Thread',
+    normalized_subject: 'thread',
+    participants: [],
+    status: 'open',
+    first_message_at: '2026-03-15T10:00:00.000Z',
+    last_message_at: '2026-03-15T12:00:00.000Z',
+    metadata: {},
+    created_at: '2026-03-15T10:00:00.000Z',
+    updated_at: '2026-03-15T12:00:00.000Z',
+  };
+
+  const pageMessages = [
+    {
+      id: 'message-older',
+      thread_id: 'thread-001',
+      internet_message_id: '<older@example.com>',
+      direction: 'inbound',
+      provider_cursor: null,
+      subject: 'Thread',
+      sender_email: 'prospect@example.com',
+      sender_name: 'Prospect',
+      recipients: [],
+      cc: [],
+      bcc: [],
+      received_at: '2026-03-15T10:00:00.000Z',
+      text_body: 'Older',
+      html_body: '',
+      headers: {},
+      activity_id: null,
+      metadata: {
+        delivery: { state: 'queued' },
+      },
+      created_at: '2026-03-15T10:00:00.000Z',
+      updated_at: '2026-03-15T10:00:00.000Z',
+    },
+  ];
+
+  const latestMessage = {
+    id: 'message-latest',
+    thread_id: 'thread-001',
+    internet_message_id: '<latest@example.com>',
+    direction: 'outbound',
+    provider_cursor: null,
+    subject: 'Thread',
+    sender_email: 'aisha@aishacrm.com',
+    sender_name: 'AiSHA',
+    recipients: [],
+    cc: [],
+    bcc: [],
+    received_at: '2026-03-15T12:00:00.000Z',
+    text_body: 'Latest',
+    html_body: '',
+    headers: {},
+    activity_id: null,
+    metadata: {
+      delivery: { state: 'delivered' },
+    },
+    created_at: '2026-03-15T12:00:00.000Z',
+    updated_at: '2026-03-15T12:00:00.000Z',
+  };
+
+  return {
+    from(table) {
+      const state = { table, filters: [], orderAscending: null };
+      return {
+        select() {
+          return this;
+        },
+        eq(field, value) {
+          state.filters.push({ field, value });
+          return this;
+        },
+        order(_field, options) {
+          state.orderAscending = options?.ascending;
+          return this;
+        },
+        range() {
+          return Promise.resolve({ data: pageMessages, error: null });
+        },
+        limit(limitValue) {
+          if (
+            table === 'communications_messages' &&
+            state.orderAscending === false &&
+            limitValue === 1
+          ) {
+            return Promise.resolve({ data: [latestMessage], error: null });
+          }
+          return Promise.resolve({ data: [], error: null });
+        },
+        maybeSingle() {
+          if (table === 'communications_threads') {
+            return Promise.resolve({ data: threadRow, error: null });
+          }
+          return Promise.resolve({ data: null, error: null });
+        },
+        then(resolve, reject) {
+          try {
+            if (table === 'communications_entity_links') {
+              return Promise.resolve(resolve({ data: [], error: null }));
+            }
+            throw new Error(`Unexpected then() call for table ${table}`);
+          } catch (error) {
+            if (reject) return Promise.resolve(reject(error));
+            throw error;
+          }
+        },
+      };
+    },
+  };
+}
+
+test('getCommunicationsThreadMessages derives thread state from the true latest message', async () => {
+  const result = await getCommunicationsThreadMessages(
+    {
+      tenantId: 'tenant-1',
+      threadId: 'thread-001',
+      limit: 1,
+      offset: 0,
+    },
+    { supabase: createThreadMessagesSupabaseStub() },
+  );
+
+  assert.equal(result.thread.state.delivery.state, 'delivered');
+  assert.equal(result.messages.length, 1);
+  assert.equal(result.messages[0].state.delivery.state, 'queued');
 });

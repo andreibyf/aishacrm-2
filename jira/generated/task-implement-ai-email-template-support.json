@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement AI Email Template Support",
+  "description": "Support reusable AI email templates that combine structured template input with live CRM and thread context.",
+  "labels": ["ai", "email", "templates", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

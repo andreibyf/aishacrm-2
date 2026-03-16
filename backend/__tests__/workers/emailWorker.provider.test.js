@@ -212,6 +212,50 @@ describe('email worker provider adapter delivery', () => {
     assert.match(notifications[0].title, /No communications provider configured/);
   });
 
+  it('marks queued email failed when mailbox resolution throws before send', async () => {
+    const activityUpdates = [];
+    const notifications = [];
+
+    setEmailWorkerDependenciesForTests({
+      async resolveProviderConnection() {
+        const error = new Error(
+          'mailboxId or mailboxAddress is required to resolve communications mailbox connections',
+        );
+        error.code = 'communications_provider_mailbox_required';
+        throw error;
+      },
+      async markActivity(activityId, status, metadata) {
+        activityUpdates.push({ activityId, status, metadata });
+      },
+      async createNotification(payload) {
+        notifications.push(payload);
+      },
+      async postStatusWebhook() {},
+    });
+
+    await processActivity({
+      id: 'activity-throwing-resolution',
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      subject: 'Follow up',
+      body: 'Checking in after our meeting.',
+      metadata: {
+        email: {
+          to: 'prospect@example.com',
+          subject: 'Follow up',
+        },
+        communications: {},
+      },
+    });
+
+    assert.equal(activityUpdates.length, 1);
+    assert.equal(activityUpdates[0].status, 'queued');
+    assert.match(
+      activityUpdates[0].metadata.delivery.error,
+      /mailboxId or mailboxAddress is required/i,
+    );
+    assert.equal(notifications.length, 0);
+  });
+
   it('generates and sends an ICS invite for scheduled meeting activities', async () => {
     const activityUpdates = [];
     const webhookEvents = [];

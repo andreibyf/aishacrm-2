@@ -9,7 +9,7 @@
  *  5. Team list rendering
  *  6. Create team form
  *  7. Team expand → member list
- *  8. Add member flow
+ *  8. Expanded team actions and member management
  *  9. Role dropdown uses custom labels
  * 10. Info note uses custom labels
  * 11. Error / empty states

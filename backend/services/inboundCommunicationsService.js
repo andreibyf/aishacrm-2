@@ -4,6 +4,7 @@ import { executeBraidTool, TOOL_ACCESS_TOKEN } from '../lib/braidIntegration-v2.
 import {
   attachActivityToCommunicationsRecords,
   persistInboundThreadAndMessage,
+  queueInboundLeadCapture,
   resolveInboundEntityLinks,
 } from './communicationsPersistenceService.js';
 
@@ -11,6 +12,7 @@ let inboundToolExecutor = executeBraidTool;
 let inboundTenantResolver = resolveCanonicalTenant;
 let inboundThreadMessagePersister = persistInboundThreadAndMessage;
 let inboundEntityLinkResolver = resolveInboundEntityLinks;
+let inboundLeadCaptureQueuer = queueInboundLeadCapture;
 let inboundActivityAttacher = attachActivityToCommunicationsRecords;
 
 export async function handleInboundCommunicationsEvent(request) {
@@ -18,6 +20,12 @@ export async function handleInboundCommunicationsEvent(request) {
   const resolvedTenant = await resolveInboundTenant(request);
   const persisted = await inboundThreadMessagePersister(request, resolvedTenant);
   const linkedEntities = await inboundEntityLinkResolver(request, resolvedTenant, persisted);
+  const leadCapture = await inboundLeadCaptureQueuer(
+    request,
+    resolvedTenant,
+    persisted,
+    linkedEntities,
+  );
   const activity = await orchestrateInboundCommunication(
     request,
     resolvedTenant,
@@ -47,9 +55,9 @@ export async function handleInboundCommunicationsEvent(request) {
       entity_id: entry.id,
       source: entry.source,
     })),
-    lead_capture_status: linkedEntities.some((entry) => entry.type === 'lead')
-      ? 'linked_existing_lead'
-      : 'pending_evaluation',
+    lead_capture_status: leadCapture?.status || 'pending_evaluation',
+    lead_capture_queue_id: leadCapture?.queue_item_id || null,
+    lead_capture_reason: leadCapture?.reason || null,
     processing_status: 'accepted',
     accepted_at: new Date().toISOString(),
   };
@@ -194,6 +202,7 @@ export function setInboundCommunicationsDependenciesForTests(overrides = null) {
   inboundThreadMessagePersister =
     overrides?.persistInboundThreadAndMessage || persistInboundThreadAndMessage;
   inboundEntityLinkResolver = overrides?.resolveInboundEntityLinks || resolveInboundEntityLinks;
+  inboundLeadCaptureQueuer = overrides?.queueInboundLeadCapture || queueInboundLeadCapture;
   inboundActivityAttacher =
     overrides?.attachActivityToCommunicationsRecords || attachActivityToCommunicationsRecords;
 }

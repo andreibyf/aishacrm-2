@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Chat-Driven Email Drafting",
+  "description": "Allow AiSHA Chat to draft outbound emails using tenant-scoped CRM context and existing communications history.",
+  "labels": ["ai", "email", "chat", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Scheduled AI Email Drafting",
+  "description": "Connect scheduled_ai_email activities and ai_email_config into the AI email drafting pipeline.",
+  "labels": ["ai", "email", "activities", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

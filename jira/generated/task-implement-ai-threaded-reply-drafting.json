@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement AI Threaded Reply Drafting",
+  "description": "Generate reply drafts from existing communications threads using canonical message history and linked CRM context.",
+  "labels": ["ai", "email", "threads", "replies", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

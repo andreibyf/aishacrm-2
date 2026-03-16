@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Story",
+  "summary": "AI Email Intelligence Layer",
+  "description": "Provide one coherent AI email drafting capability across Activities, Chat, Tasks, Notes, and threaded reply flows while preserving C.A.R.E. control points.",
+  "labels": ["ai", "email", "drafting", "care"],
+  "epic": "AI Email Intelligence Layer"
+}

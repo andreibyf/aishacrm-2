@@ -6,6 +6,12 @@ function normalizeEmail(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
+function extractDomain(email) {
+  const normalized = normalizeEmail(email);
+  const [, domain = ''] = normalized.split('@');
+  return domain;
+}
+
 function normalizeSubject(subject) {
   if (typeof subject !== 'string') return '';
   return subject
@@ -619,6 +625,80 @@ function dedupeEntityLinks(links) {
   return deduped;
 }
 
+function shouldQueueLeadCapture(links = []) {
+  return !links.some((link) => ['lead', 'contact', 'account', 'opportunity'].includes(link?.type));
+}
+
+async function findExistingLeadCaptureQueueEntry(
+  tenantId,
+  { senderEmail, senderDomain, normalizedSubject, threadId, messageId },
+  { supabase },
+) {
+  const lookups = [];
+
+  if (messageId) {
+    lookups.push(
+      supabase
+        .from('communications_lead_capture_queue')
+        .select('id, reason')
+        .eq('tenant_id', tenantId)
+        .eq('message_id', messageId)
+        .order('created_at', { ascending: false })
+        .limit(1),
+    );
+  }
+
+  if (threadId && senderEmail) {
+    lookups.push(
+      supabase
+        .from('communications_lead_capture_queue')
+        .select('id, reason')
+        .eq('tenant_id', tenantId)
+        .eq('thread_id', threadId)
+        .eq('sender_email', senderEmail)
+        .order('created_at', { ascending: false })
+        .limit(1),
+    );
+  }
+
+  if (senderEmail) {
+    lookups.push(
+      supabase
+        .from('communications_lead_capture_queue')
+        .select('id, reason')
+        .eq('tenant_id', tenantId)
+        .eq('sender_email', senderEmail)
+        .order('created_at', { ascending: false })
+        .limit(5),
+    );
+  }
+
+  if (senderDomain && normalizedSubject) {
+    lookups.push(
+      supabase
+        .from('communications_lead_capture_queue')
+        .select('id, reason')
+        .eq('tenant_id', tenantId)
+        .eq('sender_domain', senderDomain)
+        .eq('normalized_subject', normalizedSubject)
+        .order('created_at', { ascending: false })
+        .limit(5),
+    );
+  }
+
+  for (const lookup of lookups) {
+    const { data, error } = await lookup;
+    if (error) {
+      throw buildPersistenceError('communications_lead_capture_lookup_failed', error.message);
+    }
+    if (data?.[0]?.id) {
+      return data[0];
+    }
+  }
+
+  return null;
+}
+
 async function persistEntityLinks(tenantId, threadId, messageId, links, { supabase }) {
   if (links.length === 0) return [];
 
@@ -646,6 +726,119 @@ async function persistEntityLinks(tenantId, threadId, messageId, links, { supaba
   }
 
   return links;
+}
+
+export async function queueInboundLeadCapture(
+  request,
+  resolvedTenant,
+  persisted,
+  links,
+  { supabase = getSupabaseClient() } = {},
+) {
+  if (!shouldQueueLeadCapture(links)) {
+    return {
+      status: links.some((link) => link?.type === 'lead')
+        ? 'linked_existing_lead'
+        : 'linked_existing_entity',
+      queue_item_id: null,
+      reason: 'existing_entity_link',
+    };
+  }
+
+  const senderEmail = normalizeEmail(request.payload?.from?.email);
+  if (!senderEmail) {
+    return {
+      status: 'skipped',
+      queue_item_id: null,
+      reason: 'missing_sender_email',
+    };
+  }
+
+  const normalizedSubject = normalizeSubject(request.payload?.subject);
+  const senderDomain = extractDomain(senderEmail);
+  const duplicate = await findExistingLeadCaptureQueueEntry(
+    resolvedTenant.id,
+    {
+      senderEmail,
+      senderDomain,
+      normalizedSubject,
+      threadId: persisted.thread?.id || null,
+      messageId: persisted.message?.id || null,
+    },
+    { supabase },
+  );
+
+  if (duplicate) {
+    return {
+      status: 'duplicate_suppressed',
+      queue_item_id: duplicate.id,
+      reason: duplicate.reason || 'existing_queue_entry',
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('communications_lead_capture_queue')
+    .insert([
+      {
+        tenant_id: resolvedTenant.id,
+        thread_id: persisted.thread?.id || null,
+        message_id: persisted.message?.id || null,
+        mailbox_id: request.mailbox_id || null,
+        mailbox_address: request.mailbox_address || null,
+        sender_email: senderEmail,
+        sender_name: request.payload?.from?.name || null,
+        sender_domain: senderDomain || null,
+        subject: request.payload?.subject || '(no subject)',
+        normalized_subject: normalizedSubject || null,
+        status: 'pending_review',
+        reason: 'unknown_sender',
+        metadata: {
+          source_service: request.source_service || null,
+          provider_message_id: request.payload?.message_id || null,
+          received_at: request.payload?.received_at || request.occurred_at || null,
+          linked_entities: Array.isArray(links)
+            ? links.map((link) => ({
+                entity_type: link.type,
+                entity_id: link.id,
+                source: link.source,
+                confidence: link.confidence ?? null,
+              }))
+            : [],
+        },
+      },
+    ])
+    .select('id, status, reason')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      const existing = await findExistingLeadCaptureQueueEntry(
+        resolvedTenant.id,
+        {
+          senderEmail,
+          senderDomain,
+          normalizedSubject,
+          threadId: persisted.thread?.id || null,
+          messageId: persisted.message?.id || null,
+        },
+        { supabase },
+      );
+
+      return {
+        status: 'duplicate_suppressed',
+        queue_item_id: existing?.id || null,
+        reason: existing?.reason || 'existing_queue_entry',
+      };
+    }
+
+    throw buildPersistenceError('communications_lead_capture_create_failed', error.message);
+  }
+
+  return {
+    status: 'queued_for_review',
+    queue_item_id: data?.id || null,
+    reason: data?.reason || 'unknown_sender',
+  };
 }
 
 export async function resolveInboundEntityLinks(
@@ -714,8 +907,12 @@ export async function attachActivityToCommunicationsRecords(
     throw buildPersistenceError('communications_message_update_failed', messageError.message);
   }
 
+  const activityLinkSeed =
+    Array.isArray(links) && links.length > 0
+      ? links
+      : [{ source: 'activity_attachment', confidence: 1 }];
   const activityLinkRows = dedupeEntityLinks(
-    links.map((link) => ({
+    activityLinkSeed.map((link) => ({
       ...link,
       type: 'activity',
       id: activity.id,
@@ -779,5 +976,6 @@ export default {
   persistOutboundThreadAndMessage,
   persistInboundThreadAndMessage,
   resolveInboundEntityLinks,
+  queueInboundLeadCapture,
   attachActivityToCommunicationsRecords,
 };
