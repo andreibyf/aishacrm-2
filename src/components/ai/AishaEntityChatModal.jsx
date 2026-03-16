@@ -11,8 +11,20 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Send, CheckCircle2, Circle, Clock, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
+import { processChatEmailDraft } from '@/api/functions';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser';
+
+const EMAIL_DRAFT_PATTERNS = [
+  /\bdraft\b.*\bemail\b/i,
+  /\bwrite\b.*\bemail\b/i,
+  /\bcompose\b.*\bemail\b/i,
+  /\bfollow-?up email\b/i,
+  /\breply email\b/i,
+];
+
+const isEmailDraftIntent = (value = '') =>
+  EMAIL_DRAFT_PATTERNS.some((pattern) => pattern.test(value.trim()));
 
 export default function AishaEntityChatModal({
   open,
@@ -27,6 +39,7 @@ export default function AishaEntityChatModal({
   const [taskId, setTaskId] = useState(null);
   const [taskStatus, setTaskStatus] = useState(null); // PENDING, ASSIGNED, COMPLETED
   const [taskResult, setTaskResult] = useState(null);
+  const [draftRun, setDraftRun] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
@@ -51,6 +64,7 @@ export default function AishaEntityChatModal({
       setTaskId(null);
       setTaskStatus(null);
       setTaskResult(null);
+      setDraftRun(null);
       setIsLoading(false);
     } else {
       // Cleanup polling on close
@@ -64,6 +78,42 @@ export default function AishaEntityChatModal({
 
     setIsLoading(true);
     try {
+      if (isEmailDraftIntent(input)) {
+        const result = await processChatEmailDraft({
+          tenantId,
+          entity_type: entityType,
+          entity_id: entityId,
+          prompt: input.trim(),
+          require_approval: true,
+        });
+
+        const payload = result?.data || {};
+        if (result?.status >= 400 || payload?.status === 'error') {
+          throw new Error(payload?.message || payload?.error || 'Failed to draft email');
+        }
+
+        const draftData = payload?.data || {};
+        const generationResult = draftData?.generation_result || {};
+        setDraftRun({
+          status: generationResult?.status || 'completed',
+          result:
+            payload?.response || draftData?.response || 'AiSHA drafted an email for this record.',
+          recipientEmail: draftData?.recipient_email || null,
+          subject: draftData?.subject || null,
+        });
+        setTaskId(null);
+        setTaskStatus(null);
+        setTaskResult(null);
+        setIsLoading(false);
+
+        toast.success(
+          generationResult?.status === 'pending_approval'
+            ? 'AI email draft sent for approval'
+            : 'AI email draft generated',
+        );
+        return;
+      }
+
       const response = await fetch(`${getBackendUrl()}/api/tasks/from-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,6 +140,7 @@ export default function AishaEntityChatModal({
       const data = await response.json();
       setTaskId(data.task_id);
       setTaskStatus('PENDING');
+      setDraftRun(null);
       setIsLoading(false);
 
       // Keep modal open and start polling for the result
@@ -138,7 +189,12 @@ export default function AishaEntityChatModal({
       case 'ASSIGNED':
         return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
       case 'COMPLETED':
+      case 'completed':
         return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+      case 'pending_approval':
+        return <Clock className="w-5 h-5 text-amber-500 animate-pulse" />;
+      case 'queued':
+        return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
       default:
         return <Circle className="w-5 h-5 text-slate-500" />;
     }
@@ -151,11 +207,20 @@ export default function AishaEntityChatModal({
       case 'ASSIGNED':
         return 'Processing...';
       case 'COMPLETED':
+      case 'completed':
         return 'Completed';
+      case 'pending_approval':
+        return 'Awaiting approval';
+      case 'queued':
+        return 'Queued for delivery';
       default:
         return 'Ready';
     }
   };
+
+  const hasRunResult = Boolean(taskId || draftRun);
+  const activeStatus = draftRun?.status || taskStatus;
+  const activeResult = draftRun?.result || taskResult;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -168,7 +233,7 @@ export default function AishaEntityChatModal({
         </DialogHeader>
 
         <div className="py-4">
-          {!taskId ? (
+          {!hasRunResult ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm text-slate-400">
@@ -229,8 +294,8 @@ export default function AishaEntityChatModal({
               {/* Status + Watch in Office */}
               <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <div className="flex items-center gap-3">
-                  {getStatusIcon(taskStatus)}
-                  <span className="font-medium text-lg">{getStatusText(taskStatus)}</span>
+                  {getStatusIcon(activeStatus)}
+                  <span className="font-medium text-lg">{getStatusText(activeStatus)}</span>
                 </div>
                 <button
                   type="button"
@@ -243,13 +308,13 @@ export default function AishaEntityChatModal({
               </div>
 
               {/* Result Display */}
-              {taskResult && (
+              {activeResult && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
                   <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
                     Result
                   </h4>
                   <div className="p-4 bg-slate-800 rounded-lg border border-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
-                    {taskResult.split('\n').map((line, i) => {
+                    {activeResult.split('\n').map((line, i) => {
                       // Bold: **text**
                       const parts = line.split(/\*\*(.*?)\*\*/g);
                       return (
@@ -276,18 +341,38 @@ export default function AishaEntityChatModal({
                   </div>
                 </div>
               )}
+
+              {draftRun && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {draftRun.recipientEmail ? (
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-400">
+                        Recipient
+                      </div>
+                      <div className="mt-1 text-sm text-slate-100">{draftRun.recipientEmail}</div>
+                    </div>
+                  ) : null}
+                  {draftRun.subject ? (
+                    <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-400">Subject</div>
+                      <div className="mt-1 text-sm text-slate-100">{draftRun.subject}</div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <DialogFooter className="flex gap-2 sm:justify-between">
-          {taskId && (
+          {hasRunResult && (
             <Button
               onClick={() => {
                 if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
                 setTaskId(null);
                 setTaskStatus(null);
                 setTaskResult(null);
+                setDraftRun(null);
                 setInput('');
               }}
               variant="outline"
@@ -296,7 +381,7 @@ export default function AishaEntityChatModal({
               ← New Task
             </Button>
           )}
-          {taskId && taskStatus === 'COMPLETED' && (
+          {hasRunResult && activeStatus !== 'PENDING' && activeStatus !== 'ASSIGNED' && (
             <Button
               onClick={onClose}
               variant="outline"

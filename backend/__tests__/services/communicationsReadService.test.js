@@ -230,6 +230,151 @@ test('listCommunicationsThreads paginates after delivery_state filtering', async
   assert.equal(result.threads[0].linked_activities[0].id, 'activity-delivered');
 });
 
+test('listCommunicationsThreads activity hydration selects canonical activities columns', async () => {
+  let activitiesSelect = null;
+
+  const supabase = {
+    from(table) {
+      const state = { table, filters: [], select: null };
+      return {
+        select(value) {
+          state.select = value;
+          if (table === 'activities') {
+            activitiesSelect = value;
+          }
+          return this;
+        },
+        eq(field, value) {
+          state.filters.push({ field, value });
+          return this;
+        },
+        in(field, values) {
+          state.filters.push({ field, values });
+          return this;
+        },
+        order() {
+          return this;
+        },
+        range() {
+          if (table === 'communications_threads') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'thread-001',
+                  tenant_id: 'tenant-1',
+                  mailbox_id: 'owner-primary',
+                  mailbox_address: 'aisha@aishacrm.com',
+                  subject: 'Thread',
+                  normalized_subject: 'thread',
+                  participants: [],
+                  status: 'open',
+                  first_message_at: '2026-03-15T12:00:00.000Z',
+                  last_message_at: '2026-03-15T12:00:00.000Z',
+                  metadata: {},
+                  created_at: '2026-03-15T12:00:00.000Z',
+                  updated_at: '2026-03-15T12:00:00.000Z',
+                },
+              ],
+              error: null,
+              count: 1,
+            });
+          }
+          return Promise.resolve({ data: [], error: null, count: 0 });
+        },
+        then(resolve, reject) {
+          try {
+            if (table === 'communications_messages') {
+              return Promise.resolve(
+                resolve({
+                  data: [
+                    {
+                      id: 'message-001',
+                      thread_id: 'thread-001',
+                      internet_message_id: '<thread@example.com>',
+                      direction: 'outbound',
+                      subject: 'Thread',
+                      sender_email: 'aisha@aishacrm.com',
+                      sender_name: 'AiSHA',
+                      received_at: '2026-03-15T12:00:00.000Z',
+                      activity_id: 'activity-001',
+                      metadata: { delivery: { state: 'queued' } },
+                    },
+                  ],
+                  error: null,
+                  count: 1,
+                }),
+              );
+            }
+
+            if (table === 'communications_entity_links') {
+              return Promise.resolve(
+                resolve({
+                  data: [
+                    {
+                      thread_id: 'thread-001',
+                      entity_type: 'activity',
+                      entity_id: 'activity-001',
+                      link_scope: 'thread',
+                      source: 'activity_attachment',
+                      confidence: 1,
+                    },
+                  ],
+                  error: null,
+                  count: 1,
+                }),
+              );
+            }
+
+            if (table === 'activities') {
+              return Promise.resolve(
+                resolve({
+                  data: [
+                    {
+                      id: 'activity-001',
+                      tenant_id: 'tenant-1',
+                      type: 'email',
+                      subject: 'Thread',
+                      status: 'queued',
+                      due_date: null,
+                      due_time: null,
+                      related_to: 'lead',
+                      related_id: 'lead-001',
+                      metadata: {},
+                      created_date: '2026-03-15T12:00:00.000Z',
+                      updated_at: '2026-03-15T12:00:00.000Z',
+                    },
+                  ],
+                  error: null,
+                  count: 1,
+                }),
+              );
+            }
+
+            throw new Error(`Unexpected table ${table}`);
+          } catch (error) {
+            if (reject) return Promise.resolve(reject(error));
+            throw error;
+          }
+        },
+      };
+    },
+  };
+
+  const result = await listCommunicationsThreads(
+    {
+      tenantId: 'tenant-1',
+      limit: 10,
+      offset: 0,
+    },
+    { supabase },
+  );
+
+  assert.equal(result.threads.length, 1);
+  assert.ok(activitiesSelect);
+  assert.equal(activitiesSelect.includes('activity_type'), false);
+  assert.equal(result.threads[0].linked_activities[0].type, 'email');
+});
+
 function createThreadMessagesSupabaseStub() {
   const threadRow = {
     id: 'thread-001',

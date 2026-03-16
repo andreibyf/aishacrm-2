@@ -16,6 +16,18 @@ export declare function processChatCommand(opts: {
   timezone?: string;
 }): Promise<{ status: number; data: unknown }>;
 
+export declare function processChatEmailDraft(opts: {
+  tenantId?: string;
+  tenant_id?: string;
+  entity_type: string;
+  entity_id: string;
+  prompt: string;
+  subject?: string;
+  conversation_id?: string;
+  conversationId?: string;
+  require_approval?: boolean;
+}): Promise<{ status: number; data: unknown }>;
+
 export declare function processDeveloperCommand(opts: Record<string, unknown>): Promise<{ status: number; data: unknown }>;
 export declare function syncDatabase(...args: unknown[]): Promise<unknown>;
 export declare function n8nCreateLead(...args: unknown[]): Promise<unknown>;

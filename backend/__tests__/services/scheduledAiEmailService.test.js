@@ -14,6 +14,7 @@ function createSupabaseStub({
     executeSendEmailAction: [],
     updatedActivity: null,
     tableQueries: [],
+    notifications: [],
   };
 
   const activityRecord = {
@@ -111,6 +112,22 @@ function createSupabaseStub({
     },
   };
 
+  const notificationsTable = {
+    insert(payload) {
+      calls.notifications.push(payload);
+      return this;
+    },
+    select() {
+      return this;
+    },
+    async single() {
+      return {
+        data: { id: `notification-${calls.notifications.length}` },
+        error: null,
+      };
+    },
+  };
+
   return {
     calls,
     from(table) {
@@ -118,6 +135,7 @@ function createSupabaseStub({
       if (table === 'note') return notesTable;
       if (table === 'communications_entity_links') return linksTable;
       if (table === 'communications_messages') return messagesTable;
+      if (table === 'notifications') return notificationsTable;
       if (['leads', 'contacts', 'accounts', 'opportunities', 'bizdev_sources'].includes(table)) {
         return {
           select(columns) {
@@ -205,6 +223,10 @@ test('generateScheduledAiEmailDraft routes scheduled activities into CARE approv
   assert.match(config.body_prompt, /Recent email context:/);
   assert.equal(result.generation_result.status, 'pending_approval');
   assert.equal(result.activity.metadata.ai_email_generation.suggestion_id, 'suggestion-001');
+  assert.equal(supabase.calls.notifications.length, 1);
+  assert.equal(supabase.calls.notifications[0].user_email, 'owner@example.com');
+  assert.equal(supabase.calls.notifications[0].title, 'AI email draft ready for approval');
+  assert.equal(supabase.calls.notifications[0].metadata.suggestion_id, 'suggestion-001');
 });
 
 test('generateScheduledAiEmailDraft supports immediate queued email generation when approval is disabled', async () => {
@@ -242,6 +264,12 @@ test('generateScheduledAiEmailDraft supports immediate queued email generation w
   assert.equal(result.generation_result.activity_id, 'email-activity-001');
   assert.equal(
     result.activity.metadata.ai_email_generation.generated_activity_id,
+    'email-activity-001',
+  );
+  assert.equal(supabase.calls.notifications.length, 1);
+  assert.equal(supabase.calls.notifications[0].title, 'AI email draft generated');
+  assert.equal(
+    supabase.calls.notifications[0].metadata.generated_activity_id,
     'email-activity-001',
   );
 });
@@ -329,7 +357,7 @@ test('generateScheduledAiEmailDraft resolves opportunity recipients from linked 
     {
       table: 'opportunities',
       action: 'select',
-      columns: 'id, name, contact_id, lead_id',
+      columns: 'id, name, contact_id, lead_id, assigned_to, assigned_to_team',
     },
   ]);
   assert.equal(supabase.calls.executeSendEmailAction[0][4].to, 'buyer@example.com');

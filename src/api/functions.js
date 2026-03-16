@@ -192,6 +192,46 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    if (functionName === 'processChatEmailDraft') {
+      try {
+        const BACKEND_URL = getBackendUrl();
+        const opts = args[0] || {};
+        const tenantId =
+          opts.tenantId ||
+          opts.tenant_id ||
+          (typeof localStorage !== 'undefined'
+            ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id')
+            : '');
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const authHeader = await getAuthorizationHeader();
+        if (authHeader) {
+          headers.Authorization = authHeader;
+        }
+
+        const resp = await fetch(`${BACKEND_URL}/api/ai/chat-draft-email`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({
+            tenant_id: tenantId || undefined,
+            entity_type: opts.entity_type,
+            entity_id: opts.entity_id,
+            prompt: opts.prompt,
+            subject: opts.subject,
+            conversation_id: opts.conversation_id || opts.conversationId,
+            require_approval: opts.require_approval,
+          }),
+        });
+        const json = await resp.json().catch(() => ({}));
+        return { status: resp.status, data: json };
+      } catch (err) {
+        return { status: 500, data: { status: 'error', message: err?.message || String(err) } };
+      }
+    }
+
     // Developer AI handler: superadmin-only Claude-powered code assistant
     if (functionName === 'processDeveloperCommand') {
       try {
@@ -1322,6 +1362,7 @@ export const n8nCreateLead = functionsProxy.n8nCreateLead;
 export const n8nCreateContact = functionsProxy.n8nCreateContact;
 export const n8nGetData = functionsProxy.n8nGetData;
 export const processChatCommand = functionsProxy.processChatCommand;
+export const processChatEmailDraft = functionsProxy.processChatEmailDraft;
 export const processDeveloperCommand = functionsProxy.processDeveloperCommand;
 
 export const makeCall = functionsProxy.makeCall;

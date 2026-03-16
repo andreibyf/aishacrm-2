@@ -133,7 +133,7 @@ async function hydrateActivitiesById(tenantId, activityIds, { supabase }) {
   const activitiesResult = await supabase
     .from('activities')
     .select(
-      'id, tenant_id, type, activity_type, subject, status, due_date, due_time, related_to, related_id, metadata, created_date, updated_at',
+      'id, tenant_id, type, subject, status, due_date, due_time, related_to, related_id, metadata, created_date, updated_at',
     )
     .eq('tenant_id', tenantId)
     .in('id', normalizedIds);

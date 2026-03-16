@@ -47,6 +47,12 @@ import {
   extractEntityMentions,
   getIntentConfidence,
 } from '../lib/intentClassifier.js';
+import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
+import { generateChatDrivenEmailDraft } from '../services/chatDrivenEmailDraftService.js';
+import {
+  normalizeEmailEntityType,
+  buildEntityTableName,
+} from '../services/aiEmailDraftingSupport.js';
 import {
   routeIntentToTool,
   shouldForceToolChoice,
@@ -411,6 +417,108 @@ export default function createAIRoutes(pgPool) {
       return res.status(statusCode).json({
         status: 'error',
         message: error?.message || 'Internal server error',
+      });
+    }
+  });
+
+  router.post('/chat-draft-email', async (req, res) => {
+    try {
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Valid tenant_id required',
+        });
+      }
+
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        logger.warn('[AI Security] Chat draft blocked - unauthorized tenant access');
+        return res
+          .status(authCheck.status || 403)
+          .json({ status: 'error', message: authCheck.error });
+      }
+
+      const {
+        entity_type: entityType,
+        entity_id: entityId,
+        prompt,
+        subject,
+        conversation_id: conversationId,
+        require_approval: requireApproval,
+      } = req.body || {};
+
+      if (!entityType || !entityId || !prompt) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'entity_type, entity_id, and prompt are required',
+        });
+      }
+
+      if (req.user) {
+        const supabase = getSupabaseClient();
+        const normalizedType = normalizeEmailEntityType(entityType);
+        const tableName = buildEntityTableName(normalizedType);
+
+        if (!tableName) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Unsupported entity_type for chat-driven email drafting',
+          });
+        }
+
+        const { data: record, error: recordError } = await supabase
+          .from(tableName)
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenantRecord.id)
+          .eq('id', entityId)
+          .maybeSingle();
+
+        if (recordError) throw new Error(recordError.message);
+        if (!record) {
+          return res.status(404).json({ status: 'error', message: 'Record not found' });
+        }
+
+        const scope = await getVisibilityScope(req.user, supabase);
+        const access = getAccessLevel(
+          scope,
+          record.assigned_to_team,
+          record.assigned_to,
+          req.user.id,
+        );
+
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to draft AI emails for this record',
+          });
+        }
+      }
+
+      const result = await generateChatDrivenEmailDraft({
+        tenantId: tenantRecord.id,
+        entityType,
+        entityId,
+        prompt,
+        subject,
+        conversationId,
+        requireApproval,
+        user: req.user,
+      });
+
+      return res.json({
+        status: 'success',
+        response: result.response,
+        data: result,
+      });
+    } catch (error) {
+      logger.error('[AI chat-draft-email] Error:', error);
+      return res.status(error.statusCode || 500).json({
+        status: 'error',
+        code: error.code || 'chat_ai_email_generation_failed',
+        message: error.message,
       });
     }
   });

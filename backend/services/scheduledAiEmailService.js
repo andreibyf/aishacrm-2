@@ -1,202 +1,15 @@
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { executeCareSendEmailAction } from '../lib/care/carePlaybookExecutor.js';
-
-function buildServiceError(statusCode, code, message) {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  error.code = code;
-  return error;
-}
-
-function asObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function cleanString(value) {
-  if (value === undefined || value === null) return null;
-  const normalized = String(value).trim();
-  return normalized || null;
-}
-
-function buildEntityTableName(entityType) {
-  const tableMap = {
-    lead: 'leads',
-    contact: 'contacts',
-    account: 'accounts',
-    opportunity: 'opportunities',
-    bizdev_source: 'bizdev_sources',
-  };
-
-  return tableMap[entityType] || null;
-}
-
-function buildEntitySelectColumns(entityType) {
-  if (entityType === 'account') return 'id, name, email';
-  if (entityType === 'opportunity') return 'id, name, contact_id, lead_id';
-  return 'id, first_name, last_name, company, email';
-}
-
-async function loadEntityEmailById(supabase, tenantId, entityType, entityId) {
-  const tableName = buildEntityTableName(entityType);
-  if (!tableName || !entityId) return null;
-
-  const result = await supabase
-    .from(tableName)
-    .select('id, email')
-    .eq('tenant_id', tenantId)
-    .eq('id', entityId)
-    .maybeSingle();
-
-  if (result.error) {
-    throw buildServiceError(500, 'scheduled_ai_email_related_lookup_failed', result.error.message);
-  }
-
-  return cleanString(result.data?.email);
-}
-
-async function resolveRelatedRecipientEmail(supabase, activity, entity) {
-  const directEmail = cleanString(activity.related_email);
-  if (directEmail) return directEmail;
-
-  if (activity.related_to === 'opportunity') {
-    const contactEmail = await loadEntityEmailById(
-      supabase,
-      activity.tenant_id,
-      'contact',
-      entity?.contact_id,
-    );
-    if (contactEmail) return contactEmail;
-
-    return loadEntityEmailById(supabase, activity.tenant_id, 'lead', entity?.lead_id);
-  }
-
-  return cleanString(entity?.email);
-}
-
-async function loadRelatedEntityContext(supabase, activity) {
-  if (!activity.related_to || !activity.related_id) {
-    return { recipientEmail: cleanString(activity.related_email), entity: null };
-  }
-
-  const tableName = buildEntityTableName(activity.related_to);
-  if (!tableName) {
-    return { recipientEmail: cleanString(activity.related_email), entity: null };
-  }
-
-  const result = await supabase
-    .from(tableName)
-    .select(buildEntitySelectColumns(activity.related_to))
-    .eq('tenant_id', activity.tenant_id)
-    .eq('id', activity.related_id)
-    .maybeSingle();
-
-  if (result.error) {
-    throw buildServiceError(500, 'scheduled_ai_email_related_lookup_failed', result.error.message);
-  }
-
-  const entity = result.data || null;
-  return {
-    recipientEmail: await resolveRelatedRecipientEmail(supabase, activity, entity),
-    entity,
-  };
-}
-
-async function loadRecentNotes(supabase, tenantId, activity) {
-  if (!activity.related_to || !activity.related_id) return [];
-
-  const result = await supabase
-    .from('note')
-    .select('id, title, content, created_at')
-    .eq('tenant_id', tenantId)
-    .eq('related_type', activity.related_to)
-    .eq('related_id', activity.related_id)
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  if (result.error) {
-    throw buildServiceError(500, 'scheduled_ai_email_notes_lookup_failed', result.error.message);
-  }
-
-  return result.data || [];
-}
-
-async function loadRecentCommunications(supabase, tenantId, activity) {
-  if (!activity.related_to || !activity.related_id) return [];
-
-  const linksResult = await supabase
-    .from('communications_entity_links')
-    .select('thread_id, message_id')
-    .eq('tenant_id', tenantId)
-    .eq('entity_type', activity.related_to)
-    .eq('entity_id', activity.related_id)
-    .limit(10);
-
-  if (linksResult.error) {
-    throw buildServiceError(
-      500,
-      'scheduled_ai_email_links_lookup_failed',
-      linksResult.error.message,
-    );
-  }
-
-  const links = linksResult.data || [];
-  const messageIds = [...new Set(links.map((link) => link.message_id).filter(Boolean))];
-
-  if (messageIds.length === 0) return [];
-
-  const messagesResult = await supabase
-    .from('communications_messages')
-    .select('id, thread_id, direction, subject, sender_email, sender_name, received_at, text_body')
-    .eq('tenant_id', tenantId)
-    .in('id', messageIds)
-    .order('received_at', { ascending: false })
-    .limit(5);
-
-  if (messagesResult.error) {
-    throw buildServiceError(
-      500,
-      'scheduled_ai_email_messages_lookup_failed',
-      messagesResult.error.message,
-    );
-  }
-
-  return messagesResult.data || [];
-}
-
-function formatContextBlock(activity, relatedEntity, notes, communications) {
-  const contextSections = [];
-
-  if (activity.related_to && activity.related_id) {
-    contextSections.push(
-      `Related CRM record: ${JSON.stringify({
-        type: activity.related_to,
-        id: activity.related_id,
-        entity: relatedEntity || null,
-      })}`,
-    );
-  }
-
-  if (notes.length > 0) {
-    contextSections.push(
-      `Recent notes:\n${notes
-        .map((note) => `- ${note.title || 'Note'}: ${cleanString(note.content) || ''}`)
-        .join('\n')}`,
-    );
-  }
-
-  if (communications.length > 0) {
-    contextSections.push(
-      `Recent email context:\n${communications
-        .map(
-          (message) =>
-            `- [${message.direction}] ${message.subject || 'No subject'} from ${message.sender_email || message.sender_name || 'unknown'}: ${cleanString(message.text_body)?.slice(0, 280) || ''}`,
-        )
-        .join('\n')}`,
-    );
-  }
-
-  return contextSections.join('\n\n');
-}
+import {
+  buildServiceError,
+  asObject,
+  cleanString,
+  loadRelatedEntityContext,
+  loadRecentNotes,
+  loadRecentCommunications,
+  formatContextBlock,
+  createAiEmailDraftNotification,
+} from './aiEmailDraftingSupport.js';
 
 export async function generateScheduledAiEmailDraft(
   { tenantId, activityId, user },
@@ -328,6 +141,15 @@ export async function generateScheduledAiEmailDraft(
       updatedActivityResult.error.message,
     );
   }
+
+  await createAiEmailDraftNotification(supabase, {
+    tenantId,
+    source: 'scheduled_ai_email',
+    sourceRecord: updatedActivityResult.data,
+    generationResult,
+    recipientEmail,
+    userEmail: user?.email,
+  });
 
   return {
     activity: updatedActivityResult.data,
