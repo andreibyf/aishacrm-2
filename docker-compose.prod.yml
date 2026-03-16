@@ -76,6 +76,44 @@ services:
       - default
       - aishanet
 
+  # Communications worker
+  aisha-comms:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    container_name: aishacrm-comms
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis-memory:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    command: ["npm", "run", "worker:communications"]
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - CRM_BACKEND_URL=http://backend:3001
+      - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
+      - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<180000?0:1)\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - default
+      - aishanet
+
   # NOTE: MCP server is deployed separately from braid-mcp-node-server/
   # It must be on the 'aishanet' external network to be reachable by backend
   # Container name: braid-mcp-server (or aishacrm-mcp if using legacy setup)
