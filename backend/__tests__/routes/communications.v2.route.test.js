@@ -12,6 +12,7 @@ const updateThreadStatusCalls = [];
 const updateLeadCaptureStatusCalls = [];
 const promoteLeadCaptureItemCalls = [];
 const purgeThreadCalls = [];
+const generateThreadedReplyDraftCalls = [];
 
 function request(path) {
   return new Promise((resolve, reject) => {
@@ -365,6 +366,21 @@ describe('Communications v2 routes', () => {
             purged_by: request.user?.email || null,
           };
         },
+        generateThreadedReplyDraft: async (request) => {
+          generateThreadedReplyDraftCalls.push(request);
+          return {
+            recipient_email: 'prospect@example.com',
+            subject: request.subject || 'Re: Intro call',
+            generation_result: {
+              status: request.requireApproval === false ? 'completed' : 'pending_approval',
+              suggestion_id: request.requireApproval === false ? null : 'suggestion-001',
+              activity_id: request.requireApproval === false ? 'activity-001' : null,
+            },
+            thread: {
+              id: request.threadId,
+            },
+          };
+        },
       }),
     );
 
@@ -637,6 +653,40 @@ describe('Communications v2 routes', () => {
       tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
       threadId: 'thread-001',
       status: 'closed',
+      user: {
+        id: 'test-user',
+        email: 'test@example.com',
+        role: 'admin',
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      },
+    });
+  });
+
+  it('generates a threaded AI reply draft for a communication thread', async () => {
+    generateThreadedReplyDraftCalls.length = 0;
+    const res = await requestWithBody(
+      'POST',
+      '/api/v2/communications/threads/thread-001/generate-ai-reply',
+      {
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+        prompt: 'Reply with a concise pricing follow-up.',
+        subject: 'Re: Intro call',
+        require_approval: false,
+      },
+    );
+
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.equal(json.data.recipient_email, 'prospect@example.com');
+    assert.equal(json.data.generation_result.status, 'completed');
+    assert.equal(generateThreadedReplyDraftCalls.length, 1);
+    assert.deepEqual(generateThreadedReplyDraftCalls[0], {
+      tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      threadId: 'thread-001',
+      prompt: 'Reply with a concise pricing follow-up.',
+      subject: 'Re: Intro call',
+      requireApproval: false,
       user: {
         id: 'test-user',
         email: 'test@example.com',

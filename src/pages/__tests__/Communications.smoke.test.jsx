@@ -193,6 +193,7 @@ const getThreadMessagesMock = vi.fn();
 const replayThreadMock = vi.fn();
 const updateThreadStatusMock = vi.fn();
 const purgeThreadMock = vi.fn();
+const generateThreadedAiReplyDraftMock = vi.fn();
 const listLeadCaptureQueueMock = vi.fn();
 const getLeadCaptureQueueItemMock = vi.fn();
 const updateLeadCaptureQueueItemStatusMock = vi.fn();
@@ -204,6 +205,7 @@ vi.mock('@/api/communications', () => ({
   replayCommunicationThread: (...args) => replayThreadMock(...args),
   updateCommunicationThreadStatus: (...args) => updateThreadStatusMock(...args),
   purgeCommunicationThread: (...args) => purgeThreadMock(...args),
+  generateThreadedAiReplyDraft: (...args) => generateThreadedAiReplyDraftMock(...args),
   listLeadCaptureQueue: (...args) => listLeadCaptureQueueMock(...args),
   getLeadCaptureQueueItem: (...args) => getLeadCaptureQueueItemMock(...args),
   updateLeadCaptureQueueItemStatus: (...args) => updateLeadCaptureQueueItemStatusMock(...args),
@@ -232,6 +234,7 @@ describe('Communications page smoke test', () => {
     replayThreadMock.mockReset();
     updateThreadStatusMock.mockReset();
     purgeThreadMock.mockReset();
+    generateThreadedAiReplyDraftMock.mockReset();
     listLeadCaptureQueueMock.mockReset();
     getLeadCaptureQueueItemMock.mockReset();
     updateLeadCaptureQueueItemStatusMock.mockReset();
@@ -259,6 +262,19 @@ describe('Communications page smoke test', () => {
       tenant_id: 'tenant-1',
       purged_at: '2026-03-15T02:00:00.000Z',
       purged_by: 'test@example.com',
+    });
+    generateThreadedAiReplyDraftMock.mockResolvedValue({
+      response: 'I drafted a threaded reply for prospect@example.com and sent it for approval.',
+      recipient_email: 'prospect@example.com',
+      subject: 'Re: Intro call',
+      generation_result: {
+        status: 'pending_approval',
+        suggestion_id: 'suggestion-thread-001',
+      },
+      reply_headers: {
+        in_reply_to: '<msg-002@example.com>',
+        references: ['<msg-001@example.com>', '<msg-002@example.com>'],
+      },
     });
     listLeadCaptureQueueMock.mockResolvedValue(mockLeadCaptureQueueResponse);
     getLeadCaptureQueueItemMock.mockResolvedValue(mockLeadCaptureQueueItemResponse);
@@ -526,6 +542,40 @@ describe('Communications page smoke test', () => {
         }),
       ),
     );
+  });
+
+  it('generates a threaded AI reply draft from the selected thread', async () => {
+    const CommunicationsPage = (await import('../Communications.jsx')).default;
+    render(<CommunicationsPage />);
+
+    await waitFor(() => expect(listThreadsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getThreadMessagesMock).toHaveBeenCalledTimes(1));
+
+    const promptField = screen.getByLabelText(/draft instructions/i);
+    fireEvent.change(promptField, {
+      target: { value: 'Reply with pricing details and propose a 20-minute follow-up call.' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /generate ai reply draft/i }));
+
+    await waitFor(() =>
+      expect(generateThreadedAiReplyDraftMock).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        threadId: 'thread-001',
+        prompt: 'Reply with pricing details and propose a 20-minute follow-up call.',
+        subject: 'Re: Intro call',
+        requireApproval: true,
+      }),
+    );
+    const reviewLink = await screen.findByRole('link', {
+      name: /Approval suggestion suggestion-thread-001/i,
+    });
+    expect(reviewLink).toHaveAttribute('href', '/aisuggestions?suggestion=suggestion-thread-001');
+    expect(
+      await screen.findByText(/Approval suggestion suggestion-thread-001/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/In-Reply-To preserved/i)).toBeInTheDocument();
+    expect(screen.getByText('pending_approval')).toBeInTheDocument();
   });
 
   it('renders the lead capture queue and promotes a reviewed sender to a lead', async () => {

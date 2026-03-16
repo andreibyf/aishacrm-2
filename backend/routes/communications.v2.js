@@ -15,6 +15,7 @@ import {
   updateLeadCaptureQueueStatus,
   updateCommunicationsThreadStatus,
 } from '../services/communicationsStateService.js';
+import { generateThreadedReplyDraft as defaultGenerateThreadedReplyDraft } from '../services/threadedReplyDraftService.js';
 
 const ALLOWED_THREAD_VIEWS = new Set(['all', 'unread', 'open', 'closed', 'archived']);
 const ALLOWED_ENTITY_TYPES = new Set(['lead', 'contact', 'account', 'opportunity', 'activity']);
@@ -47,6 +48,7 @@ export default function createCommunicationsV2Routes(
     updateLeadCaptureStatus = updateLeadCaptureQueueStatus,
     promoteLeadCaptureItem = promoteLeadCaptureQueueItem,
     purgeThread = purgeCommunicationsThread,
+    generateThreadedReplyDraft = defaultGenerateThreadedReplyDraft,
   } = {},
 ) {
   const router = express.Router();
@@ -426,6 +428,36 @@ export default function createCommunicationsV2Routes(
         status: 'error',
         message: error.message || 'Failed to update communication thread status',
         code: error.code || 'communications_thread_status_update_failed',
+      });
+    }
+  });
+
+  router.post('/threads/:threadId/generate-ai-reply', async (req, res) => {
+    try {
+      const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+      if (!tenantId) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const result = await generateThreadedReplyDraft({
+        tenantId,
+        threadId: req.params.threadId,
+        prompt: req.body?.prompt,
+        subject: req.body?.subject,
+        requireApproval: req.body?.require_approval,
+        user: req.user,
+      });
+
+      return res.json({
+        status: 'success',
+        data: result,
+      });
+    } catch (error) {
+      logger.error('[communications.v2] Failed to generate threaded AI reply:', error.message);
+      return res.status(error.statusCode || 500).json({
+        status: 'error',
+        message: error.message || 'Failed to generate threaded AI reply',
+        code: error.code || 'communications_thread_ai_reply_failed',
       });
     }
   });

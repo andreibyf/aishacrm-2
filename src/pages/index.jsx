@@ -28,6 +28,7 @@ const PAGES = {
   AuditLog: lazy(() => import('./AuditLog')),
   Leads: lazy(() => import('./Leads')),
   AICampaigns: lazy(() => import('./AICampaigns')),
+  AISuggestions: lazy(() => import('./AISuggestions')),
   DocumentProcessing: lazy(() => import('./DocumentProcessing')),
   CashFlow: lazy(() => import('./CashFlow')),
   PaymentPortal: lazy(() => import('./PaymentPortal')),
@@ -148,6 +149,7 @@ function PagesContent() {
                 <Route path="/AuditLog" element={<PAGES.AuditLog />} />
                 <Route path="/Leads" element={<PAGES.Leads />} />
                 <Route path="/AICampaigns" element={<PAGES.AICampaigns />} />
+                <Route path="/AISuggestions" element={<PAGES.AISuggestions />} />
                 <Route path="/DocumentProcessing" element={<PAGES.DocumentProcessing />} />
                 <Route path="/CashFlow" element={<PAGES.CashFlow />} />
                 <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
