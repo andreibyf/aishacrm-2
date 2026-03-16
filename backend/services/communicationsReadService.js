@@ -17,6 +17,12 @@ const ALLOWED_DELIVERY_STATES = new Set([
   'opened',
   'clicked',
 ]);
+const ALLOWED_LEAD_CAPTURE_STATUSES = new Set([
+  'pending_review',
+  'duplicate',
+  'promoted',
+  'dismissed',
+]);
 
 function buildServiceError(statusCode, code, message) {
   const error = new Error(message);
@@ -101,6 +107,144 @@ function buildAppliedFilters({ mailboxId, status, view, entityType, entityId, de
     entity_id: entityId,
     delivery_state: deliveryState,
   };
+}
+
+function buildLeadCaptureAppliedFilters({ mailboxId, status }) {
+  return {
+    mailbox_id: mailboxId,
+    status,
+  };
+}
+
+function mapQueueById(rows) {
+  const mapped = new Map();
+  for (const row of rows || []) {
+    mapped.set(row.id, row);
+  }
+  return mapped;
+}
+
+async function hydrateActivitiesById(tenantId, activityIds, { supabase }) {
+  const normalizedIds = [...new Set((activityIds || []).filter(Boolean))];
+  if (normalizedIds.length === 0) {
+    return new Map();
+  }
+
+  const activitiesResult = await supabase
+    .from('activities')
+    .select(
+      'id, tenant_id, type, activity_type, subject, status, due_date, due_time, related_to, related_id, metadata, created_date, updated_at',
+    )
+    .eq('tenant_id', tenantId)
+    .in('id', normalizedIds);
+
+  if (activitiesResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_activity_query_failed',
+      activitiesResult.error.message,
+    );
+  }
+
+  return mapQueueById(activitiesResult.data || []);
+}
+
+function collectActivityIdsFromLinks(links = []) {
+  return (links || [])
+    .filter((link) => link?.entity_type === 'activity' && link?.entity_id)
+    .map((link) => link.entity_id);
+}
+
+function summarizeActivity(activity) {
+  if (!activity) return null;
+  return {
+    id: activity.id,
+    tenant_id: activity.tenant_id,
+    type: activity.type || activity.activity_type || null,
+    subject: activity.subject || null,
+    status: activity.status || null,
+    due_date: activity.due_date || null,
+    due_time: activity.due_time || null,
+    related_to: activity.related_to || null,
+    related_id: activity.related_id || null,
+    metadata: activity.metadata || {},
+    created_date: activity.created_date || null,
+    updated_at: activity.updated_at || null,
+  };
+}
+
+async function hydrateLeadCaptureQueueItems(tenantId, queueItems, { supabase }) {
+  if (!Array.isArray(queueItems) || queueItems.length === 0) {
+    return [];
+  }
+
+  const threadIds = [...new Set(queueItems.map((item) => item.thread_id).filter(Boolean))];
+  const messageIds = [...new Set(queueItems.map((item) => item.message_id).filter(Boolean))];
+
+  const [threadsResult, messagesResult] = await Promise.all([
+    threadIds.length > 0
+      ? supabase
+          .from('communications_threads')
+          .select(
+            'id, mailbox_id, mailbox_address, subject, normalized_subject, participants, status, first_message_at, last_message_at, metadata, created_at, updated_at',
+          )
+          .eq('tenant_id', tenantId)
+          .in('id', threadIds)
+      : Promise.resolve({ data: [], error: null }),
+    messageIds.length > 0
+      ? supabase
+          .from('communications_messages')
+          .select(
+            'id, thread_id, internet_message_id, direction, subject, sender_email, sender_name, recipients, cc, bcc, received_at, activity_id, metadata, created_at, updated_at',
+          )
+          .eq('tenant_id', tenantId)
+          .in('id', messageIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (threadsResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_lead_capture_thread_query_failed',
+      threadsResult.error.message,
+    );
+  }
+
+  if (messagesResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_lead_capture_message_query_failed',
+      messagesResult.error.message,
+    );
+  }
+
+  const threadsById = mapQueueById(threadsResult.data || []);
+  const messagesById = mapQueueById(messagesResult.data || []);
+
+  return queueItems.map((item) => {
+    const thread = threadsById.get(item.thread_id) || null;
+    const message = messagesById.get(item.message_id) || null;
+    return {
+      ...item,
+      thread: thread
+        ? {
+            ...thread,
+            event_log: Array.isArray(thread.metadata?.event_log) ? thread.metadata.event_log : [],
+          }
+        : null,
+      message: message
+        ? {
+            ...message,
+            attachments: extractAttachments(message.metadata),
+            event_log: Array.isArray(message.metadata?.event_log) ? message.metadata.event_log : [],
+            state: {
+              delivery: message.metadata?.delivery || null,
+              meeting: message.metadata?.meeting || null,
+            },
+          }
+        : null,
+    };
+  });
 }
 
 export async function listCommunicationsThreads(
@@ -291,9 +435,51 @@ export async function listCommunicationsThreads(
   }
 
   const linkedEntities = groupLinksByThread(linksResult.data || []);
+  const linkedEntitiesByThread = new Map();
+  for (const thread of pagedThreads) {
+    linkedEntitiesByThread.set(thread.id, linkedEntities.get(thread.id) || []);
+  }
+  const threadActivityIds = [
+    ...new Set(
+      pagedThreads.flatMap((thread) => {
+        const latestMessage = latestMessages.get(thread.id) || null;
+        return [
+          latestMessage?.activity_id || null,
+          ...collectActivityIdsFromLinks(linkedEntitiesByThread.get(thread.id) || []),
+        ].filter(Boolean);
+      }),
+    ),
+  ];
+  const activitiesById = await hydrateActivitiesById(tenantId, threadActivityIds, { supabase });
   const hydratedThreads = pagedThreads.map((thread) => ({
     ...thread,
-    linked_entities: linkedEntities.get(thread.id) || [],
+    latest_message: thread.latest_message
+      ? {
+          ...thread.latest_message,
+          activity: summarizeActivity(
+            activitiesById.get(thread.latest_message.activity_id) || null,
+          ),
+        }
+      : thread.latest_message,
+    linked_entities: linkedEntitiesByThread.get(thread.id) || [],
+    linked_activities: [
+      ...new Map(
+        [
+          thread.latest_message?.activity_id
+            ? [
+                thread.latest_message.activity_id,
+                summarizeActivity(activitiesById.get(thread.latest_message.activity_id) || null),
+              ]
+            : null,
+          ...(linkedEntitiesByThread.get(thread.id) || [])
+            .filter((link) => link.entity_type === 'activity')
+            .map((link) => [
+              link.entity_id,
+              summarizeActivity(activitiesById.get(link.entity_id) || null),
+            ]),
+        ].filter((entry) => entry && entry[1]),
+      ).values(),
+    ],
   }));
 
   return {
@@ -346,7 +532,7 @@ export async function getCommunicationsThreadMessages(
       .eq('thread_id', threadId),
     supabase
       .from('communications_messages')
-      .select('id, thread_id, received_at, metadata')
+      .select('id, thread_id, received_at, activity_id, metadata')
       .eq('tenant_id', tenantId)
       .eq('thread_id', threadId)
       .order('received_at', { ascending: false, nullsFirst: false })
@@ -394,6 +580,21 @@ export async function getCommunicationsThreadMessages(
     }
   }
 
+  const messageActivityIds = [
+    ...new Set(
+      [
+        ...collectActivityIdsFromLinks(threadLevelLinks),
+        ...(messagesResult.data || []).flatMap((message) => [
+          message.activity_id || null,
+          ...collectActivityIdsFromLinks(linksByMessage.get(message.id) || []),
+        ]),
+        (latestMessageResult.data || [])[0]?.activity_id || null,
+      ].filter(Boolean),
+    ),
+  ];
+  const activitiesById = await hydrateActivitiesById(tenantId, messageActivityIds, { supabase });
+  const latestMessage = (latestMessageResult.data || [])[0] || null;
+
   return {
     thread: {
       ...threadResult.data,
@@ -401,13 +602,50 @@ export async function getCommunicationsThreadMessages(
         ? threadResult.data.metadata.event_log
         : [],
       linked_entities: threadLevelLinks,
-      state: summarizeThreadState(threadResult.data, (latestMessageResult.data || [])[0] || null),
+      linked_activities: [
+        ...new Map(
+          [
+            ...collectActivityIdsFromLinks(threadLevelLinks),
+            ...(messagesResult.data || []).flatMap((message) => [
+              message.activity_id || null,
+              ...collectActivityIdsFromLinks(linksByMessage.get(message.id) || []),
+            ]),
+            latestMessage?.activity_id || null,
+          ]
+            .filter(Boolean)
+            .map((activityId) => [
+              activityId,
+              summarizeActivity(activitiesById.get(activityId) || null),
+            ])
+            .filter((entry) => entry[1]),
+        ).values(),
+      ],
+      state: summarizeThreadState(threadResult.data, latestMessage),
     },
     messages: (messagesResult.data || []).map((message) => ({
       ...message,
       event_log: Array.isArray(message.metadata?.event_log) ? message.metadata.event_log : [],
       attachments: extractAttachments(message.metadata),
       linked_entities: linksByMessage.get(message.id) || [],
+      activity: summarizeActivity(activitiesById.get(message.activity_id) || null),
+      linked_activities: [
+        ...new Map(
+          [
+            message.activity_id
+              ? [
+                  message.activity_id,
+                  summarizeActivity(activitiesById.get(message.activity_id) || null),
+                ]
+              : null,
+            ...(linksByMessage.get(message.id) || [])
+              .filter((link) => link.entity_type === 'activity')
+              .map((link) => [
+                link.entity_id,
+                summarizeActivity(activitiesById.get(link.entity_id) || null),
+              ]),
+          ].filter((entry) => entry && entry[1]),
+        ).values(),
+      ],
       state: {
         delivery: message.metadata?.delivery || null,
         meeting: message.metadata?.meeting || null,
@@ -418,7 +656,96 @@ export async function getCommunicationsThreadMessages(
   };
 }
 
+export async function listLeadCaptureQueue(
+  { tenantId, limit, offset, mailboxId, status },
+  { supabase = getSupabaseClient() } = {},
+) {
+  const safeLimit = normalizePositiveInt(limit, 25, 100);
+  const safeOffset = normalizeOffset(offset);
+  const normalizedMailboxId = normalizeOptionalString(mailboxId);
+  const normalizedStatus = normalizeOptionalString(status)?.toLowerCase() || null;
+
+  if (normalizedStatus && !ALLOWED_LEAD_CAPTURE_STATUSES.has(normalizedStatus)) {
+    throw buildServiceError(
+      400,
+      'communications_invalid_lead_capture_status',
+      'Unsupported lead capture status filter',
+    );
+  }
+
+  let queueQuery = supabase
+    .from('communications_lead_capture_queue')
+    .select(
+      'id, tenant_id, thread_id, message_id, mailbox_id, mailbox_address, sender_email, sender_name, sender_domain, subject, normalized_subject, status, reason, metadata, created_at, updated_at',
+      { count: 'exact' },
+    )
+    .eq('tenant_id', tenantId);
+
+  if (normalizedMailboxId) {
+    queueQuery = queueQuery.eq('mailbox_id', normalizedMailboxId);
+  }
+
+  if (normalizedStatus) {
+    queueQuery = queueQuery.eq('status', normalizedStatus);
+  }
+
+  const queueResult = await queueQuery
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .range(safeOffset, safeOffset + safeLimit - 1);
+
+  if (queueResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_lead_capture_query_failed',
+      queueResult.error.message,
+    );
+  }
+
+  return {
+    queue_items: await hydrateLeadCaptureQueueItems(tenantId, queueResult.data || [], { supabase }),
+    total: queueResult.count || 0,
+    limit: safeLimit,
+    offset: safeOffset,
+    applied_filters: buildLeadCaptureAppliedFilters({
+      mailboxId: normalizedMailboxId,
+      status: normalizedStatus,
+    }),
+  };
+}
+
+export async function getLeadCaptureQueueItem(
+  { tenantId, queueItemId },
+  { supabase = getSupabaseClient() } = {},
+) {
+  const queueResult = await supabase
+    .from('communications_lead_capture_queue')
+    .select(
+      'id, tenant_id, thread_id, message_id, mailbox_id, mailbox_address, sender_email, sender_name, sender_domain, subject, normalized_subject, status, reason, metadata, created_at, updated_at',
+    )
+    .eq('tenant_id', tenantId)
+    .eq('id', queueItemId)
+    .maybeSingle();
+
+  if (queueResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_lead_capture_query_failed',
+      queueResult.error.message,
+    );
+  }
+
+  if (!queueResult.data) {
+    return null;
+  }
+
+  return (
+    (await hydrateLeadCaptureQueueItems(tenantId, [queueResult.data], { supabase }))[0] || null
+  );
+}
+
 export default {
   listCommunicationsThreads,
   getCommunicationsThreadMessages,
+  listLeadCaptureQueue,
+  getLeadCaptureQueueItem,
 };

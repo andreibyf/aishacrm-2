@@ -5,8 +5,12 @@ import http from 'node:http';
 let server;
 const port = 3112;
 const listThreadsCalls = [];
+const listLeadCaptureQueueCalls = [];
+const getLeadCaptureQueueItemCalls = [];
 const replayThreadCalls = [];
 const updateThreadStatusCalls = [];
+const updateLeadCaptureStatusCalls = [];
+const promoteLeadCaptureItemCalls = [];
 const purgeThreadCalls = [];
 
 function request(path) {
@@ -26,6 +30,39 @@ function request(path) {
       },
     );
     req.on('error', reject);
+    req.end();
+  });
+}
+
+function requestWithBody(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: 'localhost',
+        port,
+        path,
+        method,
+        headers: {
+          connection: 'close',
+          'Content-Type': 'application/json',
+        },
+      },
+      (res) => {
+        let raw = '';
+        res.on('data', (chunk) => {
+          raw += chunk;
+        });
+        res.on('end', () => {
+          res.status = res.statusCode;
+          res.json = () => JSON.parse(raw);
+          resolve(res);
+        });
+      },
+    );
+    req.on('error', reject);
+    if (body) {
+      req.write(JSON.stringify(body));
+    }
     req.end();
   });
 }
@@ -172,6 +209,88 @@ describe('Communications v2 routes', () => {
             offset: Number.parseInt(offset, 10) || 0,
           };
         },
+        listLeadCaptureQueueItems: async (args) => {
+          listLeadCaptureQueueCalls.push(args);
+          return {
+            queue_items: [
+              {
+                id: 'queue-001',
+                tenant_id: args.tenantId,
+                thread_id: 'thread-001',
+                message_id: 'message-001',
+                mailbox_id: args.mailboxId || 'owner-primary',
+                mailbox_address: 'owner@example.com',
+                sender_email: 'prospect@example.com',
+                sender_name: 'Prospect',
+                sender_domain: 'example.com',
+                subject: 'Interested in your services',
+                normalized_subject: 'interested in your services',
+                status: args.status || 'pending_review',
+                reason: 'unknown_sender',
+                metadata: {
+                  source_service: 'communications-worker',
+                },
+                thread: {
+                  id: 'thread-001',
+                  subject: 'Interested in your services',
+                  metadata: {
+                    event_log: [{ type: 'thread_replay_requested' }],
+                  },
+                },
+                message: {
+                  id: 'message-001',
+                  subject: 'Interested in your services',
+                  metadata: {
+                    attachments: [{ filename: 'intro.pdf' }],
+                    delivery: { state: 'delivered' },
+                  },
+                },
+              },
+            ],
+            total: 1,
+            limit: Number.parseInt(args.limit, 10) || 25,
+            offset: Number.parseInt(args.offset, 10) || 0,
+            applied_filters: {
+              mailbox_id: args.mailboxId || null,
+              status: args.status || null,
+            },
+          };
+        },
+        getLeadCaptureQueueEntry: async ({ tenantId, queueItemId }) => {
+          getLeadCaptureQueueItemCalls.push({ tenantId, queueItemId });
+          if (queueItemId === 'missing-queue') return null;
+          return {
+            id: queueItemId,
+            tenant_id: tenantId,
+            thread_id: 'thread-001',
+            message_id: 'message-001',
+            mailbox_id: 'owner-primary',
+            mailbox_address: 'owner@example.com',
+            sender_email: 'prospect@example.com',
+            sender_name: 'Prospect',
+            sender_domain: 'example.com',
+            subject: 'Interested in your services',
+            normalized_subject: 'interested in your services',
+            status: 'pending_review',
+            reason: 'unknown_sender',
+            metadata: {},
+            thread: {
+              id: 'thread-001',
+              subject: 'Interested in your services',
+              metadata: {
+                event_log: [{ type: 'delivery_reconciled' }],
+              },
+            },
+            message: {
+              id: 'message-001',
+              subject: 'Interested in your services',
+              metadata: {
+                attachments: [{ filename: 'intro.pdf' }],
+                delivery: { state: 'delivered' },
+              },
+            },
+          };
+        },
         replayThread: async (request) => {
           replayThreadCalls.push(request);
           return {
@@ -195,6 +314,46 @@ describe('Communications v2 routes', () => {
               status: request.status,
               metadata: {},
             },
+          };
+        },
+        updateLeadCaptureStatus: async (request) => {
+          updateLeadCaptureStatusCalls.push(request);
+          return {
+            queue_item: {
+              id: request.queueItemId,
+              tenant_id: request.tenantId,
+              status: request.status,
+              metadata: {
+                review: {
+                  status: request.status,
+                  updated_by: request.user?.email || null,
+                },
+              },
+            },
+          };
+        },
+        promoteLeadCaptureItem: async (request) => {
+          promoteLeadCaptureItemCalls.push(request);
+          return {
+            queue_item: {
+              id: request.queueItemId,
+              tenant_id: request.tenantId,
+              status: 'promoted',
+              metadata: {
+                promotion: {
+                  entity_type: 'lead',
+                  entity_id: 'lead-001',
+                },
+              },
+            },
+            lead: {
+              id: 'lead-001',
+              tenant_id: request.tenantId,
+              first_name: request.lead.first_name || 'Prospect',
+              last_name: request.lead.last_name || 'Person',
+              email: request.lead.email || 'prospect@example.com',
+            },
+            already_promoted: false,
           };
         },
         purgeThread: async (request) => {
@@ -280,6 +439,119 @@ describe('Communications v2 routes', () => {
     });
   });
 
+  it('lists lead capture queue items for a tenant', async () => {
+    listLeadCaptureQueueCalls.length = 0;
+    const res = await request(
+      '/api/v2/communications/lead-capture-queue?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46&status=pending_review&mailbox_id=owner-primary',
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.equal(json.data.queue_items.length, 1);
+    assert.equal(json.data.queue_items[0].id, 'queue-001');
+    assert.equal(listLeadCaptureQueueCalls.length, 1);
+    assert.deepEqual(listLeadCaptureQueueCalls[0], {
+      tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      limit: undefined,
+      offset: undefined,
+      mailboxId: 'owner-primary',
+      status: 'pending_review',
+    });
+  });
+
+  it('returns a lead capture queue item by id', async () => {
+    getLeadCaptureQueueItemCalls.length = 0;
+    const res = await request(
+      '/api/v2/communications/lead-capture-queue/queue-001?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46',
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.equal(json.data.id, 'queue-001');
+    assert.equal(json.data.thread.id, 'thread-001');
+    assert.equal(json.data.message.id, 'message-001');
+  });
+
+  it('updates the status of a lead capture queue item', async () => {
+    updateLeadCaptureStatusCalls.length = 0;
+    const res = await requestWithBody(
+      'POST',
+      '/api/v2/communications/lead-capture-queue/queue-001/status',
+      {
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+        status: 'dismissed',
+        note: 'Known vendor inbox',
+      },
+    );
+
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.equal(json.data.queue_item.status, 'dismissed');
+    assert.equal(updateLeadCaptureStatusCalls.length, 1);
+    assert.deepEqual(updateLeadCaptureStatusCalls[0], {
+      tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      queueItemId: 'queue-001',
+      status: 'dismissed',
+      user: {
+        id: 'test-user',
+        email: 'test@example.com',
+        role: 'admin',
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      },
+      note: 'Known vendor inbox',
+      promotedEntityType: null,
+      promotedEntityId: null,
+    });
+  });
+
+  it('promotes a lead capture queue item into a lead', async () => {
+    promoteLeadCaptureItemCalls.length = 0;
+    const res = await requestWithBody(
+      'POST',
+      '/api/v2/communications/lead-capture-queue/queue-001/promote',
+      {
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+        first_name: 'Avery',
+        last_name: 'Prospect',
+        company: 'Example Co',
+        note: 'Approved from queue',
+      },
+    );
+
+    assert.equal(res.status, 201);
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    assert.equal(json.data.queue_item.status, 'promoted');
+    assert.equal(json.data.lead.id, 'lead-001');
+    assert.equal(promoteLeadCaptureItemCalls.length, 1);
+    assert.deepEqual(promoteLeadCaptureItemCalls[0], {
+      tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      queueItemId: 'queue-001',
+      user: {
+        id: 'test-user',
+        email: 'test@example.com',
+        role: 'admin',
+        tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      },
+      lead: {
+        first_name: 'Avery',
+        last_name: 'Prospect',
+        sender_name: undefined,
+        email: undefined,
+        phone: undefined,
+        company: 'Example Co',
+        job_title: undefined,
+        source: undefined,
+        status: undefined,
+        assigned_to: undefined,
+        assigned_to_name: undefined,
+        metadata: undefined,
+        note: 'Approved from queue',
+      },
+    });
+  });
+
   it('rejects invalid view values', async () => {
     const res = await request(
       '/api/v2/communications/threads?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46&view=pending',
@@ -307,6 +579,24 @@ describe('Communications v2 routes', () => {
     assert.equal(json.code, 'communications_invalid_delivery_state');
   });
 
+  it('rejects invalid lead capture status values', async () => {
+    const res = await request(
+      '/api/v2/communications/lead-capture-queue?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46&status=reviewing',
+    );
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.code, 'communications_invalid_lead_capture_status');
+  });
+
+  it('returns 404 when a lead capture queue item does not exist', async () => {
+    const res = await request(
+      '/api/v2/communications/lead-capture-queue/missing-queue?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46',
+    );
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.code, 'communications_lead_capture_not_found');
+  });
+
   it('returns 404 when a communication thread does not exist', async () => {
     const res = await request(
       '/api/v2/communications/threads/missing-thread/messages?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46',
@@ -318,38 +608,9 @@ describe('Communications v2 routes', () => {
 
   it('requests a replay for a communication thread', async () => {
     replayThreadCalls.length = 0;
-    const res = await new Promise((resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: 'localhost',
-          port,
-          path: '/api/v2/communications/threads/thread-001/replay',
-          method: 'POST',
-          headers: {
-            connection: 'close',
-            'Content-Type': 'application/json',
-          },
-        },
-        (response) => {
-          let raw = '';
-          response.on('data', (chunk) => {
-            raw += chunk;
-          });
-          response.on('end', () => {
-            response.status = response.statusCode;
-            response.json = () => JSON.parse(raw);
-            resolve(response);
-          });
-        },
-      );
-      req.on('error', reject);
-      req.write(
-        JSON.stringify({
-          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-          mailbox_id: 'owner-primary',
-        }),
-      );
-      req.end();
+    const res = await requestWithBody('POST', '/api/v2/communications/threads/thread-001/replay', {
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      mailbox_id: 'owner-primary',
     });
 
     assert.equal(res.status, 202);
@@ -362,38 +623,9 @@ describe('Communications v2 routes', () => {
 
   it('updates the status of a communication thread', async () => {
     updateThreadStatusCalls.length = 0;
-    const res = await new Promise((resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: 'localhost',
-          port,
-          path: '/api/v2/communications/threads/thread-001/status',
-          method: 'POST',
-          headers: {
-            connection: 'close',
-            'Content-Type': 'application/json',
-          },
-        },
-        (response) => {
-          let raw = '';
-          response.on('data', (chunk) => {
-            raw += chunk;
-          });
-          response.on('end', () => {
-            response.status = response.statusCode;
-            response.json = () => JSON.parse(raw);
-            resolve(response);
-          });
-        },
-      );
-      req.on('error', reject);
-      req.write(
-        JSON.stringify({
-          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-          status: 'closed',
-        }),
-      );
-      req.end();
+    const res = await requestWithBody('POST', '/api/v2/communications/threads/thread-001/status', {
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      status: 'closed',
     });
 
     assert.equal(res.status, 200);
@@ -461,38 +693,9 @@ describe('Communications v2 routes', () => {
   });
 
   it('rejects invalid thread status values', async () => {
-    const res = await new Promise((resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: 'localhost',
-          port,
-          path: '/api/v2/communications/threads/thread-001/status',
-          method: 'POST',
-          headers: {
-            connection: 'close',
-            'Content-Type': 'application/json',
-          },
-        },
-        (response) => {
-          let raw = '';
-          response.on('data', (chunk) => {
-            raw += chunk;
-          });
-          response.on('end', () => {
-            response.status = response.statusCode;
-            response.json = () => JSON.parse(raw);
-            resolve(response);
-          });
-        },
-      );
-      req.on('error', reject);
-      req.write(
-        JSON.stringify({
-          tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-          status: 'pending',
-        }),
-      );
-      req.end();
+    const res = await requestWithBody('POST', '/api/v2/communications/threads/thread-001/status', {
+      tenant_id: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      status: 'pending',
     });
 
     assert.equal(res.status, 400);

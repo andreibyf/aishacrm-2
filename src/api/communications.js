@@ -138,10 +138,99 @@ export async function purgeCommunicationThread({ tenantId, threadId } = {}) {
   return handleResponse(response, 'Failed to purge communication thread');
 }
 
+export async function listLeadCaptureQueue({
+  tenantId,
+  mailboxId,
+  status = 'pending_review',
+  limit = 50,
+  offset = 0,
+} = {}) {
+  const query = buildQuery({
+    tenant_id: tenantId,
+    mailbox_id: mailboxId,
+    status,
+    limit,
+    offset,
+  });
+
+  const response = await fetch(`${BACKEND_URL}/api/v2/communications/lead-capture-queue?${query}`, {
+    credentials: 'include',
+  });
+
+  return handleResponse(response, 'Failed to load lead capture queue');
+}
+
+export async function getLeadCaptureQueueItem({ tenantId, queueItemId } = {}) {
+  const query = buildQuery({
+    tenant_id: tenantId,
+  });
+
+  const response = await fetch(
+    `${BACKEND_URL}/api/v2/communications/lead-capture-queue/${queueItemId}?${query}`,
+    {
+      credentials: 'include',
+    },
+  );
+
+  return handleResponse(response, 'Failed to load lead capture queue item');
+}
+
+export async function updateLeadCaptureQueueItemStatus({
+  tenantId,
+  queueItemId,
+  status,
+  note,
+  promotedEntityType,
+  promotedEntityId,
+} = {}) {
+  const response = await fetch(
+    `${BACKEND_URL}/api/v2/communications/lead-capture-queue/${queueItemId}/status`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        status,
+        note,
+        promoted_entity_type: promotedEntityType,
+        promoted_entity_id: promotedEntityId,
+      }),
+    },
+  );
+
+  return handleResponse(response, 'Failed to update lead capture queue item');
+}
+
+export async function promoteLeadCaptureQueueItem({ tenantId, queueItemId, lead } = {}) {
+  const response = await fetch(
+    `${BACKEND_URL}/api/v2/communications/lead-capture-queue/${queueItemId}/promote`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        ...(lead || {}),
+      }),
+    },
+  );
+
+  return handleResponse(response, 'Failed to promote lead capture queue item');
+}
+
 export default {
   listCommunicationThreads,
   getCommunicationThreadMessages,
   replayCommunicationThread,
   updateCommunicationThreadStatus,
   purgeCommunicationThread,
+  listLeadCaptureQueue,
+  getLeadCaptureQueueItem,
+  updateLeadCaptureQueueItemStatus,
+  promoteLeadCaptureQueueItem,
 };
