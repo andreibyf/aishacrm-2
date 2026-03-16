@@ -195,7 +195,7 @@ async function hydrateLeadCaptureQueueItems(tenantId, queueItems, { supabase }) 
       ? supabase
           .from('communications_messages')
           .select(
-            'id, thread_id, internet_message_id, direction, subject, sender_email, sender_name, recipients, cc, bcc, received_at, activity_id, metadata, created_at, updated_at',
+            'id, thread_id, internet_message_id, direction, subject, sender_email, sender_name, recipients, cc, bcc, received_at, text_body, html_body, activity_id, metadata, created_at, updated_at',
           )
           .eq('tenant_id', tenantId)
           .in('id', messageIds)

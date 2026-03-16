@@ -459,6 +459,8 @@ function createLeadCaptureQueueSupabaseStub() {
       cc: [],
       bcc: [],
       received_at: '2026-03-15T12:00:00.000Z',
+      text_body: 'I would love to learn more about your services.',
+      html_body: '<p>I would love to learn more about your services.</p>',
       activity_id: null,
       metadata: {
         attachments: [{ filename: 'intro.pdf' }],
@@ -538,6 +540,14 @@ test('listLeadCaptureQueue hydrates thread and message context', async () => {
   assert.equal(result.queue_items[0].thread.id, 'thread-001');
   assert.equal(result.queue_items[0].message.id, 'message-001');
   assert.equal(result.queue_items[0].message.attachments[0].filename, 'intro.pdf');
+  assert.equal(
+    result.queue_items[0].message.text_body,
+    'I would love to learn more about your services.',
+  );
+  assert.equal(
+    result.queue_items[0].message.html_body,
+    '<p>I would love to learn more about your services.</p>',
+  );
 });
 
 test('getLeadCaptureQueueItem returns a hydrated queue item', async () => {
