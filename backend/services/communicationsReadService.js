@@ -329,7 +329,7 @@ export async function getCommunicationsThreadMessages(
     return null;
   }
 
-  const [messagesResult, linksResult] = await Promise.all([
+  const [messagesResult, linksResult, latestMessageResult] = await Promise.all([
     supabase
       .from('communications_messages')
       .select(
@@ -344,6 +344,15 @@ export async function getCommunicationsThreadMessages(
       .select('thread_id, message_id, entity_type, entity_id, link_scope, source, confidence')
       .eq('tenant_id', tenantId)
       .eq('thread_id', threadId),
+    supabase
+      .from('communications_messages')
+      .select(
+        'id, thread_id, internet_message_id, direction, provider_cursor, subject, sender_email, sender_name, recipients, cc, bcc, received_at, text_body, html_body, headers, activity_id, metadata, created_at, updated_at',
+      )
+      .eq('tenant_id', tenantId)
+      .eq('thread_id', threadId)
+      .order('received_at', { ascending: false, nullsFirst: false })
+      .limit(1),
   ]);
 
   if (messagesResult.error) {
@@ -356,6 +365,14 @@ export async function getCommunicationsThreadMessages(
 
   if (linksResult.error) {
     throw buildServiceError(500, 'communications_links_query_failed', linksResult.error.message);
+  }
+
+  if (latestMessageResult.error) {
+    throw buildServiceError(
+      500,
+      'communications_messages_query_failed',
+      latestMessageResult.error.message,
+    );
   }
 
   const links = linksResult.data || [];
@@ -386,10 +403,7 @@ export async function getCommunicationsThreadMessages(
         ? threadResult.data.metadata.event_log
         : [],
       linked_entities: threadLevelLinks,
-      state: summarizeThreadState(
-        threadResult.data,
-        (messagesResult.data || []).slice(-1)[0] || null,
-      ),
+      state: summarizeThreadState(threadResult.data, (latestMessageResult.data || [])[0] || null),
     },
     messages: (messagesResult.data || []).map((message) => ({
       ...message,

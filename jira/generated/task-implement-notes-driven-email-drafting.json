@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Notes-Driven Email Drafting",
+  "description": "Allow notes attached to CRM records or activities to serve as structured drafting context for AI-generated email.",
+  "labels": ["ai", "email", "notes", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

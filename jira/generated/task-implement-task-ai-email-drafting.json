@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Task AI Email Drafting",
+  "description": "Enable task-oriented workflows to turn a task or reminder into a context-aware email draft.",
+  "labels": ["ai", "email", "tasks", "drafting"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}

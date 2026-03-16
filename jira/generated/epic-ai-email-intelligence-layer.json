@@ -1,0 +1,8 @@
+{
+  "project": "AISHA",
+  "issue_type": "Epic",
+  "summary": "AI Email Intelligence Layer",
+  "description": "Build a tenant-safe AI email drafting layer on top of activities, communications threads, and C.A.R.E. approval controls.",
+  "labels": ["ai", "email", "care", "drafting", "communications"],
+  "epic_name": "AI Email Intelligence Layer"
+}

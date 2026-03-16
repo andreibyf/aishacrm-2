@@ -93,6 +93,11 @@ describe('inbound communications service', () => {
           source: 'explicit',
         },
       ],
+      queueInboundLeadCapture: async () => ({
+        status: 'linked_existing_lead',
+        queue_item_id: null,
+        reason: 'existing_entity_link',
+      }),
       attachActivityToCommunicationsRecords: async ({ activity }) => ({
         ...activity,
         metadata: {
@@ -118,5 +123,37 @@ describe('inbound communications service', () => {
     assert.equal(result.result.attachment_count, 1);
     assert.equal(Array.isArray(result.result.linked_entities), true);
     assert.equal(result.result.linked_entities[0].entity_type, 'lead');
+    assert.equal(result.result.lead_capture_status, 'linked_existing_lead');
+  });
+
+  it('returns queue metadata when an unknown sender is queued for review', async () => {
+    setInboundCommunicationsDependenciesForTests({
+      resolveCanonicalTenant: async (tenantId) => ({
+        uuid: tenantId,
+        slug: 'owner-tenant',
+        source: 'canonical',
+      }),
+      persistInboundThreadAndMessage: async (_request, resolvedTenant) => ({
+        thread: { id: 'thread-001', tenant_id: resolvedTenant.id },
+        message: {
+          id: 'message-001',
+          tenant_id: resolvedTenant.id,
+          metadata: { attachments: [] },
+        },
+      }),
+      resolveInboundEntityLinks: async () => [],
+      queueInboundLeadCapture: async () => ({
+        status: 'queued_for_review',
+        queue_item_id: 'queue-001',
+        reason: 'unknown_sender',
+      }),
+      attachActivityToCommunicationsRecords: async ({ activity }) => activity,
+    });
+
+    const result = await handleInboundCommunicationsEvent(buildRequest());
+
+    assert.equal(result.result.lead_capture_status, 'queued_for_review');
+    assert.equal(result.result.lead_capture_queue_id, 'queue-001');
+    assert.equal(result.result.lead_capture_reason, 'unknown_sender');
   });
 });

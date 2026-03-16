@@ -346,39 +346,10 @@ export async function processActivity(activity) {
   const mailboxId = communications.mailbox_id || meta.mailbox_id || email.mailbox_id || null;
   const mailboxAddress =
     communications.mailbox_address || meta.mailbox_address || email.from || null;
-
-  const providerConnection = await emailWorkerDeps.resolveProviderConnection({
-    tenantId: activity.tenant_id,
-    mailboxId,
-    mailboxAddress,
-  });
-
-  if (!providerConnection) {
-    const failedMeta = {
-      ...meta,
-      delivery: {
-        ...(meta.delivery || {}),
-        provider: 'communications_provider',
-        error:
-          'No communications provider mailbox is configured for this outbound email. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
-        failed_at: new Date().toISOString(),
-      },
-    };
-
-    await emailWorkerDeps.markActivity(activity.id, 'failed', failedMeta);
-    await emailWorkerDeps.createNotification({
-      tenant_id: activity.tenant_id,
-      title: 'Email delivery failed - No communications provider configured',
-      message:
-        'Email could not be sent. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
-      type: 'error',
-    });
-    return;
-  }
-
-  const providerType = providerConnection.connection?.config?.provider_type || 'unknown';
-  const providerName = providerConnection.connection?.config?.provider_name || 'unknown';
-  const from = email.from || providerConnection.connection?.config?.outbound?.from_address;
+  let providerConnection = null;
+  let providerType = 'unknown';
+  let providerName = 'unknown';
+  let from = email.from || null;
   let toList = Array.isArray(toValue)
     ? toValue
     : toValue
@@ -390,6 +361,39 @@ export async function processActivity(activity) {
   let inviteArtifacts = null;
 
   try {
+    providerConnection = await emailWorkerDeps.resolveProviderConnection({
+      tenantId: activity.tenant_id,
+      mailboxId,
+      mailboxAddress,
+    });
+
+    if (!providerConnection) {
+      const failedMeta = {
+        ...meta,
+        delivery: {
+          ...(meta.delivery || {}),
+          provider: 'communications_provider',
+          error:
+            'No communications provider mailbox is configured for this outbound email. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
+          failed_at: new Date().toISOString(),
+        },
+      };
+
+      await emailWorkerDeps.markActivity(activity.id, 'failed', failedMeta);
+      await emailWorkerDeps.createNotification({
+        tenant_id: activity.tenant_id,
+        title: 'Email delivery failed - No communications provider configured',
+        message:
+          'Email could not be sent. Please configure a communications provider mailbox in Settings > Tenant Integrations.',
+        type: 'error',
+      });
+      return;
+    }
+
+    providerType = providerConnection.connection?.config?.provider_type || 'unknown';
+    providerName = providerConnection.connection?.config?.provider_name || 'unknown';
+    from = email.from || providerConnection.connection?.config?.outbound?.from_address;
+
     if (isMeetingInvite) {
       inviteArtifacts = buildMeetingInviteArtifacts(activity, email, meeting, from);
       toList = inviteArtifacts.attendees.map((entry) => entry.email);

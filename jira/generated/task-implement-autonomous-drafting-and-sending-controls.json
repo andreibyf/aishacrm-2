@@ -1,0 +1,9 @@
+{
+  "project": "AISHA",
+  "issue_type": "Task",
+  "summary": "Implement Autonomous Drafting and Sending Controls",
+  "description": "Wire AI email drafting into C.A.R.E. approval and autonomy policy gates so no send path bypasses control logic.",
+  "labels": ["ai", "email", "care", "approval", "autonomy"],
+  "epic": "AI Email Intelligence Layer",
+  "story": "AI Email Intelligence Layer"
+}
