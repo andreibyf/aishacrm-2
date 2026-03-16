@@ -120,7 +120,7 @@ test('attachActivityToCommunicationsRecords preserves message metadata when link
   assert.equal(supabase.updates.message.metadata.communications.thread_id, 'thread-001');
 });
 
-function createLeadCaptureSupabaseStub({ duplicate = null } = {}) {
+function createLeadCaptureSupabaseStub({ duplicate = null, insertError = null } = {}) {
   const inserts = {
     queue: null,
   };
@@ -140,6 +140,7 @@ function createLeadCaptureSupabaseStub({ duplicate = null } = {}) {
       const matches =
         duplicate &&
         ((duplicate.scope === 'thread' && this._lastField === 'thread_id') ||
+          (duplicate.scope === 'message' && this._lastField === 'message_id') ||
           (duplicate.scope === 'sender' && this._lastField === 'sender_email') ||
           (duplicate.scope === 'domain' && this._lastField === 'sender_domain'))
           ? [duplicate.row]
@@ -151,6 +152,12 @@ function createLeadCaptureSupabaseStub({ duplicate = null } = {}) {
       return this;
     },
     single() {
+      if (insertError) {
+        return Promise.resolve({
+          data: null,
+          error: insertError,
+        });
+      }
       return Promise.resolve({
         data: { id: 'queue-001', status: 'pending_review', reason: 'unknown_sender' },
         error: null,
@@ -220,6 +227,53 @@ test('queueInboundLeadCapture suppresses duplicates for matching sender history'
   assert.equal(result.status, 'duplicate_suppressed');
   assert.equal(result.queue_item_id, 'queue-existing');
   assert.equal(supabase.inserts.queue, null);
+});
+
+test('queueInboundLeadCapture skips review queue when opportunity is already linked', async () => {
+  const supabase = createLeadCaptureSupabaseStub();
+
+  const result = await queueInboundLeadCapture(
+    {
+      payload: {
+        subject: 'Re: Deal next steps',
+        from: { email: 'buyer@example.com', name: 'Buyer' },
+      },
+    },
+    { id: 'tenant-1' },
+    { thread: { id: 'thread-001' }, message: { id: 'message-001' } },
+    [{ type: 'opportunity', id: 'opp-001', source: 'thread_history', confidence: 0.7 }],
+    { supabase },
+  );
+
+  assert.equal(result.status, 'linked_existing_entity');
+  assert.equal(result.queue_item_id, null);
+  assert.equal(supabase.inserts.queue, null);
+});
+
+test('queueInboundLeadCapture treats uniqueness conflicts as duplicate suppression', async () => {
+  const supabase = createLeadCaptureSupabaseStub({
+    duplicate: {
+      scope: 'message',
+      row: { id: 'queue-by-message', reason: 'unknown_sender' },
+    },
+    insertError: { code: '23505', message: 'duplicate key value violates unique constraint' },
+  });
+
+  const result = await queueInboundLeadCapture(
+    {
+      payload: {
+        subject: 'Interested in your services',
+        from: { email: 'prospect@example.com', name: 'Prospect' },
+      },
+    },
+    { id: 'tenant-1' },
+    { thread: { id: 'thread-001' }, message: { id: 'message-001' } },
+    [],
+    { supabase },
+  );
+
+  assert.equal(result.status, 'duplicate_suppressed');
+  assert.equal(result.queue_item_id, 'queue-by-message');
 });
 
 test('attachActivityToCommunicationsRecords persists an activity link even when no entity links exist', async () => {

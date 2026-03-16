@@ -346,9 +346,7 @@ export async function getCommunicationsThreadMessages(
       .eq('thread_id', threadId),
     supabase
       .from('communications_messages')
-      .select(
-        'id, thread_id, internet_message_id, direction, provider_cursor, subject, sender_email, sender_name, recipients, cc, bcc, received_at, text_body, html_body, headers, activity_id, metadata, created_at, updated_at',
-      )
+      .select('id, thread_id, received_at, metadata')
       .eq('tenant_id', tenantId)
       .eq('thread_id', threadId)
       .order('received_at', { ascending: false, nullsFirst: false })

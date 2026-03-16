@@ -626,15 +626,27 @@ function dedupeEntityLinks(links) {
 }
 
 function shouldQueueLeadCapture(links = []) {
-  return !links.some((link) => ['lead', 'contact', 'account'].includes(link?.type));
+  return !links.some((link) => ['lead', 'contact', 'account', 'opportunity'].includes(link?.type));
 }
 
 async function findExistingLeadCaptureQueueEntry(
   tenantId,
-  { senderEmail, senderDomain, normalizedSubject, threadId },
+  { senderEmail, senderDomain, normalizedSubject, threadId, messageId },
   { supabase },
 ) {
   const lookups = [];
+
+  if (messageId) {
+    lookups.push(
+      supabase
+        .from('communications_lead_capture_queue')
+        .select('id, reason')
+        .eq('tenant_id', tenantId)
+        .eq('message_id', messageId)
+        .order('created_at', { ascending: false })
+        .limit(1),
+    );
+  }
 
   if (threadId) {
     lookups.push(
@@ -750,6 +762,7 @@ export async function queueInboundLeadCapture(
       senderDomain,
       normalizedSubject,
       threadId: persisted.thread?.id || null,
+      messageId: persisted.message?.id || null,
     },
     { supabase },
   );
@@ -797,6 +810,26 @@ export async function queueInboundLeadCapture(
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      const existing = await findExistingLeadCaptureQueueEntry(
+        resolvedTenant.id,
+        {
+          senderEmail,
+          senderDomain,
+          normalizedSubject,
+          threadId: persisted.thread?.id || null,
+          messageId: persisted.message?.id || null,
+        },
+        { supabase },
+      );
+
+      return {
+        status: 'duplicate_suppressed',
+        queue_item_id: existing?.id || null,
+        reason: existing?.reason || 'existing_queue_entry',
+      };
+    }
+
     throw buildPersistenceError('communications_lead_capture_create_failed', error.message);
   }
 
