@@ -11,7 +11,7 @@
  */
 
 import pino from 'pino';
-import { redactSecrets, redactSecretsFromObject } from './devaiSecurity.js';
+import { redactSecrets } from './devaiSecurity.js';
 
 // Determine if we're in development mode
 const isDevelopment =
@@ -49,6 +49,20 @@ const redactPaths = [
 ];
 
 const EMAIL_PATTERN = /\b([A-Za-z0-9._%+-]{1,64})@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/g;
+const INLINE_SECRET_PATTERN = /\bsk(?:[-_][A-Za-z0-9]+)*[-_][A-Za-z0-9_-]{16,}\b/g;
+const SENSITIVE_KEY_PATTERN =
+  /(?:^|[_-])(password|api[_-]?key|secret|token|authorization|cookie)(?:$|[_-])/i;
+const SENSITIVE_EXACT_KEYS = new Set([
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_ANON_KEY',
+  'DATABASE_URL',
+  'REDIS_URL',
+  'OPENAI_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'ELEVENLABS_API_KEY',
+]);
+const CONTENT_KEY_PATTERN =
+  /^(body|content|prompt|html_body|text_body|message_text|notes|note_body|description|html|text)$/i;
 
 export function redactEmail(email) {
   if (!email || typeof email !== 'string') return '***';
@@ -65,19 +79,26 @@ function redactEmailsInString(value) {
 function redactInlineSecrets(value) {
   if (typeof value !== 'string') return value;
   return value
-    .replace(/\bsk-[A-Za-z0-9]{20,}\b/g, '[REDACTED_API_KEY]')
+    .replace(INLINE_SECRET_PATTERN, '[REDACTED_API_KEY]')
     .replace(/\bBearer\s+[A-Za-z0-9._-]{20,}\b/gi, 'Bearer [REDACTED_TOKEN]');
 }
 
-function truncateString(value, maxLength = 200) {
-  if (typeof value !== 'string' || value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, maxLength)}...`;
+function isSensitiveKey(key) {
+  if (typeof key !== 'string' || !key) return false;
+  return SENSITIVE_EXACT_KEYS.has(key) || SENSITIVE_KEY_PATTERN.test(key);
 }
 
-export function sanitizeLogValue(value, options = {}) {
+function sanitizeLogValueInternal(value, options, seen, parentKey = '') {
   const { maxDepth = 4, maxStringLength = 200, maxArrayLength = 10 } = options;
+
+  if (isSensitiveKey(parentKey)) {
+    return '[REDACTED]';
+  }
+
+  if (CONTENT_KEY_PATTERN.test(parentKey)) {
+    const len = typeof value === 'string' ? value.length : (JSON.stringify(value)?.length ?? 0);
+    return `[CONTENT: ${len} chars]`;
+  }
 
   if (value == null || typeof value === 'number' || typeof value === 'boolean') {
     return value;
@@ -93,7 +114,7 @@ export function sanitizeLogValue(value, options = {}) {
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: sanitizeLogValue(value.message, options),
+      message: sanitizeLogValueInternal(value.message, options, seen, 'message'),
       code: value.code,
       status: value.status,
       statusCode: value.statusCode,
@@ -107,31 +128,55 @@ export function sanitizeLogValue(value, options = {}) {
     return '[Object]';
   }
 
-  if (Array.isArray(value)) {
-    return value.slice(0, maxArrayLength).map((item) =>
-      sanitizeLogValue(item, {
-        maxDepth: maxDepth - 1,
-        maxStringLength,
-        maxArrayLength,
-      }),
-    );
-  }
-
   if (typeof value === 'object') {
-    const redactedObject = redactSecretsFromObject(value);
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      return value.slice(0, maxArrayLength).map((item) =>
+        sanitizeLogValueInternal(
+          item,
+          {
+            maxDepth: maxDepth - 1,
+            maxStringLength,
+            maxArrayLength,
+          },
+          seen,
+        ),
+      );
+    }
+
     return Object.fromEntries(
-      Object.entries(redactedObject).map(([key, entryValue]) => [
+      Object.entries(value).map(([key, entryValue]) => [
         key,
-        sanitizeLogValue(entryValue, {
-          maxDepth: maxDepth - 1,
-          maxStringLength,
-          maxArrayLength,
-        }),
+        sanitizeLogValueInternal(
+          entryValue,
+          {
+            maxDepth: maxDepth - 1,
+            maxStringLength,
+            maxArrayLength,
+          },
+          seen,
+          key,
+        ),
       ]),
     );
   }
 
   return value;
+}
+
+function truncateString(value, maxLength = 200) {
+  if (typeof value !== 'string' || value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...`;
+}
+
+export function sanitizeLogValue(value, options = {}) {
+  return sanitizeLogValueInternal(value, options, new WeakSet());
 }
 
 export function summarizeMessagesForLog(messages = []) {
@@ -168,7 +213,13 @@ export function summarizeRowsForLog(rows = []) {
 }
 
 export function toSafeErrorMeta(error) {
-  return sanitizeLogValue(error instanceof Error ? error : { message: error }, { maxDepth: 3 });
+  if (error instanceof Error) {
+    return sanitizeLogValue(error, { maxDepth: 3 });
+  }
+  if (error && typeof error === 'object') {
+    return sanitizeLogValue(error, { maxDepth: 3 });
+  }
+  return sanitizeLogValue({ message: error }, { maxDepth: 3 });
 }
 
 /**
