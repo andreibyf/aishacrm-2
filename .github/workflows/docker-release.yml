@@ -536,6 +536,20 @@ jobs:
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
             phase "Recreating main production services"
             run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms redpanda telemetry-sidecar office-viz
+            phase "Waiting for aisha-comms to become healthy"
+            run_timed 3m sh -c '
+              for i in $(seq 1 36); do
+                STATUS=$(docker inspect --format="{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" aishacrm-comms 2>/dev/null || true)
+                if [ "$STATUS" = "healthy" ]; then
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "ERROR: aishacrm-comms did not become healthy"
+              docker compose -f docker-compose.prod.yml ps aisha-comms || true
+              docker logs --tail=200 aishacrm-comms || true
+              exit 1
+            '
 
             # Deploy MCP server (separate compose file with 3 containers)
             phase "Deploying MCP server cluster (1 server + 2 nodes)"
