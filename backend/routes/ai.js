@@ -50,6 +50,10 @@ import {
 import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
 import { generateChatDrivenEmailDraft } from '../services/chatDrivenEmailDraftService.js';
 import {
+  normalizeEmailEntityType,
+  buildEntityTableName,
+} from '../services/aiEmailDraftingSupport.js';
+import {
   routeIntentToTool,
   shouldForceToolChoice,
   getRelevantToolsForIntent,
@@ -455,15 +459,8 @@ export default function createAIRoutes(pgPool) {
 
       if (req.user) {
         const supabase = getSupabaseClient();
-        const tableMap = {
-          lead: 'leads',
-          contact: 'contacts',
-          account: 'accounts',
-          opportunity: 'opportunities',
-          bizdev_source: 'bizdev_sources',
-        };
-        const normalizedType = String(entityType).replace(/s$/, '');
-        const tableName = tableMap[normalizedType] || tableMap[entityType];
+        const normalizedType = normalizeEmailEntityType(entityType);
+        const tableName = buildEntityTableName(normalizedType);
 
         if (!tableName) {
           return res.status(400).json({
