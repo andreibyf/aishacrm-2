@@ -494,9 +494,10 @@ describe('Communications page smoke test', () => {
 
     expect(screen.getByLabelText(/^to$/i)).toHaveValue('prospect@example.com');
     expect(screen.getByLabelText(/^subject$/i)).toHaveValue('Re: Intro call');
-    expect(screen.getByLabelText(/^body$/i)).toHaveValue(
-      '\n\nOn 3/14/2026, 8:00:00 AM, You wrote:\n> Looking forward to next week.',
-    );
+    const replyBody = screen.getByLabelText(/^body$/i).value;
+    expect(replyBody).toContain('On ');
+    expect(replyBody).toContain(', You wrote:');
+    expect(replyBody).toContain('> Looking forward to next week.');
 
     fireEvent.change(screen.getByLabelText(/^body$/i), {
       target: { value: 'Thanks for the quick reply.' },

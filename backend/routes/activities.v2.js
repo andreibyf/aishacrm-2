@@ -163,7 +163,12 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
 
 export default function createActivityV2Routes(_pgPool, options = {}) {
   const router = express.Router();
-  const { generateScheduledAiEmailDraft = defaultGenerateScheduledAiEmailDraft } = options;
+  const {
+    generateScheduledAiEmailDraft = defaultGenerateScheduledAiEmailDraft,
+    getSupabaseClient: getSupabaseClientOverride = getSupabaseClient,
+    getVisibilityScope: getVisibilityScopeOverride = getVisibilityScope,
+    getAccessLevel: getAccessLevelOverride = getAccessLevel,
+  } = options;
 
   router.use(validateTenantAccess);
 
@@ -1058,6 +1063,34 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const supabase = getSupabaseClientOverride();
+      const { data: activity, error: activityError } = await supabase
+        .from('activities')
+        .select('id, assigned_to, assigned_to_team')
+        .eq('tenant_id', tenant_id)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (activityError) throw new Error(activityError.message);
+      if (!activity) {
+        return res.status(404).json({ status: 'error', message: 'Activity not found' });
+      }
+
+      if (req.user) {
+        const scope = await getVisibilityScopeOverride(req.user, supabase);
+        const access = getAccessLevelOverride(
+          scope,
+          activity.assigned_to_team,
+          activity.assigned_to,
+          req.user.id,
+        );
+        if (access === 'none') {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'You do not have access to this record' });
+        }
       }
 
       const result = await generateScheduledAiEmailDraft({

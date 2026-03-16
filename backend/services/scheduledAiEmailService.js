@@ -30,6 +30,49 @@ function buildEntityTableName(entityType) {
   return tableMap[entityType] || null;
 }
 
+function buildEntitySelectColumns(entityType) {
+  if (entityType === 'account') return 'id, name, email';
+  if (entityType === 'opportunity') return 'id, name, contact_id, lead_id';
+  return 'id, first_name, last_name, company, email';
+}
+
+async function loadEntityEmailById(supabase, tenantId, entityType, entityId) {
+  const tableName = buildEntityTableName(entityType);
+  if (!tableName || !entityId) return null;
+
+  const result = await supabase
+    .from(tableName)
+    .select('id, email')
+    .eq('tenant_id', tenantId)
+    .eq('id', entityId)
+    .maybeSingle();
+
+  if (result.error) {
+    throw buildServiceError(500, 'scheduled_ai_email_related_lookup_failed', result.error.message);
+  }
+
+  return cleanString(result.data?.email);
+}
+
+async function resolveRelatedRecipientEmail(supabase, activity, entity) {
+  const directEmail = cleanString(activity.related_email);
+  if (directEmail) return directEmail;
+
+  if (activity.related_to === 'opportunity') {
+    const contactEmail = await loadEntityEmailById(
+      supabase,
+      activity.tenant_id,
+      'contact',
+      entity?.contact_id,
+    );
+    if (contactEmail) return contactEmail;
+
+    return loadEntityEmailById(supabase, activity.tenant_id, 'lead', entity?.lead_id);
+  }
+
+  return cleanString(entity?.email);
+}
+
 async function loadRelatedEntityContext(supabase, activity) {
   if (!activity.related_to || !activity.related_id) {
     return { recipientEmail: cleanString(activity.related_email), entity: null };
@@ -40,16 +83,10 @@ async function loadRelatedEntityContext(supabase, activity) {
     return { recipientEmail: cleanString(activity.related_email), entity: null };
   }
 
-  let selectColumns = 'id';
-  if (activity.related_to === 'account' || activity.related_to === 'opportunity') {
-    selectColumns = 'id, name, email';
-  } else {
-    selectColumns = 'id, first_name, last_name, company, email';
-  }
-
   const result = await supabase
     .from(tableName)
-    .select(selectColumns)
+    .select(buildEntitySelectColumns(activity.related_to))
+    .eq('tenant_id', activity.tenant_id)
     .eq('id', activity.related_id)
     .maybeSingle();
 
@@ -59,7 +96,7 @@ async function loadRelatedEntityContext(supabase, activity) {
 
   const entity = result.data || null;
   return {
-    recipientEmail: cleanString(activity.related_email) || cleanString(entity?.email),
+    recipientEmail: await resolveRelatedRecipientEmail(supabase, activity, entity),
     entity,
   };
 }

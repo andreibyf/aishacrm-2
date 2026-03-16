@@ -5,7 +5,7 @@ import { generateScheduledAiEmailDraft } from '../../services/scheduledAiEmailSe
 
 function createSupabaseStub({
   activityOverrides = {},
-  relatedEntity = null,
+  relatedEntities = {},
   notes = [],
   links = [],
   messages = [],
@@ -13,6 +13,7 @@ function createSupabaseStub({
   const calls = {
     executeSendEmailAction: [],
     updatedActivity: null,
+    tableQueries: [],
   };
 
   const activityRecord = {
@@ -60,21 +61,6 @@ function createSupabaseStub({
           ...updatedActivity,
           metadata: calls.updatedActivity.metadata,
         },
-        error: null,
-      };
-    },
-  };
-
-  const relatedTable = {
-    select() {
-      return this;
-    },
-    eq() {
-      return this;
-    },
-    async maybeSingle() {
-      return {
-        data: relatedEntity,
         error: null,
       };
     },
@@ -129,10 +115,27 @@ function createSupabaseStub({
     calls,
     from(table) {
       if (table === 'activities') return activitiesTable;
-      if (table === 'leads') return relatedTable;
       if (table === 'note') return notesTable;
       if (table === 'communications_entity_links') return linksTable;
       if (table === 'communications_messages') return messagesTable;
+      if (['leads', 'contacts', 'accounts', 'opportunities', 'bizdev_sources'].includes(table)) {
+        return {
+          select(columns) {
+            calls.tableQueries.push({ table, action: 'select', columns });
+            return this;
+          },
+          eq(field, value) {
+            calls.tableQueries.push({ table, action: 'eq', field, value });
+            return this;
+          },
+          async maybeSingle() {
+            return {
+              data: relatedEntities[table] || null,
+              error: null,
+            };
+          },
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     },
   };
@@ -140,12 +143,14 @@ function createSupabaseStub({
 
 test('generateScheduledAiEmailDraft routes scheduled activities into CARE approval flow', async () => {
   const supabase = createSupabaseStub({
-    relatedEntity: {
-      id: 'lead-001',
-      first_name: 'Prospect',
-      last_name: 'Person',
-      company: 'Example Co',
-      email: 'prospect@example.com',
+    relatedEntities: {
+      leads: {
+        id: 'lead-001',
+        first_name: 'Prospect',
+        last_name: 'Person',
+        company: 'Example Co',
+        email: 'prospect@example.com',
+      },
     },
     notes: [
       {
@@ -239,4 +244,94 @@ test('generateScheduledAiEmailDraft supports immediate queued email generation w
     result.activity.metadata.ai_email_generation.generated_activity_id,
     'email-activity-001',
   );
+});
+
+test('generateScheduledAiEmailDraft scopes related entity lookups by tenant', async () => {
+  const supabase = createSupabaseStub({
+    relatedEntities: {
+      leads: {
+        id: 'lead-001',
+        first_name: 'Prospect',
+        last_name: 'Person',
+        company: 'Example Co',
+        email: 'prospect@example.com',
+      },
+    },
+  });
+
+  await generateScheduledAiEmailDraft(
+    {
+      tenantId: 'tenant-1',
+      activityId: 'activity-001',
+      user: { id: 'user-1', email: 'owner@example.com' },
+    },
+    {
+      supabase,
+      executeSendEmailAction: async () => ({
+        status: 'pending_approval',
+        suggestion_id: 'suggestion-tenant',
+      }),
+    },
+  );
+
+  assert.deepEqual(
+    supabase.calls.tableQueries.filter((entry) => entry.table === 'leads' && entry.action === 'eq'),
+    [
+      { table: 'leads', action: 'eq', field: 'tenant_id', value: 'tenant-1' },
+      { table: 'leads', action: 'eq', field: 'id', value: 'lead-001' },
+    ],
+  );
+});
+
+test('generateScheduledAiEmailDraft resolves opportunity recipients from linked contact records', async () => {
+  const supabase = createSupabaseStub({
+    activityOverrides: {
+      related_to: 'opportunity',
+      related_id: 'opp-001',
+      related_email: null,
+    },
+    relatedEntities: {
+      opportunities: {
+        id: 'opp-001',
+        name: 'Big Deal',
+        contact_id: 'contact-001',
+        lead_id: null,
+      },
+      contacts: {
+        id: 'contact-001',
+        email: 'buyer@example.com',
+      },
+    },
+  });
+
+  const result = await generateScheduledAiEmailDraft(
+    {
+      tenantId: 'tenant-1',
+      activityId: 'activity-001',
+      user: { id: 'user-1', email: 'owner@example.com' },
+    },
+    {
+      supabase,
+      executeSendEmailAction: async (...args) => {
+        supabase.calls.executeSendEmailAction.push(args);
+        return {
+          status: 'pending_approval',
+          suggestion_id: 'suggestion-opportunity',
+        };
+      },
+    },
+  );
+
+  const selects = supabase.calls.tableQueries.filter(
+    (entry) => entry.table === 'opportunities' && entry.action === 'select',
+  );
+  assert.deepEqual(selects, [
+    {
+      table: 'opportunities',
+      action: 'select',
+      columns: 'id, name, contact_id, lead_id',
+    },
+  ]);
+  assert.equal(supabase.calls.executeSendEmailAction[0][4].to, 'buyer@example.com');
+  assert.equal(result.activity.metadata.ai_email_generation.recipient_email, 'buyer@example.com');
 });
