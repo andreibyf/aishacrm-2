@@ -128,6 +128,11 @@ describe('Internal Communications Route Scaffolding', () => {
           },
         },
       }),
+      queueInboundLeadCapture: async () => ({
+        status: 'pending_evaluation',
+        queue_item_id: null,
+        reason: null,
+      }),
     });
 
     setCommunicationsEventDependenciesForTests({

@@ -355,7 +355,7 @@ async function executeStepAction(supabase, execution, playbook, step, stepIndex)
 
   switch (action_type) {
     case 'send_email':
-      return await executeSendEmail(
+      return await executeCareSendEmailAction(
         supabase,
         tenant_id,
         entity_type,
@@ -426,7 +426,14 @@ async function executeStepAction(supabase, execution, playbook, step, stepIndex)
  * Send email — creates an email activity record.
  * emailWorker polls for these and sends via SMTP.
  */
-async function executeSendEmail(supabase, tenantId, entityType, entityId, config, base) {
+export async function executeCareSendEmailAction(
+  supabase,
+  tenantId,
+  entityType,
+  entityId,
+  config,
+  base,
+) {
   const { to, subject, body_prompt, use_ai_generation, require_approval } = config;
   let emailBody = config.body || '';
   let tokens = 0;
@@ -488,6 +495,15 @@ async function executeSendEmail(supabase, tenantId, entityType, entityId, config
     }
   }
 
+  const activityMetadata =
+    config.activity_metadata && typeof config.activity_metadata === 'object'
+      ? config.activity_metadata
+      : {};
+  const activitySource =
+    typeof config.source === 'string' && config.source.trim()
+      ? config.source.trim()
+      : 'care_playbook';
+
   // Create email activity (emailWorker picks this up)
   const { data: activity, error } = await supabase
     .from('activities')
@@ -499,7 +515,11 @@ async function executeSendEmail(supabase, tenantId, entityType, entityId, config
       status: 'queued',
       related_to: entityType,
       related_id: entityId,
-      metadata: { source: 'care_playbook', playbook_generated: true },
+      metadata: {
+        source: activitySource,
+        ...(activitySource === 'care_playbook' ? { playbook_generated: true } : {}),
+        ...activityMetadata,
+      },
     })
     .select('id')
     .single();
@@ -942,4 +962,5 @@ export async function queuePlaybookExecution(executionId) {
 export default {
   initPlaybookQueueProcessor,
   queuePlaybookExecution,
+  executeCareSendEmailAction,
 };

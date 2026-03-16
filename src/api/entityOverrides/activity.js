@@ -81,3 +81,43 @@ Activity.search = async function (searchParams = {}) {
     throw error;
   }
 };
+
+Activity.generateAiEmailDraft = async function (id, tenantId) {
+  if (!id) {
+    throw new Error('Activity id is required');
+  }
+
+  let resolvedTenantId = tenantId;
+  if (!resolvedTenantId && typeof window !== 'undefined') {
+    resolvedTenantId =
+      localStorage.getItem('selected_tenant_id') ||
+      new URL(window.location.href).searchParams.get('tenant');
+  }
+
+  if (!resolvedTenantId) {
+    throw new Error('tenant_id is required for Activity.generateAiEmailDraft');
+  }
+
+  const authOpts = await getAuthFetchOptions();
+  const response = await fetch(`${BACKEND_URL}/api/v2/activities/${id}/generate-ai-email`, {
+    method: 'POST',
+    ...authOpts,
+    body: JSON.stringify({
+      tenant_id: resolvedTenantId,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ message: 'Failed to generate AI email draft' }));
+    throw new Error(error.message || 'Failed to generate AI email draft');
+  }
+
+  const result = await response.json();
+  if (result.status !== 'success') {
+    throw new Error(result.message || 'Failed to generate AI email draft');
+  }
+
+  return result.data;
+};

@@ -2,6 +2,7 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
+import { generateScheduledAiEmailDraft as defaultGenerateScheduledAiEmailDraft } from '../services/scheduledAiEmailService.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
@@ -160,8 +161,9 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
   return { due_date: dueDate || null, due_time: dueTime || null, originalIso };
 }
 
-export default function createActivityV2Routes(_pgPool) {
+export default function createActivityV2Routes(_pgPool, options = {}) {
   const router = express.Router();
+  const { generateScheduledAiEmailDraft = defaultGenerateScheduledAiEmailDraft } = options;
 
   router.use(validateTenantAccess);
 
@@ -1046,6 +1048,32 @@ export default function createActivityV2Routes(_pgPool) {
     } catch (err) {
       logger.error('[Activities v2 GET /:id/assignment-history] Error:', err.message);
       res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  router.post('/:id/generate-ai-email', invalidateCache('activities'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.body?.tenant_id || req.query?.tenant_id || req.tenant?.id;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const result = await generateScheduledAiEmailDraft({
+        tenantId: tenant_id,
+        activityId: id,
+        user: req.user,
+      });
+
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[Activities v2 POST /:id/generate-ai-email] Error:', error);
+      res.status(error.statusCode || 500).json({
+        status: 'error',
+        code: error.code || 'scheduled_ai_email_generation_failed',
+        message: error.message,
+      });
     }
   });
 
