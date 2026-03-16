@@ -50,6 +50,8 @@ beforeEach(() => {
   processChatCommand.mockClear();
   addHistoryEntry.mockClear();
   getSuggestions.mockReturnValue([]);
+  window.history.pushState({}, '', '/');
+  localStorage.setItem('tenant_id', 'tenant-test-001');
 });
 
 describe('[AISHA_CHAT] deriveRouteContext', () => {
