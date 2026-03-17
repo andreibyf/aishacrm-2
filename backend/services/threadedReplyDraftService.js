@@ -154,7 +154,7 @@ export async function generateThreadedReplyDraft(
     {
       tenantId,
       threadId,
-      limit: 100,
+      limit: 250,
       offset: 0,
     },
     { supabase },
@@ -201,18 +201,20 @@ export async function generateThreadedReplyDraft(
   }
 
   const threadContext = buildThreadHistoryContext(thread, messages);
-  const crmContext = entityType && entityId ? formatContextBlock(contextRecord, entity, notes, []) : '';
+  const crmContext =
+    entityType && entityId ? formatContextBlock(contextRecord, entity, notes, []) : '';
   const mergedPrompt = [normalizedPrompt, crmContext, threadContext].filter(Boolean).join('\n\n');
   const lastMessage = messages[messages.length - 1] || null;
   const references = collectThreadReferenceIds(messages);
-  const inReplyTo = cleanString(lastMessage?.internet_message_id) || references[references.length - 1] || null;
+  const inReplyTo =
+    cleanString(lastMessage?.internet_message_id) || references[references.length - 1] || null;
   const requestedAt = new Date().toISOString();
   const resolvedSubject = ensureReplySubject(subject, thread.subject);
 
   const generationResult = await executeSendEmailAction(
     supabase,
     tenantId,
-    entityType || 'activity',
+    entityType || 'communications_thread',
     entityId || thread.id,
     {
       to: recipientEmail,

@@ -190,3 +190,58 @@ test('generateThreadedReplyDraft returns 404 when the thread does not exist', as
     },
   );
 });
+
+test('generateThreadedReplyDraft uses communications_thread entity type for unlinked threads', async () => {
+  const supabase = createSupabaseStub();
+
+  const result = await generateThreadedReplyDraft(
+    {
+      tenantId: 'tenant-1',
+      threadId: 'thread-unlinked',
+      prompt: 'Send a polite follow-up.',
+      user: { id: 'user-1', email: 'owner@example.com' },
+    },
+    {
+      supabase,
+      getThreadMessages: async () => ({
+        thread: {
+          id: 'thread-unlinked',
+          mailbox_id: 'owner-primary',
+          mailbox_address: 'owner@example.com',
+          subject: 'General inquiry',
+          status: 'open',
+          participants: [
+            { email: 'owner@example.com', role: 'mailbox' },
+            { email: 'visitor@example.com', role: 'sender' },
+          ],
+          linked_entities: [],
+        },
+        messages: [
+          {
+            id: 'msg-u1',
+            internet_message_id: '<msg-u1@example.com>',
+            direction: 'inbound',
+            subject: 'General inquiry',
+            sender_email: 'visitor@example.com',
+            received_at: '2026-03-16T10:00:00.000Z',
+            text_body: 'I have a question about your product.',
+          },
+        ],
+      }),
+      executeSendEmailAction: async (...args) => {
+        supabase.calls.executeSendEmailAction.push(args);
+        return { status: 'pending_approval', suggestion_id: 'suggestion-unlinked' };
+      },
+    },
+  );
+
+  assert.equal(supabase.calls.executeSendEmailAction.length, 1);
+  const [, , entityType, entityId] = supabase.calls.executeSendEmailAction[0];
+  assert.equal(
+    entityType,
+    'communications_thread',
+    'unlinked threads should use communications_thread, not activity',
+  );
+  assert.equal(entityId, 'thread-unlinked', 'unlinked threads should use thread.id as entity id');
+  assert.equal(result.recipient_email, 'visitor@example.com');
+});
