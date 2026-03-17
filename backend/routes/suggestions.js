@@ -14,6 +14,8 @@ import express from 'express';
 import { resolveCanonicalTenant, isUuid } from '../lib/tenantCanonicalResolver.js';
 import { triggerForTenant } from '../lib/aiTriggersWorker.js';
 import { executeBraidTool } from '../lib/braidIntegration-v2.js';
+import { executeCareSendEmailAction } from '../lib/care/carePlaybookExecutor.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
 
 export default function createSuggestionsRoutes(pgPool) {
@@ -630,6 +632,59 @@ export default function createSuggestionsRoutes(pgPool) {
   });
 
   /**
+   * Dispatch a suggestion action to the appropriate executor.
+   * - `send_email` → CARE email pipeline (executeCareSendEmailAction)
+   * - all others → Braid tool execution
+   *
+   * Returns { success: boolean, result: any }
+   */
+  async function applySuggestionAction(action, suggestion, tenantRecord, userEmail) {
+    const toolName = action.tool_name;
+    const toolArgs = action.tool_args || {};
+
+    if (toolName === 'send_email') {
+      const supabase = getSupabaseClient();
+      const entityType = suggestion.record_type || 'contact';
+      const entityId = suggestion.record_id || null;
+
+      const config = {
+        ...toolArgs,
+        require_approval: false,   // already approved by user
+        use_ai_generation: true,   // generate body from body_prompt
+      };
+      const base = { action: 'send_email' };
+
+      const result = await executeCareSendEmailAction(
+        supabase,
+        tenantRecord.id,
+        entityType,
+        entityId,
+        config,
+        base,
+      );
+
+      const success = result?.status === 'completed' || result?.status === 'pending_approval';
+      return { success, result };
+    }
+
+    // Default: execute via Braid tool registry
+    let braidResult = await executeBraidTool(
+      toolName,
+      toolArgs,
+      tenantRecord,
+      userEmail,
+    );
+
+    if (braidResult?.tag === 'Err') {
+      return { success: false, result: { error: braidResult.error } };
+    }
+    if (braidResult?.tag === 'Ok') {
+      braidResult = braidResult.value;
+    }
+    return { success: true, result: braidResult };
+  }
+
+  /**
    * @openapi
    * /api/ai/suggestions/{id}/apply:
    *   post:
@@ -697,7 +752,7 @@ export default function createSuggestionsRoutes(pgPool) {
         });
       }
 
-      // Safe Apply Engine - Execute the action via Braid
+      // Safe Apply Engine - Dispatch action to appropriate executor
       logger.debug(`[Suggestions] Applying suggestion ${id}: ${action.tool_name}`, {
         user: userEmail,
         tenant: resolved.uuid,
@@ -714,24 +769,14 @@ export default function createSuggestionsRoutes(pgPool) {
       let applySuccess = false;
 
       try {
-        applyResult = await executeBraidTool(
-          action.tool_name,
-          action.tool_args || {},
+        const dispatched = await applySuggestionAction(
+          action,
+          suggestion,
           tenantRecord,
           userEmail,
         );
-
-        // Check if result is an error
-        if (applyResult?.tag === 'Err') {
-          applySuccess = false;
-          applyResult = { error: applyResult.error };
-        } else {
-          applySuccess = true;
-          // Unwrap Ok result
-          if (applyResult?.tag === 'Ok') {
-            applyResult = applyResult.value;
-          }
-        }
+        applyResult = dispatched.result;
+        applySuccess = dispatched.success;
       } catch (toolError) {
         applyResult = { error: toolError.message };
         applySuccess = false;

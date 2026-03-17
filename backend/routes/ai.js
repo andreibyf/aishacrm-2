@@ -5462,27 +5462,63 @@ ${conversationSummary}`;
 
   // ============================================================================
   // POST /api/ai/generate-email-draft - Generate AI email draft
+  // DEPRECATED: Use POST /api/ai/chat-draft-email (with entityType+entityId) instead.
+  // Retained for backward compatibility.
   // ============================================================================
   router.post('/generate-email-draft', async (req, res) => {
     const startedAt = Date.now();
-    try {
-      const { recipientEmail, recipientName, context, prompt } = req.body;
+    res.set('X-Deprecated', 'Use POST /api/ai/chat-draft-email instead');
 
-      if (!prompt) {
+    try {
+      const { recipientEmail, recipientName, context, prompt, entityType, entityId, userPrompt } = req.body;
+      const effectivePrompt = prompt || userPrompt;
+
+      if (!effectivePrompt) {
         return res.status(400).json({
           status: 'error',
           message: 'prompt is required',
         });
       }
 
-      // Get OpenAI client
-      const openai = getOpenAIClient();
-      if (!openai) {
-        return res.status(500).json({
-          status: 'error',
-          message: 'AI provider not configured',
+      const tenantId = req.tenant?.id;
+      const user = req.user || {};
+
+      // Modern path: if entityType + entityId are provided, route through CARE pipeline
+      if (entityType && entityId && tenantId) {
+        const result = await generateChatDrivenEmailDraft(
+          {
+            tenantId,
+            entityType,
+            entityId,
+            prompt: effectivePrompt,
+            subject: null,
+            conversationId: null,
+            requireApproval: false,
+            user,
+          },
+        );
+
+        return res.json({
+          status: 'success',
+          data: {
+            success: true,
+            draft: {
+              subject_lines: [result.subject || 'Generated Email'],
+              email_body: result.response || '',
+            },
+            recipientEmail: result.recipient_email || recipientEmail,
+            recipientName,
+          },
+          durationMs: Date.now() - startedAt,
         });
       }
+
+      // Legacy fallback: generate a simple draft via AI Engine (no entity context)
+      const llmConfig = tenantId
+        ? await selectLLMConfigForTenant(tenantId, 'chat_tools')
+        : { provider: 'openai', model: 'gpt-4o-mini' };
+      const apiKey = await resolveLLMApiKey(llmConfig.provider, tenantId);
+      const client = createProviderClient(llmConfig.provider, apiKey);
 
       const systemPrompt = `You are a professional business email writer. Generate a polished, professional email based on the user's instructions. 
 Return ONLY the email content (subject line followed by body), no additional commentary.
@@ -5497,15 +5533,15 @@ Guidelines:
 - Use appropriate greetings and sign-offs
 - Match the tone to the context provided`;
 
-      const userPrompt = `Write an email to ${recipientName || 'the recipient'}${recipientEmail ? ` (${recipientEmail})` : ''}.
+      const userPromptText = `Write an email to ${recipientName || 'the recipient'}${recipientEmail ? ` (${recipientEmail})` : ''}.
 ${context ? `Context: ${context}` : ''}
-Instructions: ${prompt}`;
+Instructions: ${effectivePrompt}`;
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+      const completion = await client.chat.completions.create({
+        model: llmConfig.model || 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
+          { role: 'user', content: userPromptText },
         ],
         max_tokens: 1000,
         temperature: 0.7,
