@@ -1,38 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 import SuggestionQueue from '@/components/ai/SuggestionQueue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-function getFocusedSuggestionFromLocation() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('suggestion') || null;
-}
-
 export default function AISuggestionsPage() {
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const tenantId = selectedTenantId || user?.tenant_id || null;
-  const [focusSuggestionId, setFocusSuggestionId] = useState(() => getFocusedSuggestionFromLocation());
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setFocusSuggestionId(getFocusedSuggestionFromLocation());
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  const focusSuggestionId = searchParams.get('suggestion') || null;
 
   const handleClearFocus = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    params.delete('suggestion');
-    const nextSearch = params.toString();
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`;
-    window.history.pushState({}, '', nextUrl);
-    setFocusSuggestionId(null);
-  }, []);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('suggestion');
+      return next;
+    });
+  }, [setSearchParams]);
 
   if (!tenantId) {
     return (
