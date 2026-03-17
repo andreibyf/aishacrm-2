@@ -20,7 +20,10 @@ import {
   ChevronUp,
   RefreshCw,
   Filter,
-  Loader2
+  Loader2,
+  Mail,
+  Reply,
+  Users,
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -165,6 +168,80 @@ function ConfidenceIndicator({ confidence }) {
 }
 
 /**
+ * Human-readable email preview for send_email suggestions.
+ */
+function EmailPreview({ action }) {
+  const args = action?.tool_args || {};
+  const comms = args.communications || {};
+  const participants = comms.participants || [];
+  const sender = participants.find((p) => p.role === 'sender');
+  const recipients = participants.filter((p) => p.role === 'to');
+  const isReply = Boolean(args.email?.in_reply_to);
+
+  return (
+    <div className="space-y-3">
+      {/* Header row */}
+      <div className="flex items-center gap-2 text-sm font-medium">
+        {isReply ? (
+          <Reply className="w-4 h-4 text-blue-500" />
+        ) : (
+          <Mail className="w-4 h-4 text-blue-500" />
+        )}
+        <span>{isReply ? 'Email Reply' : 'New Email'}</span>
+        {args.source && (
+          <Badge variant="outline" className="text-xs ml-auto">
+            via {args.source.replace(/_/g, ' ')}
+          </Badge>
+        )}
+      </div>
+
+      {/* Email fields */}
+      <div className="border rounded-lg divide-y text-sm">
+        {sender && (
+          <div className="flex gap-2 px-3 py-2">
+            <span className="text-muted-foreground w-16 shrink-0">From</span>
+            <span className="truncate">{sender.email}</span>
+          </div>
+        )}
+        <div className="flex gap-2 px-3 py-2">
+          <span className="text-muted-foreground w-16 shrink-0">To</span>
+          <span className="truncate">
+            {args.to || recipients.map((p) => p.email).join(', ') || '—'}
+          </span>
+        </div>
+        <div className="flex gap-2 px-3 py-2">
+          <span className="text-muted-foreground w-16 shrink-0">Subject</span>
+          <span className="font-medium truncate">{args.subject || '(no subject)'}</span>
+        </div>
+      </div>
+
+      {/* Body prompt / draft instructions */}
+      {args.body_prompt && (
+        <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20 p-3">
+          <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400 mb-1">
+            AI will draft this message using:
+          </p>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+            {args.body_prompt}
+          </p>
+        </div>
+      )}
+
+      {/* Thread context */}
+      {comms.thread_id && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Users className="w-3 h-3" />
+          <span>Thread: {comms.thread_id.slice(0, 8)}...</span>
+          {participants.length > 0 && (
+            <span>• {participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Single suggestion card component
  */
 function SuggestionCard({
@@ -252,9 +329,13 @@ function SuggestionCard({
             {suggestion.action && (
               <div className="p-3 bg-muted rounded-lg">
                 <h4 className="font-medium text-sm mb-2">Proposed Action</h4>
-                <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
-                  {JSON.stringify(suggestion.action, null, 2)}
-                </pre>
+                {suggestion.action.tool_name === 'send_email' ? (
+                  <EmailPreview action={suggestion.action} />
+                ) : (
+                  <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                    {JSON.stringify(suggestion.action, null, 2)}
+                  </pre>
+                )}
               </div>
             )}
 

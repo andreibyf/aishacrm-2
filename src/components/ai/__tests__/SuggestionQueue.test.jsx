@@ -79,7 +79,27 @@ describe('SuggestionQueue', () => {
               priority: 'high',
               confidence: 0.92,
               reasoning: 'Focused suggestion reasoning.',
-              action: { tool_name: 'send_email' },
+              action: {
+                tool_name: 'send_email',
+                tool_args: {
+                  to: 'andrei.byfield@gmail.com',
+                  subject: 'Re: New Thread Test',
+                  body_prompt: 'Draft a concise, professional reply to the latest message.',
+                  source: 'care_playbook',
+                  email: {
+                    references: ['<abc@aishacrm.com>'],
+                    in_reply_to: '<abc@aishacrm.com>',
+                  },
+                  communications: {
+                    thread_id: '5262bbbf-45bc-4bb0-b111-40608aae79a8',
+                    mailbox_id: 'owner-primary',
+                    participants: [
+                      { name: null, role: 'sender', email: 'andrei.byfield@aishacrm.com' },
+                      { name: null, role: 'to', email: 'andrei.byfield@gmail.com' },
+                    ],
+                  },
+                },
+              },
             },
             {
               id: 'suggestion-002',
@@ -124,5 +144,39 @@ describe('SuggestionQueue', () => {
     screen.getByRole('button', { name: /show all suggestions/i }).click();
 
     expect(onClearFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders email preview for send_email suggestions instead of raw JSON', async () => {
+    render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-001" />);
+
+    await waitFor(() => expect(screen.getByText('Focus Record')).toBeInTheDocument());
+
+    // Should show human-readable email fields
+    expect(screen.getByText('Email Reply')).toBeInTheDocument();
+    expect(screen.getByText('andrei.byfield@gmail.com')).toBeInTheDocument();
+    expect(screen.getByText('Re: New Thread Test')).toBeInTheDocument();
+    expect(screen.getByText('andrei.byfield@aishacrm.com')).toBeInTheDocument();
+
+    // Should show the body prompt context
+    expect(
+      screen.getByText('Draft a concise, professional reply to the latest message.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/AI will draft this message using/)).toBeInTheDocument();
+
+    // Should show source badge
+    expect(screen.getByText('via care playbook')).toBeInTheDocument();
+
+    // Should NOT show raw JSON keys like tool_args or thread_id in full
+    expect(screen.queryByText(/"tool_name"/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/"tool_args"/)).not.toBeInTheDocument();
+  });
+
+  it('renders raw JSON for non-email tool suggestions', async () => {
+    render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-002" />);
+
+    await waitFor(() => expect(screen.getByText('Other Record')).toBeInTheDocument());
+
+    // Non-email suggestions should still show raw JSON
+    expect(screen.getByText(/"tool_name": "create_task"/)).toBeInTheDocument();
   });
 });
