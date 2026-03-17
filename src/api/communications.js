@@ -122,6 +122,33 @@ export async function updateCommunicationThreadStatus({ tenantId, threadId, stat
   return handleResponse(response, 'Failed to update communication thread status');
 }
 
+export async function generateThreadedAiReplyDraft({
+  tenantId,
+  threadId,
+  prompt,
+  subject,
+  requireApproval = true,
+} = {}) {
+  const response = await fetch(
+    `${BACKEND_URL}/api/v2/communications/threads/${threadId}/generate-ai-reply`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        prompt,
+        subject,
+        require_approval: requireApproval,
+      }),
+    },
+  );
+
+  return handleResponse(response, 'Failed to generate threaded AI reply');
+}
+
 export async function purgeCommunicationThread({ tenantId, threadId } = {}) {
   const query = buildQuery({
     tenant_id: tenantId,
@@ -228,6 +255,7 @@ export default {
   getCommunicationThreadMessages,
   replayCommunicationThread,
   updateCommunicationThreadStatus,
+  generateThreadedAiReplyDraft,
   purgeCommunicationThread,
   listLeadCaptureQueue,
   getLeadCaptureQueueItem,

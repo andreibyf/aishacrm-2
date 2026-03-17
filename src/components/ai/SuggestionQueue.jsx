@@ -5,7 +5,7 @@
  * Supports approve/reject/defer actions with confidence indicators.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   CheckCircle, 
   XCircle, 
@@ -167,23 +167,33 @@ function ConfidenceIndicator({ confidence }) {
 /**
  * Single suggestion card component
  */
-function SuggestionCard({ 
-  suggestion, 
-  onApprove, 
-  onReject, 
+function SuggestionCard({
+  suggestion,
+  onApprove,
+  onReject,
   onDefer,
-  isProcessing 
+  isProcessing,
+  isHighlighted = false,
+  defaultExpanded = false,
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const config = TRIGGER_CONFIG[suggestion.trigger_type] || TRIGGER_CONFIG.followup_needed;
   const Icon = config.icon;
 
-  const actionSummary = suggestion.action?.tool_name 
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded]);
+
+  const actionSummary = suggestion.action?.tool_name
     ? `${suggestion.action.tool_name.replace(/_/g, ' ')}`
     : 'Suggested action';
 
   return (
-    <Card className={`border-l-4 ${config.bgColor} border-l-current`}>
+    <Card
+      className={`border-l-4 ${config.bgColor} border-l-current ${
+        isHighlighted ? 'ring-2 ring-cyan-500/60 shadow-[0_0_0_1px_rgba(34,211,238,0.2)]' : ''
+      }`}
+    >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
@@ -191,7 +201,8 @@ function SuggestionCard({
               <Icon className={`w-5 h-5 ${config.color}`} />
               <div>
                 <CardTitle className="text-base">
-                  {suggestion.record_name || `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
+                  {suggestion.record_name ||
+                    `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {config.label} • {formatRelativeTime(suggestion.created_at)}
@@ -204,7 +215,11 @@ function SuggestionCard({
               </Badge>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm">
-                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
                 </Button>
               </CollapsibleTrigger>
             </div>
@@ -218,7 +233,7 @@ function SuggestionCard({
               {suggestion.reasoning?.slice(0, 150)}
               {suggestion.reasoning?.length > 150 ? '...' : ''}
             </p>
-            
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <Badge variant="outline">{actionSummary}</Badge>
@@ -244,15 +259,18 @@ function SuggestionCard({
             )}
 
             <div className="text-xs text-muted-foreground">
-              <p>Expires: {suggestion.expires_at ? new Date(suggestion.expires_at).toLocaleString() : 'Never'}</p>
+              <p>
+                Expires:{' '}
+                {suggestion.expires_at ? new Date(suggestion.expires_at).toLocaleString() : 'Never'}
+              </p>
               <p>Created by: {suggestion.created_by || 'AI Trigger Engine'}</p>
             </div>
           </CollapsibleContent>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="default"
               className="bg-green-600 hover:bg-green-700"
               onClick={() => onApprove(suggestion.id)}
@@ -265,8 +283,8 @@ function SuggestionCard({
               )}
               Approve
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="destructive"
               onClick={() => onReject(suggestion.id)}
               disabled={isProcessing}
@@ -274,8 +292,8 @@ function SuggestionCard({
               <XCircle className="w-4 h-4 mr-1" />
               Reject
             </Button>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => onDefer(suggestion.id)}
               disabled={isProcessing}
@@ -293,7 +311,11 @@ function SuggestionCard({
 /**
  * Main SuggestionQueue component
  */
-export default function SuggestionQueue({ tenantId }) {
+export default function SuggestionQueue({
+  tenantId,
+  focusSuggestionId = null,
+  onClearFocus = null,
+}) {
   const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -339,70 +361,87 @@ export default function SuggestionQueue({ tenantId }) {
     }
   }, [backendUrl, tenantId, filter]);
 
+  const focusId = focusSuggestionId ? String(focusSuggestionId) : null;
+
+  const displayedSuggestions = useMemo(() => {
+    if (!focusId) return suggestions;
+    return suggestions.filter((suggestion) => suggestion.id === focusId);
+  }, [focusId, suggestions]);
+
+  const focusedSuggestionMissing = Boolean(
+    focusId && !isLoading && displayedSuggestions.length === 0,
+  );
+
   /**
    * Approve a suggestion
    */
-  const handleApprove = useCallback(async (suggestionId) => {
-    try {
-      setIsProcessing(true);
-      const headers = await getAuthHeaders();
+  const handleApprove = useCallback(
+    async (suggestionId) => {
+      try {
+        setIsProcessing(true);
+        const headers = await getAuthHeaders();
 
-      const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ tenant_id: tenantId }),
-      });
+        const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id: tenantId }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to approve suggestion');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to approve suggestion');
+        }
+
+        const result = await response.json();
+
+        // Remove from list
+        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
+        toast.success(result.message || 'Suggestion approved and executed');
+      } catch (err) {
+        console.error('Error approving suggestion:', err);
+        toast.error(err.message || 'Failed to approve suggestion');
+      } finally {
+        setIsProcessing(false);
       }
-
-      const result = await response.json();
-      
-      // Remove from list
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
-      toast.success(result.message || 'Suggestion approved and executed');
-    } catch (err) {
-      console.error('Error approving suggestion:', err);
-      toast.error(err.message || 'Failed to approve suggestion');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [backendUrl, tenantId]);
+    },
+    [backendUrl, tenantId],
+  );
 
   /**
    * Reject a suggestion
    */
-  const handleReject = useCallback(async (suggestionId) => {
-    try {
-      setIsProcessing(true);
-      const headers = await getAuthHeaders();
+  const handleReject = useCallback(
+    async (suggestionId) => {
+      try {
+        setIsProcessing(true);
+        const headers = await getAuthHeaders();
 
-      const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ tenant_id: tenantId, reason: 'User rejected' }),
-      });
+        const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/reject`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id: tenantId, reason: 'User rejected' }),
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to reject suggestion');
+        if (!response.ok) {
+          throw new Error('Failed to reject suggestion');
+        }
+
+        // Remove from list
+        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
+        toast.success('Suggestion rejected');
+      } catch (err) {
+        console.error('Error rejecting suggestion:', err);
+        toast.error('Failed to reject suggestion');
+      } finally {
+        setIsProcessing(false);
       }
-
-      // Remove from list
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
-      toast.success('Suggestion rejected');
-    } catch (err) {
-      console.error('Error rejecting suggestion:', err);
-      toast.error('Failed to reject suggestion');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [backendUrl, tenantId]);
+    },
+    [backendUrl, tenantId],
+  );
 
   /**
    * Defer a suggestion (snooze for later)
@@ -413,8 +452,8 @@ export default function SuggestionQueue({ tenantId }) {
 
       // For now, just hide it from the list - in full implementation
       // this would update the expires_at or add a "snoozed_until" field
-      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
-      
+      setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+
       toast.info('Suggestion deferred');
     } catch (err) {
       console.error('Error deferring suggestion:', err);
@@ -434,7 +473,7 @@ export default function SuggestionQueue({ tenantId }) {
   // Get unique trigger types for filter
   const availableTriggerTypes = [
     'all',
-    ...new Set(suggestions.map(s => s.trigger_type).filter(Boolean))
+    ...new Set(suggestions.map((s) => s.trigger_type).filter(Boolean)),
   ];
 
   if (isLoading && suggestions.length === 0) {
@@ -452,33 +491,37 @@ export default function SuggestionQueue({ tenantId }) {
         <div>
           <h2 className="text-lg font-semibold">AI Suggestions</h2>
           <p className="text-sm text-muted-foreground">
-            {suggestions.length} pending suggestion{suggestions.length !== 1 ? 's' : ''} for review
+            {displayedSuggestions.length} pending suggestion
+            {displayedSuggestions.length !== 1 ? 's' : ''} for review
           </p>
+          {focusId ? (
+            <p className="text-xs text-cyan-300 mt-1">Showing suggestion {focusId}</p>
+          ) : null}
         </div>
-        
+
         <div className="flex items-center gap-2">
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableTriggerTypes.map(type => (
-                <SelectItem key={type} value={type}>
-                  {type === 'all' 
-                    ? 'All Suggestions' 
-                    : TRIGGER_CONFIG[type]?.label || type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={fetchSuggestions}
-            disabled={isLoading}
-          >
+          {focusId && onClearFocus ? (
+            <Button variant="outline" onClick={onClearFocus}>
+              Show all suggestions
+            </Button>
+          ) : null}
+          {!focusId ? (
+            <Select value={filter} onValueChange={setFilter}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTriggerTypes.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type === 'all' ? 'All Suggestions' : TRIGGER_CONFIG[type]?.label || type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+
+          <Button variant="outline" size="icon" onClick={fetchSuggestions} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
@@ -489,20 +532,33 @@ export default function SuggestionQueue({ tenantId }) {
         <Card className="border-red-200 bg-red-50">
           <CardContent className="py-4">
             <p className="text-sm text-red-600">{error}</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="mt-2"
-              onClick={fetchSuggestions}
-            >
+            <Button variant="outline" size="sm" className="mt-2" onClick={fetchSuggestions}>
               Try Again
             </Button>
           </CardContent>
         </Card>
       )}
 
+      {!error && focusedSuggestionMissing && (
+        <Card className="border-dashed border-cyan-500/40 bg-cyan-500/5">
+          <CardContent className="py-8 text-center">
+            <Lightbulb className="w-12 h-12 mx-auto text-cyan-300 mb-4" />
+            <h3 className="font-medium">Focused suggestion not found</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Suggestion {focusId} may already have been approved, rejected, or removed from the
+              pending queue.
+            </p>
+            {onClearFocus ? (
+              <Button variant="outline" className="mt-4" onClick={onClearFocus}>
+                Show all suggestions
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Empty state */}
-      {!error && suggestions.length === 0 && (
+      {!error && !focusedSuggestionMissing && displayedSuggestions.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center">
             <Lightbulb className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -516,7 +572,7 @@ export default function SuggestionQueue({ tenantId }) {
 
       {/* Suggestion list */}
       <div className="space-y-3">
-        {suggestions.map(suggestion => (
+        {displayedSuggestions.map((suggestion) => (
           <SuggestionCard
             key={suggestion.id}
             suggestion={suggestion}
@@ -524,6 +580,8 @@ export default function SuggestionQueue({ tenantId }) {
             onReject={handleReject}
             onDefer={handleDefer}
             isProcessing={isProcessing}
+            isHighlighted={Boolean(focusId && suggestion.id === focusId)}
+            defaultExpanded={Boolean(focusId && suggestion.id === focusId)}
           />
         ))}
       </div>

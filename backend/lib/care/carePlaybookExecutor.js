@@ -437,6 +437,16 @@ export async function executeCareSendEmailAction(
   const { to, subject, body_prompt, use_ai_generation, require_approval } = config;
   let emailBody = config.body || '';
   let tokens = 0;
+  const emailMetadata =
+    config.email && typeof config.email === 'object' && !Array.isArray(config.email)
+      ? config.email
+      : {};
+  const communicationsMetadata =
+    config.communications &&
+    typeof config.communications === 'object' &&
+    !Array.isArray(config.communications)
+      ? config.communications
+      : {};
 
   // AI-generate body if configured
   if (use_ai_generation && body_prompt) {
@@ -459,6 +469,10 @@ export async function executeCareSendEmailAction(
               to,
               source: 'care_playbook',
               requires_approval: true,
+              ...(Object.keys(emailMetadata).length > 0 ? { email: emailMetadata } : {}),
+              ...(Object.keys(communicationsMetadata).length > 0
+                ? { communications: communicationsMetadata }
+                : {}),
             },
           },
           confidence: 0.9,
@@ -519,6 +533,27 @@ export async function executeCareSendEmailAction(
         source: activitySource,
         ...(activitySource === 'care_playbook' ? { playbook_generated: true } : {}),
         ...activityMetadata,
+        ...(Object.keys(emailMetadata).length > 0
+          ? {
+              email: {
+                ...(activityMetadata.email && typeof activityMetadata.email === 'object'
+                  ? activityMetadata.email
+                  : {}),
+                ...emailMetadata,
+              },
+            }
+          : {}),
+        ...(Object.keys(communicationsMetadata).length > 0
+          ? {
+              communications: {
+                ...(activityMetadata.communications &&
+                typeof activityMetadata.communications === 'object'
+                  ? activityMetadata.communications
+                  : {}),
+                ...communicationsMetadata,
+              },
+            }
+          : {}),
       },
     })
     .select('id')

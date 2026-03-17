@@ -10,6 +10,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { executeCareSendEmailAction } from '../carePlaybookExecutor.js';
 
 // ============================================================
 // Table Name Mapping
@@ -288,5 +289,115 @@ describe('Playbook Executor — Notification Null Guard', () => {
   test('valid email should proceed', () => {
     const userEmail = 'test@example.com';
     assert.ok(userEmail !== null);
+  });
+});
+
+describe('Playbook Executor — Email Metadata Persistence', () => {
+  test('approval suggestions preserve reply headers and communications metadata', async () => {
+    const calls = { insertedSuggestion: null };
+    const supabase = {
+      from(table) {
+        assert.equal(table, 'ai_suggestions');
+        return {
+          insert(payload) {
+            calls.insertedSuggestion = payload;
+            return this;
+          },
+          select() {
+            return this;
+          },
+          async single() {
+            return { data: { id: 'suggestion-001' }, error: null };
+          },
+        };
+      },
+    };
+
+    const result = await executeCareSendEmailAction(
+      supabase,
+      'tenant-1',
+      'lead',
+      'lead-001',
+      {
+        to: 'prospect@example.com',
+        subject: 'Re: Pricing follow-up',
+        body_prompt: 'Draft a reply.',
+        use_ai_generation: true,
+        require_approval: true,
+        email: {
+          in_reply_to: '<message-003@example.com>',
+          references: ['<message-001@example.com>', '<message-003@example.com>'],
+        },
+        communications: {
+          thread_id: 'thread-001',
+          mailbox_id: 'owner-primary',
+        },
+      },
+      { status: 'completed' },
+    );
+
+    assert.equal(result.status, 'pending_approval');
+    assert.deepEqual(calls.insertedSuggestion.action.tool_args.email, {
+      in_reply_to: '<message-003@example.com>',
+      references: ['<message-001@example.com>', '<message-003@example.com>'],
+    });
+    assert.deepEqual(calls.insertedSuggestion.action.tool_args.communications, {
+      thread_id: 'thread-001',
+      mailbox_id: 'owner-primary',
+    });
+  });
+
+  test('queued activities preserve reply headers and communications metadata', async () => {
+    const calls = { insertedActivity: null };
+    const supabase = {
+      from(table) {
+        assert.equal(table, 'activities');
+        return {
+          insert(payload) {
+            calls.insertedActivity = payload;
+            return this;
+          },
+          select() {
+            return this;
+          },
+          async single() {
+            return { data: { id: 'activity-001' }, error: null };
+          },
+        };
+      },
+    };
+
+    const result = await executeCareSendEmailAction(
+      supabase,
+      'tenant-1',
+      'lead',
+      'lead-001',
+      {
+        to: 'prospect@example.com',
+        subject: 'Re: Pricing follow-up',
+        body: 'Static reply body',
+        use_ai_generation: false,
+        source: 'threaded_ai_reply',
+        email: {
+          in_reply_to: '<message-003@example.com>',
+          references: ['<message-001@example.com>', '<message-003@example.com>'],
+        },
+        communications: {
+          thread_id: 'thread-001',
+          mailbox_id: 'owner-primary',
+        },
+      },
+      { status: 'completed' },
+    );
+
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(calls.insertedActivity.metadata.email, {
+      in_reply_to: '<message-003@example.com>',
+      references: ['<message-001@example.com>', '<message-003@example.com>'],
+    });
+    assert.deepEqual(calls.insertedActivity.metadata.communications, {
+      thread_id: 'thread-001',
+      mailbox_id: 'owner-primary',
+    });
   });
 });

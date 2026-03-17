@@ -117,11 +117,6 @@ export async function generateTemplateDrivenEmailDraft(
   },
   { supabase = getSupabaseClient(), executeSendEmailAction } = {},
 ) {
-  // Lazy-load CARE executor to avoid module-level Redis queue init
-  if (!executeSendEmailAction) {
-    const { executeCareSendEmailAction } = await import('../lib/care/carePlaybookExecutor.js');
-    executeSendEmailAction = executeCareSendEmailAction;
-  }
   // 1. Load the template
   const { data: template, error: templateError } = await supabase
     .from('email_template')
@@ -209,6 +204,12 @@ export async function generateTemplateDrivenEmailDraft(
     related_to: normalizedEntityType,
     related_id: entityId,
   };
+
+  // Lazy-load CARE executor to avoid module-level Redis queue init in tests
+  if (!executeSendEmailAction) {
+    const { executeCareSendEmailAction } = await import('../lib/care/carePlaybookExecutor.js');
+    executeSendEmailAction = executeCareSendEmailAction;
+  }
 
   const generationResult = await executeSendEmailAction(
     supabase,

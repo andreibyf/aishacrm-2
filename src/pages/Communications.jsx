@@ -21,6 +21,7 @@ import { Activity } from '@/api/entities';
 import {
   listCommunicationThreads,
   getCommunicationThreadMessages,
+  generateThreadedAiReplyDraft,
   purgeCommunicationThread,
   replayCommunicationThread,
   updateCommunicationThreadStatus,
@@ -40,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 const VIEW_OPTIONS = [
@@ -189,6 +191,13 @@ function renderActivityLabel(activity) {
   return subject || status || 'Linked activity';
 }
 
+function defaultAiReplyPrompt(subject) {
+  const normalizedSubject = String(subject || '').trim();
+  return normalizedSubject
+    ? `Draft a concise, professional reply to the latest message in the thread about "${normalizedSubject}". Answer any open questions, keep the tone human, and end with a clear next step.`
+    : 'Draft a concise, professional reply to the latest message in this thread. Answer any open questions, keep the tone human, and end with a clear next step.';
+}
+
 export default function CommunicationsPage() {
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
@@ -213,6 +222,12 @@ export default function CommunicationsPage() {
   const [statusError, setStatusError] = useState(null);
   const [purgeSubmitting, setPurgeSubmitting] = useState(false);
   const [purgeError, setPurgeError] = useState(null);
+  const [aiDraftPrompt, setAiDraftPrompt] = useState('');
+  const [aiDraftSubject, setAiDraftSubject] = useState('');
+  const [aiDraftRequireApproval, setAiDraftRequireApproval] = useState(true);
+  const [aiDraftSubmitting, setAiDraftSubmitting] = useState(false);
+  const [aiDraftError, setAiDraftError] = useState(null);
+  const [aiDraftResult, setAiDraftResult] = useState(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [composerOpen, setComposerOpen] = useState(false);
   const [composeSubmitting, setComposeSubmitting] = useState(false);
@@ -339,6 +354,15 @@ export default function CommunicationsPage() {
       relatedId: current.relatedId || (entityType !== 'all' ? entityId.trim() : '') || '',
     }));
   }, [entityId, entityType, mailboxId, selectedThread]);
+
+  useEffect(() => {
+    const nextSubject = formatReplySubject(selectedThread?.subject);
+    setAiDraftSubject(selectedThread ? nextSubject : '');
+    setAiDraftPrompt(selectedThread ? defaultAiReplyPrompt(selectedThread.subject) : '');
+    setAiDraftRequireApproval(true);
+    setAiDraftError(null);
+    setAiDraftResult(null);
+  }, [selectedThreadId, selectedThread?.subject]);
 
   const handleRefresh = () => {
     setThreadsError(null);
@@ -531,6 +555,43 @@ export default function CommunicationsPage() {
       setPurgeError(error.message || 'Failed to purge communication thread');
     } finally {
       setPurgeSubmitting(false);
+    }
+  };
+
+  const handleGenerateAiReplyDraft = async () => {
+    if (!effectiveTenantId || !selectedThread?.id || aiDraftSubmitting) return;
+
+    const promptValue = aiDraftPrompt.trim();
+    if (!promptValue) {
+      setAiDraftError('Add reply instructions before generating a draft.');
+      return;
+    }
+
+    setAiDraftSubmitting(true);
+    setAiDraftError(null);
+    try {
+      const result = await generateThreadedAiReplyDraft({
+        tenantId: effectiveTenantId,
+        threadId: selectedThread.id,
+        prompt: promptValue,
+        subject: aiDraftSubject.trim() || undefined,
+        requireApproval: aiDraftRequireApproval,
+      });
+      setAiDraftResult(result || null);
+
+      if (result?.generation_result?.status === 'pending_approval') {
+        toast.success('AI email draft sent for approval.');
+      } else if (result?.generation_result?.activity_id) {
+        toast.success('AI email draft generated and queued for delivery.');
+      } else {
+        toast.success('AI email draft generated.');
+      }
+    } catch (error) {
+      console.error('Failed to generate threaded AI reply draft:', error);
+      setAiDraftError(error?.message || 'Failed to generate AI reply draft');
+      toast.error(error?.message || 'Failed to generate AI reply draft');
+    } finally {
+      setAiDraftSubmitting(false);
     }
   };
 
@@ -1197,6 +1258,134 @@ export default function CommunicationsPage() {
                         </div>
                       </div>
                     )}
+
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            AI Reply Draft
+                          </h3>
+                          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                            Generate a threaded reply from the canonical conversation history and
+                            keep reply headers attached to the existing thread.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+                          Thread-aware
+                        </Badge>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr),220px]">
+                        <div className="space-y-2">
+                          <Label htmlFor="communications-ai-reply-subject">Reply Subject</Label>
+                          <Input
+                            id="communications-ai-reply-subject"
+                            value={aiDraftSubject}
+                            onChange={(event) => setAiDraftSubject(event.target.value)}
+                            placeholder="Re: Intro call"
+                            className="border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="communications-ai-reply-approval">Require Approval</Label>
+                          <div className="flex h-10 items-center justify-between rounded-xl border border-slate-700 bg-slate-900 px-3">
+                            <span className="text-sm text-slate-300">
+                              {aiDraftRequireApproval ? 'Review before send' : 'Queue immediately'}
+                            </span>
+                            <Switch
+                              id="communications-ai-reply-approval"
+                              checked={aiDraftRequireApproval}
+                              onCheckedChange={setAiDraftRequireApproval}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        <Label htmlFor="communications-ai-reply-prompt">Draft Instructions</Label>
+                        <Textarea
+                          id="communications-ai-reply-prompt"
+                          value={aiDraftPrompt}
+                          onChange={(event) => setAiDraftPrompt(event.target.value)}
+                          placeholder="Tell AiSHA how to respond to the latest message."
+                          className="min-h-[140px] border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500"
+                        />
+                      </div>
+
+                      {aiDraftError ? (
+                        <div className="mt-4 rounded-xl border border-red-900/50 bg-red-950/40 p-4 text-sm text-red-200">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="mt-0.5 h-4 w-4" />
+                            <span>{aiDraftError}</span>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {aiDraftResult ? (
+                        <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-slate-100">
+                                {aiDraftResult.subject || aiDraftSubject || 'Reply draft ready'}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-400">
+                                Recipient: {aiDraftResult.recipient_email || 'Unknown'}
+                              </p>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={
+                                aiDraftResult.generation_result?.status === 'pending_approval'
+                                  ? 'bg-amber-500/15 text-amber-200'
+                                  : 'bg-emerald-500/15 text-emerald-200'
+                              }
+                            >
+                              {aiDraftResult.generation_result?.status || 'generated'}
+                            </Badge>
+                          </div>
+
+                          <p className="mt-3 text-sm text-slate-300">{aiDraftResult.response}</p>
+
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
+                            {aiDraftResult.generation_result?.suggestion_id ? (
+                              <Link
+                                to={createPageUrl(
+                                  `AISuggestions?suggestion=${aiDraftResult.generation_result.suggestion_id}`,
+                                )}
+                                className="text-cyan-300 underline-offset-4 hover:underline"
+                              >
+                                Approval suggestion {aiDraftResult.generation_result.suggestion_id}
+                              </Link>
+                            ) : null}
+                            {aiDraftResult.generation_result?.activity_id ? (
+                              <Link
+                                to={createPageUrl(
+                                  `Activities?id=${aiDraftResult.generation_result.activity_id}`,
+                                )}
+                                className="text-cyan-300 underline-offset-4 hover:underline"
+                              >
+                                Review queued activity
+                              </Link>
+                            ) : null}
+                            {aiDraftResult.reply_headers?.in_reply_to ? (
+                              <span>In-Reply-To preserved</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 flex justify-end">
+                        <Button
+                          type="button"
+                          onClick={handleGenerateAiReplyDraft}
+                          disabled={aiDraftSubmitting}
+                          className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          {aiDraftSubmitting ? 'Generating Draft...' : 'Generate AI Reply Draft'}
+                        </Button>
+                      </div>
+                    </div>
 
                     <div className="space-y-4">
                       {messages.map((message) => (
