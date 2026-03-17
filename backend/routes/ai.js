@@ -5520,18 +5520,26 @@ ${conversationSummary}`;
       const apiKey = await resolveLLMApiKey(llmConfig.provider, tenantId);
       const client = createProviderClient(llmConfig.provider, apiKey);
 
-      const systemPrompt = `You are a professional business email writer. Generate a polished, professional email based on the user's instructions. 
+      const systemPrompt = `You are a professional business email writer. Generate a polished email based on the user's instructions. 
 Return ONLY the email content (subject line followed by body), no additional commentary.
 Format:
 Subject: [subject line here]
 
 [email body here]
 
-Guidelines:
-- Be professional and courteous
-- Keep emails concise but complete
-- Use appropriate greetings and sign-offs
-- Match the tone to the context provided`;
+CRITICAL STYLE RULES:
+- Write like a real human, NOT like an AI. Every email must sound like it was personally written.
+- NEVER open with "I hope this message finds you well" or any variation — this is the #1 giveaway of AI-generated email.
+- Open naturally, the way a real person would:
+  - "Hi [Name], thanks for expressing interest in ..."
+  - "Hi [Name], how are you? Hope your week is going well."
+  - "Hi [Name], just following up on our conversation about ..."
+  - Or jump straight to the reason for the email.
+- Vary your openers — never reuse the same one.
+- Avoid robotic phrases: "Please don't hesitate to", "Feel free to reach out", "I wanted to take a moment to", "moving forward", "synergy", "leverage".
+- Keep emails concise but complete.
+- End with a clear, specific next step — not a generic closing.
+- Match the tone to the context provided.`;
 
       const userPromptText = `Write an email to ${recipientName || 'the recipient'}${recipientEmail ? ` (${recipientEmail})` : ''}.
 ${context ? `Context: ${context}` : ''}

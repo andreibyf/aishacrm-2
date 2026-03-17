@@ -492,12 +492,19 @@ export async function executeCareSendEmailAction(
     // No approval needed — generate now
     try {
       const SYSTEM_USER_ID = process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
+      // Inject email style guidelines into the prompt
+      const { buildStyleDirective } = await import('../communications/contracts/emailStyleGuardrailsContract.js');
+      const styleDirective = buildStyleDirective(
+        { tone: 'friendly', length_tier: 'standard' },
+        { recipient_name: to },
+      );
+      const styledPrompt = `${styleDirective}\n\n${body_prompt}`;
       const result = await runAiBrainTask({
         tenantId,
         userId: SYSTEM_USER_ID,
         taskType: 'email_generation',
         mode: 'generate_content',
-        context: { prompt: body_prompt, entity_type: entityType, entity_id: entityId },
+        context: { prompt: styledPrompt, entity_type: entityType, entity_id: entityId },
       });
       emailBody = result?.content || result?.summary || emailBody;
       tokens = result?.usage?.total_tokens || 0;
