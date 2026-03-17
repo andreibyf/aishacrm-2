@@ -1,5 +1,4 @@
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { executeCareSendEmailAction } from '../lib/care/carePlaybookExecutor.js';
 import {
   buildServiceError,
   cleanString,
@@ -98,7 +97,8 @@ function buildThreadHistoryContext(thread, messages) {
     .slice(-10)
     .map((message) => {
       const timestamp = cleanString(message.received_at) || 'unknown time';
-      const sender = cleanString(message.sender_email) || cleanString(message.sender_name) || 'unknown';
+      const sender =
+        cleanString(message.sender_email) || cleanString(message.sender_name) || 'unknown';
       const excerpt = cleanString(message.text_body || message.html_body)?.slice(0, 280) || '';
       return `- [${message.direction || 'unknown'}] ${timestamp} ${sender}: ${message.subject || 'No subject'}${excerpt ? ` :: ${excerpt}` : ''}`;
     });
@@ -124,7 +124,13 @@ function buildThreadHistoryContext(thread, messages) {
 const MAX_REFERENCE_IDS = 20;
 
 function collectThreadReferenceIds(messages) {
-  const all = [...new Set(asArray(messages).map((message) => cleanString(message.internet_message_id)).filter(Boolean))];
+  const all = [
+    ...new Set(
+      asArray(messages)
+        .map((message) => cleanString(message.internet_message_id))
+        .filter(Boolean),
+    ),
+  ];
   // Keep only the most recent references to avoid oversized headers
   return all.length > MAX_REFERENCE_IDS ? all.slice(-MAX_REFERENCE_IDS) : all;
 }
@@ -134,7 +140,7 @@ export async function generateThreadedReplyDraft(
   {
     supabase = getSupabaseClient(),
     getThreadMessages = getCommunicationsThreadMessages,
-    executeSendEmailAction = executeCareSendEmailAction,
+    executeSendEmailAction,
   } = {},
 ) {
   if (!cleanString(threadId)) {
@@ -147,11 +153,7 @@ export async function generateThreadedReplyDraft(
 
   const normalizedPrompt = cleanString(prompt);
   if (!normalizedPrompt) {
-    throw buildServiceError(
-      400,
-      'threaded_ai_reply_missing_prompt',
-      'A draft prompt is required',
-    );
+    throw buildServiceError(400, 'threaded_ai_reply_missing_prompt', 'A draft prompt is required');
   }
 
   const threadResult = await getThreadMessages(
@@ -214,6 +216,12 @@ export async function generateThreadedReplyDraft(
     cleanString(lastMessage?.internet_message_id) || references[references.length - 1] || null;
   const requestedAt = new Date().toISOString();
   const resolvedSubject = ensureReplySubject(subject, thread.subject);
+
+  // Lazy-load CARE executor to avoid module-level Redis queue init in tests
+  if (!executeSendEmailAction) {
+    const { executeCareSendEmailAction } = await import('../lib/care/carePlaybookExecutor.js');
+    executeSendEmailAction = executeCareSendEmailAction;
+  }
 
   const generationResult = await executeSendEmailAction(
     supabase,
