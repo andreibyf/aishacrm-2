@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 vi.mock('@/components/ui/button', () => ({
   Button: ({ children, ...props }) => <button {...props}>{children}</button>,
@@ -232,5 +232,40 @@ describe('SuggestionQueue', () => {
 
     // Non-email suggestions should still show raw JSON
     expect(screen.getByText(/"tool_name": "create_task"/)).toBeInTheDocument();
+  });
+
+  it('calls /approve then /apply when user approves a suggestion', async () => {
+    render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-001" />);
+
+    await waitFor(() => expect(screen.getByText('Focus Record')).toBeInTheDocument());
+
+    // Reset fetch mock to track approve+apply calls
+    const calls = [];
+    globalThis.fetch = vi.fn(async (url, opts) => {
+      calls.push(url);
+      return {
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          message: url.includes('/apply')
+            ? 'Suggestion applied successfully.'
+            : 'Suggestion approved.',
+        }),
+      };
+    });
+
+    // Click approve
+    fireEvent.click(screen.getByRole('button', { name: /approve/i }));
+
+    await waitFor(() => {
+      expect(calls.length).toBe(2);
+    });
+
+    // First call: approve, second call: apply
+    expect(calls[0]).toContain('/suggestions/suggestion-001/approve');
+    expect(calls[1]).toContain('/suggestions/suggestion-001/apply');
+
+    // Suggestion should be removed from the list after successful apply
+    expect(screen.queryByText('Focus Record')).not.toBeInTheDocument();
   });
 });

@@ -531,7 +531,7 @@ export default function SuggestionQueue({
   );
 
   /**
-   * Approve a suggestion
+   * Approve a suggestion, then apply (execute) it via the Safe Apply Engine.
    */
   const handleApprove = useCallback(
     async (suggestionId) => {
@@ -539,21 +539,37 @@ export default function SuggestionQueue({
         setIsProcessing(true);
         const headers = await getAuthHeaders();
 
-        const response = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
+        // Step 1: Mark as approved
+        const approveRes = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/approve`, {
           method: 'POST',
           headers,
           credentials: 'include',
           body: JSON.stringify({ tenant_id: tenantId }),
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!approveRes.ok) {
+          const errorData = await approveRes.json();
           throw new Error(errorData.error || 'Failed to approve suggestion');
         }
 
-        const result = await response.json();
+        // Step 2: Execute via Safe Apply Engine
+        const applyRes = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/apply`, {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id: tenantId }),
+        });
 
-        // Remove from list
+        if (!applyRes.ok) {
+          const errorData = await applyRes.json();
+          // Approved but failed to execute — leave in queue so user can retry
+          toast.error(errorData.error || 'Approved but failed to execute. You can retry.');
+          return;
+        }
+
+        const result = await applyRes.json();
+
+        // Remove from list only after successful execution
         setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
 
         toast.success(result.message || 'Suggestion approved and executed');
