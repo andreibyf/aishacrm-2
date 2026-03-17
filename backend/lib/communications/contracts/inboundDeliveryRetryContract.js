@@ -159,11 +159,11 @@ export function buildDeliveryState(overrides = {}) {
  * @param {object} [details] - Event-specific details
  * @returns {object} Audit event record
  */
-export function buildAuditEvent(type, actor, details = {}) {
+export function buildAuditEvent(type, actor, details = {}, { timestamp } = {}) {
   return {
     type,
     actor,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     details,
   };
 }
@@ -178,10 +178,10 @@ export function buildAuditEvent(type, actor, details = {}) {
  * @param {string} [error.message]
  * @returns {object} Attempt record
  */
-export function buildDeliveryAttempt(attemptNumber, status, error = null) {
+export function buildDeliveryAttempt(attemptNumber, status, error = null, { timestamp } = {}) {
   return {
     number: attemptNumber,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp || new Date().toISOString(),
     status,
     error_code: error?.code || null,
     error_message: error?.message || null,
@@ -283,6 +283,10 @@ export function validateDeliveryState(state) {
     errors.push('last_attempt_at must be a valid ISO-8601 date or null');
   }
 
+  if (state.resolved_at !== null && state.resolved_at !== undefined && !isValidISODate(state.resolved_at)) {
+    errors.push('resolved_at must be a valid ISO-8601 date or null');
+  }
+
   return { valid: errors.length === 0, errors };
 }
 
@@ -340,7 +344,7 @@ export function classifyErrorCategory(errorCode) {
  * @param {number} maxRetries  - Maximum retries allowed
  * @returns {boolean}
  */
-export function shouldRetry(errorCode, retryCount, maxRetries) {
+export function shouldRetry(errorCode, retryCount, maxRetries = DEFAULT_MAX_RETRIES) {
   if (retryCount >= maxRetries) return false;
   const category = classifyErrorCategory(errorCode);
   // Only retry transient and unknown errors; never retry permanent
@@ -407,7 +411,7 @@ export function calculateNextRetryAt(lastAttemptAt, retryCount, config = {}) {
  * @param {string} header - The Retry-After header value
  * @returns {number|null} Seconds to wait, or null if unparseable
  */
-export function parseRetryAfterHeader(header) {
+export function parseRetryAfterHeader(header, { now } = {}) {
   if (!header || typeof header !== 'string') return null;
   const trimmed = header.trim();
 
@@ -418,7 +422,7 @@ export function parseRetryAfterHeader(header) {
   // Try HTTP-date
   const dateMs = Date.parse(trimmed);
   if (!Number.isNaN(dateMs)) {
-    const diff = Math.floor((dateMs - Date.now()) / 1000);
+    const diff = Math.floor((dateMs - (now ?? Date.now())) / 1000);
     return diff > 0 ? diff : 0;
   }
 
@@ -469,23 +473,24 @@ export function applyDeliverySuccess(state, timestampNow) {
  * @returns {object} Updated delivery state with retry decision applied
  */
 export function applyDeliveryFailure(state, timestampNow, error) {
-  const config = state.retry_config || buildRetryConfig();
+  const safeError = error || { code: null, message: null };
+  const config = buildRetryConfig(state.retry_config);
   const currentRetryCount = state.retry_count || 0;
-  const category = classifyErrorCategory(error.code);
+  const category = classifyErrorCategory(safeError.code);
 
   const attempt = {
     number: currentRetryCount + 1,
     timestamp: timestampNow,
     status: 'failed',
-    error_code: error.code || null,
-    error_message: error.message || null,
+    error_code: safeError.code || null,
+    error_message: safeError.message || null,
     error_category: category,
   };
 
   const attempts = [...(state.attempts || []), attempt];
   const firstAttempt = state.first_attempt_at || timestampNow;
 
-  if (shouldRetry(error.code, currentRetryCount, config.max_retries)) {
+  if (shouldRetry(safeError.code, currentRetryCount, config.max_retries)) {
     const nextRetry = calculateNextRetryAt(timestampNow, currentRetryCount, config);
     return {
       ...state,
@@ -510,7 +515,7 @@ export function applyDeliveryFailure(state, timestampNow, error) {
     first_attempt_at: firstAttempt,
     last_attempt_at: timestampNow,
     resolved_at: timestampNow,
-    final_error_code: error.code || null,
+    final_error_code: safeError.code || null,
   };
 }
 

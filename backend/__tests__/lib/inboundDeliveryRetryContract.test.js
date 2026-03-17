@@ -133,6 +133,12 @@ describe('inboundDeliveryRetryContract', () => {
       const event = buildAuditEvent(AUDIT_EVENT_TYPE.INBOUND_RECEIVED, 'webhook');
       assert.deepEqual(event.details, {});
     });
+
+    it('accepts explicit timestamp via options', () => {
+      const ts = '2025-01-01T00:00:00.000Z';
+      const event = buildAuditEvent(AUDIT_EVENT_TYPE.DELIVERY_ATTEMPT, 'worker', {}, { timestamp: ts });
+      assert.equal(event.timestamp, ts);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -154,6 +160,12 @@ describe('inboundDeliveryRetryContract', () => {
       assert.equal(attempt.error_code, 'TIMEOUT');
       assert.equal(attempt.error_message, 'Connection timed out');
       assert.equal(attempt.error_category, ERROR_CATEGORY.TRANSIENT);
+    });
+
+    it('accepts explicit timestamp via options', () => {
+      const ts = '2025-06-01T12:00:00.000Z';
+      const attempt = buildDeliveryAttempt(1, 'success', null, { timestamp: ts });
+      assert.equal(attempt.timestamp, ts);
     });
   });
 
@@ -225,6 +237,17 @@ describe('inboundDeliveryRetryContract', () => {
       const result = validateDeliveryState({ status: 'pending', retry_config: { strategy: 'bogus' } });
       assert.equal(result.valid, false);
       assert.ok(result.errors.some((e) => e.includes('retry_config')));
+    });
+
+    it('rejects invalid resolved_at', () => {
+      const result = validateDeliveryState({ status: 'pending', resolved_at: 'not-a-date' });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('resolved_at')));
+    });
+
+    it('accepts null resolved_at', () => {
+      const result = validateDeliveryState({ status: 'pending', resolved_at: null });
+      assert.equal(result.valid, true);
     });
   });
 
@@ -317,6 +340,11 @@ describe('inboundDeliveryRetryContract', () => {
 
     it('returns false for unknown error at max', () => {
       assert.equal(shouldRetry('WEIRD_ERROR', 5, 5), false);
+    });
+
+    it('defaults maxRetries to DEFAULT_MAX_RETRIES when omitted', () => {
+      assert.equal(shouldRetry('TIMEOUT', 0), true);
+      assert.equal(shouldRetry('TIMEOUT', DEFAULT_MAX_RETRIES), false);
     });
   });
 
@@ -412,6 +440,19 @@ describe('inboundDeliveryRetryContract', () => {
     it('returns null for non-string', () => {
       assert.equal(parseRetryAfterHeader(123), null);
     });
+
+    it('parses HTTP-date format', () => {
+      // A date in the past relative to the injected now should return 0
+      const now = new Date('2025-06-15T12:00:00Z').getTime();
+      const pastDate = 'Sun, 15 Jun 2025 11:59:00 GMT';
+      assert.equal(parseRetryAfterHeader(pastDate, { now }), 0);
+    });
+
+    it('parses HTTP-date in the future', () => {
+      const now = new Date('2025-06-15T12:00:00Z').getTime();
+      const futureDate = 'Sun, 15 Jun 2025 12:02:00 GMT';
+      assert.equal(parseRetryAfterHeader(futureDate, { now }), 120);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -503,6 +544,24 @@ describe('inboundDeliveryRetryContract', () => {
       const retry2 = new Date(state.next_retry_at).getTime() - new Date(t2).getTime();
 
       assert.ok(retry2 > retry1, `Second backoff (${retry2}ms) should be larger than first (${retry1}ms)`);
+    });
+
+    it('handles null error gracefully', () => {
+      const state = buildDeliveryState();
+      const now = '2025-03-17T10:01:00.000Z';
+      const result = applyDeliveryFailure(state, now, null);
+      assert.equal(result.status, DELIVERY_STATUS.FAILED_RETRYABLE);
+      assert.equal(result.attempts[0].error_code, null);
+      assert.equal(result.attempts[0].error_category, ERROR_CATEGORY.UNKNOWN);
+    });
+
+    it('normalizes partial retry_config via buildRetryConfig', () => {
+      const state = buildDeliveryState({ retry_config: { strategy: 'linear_backoff' } });
+      // max_retries is not set on the raw config, but buildRetryConfig fills it in
+      const now = '2025-03-17T10:01:00.000Z';
+      const result = applyDeliveryFailure(state, now, { code: 'TIMEOUT', message: 'err' });
+      // Should retry because max_retries defaults to 5 via buildRetryConfig
+      assert.equal(result.status, DELIVERY_STATUS.FAILED_RETRYABLE);
     });
   });
 
