@@ -651,7 +651,7 @@ export default function UniversalDetailPanel({
     ) {
       return 'bg-purple-600 text-purple-50 hover:bg-purple-700';
     }
-    return 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600'; // Default
+    return 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 hover:bg-slate-300 dark:hover:bg-slate-600'; // Default
   };
 
   // Render "Contact Information" section (from outline)
@@ -661,12 +661,12 @@ export default function UniversalDetailPanel({
     if (entity.email) {
       infoFields.push(
         <div key="email" className="flex items-center gap-3">
-          <Mail className="w-4 h-4 text-slate-400" />
+          <Mail className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500">Email</Label>
+            <Label className="text-xs text-slate-500 dark:text-slate-500">Email</Label>
             <a
               href={`mailto:${entity.email}`}
-              className="text-blue-400 hover:text-blue-300 text-base block"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
             >
               {entity.email}
             </a>
@@ -678,12 +678,12 @@ export default function UniversalDetailPanel({
     if (entity.phone) {
       infoFields.push(
         <div key="phone" className="flex items-center gap-3">
-          <Phone className="w-4 h-4 text-slate-400" />
+          <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500">Phone</Label>
+            <Label className="text-xs text-slate-500 dark:text-slate-500">Phone</Label>
             <a
               href={`tel:${entity.phone}`}
-              className="text-blue-400 hover:text-blue-300 text-base block"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
             >
               {entity.phone}
             </a>
@@ -695,12 +695,12 @@ export default function UniversalDetailPanel({
     if (entity.mobile) {
       infoFields.push(
         <div key="mobile" className="flex items-center gap-3">
-          <Phone className="w-4 h-4 text-slate-400" />
+          <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500">Mobile</Label>
+            <Label className="text-xs text-slate-500 dark:text-slate-500">Mobile</Label>
             <a
               href={`tel:${entity.mobile}`}
-              className="text-blue-400 hover:text-blue-300 text-base block"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
             >
               {entity.mobile}
             </a>
@@ -713,7 +713,9 @@ export default function UniversalDetailPanel({
 
     return (
       <div>
-        <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Contact Information</h3>
+        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+          Contact Information
+        </h3>
         <div className="space-y-3">{infoFields}</div>
       </div>
     );
@@ -731,8 +733,8 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`display-${label}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-400">{label}</Label>
-            <div className="text-base text-slate-200 font-medium">{value}</div>
+            <Label className="text-slate-500 dark:text-slate-400">{label}</Label>
+            <div className="text-base text-slate-800 dark:text-slate-200 font-medium">{value}</div>
           </div>,
         );
       });
@@ -816,7 +818,7 @@ export default function UniversalDetailPanel({
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 hover:underline"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 hover:underline"
             >
               {value}
             </a>
@@ -831,8 +833,8 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`entity-${key}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-400">{label}</Label>
-            <div className="text-base text-slate-200 font-medium">{value}</div>
+            <Label className="text-slate-500 dark:text-slate-400">{label}</Label>
+            <div className="text-base text-slate-800 dark:text-slate-200 font-medium">{value}</div>
           </div>,
         );
       }
@@ -842,7 +844,9 @@ export default function UniversalDetailPanel({
 
     return (
       <div>
-        <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Details</h3>
+        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+          Details
+        </h3>
         <div className="space-y-3">{detailFields}</div>
       </div>
     );
@@ -852,7 +856,7 @@ export default function UniversalDetailPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="!w-1/2 !max-w-none bg-slate-900 text-slate-100 border-l border-slate-700 overflow-y-auto"
+        className="!w-1/2 !max-w-none bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-l border-slate-200 dark:border-slate-700 overflow-y-auto"
         style={{ width: '50%' }}
         onPointerDownOutside={(e) => {
           // Prevent closing when clicking inside AI sidebar
@@ -869,11 +873,11 @@ export default function UniversalDetailPanel({
           }
         }}
       >
-        <SheetHeader className="border-b border-slate-700 pb-4">
+        <SheetHeader className="border-b border-slate-200 dark:border-slate-700 pb-4">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
               <div
-                className="p-2 rounded-lg text-slate-200"
+                className="p-2 rounded-lg text-slate-700 dark:text-slate-200"
                 style={{
                   backgroundColor:
                     'color-mix(in srgb, var(--primary-color) 18%, var(--color-slate-800))',
@@ -882,33 +886,52 @@ export default function UniversalDetailPanel({
                 {getIcon()}
               </div>
               <div>
-                <SheetTitle className="text-2xl font-bold text-slate-100">{getTitle()}</SheetTitle>
-                {getSubtitle() && <p className="text-sm text-slate-300 mt-1">{getSubtitle()}</p>}
+                <SheetTitle className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  {getTitle()}
+                </SheetTitle>
+                {getSubtitle() && (
+                  <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">{getSubtitle()}</p>
+                )}
                 {entity.job_title && (
-                  <p className="text-sm text-slate-400 mt-1">{entity.job_title}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    {entity.job_title}
+                  </p>
                 )}
                 {/* For B2C leads or contacts, show company. For B2B leads, company is already in title */}
                 {entity.company &&
                   !(
                     entityType === 'lead' &&
                     (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')
-                  ) && <p className="text-sm text-slate-400 mt-1">{entity.company}</p>}
+                  ) && (
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      {entity.company}
+                    </p>
+                  )}
                 {entity.unique_id && !entity.job_title && !entity.company && (
-                  <p className="text-sm text-slate-500 mt-1">ID: {entity.unique_id}</p>
+                  <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+                    ID: {entity.unique_id}
+                  </p>
                 )}
               </div>
             </div>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-200">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
                   <MoreVertical className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
+              <DropdownMenuContent
+                align="end"
+                className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              >
                 <DropdownMenuItem
                   onClick={() => onEdit?.(entity)}
-                  className="text-slate-200 hover:bg-slate-700 cursor-pointer"
+                  className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
@@ -918,7 +941,7 @@ export default function UniversalDetailPanel({
                   <DropdownMenuItem
                     key={idx}
                     onClick={() => action.onClick?.(entity)}
-                    className="text-slate-200 hover:bg-slate-700 cursor-pointer"
+                    className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                   >
                     {action.icon && <span className="mr-2">{action.icon}</span>}
                     {action.label}
@@ -927,7 +950,7 @@ export default function UniversalDetailPanel({
 
                 <DropdownMenuItem
                   onClick={() => onDelete?.(entity.id)}
-                  className="text-red-400 hover:bg-red-900/20 cursor-pointer"
+                  className="text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
@@ -937,7 +960,7 @@ export default function UniversalDetailPanel({
           </div>
         </SheetHeader>
 
-        <div className="p-6 divide-y divide-slate-700/50 [&>*]:py-5 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
+        <div className="p-6 divide-y divide-slate-200/70 dark:divide-slate-700/50 [&>*]:py-5 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
           {/* Contact Information Section */}
           {renderContactInfo()}
 
@@ -947,10 +970,12 @@ export default function UniversalDetailPanel({
           {/* Address Section - from outline, slightly adapted to match original data props */}
           {(entity.address_1 || entity.city || entity.state) && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">Address</h3>
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+                Address
+              </h3>
               <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                <div className="text-base text-slate-300">
+                <MapPin className="w-4 h-4 text-slate-400 dark:text-slate-400 mt-1" />
+                <div className="text-base text-slate-700 dark:text-slate-300">
                   {entity.address_1 && <div>{entity.address_1}</div>}
                   {entity.address_2 && <div>{entity.address_2}</div>}
                   {(entity.city || entity.state || entity.zip) && (
@@ -969,13 +994,17 @@ export default function UniversalDetailPanel({
           {/* Tags */}
           {entity.tags && entity.tags.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3 flex items-center gap-2">
                 <Tag className="w-4 h-4" />
                 Tags
               </h3>
               <div className="flex flex-wrap gap-2">
                 {entity.tags.map((tag, idx) => (
-                  <Badge key={idx} variant="outline" className="bg-slate-700 border-slate-600">
+                  <Badge
+                    key={idx}
+                    variant="outline"
+                    className="bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600"
+                  >
                     <Hash className="w-3 h-3 mr-1" />
                     {tag}
                   </Badge>
@@ -988,10 +1017,14 @@ export default function UniversalDetailPanel({
           {entity.description && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-semibold text-slate-400 uppercase">Description</h3>
-                <span className="text-xs text-slate-500 italic">— What is this about?</span>
+                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                  Description
+                </h3>
+                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                  — What is this about?
+                </span>
               </div>
-              <div className="text-base text-slate-300 bg-slate-800 rounded-lg p-4 border border-slate-700 whitespace-pre-wrap">
+              <div className="text-base text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 whitespace-pre-wrap">
                 {entity.description}
               </div>
             </div>
@@ -1005,7 +1038,7 @@ export default function UniversalDetailPanel({
                   key={index}
                   variant="outline"
                   onClick={() => action.onClick?.(entity)}
-                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
                 >
                   {action.icon && <span className="mr-2">{action.icon}</span>}
                   {action.label}
@@ -1016,9 +1049,9 @@ export default function UniversalDetailPanel({
 
           {/* Related Contacts Section - IMPROVED */}
           {entityType === 'account' && (
-            <div className="border-t border-slate-700 pt-6">
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Contacts ({relatedContacts.length})
                 </h3>
@@ -1026,27 +1059,27 @@ export default function UniversalDetailPanel({
 
               {relatedDataLoading ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500 dark:text-blue-400" />
                 </div>
               ) : relatedContacts.length > 0 ? (
                 <div className="space-y-3">
                   {relatedContacts.map((contact) => (
                     <div
                       key={contact.id}
-                      className="p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+                      className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 space-y-2">
                           {/* Contact Name */}
                           <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-slate-400" />
-                            <span className="font-medium text-slate-200 text-base">
+                            <User className="w-4 h-4 text-slate-400 dark:text-slate-400" />
+                            <span className="font-medium text-slate-800 dark:text-slate-200 text-base">
                               {contact.first_name} {contact.last_name}
                             </span>
                             {contact.job_title && (
                               <Badge
                                 variant="outline"
-                                className="text-xs bg-slate-700 text-slate-300 border-slate-600"
+                                className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600"
                               >
                                 {contact.job_title}
                               </Badge>
@@ -1056,10 +1089,10 @@ export default function UniversalDetailPanel({
                           {/* Contact Phone */}
                           {contact.phone && (
                             <div className="flex items-center gap-2 text-base">
-                              <Phone className="w-4 h-4 text-slate-400" />
+                              <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
                               <a
                                 href={`tel:${contact.phone}`}
-                                className="text-blue-400 hover:text-blue-300"
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.phone}
@@ -1070,10 +1103,10 @@ export default function UniversalDetailPanel({
                           {/* Contact Email */}
                           {contact.email && (
                             <div className="flex items-center gap-2 text-base">
-                              <Mail className="w-4 h-4 text-slate-400" />
+                              <Mail className="w-4 h-4 text-slate-400 dark:text-slate-400" />
                               <a
                                 href={`mailto:${contact.email}`}
-                                className="text-blue-400 hover:text-blue-300"
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.email}
@@ -1084,11 +1117,13 @@ export default function UniversalDetailPanel({
                           {/* Contact Mobile (if different from phone) */}
                           {contact.mobile && contact.mobile !== contact.phone && (
                             <div className="flex items-center gap-2 text-base">
-                              <Phone className="w-4 h-4 text-slate-400" />
-                              <span className="text-slate-400 text-xs mr-1">Mobile:</span>
+                              <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
+                              <span className="text-slate-400 dark:text-slate-400 text-xs mr-1">
+                                Mobile:
+                              </span>
                               <a
                                 href={`tel:${contact.mobile}`}
-                                className="text-blue-400 hover:text-blue-300"
+                                className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                                 onClick={(e) => e.stopPropagation()} // Prevent sheet from closing/re-rendering
                               >
                                 {contact.mobile}
@@ -1105,7 +1140,7 @@ export default function UniversalDetailPanel({
                             e.stopPropagation(); // Prevent sheet from closing/re-rendering
                             window.location.href = `/contacts/${contact.id}`; // Adjusted to a more common SPA route pattern if applicable
                           }}
-                          className="text-slate-400 hover:text-slate-200"
+                          className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -1114,7 +1149,7 @@ export default function UniversalDetailPanel({
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 text-slate-400 bg-slate-800/50 rounded-lg">
+                <div className="text-center py-8 text-slate-400 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                   <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No contacts linked to this account</p>
                 </div>
@@ -1125,7 +1160,7 @@ export default function UniversalDetailPanel({
           {/* Recent Activities Section - New from outline */}
           {activities.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase mb-4">
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
                 Recent Activities
               </h3>
               <div className="space-y-2">
@@ -1133,12 +1168,12 @@ export default function UniversalDetailPanel({
                   <button
                     key={activity.id}
                     onClick={() => handleViewActivity(activity)}
-                    className="w-full flex items-start gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700 text-left transition-colors"
+                    className="w-full flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left transition-colors"
                   >
                     <div className="mt-0.5">{getActivityIcon(activity.type)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-slate-200 text-base">
+                        <span className="font-medium text-slate-800 dark:text-slate-200 text-base">
                           {activity.subject}
                         </span>
                         <Badge className={getStatusColor(activity.status)}>
@@ -1146,11 +1181,11 @@ export default function UniversalDetailPanel({
                         </Badge>
                       </div>
                       {activity.description && (
-                        <p className="text-sm text-slate-400 line-clamp-2">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
                           {activity.description}
                         </p>
                       )}
-                      <p className="text-sm text-slate-500 mt-1">
+                      <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
                         {activity.created_date
                           ? format(new Date(activity.created_date), 'MMM d, yyyy')
                           : 'N/A'}
@@ -1168,7 +1203,7 @@ export default function UniversalDetailPanel({
               {customSections.map((section, index) => (
                 <div key={index} className="space-y-2">
                   {section.title && (
-                    <h3 className="text-sm font-semibold text-slate-400 uppercase mb-3 flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3 flex items-center gap-2">
                       {section.icon && <span className="w-4 h-4">{section.icon}</span>}
                       {section.title}
                     </h3>
@@ -1197,31 +1232,38 @@ export default function UniversalDetailPanel({
           {showNotes && (
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-semibold text-slate-400 uppercase">Notes & Activity</h3>
-                <span className="text-xs text-slate-500 italic">— What happened?</span>
+                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                  Notes & Activity
+                </h3>
+                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                  — What happened?
+                </span>
               </div>
 
               {/* Add Note Form */}
-              <div className="space-y-3 mb-4 p-4 border border-slate-700 rounded-lg bg-slate-800">
+              <div className="space-y-3 mb-4 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
                 <Input
                   placeholder="Note title (optional)"
                   value={newNoteTitle}
                   onChange={(e) => setNewNoteTitle(e.target.value)}
-                  className="bg-slate-900 border-slate-700 text-slate-200 placeholder:text-slate-500"
+                  className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 />
                 <Textarea
                   placeholder="Write your note here..."
                   value={newNoteContent}
                   onChange={(e) => setNewNoteContent(e.target.value)}
-                  className="bg-slate-900 border-slate-700 text-slate-200 min-h-[100px] placeholder:text-slate-500"
+                  className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200 min-h-[100px] placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 />
                 <div className="flex items-center gap-3">
                   <Select value={newNoteType} onValueChange={setNewNoteType}>
-                    <SelectTrigger className="w-48 bg-slate-900 border-slate-700 text-slate-200">
+                    <SelectTrigger className="w-48 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="general" className="hover:bg-slate-700 focus:bg-slate-700">
+                    <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
+                      <SelectItem
+                        value="general"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-slate-400" />
                           General
@@ -1229,26 +1271,35 @@ export default function UniversalDetailPanel({
                       </SelectItem>
                       <SelectItem
                         value="call_log"
-                        className="hover:bg-slate-700 focus:bg-slate-700"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
                       >
                         <div className="flex items-center gap-2">
                           <PhoneCall className="w-4 h-4 text-slate-400" />
                           Call Log
                         </div>
                       </SelectItem>
-                      <SelectItem value="meeting" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="meeting"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 text-slate-400" />
                           Meeting
                         </div>
                       </SelectItem>
-                      <SelectItem value="email" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="email"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <Send className="w-4 h-4 text-slate-400" />
                           Email
                         </div>
                       </SelectItem>
-                      <SelectItem value="task" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="task"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-4 h-4 text-slate-400" />
                           Task
@@ -1256,7 +1307,7 @@ export default function UniversalDetailPanel({
                       </SelectItem>
                       <SelectItem
                         value="follow_up"
-                        className="hover:bg-slate-700 focus:bg-slate-700"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
                       >
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-4 h-4 text-slate-400" />
@@ -1265,14 +1316,17 @@ export default function UniversalDetailPanel({
                       </SelectItem>
                       <SelectItem
                         value="important"
-                        className="hover:bg-slate-700 focus:bg-slate-700"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
                       >
                         <div className="flex items-center gap-2">
                           <Star className="w-4 h-4 text-slate-400" />
                           Important
                         </div>
                       </SelectItem>
-                      <SelectItem value="demo" className="hover:bg-slate-700 focus:bg-slate-700">
+                      <SelectItem
+                        value="demo"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
+                      >
                         <div className="flex items-center gap-2">
                           <Presentation className="w-4 h-4 text-slate-400" />
                           Demo
@@ -1280,7 +1334,7 @@ export default function UniversalDetailPanel({
                       </SelectItem>
                       <SelectItem
                         value="proposal"
-                        className="hover:bg-slate-700 focus:bg-slate-700"
+                        className="hover:bg-slate-100 dark:hover:bg-slate-700 focus:bg-slate-100 dark:focus:bg-slate-700"
                       >
                         <div className="flex items-center gap-2">
                           <ClipboardCheck className="w-4 h-4 text-slate-400" />
@@ -1309,7 +1363,7 @@ export default function UniversalDetailPanel({
                         setNewNoteContent('');
                         setNewNoteType('general');
                       }}
-                      className="text-slate-400 hover:bg-slate-700"
+                      className="text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
                     >
                       <X className="w-4 h-4" />
                     </Button>
@@ -1326,7 +1380,7 @@ export default function UniversalDetailPanel({
 
               {/* Notes List */}
               {notes.length === 0 ? (
-                <div className="text-center py-8 text-slate-500">
+                <div className="text-center py-8 text-slate-400 dark:text-slate-500">
                   <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No notes yet</p>
                   <p className="text-xs">Add your first note above</p>
@@ -1336,26 +1390,32 @@ export default function UniversalDetailPanel({
                   {notes.map((note) => (
                     <div
                       key={note.id}
-                      className="p-4 rounded-lg bg-slate-800/50 border border-slate-700"
+                      className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
                           {getNoteTypeIcon(note.type || note.metadata?.type || 'general')}
-                          <span className="font-medium text-slate-200">{note.title}</span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                            {note.title}
+                          </span>
                           <Badge
                             variant="secondary"
-                            className="text-xs bg-slate-700 text-slate-300 border-slate-600"
+                            className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600"
                           >
                             {(note.type || note.metadata?.type || 'general').replace(/_/g, ' ')}
                           </Badge>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-slate-500 dark:text-slate-400"
+                            >
                               <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="bg-slate-800 border-slate-700">
+                          <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                             <DropdownMenuItem
                               onClick={() => {
                                 setEditingNote(note);
@@ -1363,14 +1423,14 @@ export default function UniversalDetailPanel({
                                 setNewNoteContent(note.content || '');
                                 setNewNoteType(note.type || note.metadata?.type || 'general');
                               }}
-                              className="text-slate-200 hover:bg-slate-700 cursor-pointer"
+                              className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
                             >
                               <Edit className="w-4 h-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDeleteNote(note.id)}
-                              className="text-red-400 hover:bg-red-900/20 cursor-pointer"
+                              className="text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete
@@ -1378,7 +1438,9 @@ export default function UniversalDetailPanel({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <p className="text-sm text-slate-300 whitespace-pre-wrap">{note.content}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                        {note.content}
+                      </p>
                       <p className="text-xs text-slate-500 mt-2">
                         {note.created_date
                           ? format(new Date(note.created_date), 'MMM d, yyyy HH:mm')

@@ -78,7 +78,9 @@ export default function ActivityTable({
               <TableHead className="text-left p-3 font-medium text-slate-300">Status</TableHead>
               <TableHead className="text-left p-3 font-medium text-slate-300">Due Date</TableHead>
               <TableHead className="text-left p-3 font-medium text-slate-300">Related To</TableHead>
-              <TableHead className="text-left p-3 font-medium text-slate-300">Assigned To</TableHead>
+              <TableHead className="text-left p-3 font-medium text-slate-300">
+                Assigned To
+              </TableHead>
               <TableHead className="w-24 p-3 font-medium text-slate-300">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -99,19 +101,27 @@ export default function ActivityTable({
                   className="font-medium text-slate-200 cursor-pointer p-3"
                   onClick={() => handleViewDetails(activity)}
                 >
-                  <div className="font-semibold">{activity.subject}</div>
+                  <div className="font-semibold whitespace-normal break-words">
+                    {activity.subject}
+                  </div>
                   {activity.description && (
-                    <div className="text-xs text-slate-400 truncate max-w-xs">
+                    <div className="text-xs text-slate-400 whitespace-normal break-words max-w-xs">
                       {activity.description}
                     </div>
                   )}
                 </TableCell>
-                <TableCell className="cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
+                <TableCell
+                  className="cursor-pointer p-3"
+                  onClick={() => handleViewDetails(activity)}
+                >
                   <Badge className={`${typeColors[activity.type]} capitalize text-xs`}>
                     {activity.type}
                   </Badge>
                 </TableCell>
-                <TableCell className="cursor-pointer p-3" onClick={() => handleViewDetails(activity)}>
+                <TableCell
+                  className="cursor-pointer p-3"
+                  onClick={() => handleViewDetails(activity)}
+                >
                   <Badge
                     className={`${statusColors[activity.status]} contrast-badge capitalize text-xs`}
                     data-variant="status"
