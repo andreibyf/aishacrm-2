@@ -434,17 +434,20 @@ export default function createCommunicationsV2Routes(
 
   router.post('/threads/:threadId/generate-ai-reply', async (req, res) => {
     try {
-      const tenantId = req.body?.tenant_id || req.query?.tenant_id;
+      const tenantId = req.tenant?.id;
       if (!tenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      const rawApproval = req.body?.require_approval;
+      const requireApproval = rawApproval !== false && rawApproval !== 'false';
 
       const result = await generateThreadedReplyDraft({
         tenantId,
         threadId: req.params.threadId,
         prompt: req.body?.prompt,
         subject: req.body?.subject,
-        requireApproval: req.body?.require_approval,
+        requireApproval,
         user: req.user,
       });
 

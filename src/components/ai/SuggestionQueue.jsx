@@ -369,7 +369,7 @@ export default function SuggestionQueue({
   }, [focusId, suggestions]);
 
   const focusedSuggestionMissing = Boolean(
-    focusId && !isLoading && suggestions.length > 0 && displayedSuggestions.length === 0,
+    focusId && !isLoading && displayedSuggestions.length === 0,
   );
 
   /**

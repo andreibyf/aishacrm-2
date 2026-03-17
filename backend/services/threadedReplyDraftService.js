@@ -121,8 +121,12 @@ function buildThreadHistoryContext(thread, messages) {
   return sections.join('\n\n');
 }
 
+const MAX_REFERENCE_IDS = 20;
+
 function collectThreadReferenceIds(messages) {
-  return [...new Set(asArray(messages).map((message) => cleanString(message.internet_message_id)).filter(Boolean))];
+  const all = [...new Set(asArray(messages).map((message) => cleanString(message.internet_message_id)).filter(Boolean))];
+  // Keep only the most recent references to avoid oversized headers
+  return all.length > MAX_REFERENCE_IDS ? all.slice(-MAX_REFERENCE_IDS) : all;
 }
 
 export async function generateThreadedReplyDraft(
