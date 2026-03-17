@@ -183,6 +183,14 @@ vitest-results.json
 # Claude Code temp files
 tmpclaude-*
 
+# Trello API temp files
+backlog.json
+sprint_backlog.json
+sprint_complete.json
+in_progress.json
+story.json
+story_checklists.json
+
 # Local AI agent runtime state and machine-local tooling
 .aider.chat.history.md
 .aider.input.history
