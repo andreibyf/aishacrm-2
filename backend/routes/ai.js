@@ -49,6 +49,7 @@ import {
 } from '../lib/intentClassifier.js';
 import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
 import { generateChatDrivenEmailDraft } from '../services/chatDrivenEmailDraftService.js';
+import { generateTemplateDrivenEmailDraft } from '../services/templateEmailDraftService.js';
 import {
   normalizeEmailEntityType,
   buildEntityTableName,
@@ -60,6 +61,13 @@ import {
 } from '../lib/intentRouter.js';
 import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 import logger from '../lib/logger.js';
+import {
+  redactEmail,
+  sanitizeLogValue,
+  summarizeMessagesForLog,
+  summarizeToolArgsForLog,
+  toSafeErrorMeta,
+} from '../lib/logger.js';
 import { buildTenantKey, putObject } from '../lib/r2.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 // Phase 7 RAG helpers
@@ -518,6 +526,100 @@ export default function createAIRoutes(pgPool) {
       return res.status(error.statusCode || 500).json({
         status: 'error',
         code: error.code || 'chat_ai_email_generation_failed',
+        message: error.message,
+      });
+    }
+  });
+
+  // POST /api/ai/draft-from-template — Generate email draft from a reusable template
+  router.post('/draft-from-template', async (req, res) => {
+    try {
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        logger.warn('[AI Security] Template draft blocked - unauthorized tenant access');
+        return res
+          .status(authCheck.status || 403)
+          .json({ status: 'error', message: authCheck.error });
+      }
+
+      const {
+        template_id: templateId,
+        entity_type: entityType,
+        entity_id: entityId,
+        variables,
+        additional_prompt: additionalPrompt,
+        require_approval: requireApproval,
+        conversation_id: conversationId,
+      } = req.body || {};
+
+      if (!templateId || !entityType || !entityId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'template_id, entity_type, and entity_id are required',
+        });
+      }
+
+      // Ownership / visibility check
+      if (req.user) {
+        const supabaseCheck = getSupabaseClient();
+        const normalizedType = normalizeEmailEntityType(entityType);
+        const tableName = buildEntityTableName(normalizedType);
+
+        if (!tableName) {
+          return res.status(400).json({ status: 'error', message: 'Unsupported entity_type' });
+        }
+
+        const { data: record, error: recordError } = await supabaseCheck
+          .from(tableName)
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenantRecord.id)
+          .eq('id', entityId)
+          .maybeSingle();
+
+        if (recordError) throw new Error(recordError.message);
+        if (!record) return res.status(404).json({ status: 'error', message: 'Record not found' });
+
+        const scope = await getVisibilityScope(req.user, supabaseCheck);
+        const access = getAccessLevel(
+          scope,
+          record.assigned_to_team,
+          record.assigned_to,
+          req.user.id,
+        );
+
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to draft AI emails for this record',
+          });
+        }
+      }
+
+      const result = await generateTemplateDrivenEmailDraft({
+        tenantId: tenantRecord.id,
+        templateId,
+        entityType,
+        entityId,
+        variables,
+        additionalPrompt,
+        requireApproval,
+        conversationId,
+        user: req.user,
+      });
+
+      return res.json({ status: 'success', response: result.response, data: result });
+    } catch (error) {
+      logger.error('[AI draft-from-template] Error:', error);
+      return res.status(error.statusCode || 500).json({
+        status: 'error',
+        code: error.code || 'template_email_generation_failed',
         message: error.message,
       });
     }
@@ -1551,7 +1653,13 @@ Use this summary for context about prior discussion topics, goals, and decisions
               parsedArgs = {};
             }
 
-            logger.debug('[AI Tool Call]', toolName, 'with args:', JSON.stringify(parsedArgs));
+            logger.debug(
+              {
+                toolName,
+                args: summarizeToolArgsForLog(parsedArgs),
+              },
+              '[AI Tool Call]',
+            );
 
             let toolResult;
             try {
@@ -1567,7 +1675,13 @@ Use this summary for context about prior discussion topics, goals, and decisions
               });
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
-              logger.error(`[AI Tool Execution] ${toolName} error:`, toolError);
+              logger.error(
+                {
+                  toolName,
+                  error: toSafeErrorMeta(toolError),
+                },
+                '[AI Tool Execution] Tool call failed',
+              );
             }
 
             // Generate human-readable summary for better LLM comprehension
@@ -2084,18 +2198,29 @@ ${toolContextSummary}`,
     let agentName = 'crm_assistant';
 
     // DEBUG: Log ALL incoming requests
-    logger.debug('[DEBUG] POST /api/ai/conversations - Request received', {
-      headers: {
-        'x-tenant-id': req.headers['x-tenant-id'],
-        'content-type': req.headers['content-type'],
-        'user-agent': req.headers['user-agent']?.substring(0, 50),
+    logger.debug(
+      {
+        headers: {
+          'x-tenant-id': req.headers['x-tenant-id'],
+          'content-type': req.headers['content-type'],
+          'user-agent': req.headers['user-agent']?.substring(0, 50),
+        },
+        query: sanitizeLogValue(req.query),
+        body: {
+          keys: Object.keys(req.body || {}),
+          metadataKeys: Object.keys(req.body?.metadata || {}),
+          agent_name: req.body?.agent_name || null,
+        },
+        user: req.user
+          ? {
+              email: redactEmail(req.user.email),
+              tenant_id: req.user.tenant_id,
+              role: req.user.role,
+            }
+          : null,
       },
-      query: req.query,
-      body: req.body,
-      user: req.user
-        ? { email: req.user.email, tenant_id: req.user.tenant_id, role: req.user.role }
-        : null,
-    });
+      '[DEBUG] POST /api/ai/conversations - Request received',
+    );
 
     try {
       const { agent_name = 'crm_assistant', metadata = {} } = req.body;
@@ -2139,11 +2264,14 @@ ${toolContextSummary}`,
       logger.debug('[DEBUG] Auth check result:', authCheck);
 
       if (!authCheck.authorized) {
-        logger.warn('[AI Security] Conversation creation blocked - unauthorized tenant access', {
-          user: req.user?.email,
-          requestedTenant: tenantIdentifier,
-          error: authCheck.error,
-        });
+        logger.warn(
+          {
+            user: redactEmail(req.user?.email),
+            requestedTenant: tenantIdentifier,
+            error: authCheck.error,
+          },
+          '[AI Security] Conversation creation blocked - unauthorized tenant access',
+        );
         return res
           .status(authCheck.status || 403)
           .json({ status: 'error', message: authCheck.error });
@@ -2156,12 +2284,15 @@ ${toolContextSummary}`,
         tenant_name: metadata?.tenant_name ?? tenantRecord.name ?? null,
       };
 
-      logger.debug('[DEBUG] Inserting conversation into database', {
-        tenant_id: tenantRecord.id,
-        tenant_name: tenantRecord.name,
-        agent_name: agentName,
-        metadata: enrichedMetadata,
-      });
+      logger.debug(
+        {
+          tenant_id: tenantRecord.id,
+          tenant_name: tenantRecord.name,
+          agent_name: agentName,
+          metadataKeys: Object.keys(enrichedMetadata || {}),
+        },
+        '[DEBUG] Inserting conversation into database',
+      );
 
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
@@ -2183,15 +2314,14 @@ ${toolContextSummary}`,
 
       res.json({ status: 'success', data });
     } catch (error) {
-      logger.error('[DEBUG] Create conversation ERROR:', {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        tenantIdentifier,
-        tenantRecord: tenantRecord ? { id: tenantRecord.id, name: tenantRecord.name } : null,
-      });
-      logger.error('Create conversation error:', error);
+      logger.error(
+        {
+          error: toSafeErrorMeta(error),
+          tenantIdentifier,
+          tenantRecord: tenantRecord ? { id: tenantRecord.id, name: tenantRecord.name } : null,
+        },
+        '[DEBUG] Create conversation ERROR',
+      );
       await logAiEvent({
         message: 'AI conversation creation failed',
         tenantRecord,
@@ -2923,7 +3053,16 @@ ${toolContextSummary}`,
     try {
       chatStartTime = Date.now();
       chatRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-      logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
+      logger.debug(
+        {
+          bodyKeys: Object.keys(req.body || {}),
+          messageSummary: summarizeMessagesForLog(req.body?.messages),
+          hasSessionEntities:
+            Array.isArray(req.body?.sessionEntities) && req.body.sessionEntities.length > 0,
+          conversationId: req.body?.conversation_id || null,
+        },
+        '[DEBUG /api/ai/chat] Request summary',
+      );
 
       const {
         messages = [],
@@ -2942,12 +3081,12 @@ ${toolContextSummary}`,
       const userEmail =
         req.body?.user_email || req.headers['x-user-email'] || req.user?.email || null;
 
-      logger.debug('[DEBUG /api/ai/chat] Extracted messages:', messages);
       logger.debug(
-        '[DEBUG /api/ai/chat] messages.length:',
-        messages?.length,
-        'isArray:',
-        Array.isArray(messages),
+        {
+          messageSummary: summarizeMessagesForLog(messages),
+          isArray: Array.isArray(messages),
+        },
+        '[DEBUG /api/ai/chat] Extracted messages summary',
       );
 
       if (!Array.isArray(messages) || messages.length === 0) {
@@ -2968,11 +3107,13 @@ ${toolContextSummary}`,
 
       // Debug logging for session context
       if (sessionEntities && sessionEntities.length > 0) {
-        logger.debug('[AI Chat] Session entities received:', {
-          count: sessionEntities.length,
-          types: [...new Set(sessionEntities.map((e) => e.type))],
-          entities: sessionEntities.map((e) => `${e.name} (${e.type})`),
-        });
+        logger.debug(
+          {
+            count: sessionEntities.length,
+            types: [...new Set(sessionEntities.map((e) => e.type).filter(Boolean))],
+          },
+          '[AI Chat] Session entities received',
+        );
       } else {
         logger.debug('[AI Chat] WARNING: No session entities provided');
       }
