@@ -60,6 +60,13 @@ import {
 } from '../lib/intentRouter.js';
 import { buildStatusLabelMap, normalizeToolArgs } from '../lib/statusCardLabelResolver.js';
 import logger from '../lib/logger.js';
+import {
+  redactEmail,
+  sanitizeLogValue,
+  summarizeMessagesForLog,
+  summarizeToolArgsForLog,
+  toSafeErrorMeta,
+} from '../lib/logger.js';
 import { buildTenantKey, putObject } from '../lib/r2.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 // Phase 7 RAG helpers
@@ -1551,7 +1558,13 @@ Use this summary for context about prior discussion topics, goals, and decisions
               parsedArgs = {};
             }
 
-            logger.debug('[AI Tool Call]', toolName, 'with args:', JSON.stringify(parsedArgs));
+            logger.debug(
+              {
+                toolName,
+                args: summarizeToolArgsForLog(parsedArgs),
+              },
+              '[AI Tool Call]',
+            );
 
             let toolResult;
             try {
@@ -1567,7 +1580,13 @@ Use this summary for context about prior discussion topics, goals, and decisions
               });
             } catch (toolError) {
               toolResult = { error: toolError.message || String(toolError) };
-              logger.error(`[AI Tool Execution] ${toolName} error:`, toolError);
+              logger.error(
+                {
+                  toolName,
+                  error: toSafeErrorMeta(toolError),
+                },
+                '[AI Tool Execution] Tool call failed',
+              );
             }
 
             // Generate human-readable summary for better LLM comprehension
@@ -2084,18 +2103,29 @@ ${toolContextSummary}`,
     let agentName = 'crm_assistant';
 
     // DEBUG: Log ALL incoming requests
-    logger.debug('[DEBUG] POST /api/ai/conversations - Request received', {
-      headers: {
-        'x-tenant-id': req.headers['x-tenant-id'],
-        'content-type': req.headers['content-type'],
-        'user-agent': req.headers['user-agent']?.substring(0, 50),
+    logger.debug(
+      {
+        headers: {
+          'x-tenant-id': req.headers['x-tenant-id'],
+          'content-type': req.headers['content-type'],
+          'user-agent': req.headers['user-agent']?.substring(0, 50),
+        },
+        query: sanitizeLogValue(req.query),
+        body: {
+          keys: Object.keys(req.body || {}),
+          metadataKeys: Object.keys(req.body?.metadata || {}),
+          agent_name: req.body?.agent_name || null,
+        },
+        user: req.user
+          ? {
+              email: redactEmail(req.user.email),
+              tenant_id: req.user.tenant_id,
+              role: req.user.role,
+            }
+          : null,
       },
-      query: req.query,
-      body: req.body,
-      user: req.user
-        ? { email: req.user.email, tenant_id: req.user.tenant_id, role: req.user.role }
-        : null,
-    });
+      '[DEBUG] POST /api/ai/conversations - Request received',
+    );
 
     try {
       const { agent_name = 'crm_assistant', metadata = {} } = req.body;
@@ -2139,11 +2169,14 @@ ${toolContextSummary}`,
       logger.debug('[DEBUG] Auth check result:', authCheck);
 
       if (!authCheck.authorized) {
-        logger.warn('[AI Security] Conversation creation blocked - unauthorized tenant access', {
-          user: req.user?.email,
-          requestedTenant: tenantIdentifier,
-          error: authCheck.error,
-        });
+        logger.warn(
+          {
+            user: redactEmail(req.user?.email),
+            requestedTenant: tenantIdentifier,
+            error: authCheck.error,
+          },
+          '[AI Security] Conversation creation blocked - unauthorized tenant access',
+        );
         return res
           .status(authCheck.status || 403)
           .json({ status: 'error', message: authCheck.error });
@@ -2156,12 +2189,15 @@ ${toolContextSummary}`,
         tenant_name: metadata?.tenant_name ?? tenantRecord.name ?? null,
       };
 
-      logger.debug('[DEBUG] Inserting conversation into database', {
-        tenant_id: tenantRecord.id,
-        tenant_name: tenantRecord.name,
-        agent_name: agentName,
-        metadata: enrichedMetadata,
-      });
+      logger.debug(
+        {
+          tenant_id: tenantRecord.id,
+          tenant_name: tenantRecord.name,
+          agent_name: agentName,
+          metadataKeys: Object.keys(enrichedMetadata || {}),
+        },
+        '[DEBUG] Inserting conversation into database',
+      );
 
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
@@ -2183,15 +2219,14 @@ ${toolContextSummary}`,
 
       res.json({ status: 'success', data });
     } catch (error) {
-      logger.error('[DEBUG] Create conversation ERROR:', {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        tenantIdentifier,
-        tenantRecord: tenantRecord ? { id: tenantRecord.id, name: tenantRecord.name } : null,
-      });
-      logger.error('Create conversation error:', error);
+      logger.error(
+        {
+          error: toSafeErrorMeta(error),
+          tenantIdentifier,
+          tenantRecord: tenantRecord ? { id: tenantRecord.id, name: tenantRecord.name } : null,
+        },
+        '[DEBUG] Create conversation ERROR',
+      );
       await logAiEvent({
         message: 'AI conversation creation failed',
         tenantRecord,
@@ -2923,7 +2958,16 @@ ${toolContextSummary}`,
     try {
       chatStartTime = Date.now();
       chatRequestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-      logger.debug('[DEBUG /api/ai/chat] req.body:', JSON.stringify(req.body, null, 2));
+      logger.debug(
+        {
+          bodyKeys: Object.keys(req.body || {}),
+          messageSummary: summarizeMessagesForLog(req.body?.messages),
+          hasSessionEntities:
+            Array.isArray(req.body?.sessionEntities) && req.body.sessionEntities.length > 0,
+          conversationId: req.body?.conversation_id || null,
+        },
+        '[DEBUG /api/ai/chat] Request summary',
+      );
 
       const {
         messages = [],
@@ -2942,12 +2986,12 @@ ${toolContextSummary}`,
       const userEmail =
         req.body?.user_email || req.headers['x-user-email'] || req.user?.email || null;
 
-      logger.debug('[DEBUG /api/ai/chat] Extracted messages:', messages);
       logger.debug(
-        '[DEBUG /api/ai/chat] messages.length:',
-        messages?.length,
-        'isArray:',
-        Array.isArray(messages),
+        {
+          messageSummary: summarizeMessagesForLog(messages),
+          isArray: Array.isArray(messages),
+        },
+        '[DEBUG /api/ai/chat] Extracted messages summary',
       );
 
       if (!Array.isArray(messages) || messages.length === 0) {
@@ -2968,11 +3012,13 @@ ${toolContextSummary}`,
 
       // Debug logging for session context
       if (sessionEntities && sessionEntities.length > 0) {
-        logger.debug('[AI Chat] Session entities received:', {
-          count: sessionEntities.length,
-          types: [...new Set(sessionEntities.map((e) => e.type))],
-          entities: sessionEntities.map((e) => `${e.name} (${e.type})`),
-        });
+        logger.debug(
+          {
+            count: sessionEntities.length,
+            types: [...new Set(sessionEntities.map((e) => e.type).filter(Boolean))],
+          },
+          '[AI Chat] Session entities received',
+        );
       } else {
         logger.debug('[AI Chat] WARNING: No session entities provided');
       }

@@ -9,15 +9,12 @@ import { CRM_POLICIES } from './policies.js';
 import { TOOL_REGISTRY } from './registry.js';
 import { TOOL_CACHE_TTL, generateBraidCacheKey } from './registry.js';
 import { trackRealtimeMetrics, logAuditEntry, extractEntityType } from './metrics.js';
-import {
-  createBackendDeps,
-  filterSensitiveFields,
-  validateToolArgs,
-} from './utils.js';
+import { createBackendDeps, filterSensitiveFields, validateToolArgs } from './utils.js';
 import { objectToPositionalArgs, normalizeToolArgs } from './analysis.js';
 import cacheManager from '../cacheManager.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger, { summarizeToolArgsForLog, toSafeErrorMeta } from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.join(__dirname, '..', '..', '..', 'braid-llm-kit', 'examples', 'assistant');
@@ -73,13 +70,16 @@ export async function executeBraidTool(
   // SECURITY: Verify the access token before any tool execution
   // This is the "key to the toolshed" - without it, no tools can be accessed
   if (!validateToolAccessToken(accessToken)) {
-    console.error('[Braid Security] Tool execution DENIED - invalid or missing access token', {
-      toolName,
-      hasToken: !!accessToken,
-      tokenVerified: accessToken?.verified,
-      tokenSource: accessToken?.source,
-      userId,
-    });
+    logger.error(
+      {
+        toolName,
+        hasToken: !!accessToken,
+        tokenVerified: accessToken?.verified,
+        tokenSource: accessToken?.source,
+        userId,
+      },
+      '[Braid Security] Tool execution denied - invalid or missing access token',
+    );
     return {
       tag: 'Err',
       error: {
@@ -245,12 +245,16 @@ export async function executeBraidTool(
   // Convert object args to positional array based on function signature
   const positionalArgs = objectToPositionalArgs(toolName, normalizedArgs);
 
-  console.log('[Braid Tool] Executing %s', toolName, {
-    braidPath,
-    function: config.function,
-    tenantUuid,
-    argsPreview: JSON.stringify(positionalArgs).substring(0, 200),
-  });
+  logger.debug(
+    {
+      toolName,
+      braidPath,
+      function: config.function,
+      tenantUuid,
+      args: summarizeToolArgsForLog(normalizedArgs),
+    },
+    '[Braid Tool] Executing tool',
+  );
 
   // Check Redis cache for READ_ONLY tools
   const isReadOnly = config.policy === 'READ_ONLY';
@@ -260,9 +264,13 @@ export async function executeBraidTool(
     try {
       const cachedResult = await cacheManager.get(cacheKey);
       if (cachedResult !== null) {
-        console.log('[Braid Tool] Cache HIT for %s', toolName, {
-          cacheKey: cacheKey.substring(0, 60),
-        });
+        logger.debug(
+          {
+            toolName,
+            cacheKeyPrefix: cacheKey.substring(0, 60),
+          },
+          '[Braid Tool] Cache hit',
+        );
 
         // Track cache hit in real-time metrics
         trackRealtimeMetrics(tenantUuid, toolName, true, true, 0);
@@ -285,9 +293,13 @@ export async function executeBraidTool(
 
         return cachedResult;
       }
-      console.log('[Braid Tool] Cache MISS for %s', toolName, {
-        cacheKey: cacheKey.substring(0, 60),
-      });
+      logger.debug(
+        {
+          toolName,
+          cacheKeyPrefix: cacheKey.substring(0, 60),
+        },
+        '[Braid Tool] Cache miss',
+      );
     } catch (cacheErr) {
       // Cache errors should never block tool execution
       console.warn('[Braid Tool] Cache lookup failed for %s:', toolName, cacheErr.message);
@@ -307,28 +319,28 @@ export async function executeBraidTool(
       { cache: false, timeout: 30000 }, // Disable in-memory cache, use Redis instead
     );
 
-    console.log('[Braid Tool] %s completed', toolName, {
-      resultTag: result?.tag,
-      hasError: !!result?.error,
-      errorType: result?.error?.type,
-      errorMsg: result?.error?.message?.substring?.(0, 200),
-      // For search/list operations, log result count for debugging
-      resultCount: Array.isArray(result?.value)
-        ? result.value.length
-        : result?.value?.length !== undefined
+    logger.debug(
+      {
+        toolName,
+        resultTag: result?.tag,
+        hasError: !!result?.error,
+        errorType: result?.error?.type,
+        errorMsg: result?.error?.message?.substring?.(0, 200),
+        resultCount: Array.isArray(result?.value)
           ? result.value.length
-          : 'N/A',
-      resultPreview: Array.isArray(result?.value)
-        ? result.value.slice(0, 2).map((r) => r?.first_name || r?.name || r?.id)
-        : 'N/A',
-    });
+          : result?.value?.length !== undefined
+            ? result.value.length
+            : 'N/A',
+      },
+      '[Braid Tool] Tool completed',
+    );
 
     // Cache successful READ_ONLY results in Redis
     if (isReadOnly && result?.tag === 'Ok') {
       try {
         const ttl = TOOL_CACHE_TTL[toolName] || TOOL_CACHE_TTL.DEFAULT;
         await cacheManager.set(cacheKey, result, ttl);
-        console.log('[Braid Tool] Cached %s result for %ds', toolName, ttl);
+        logger.debug({ toolName, ttl }, '[Braid Tool] Cached result');
       } catch (cacheErr) {
         // Cache errors should never block tool execution
         console.warn('[Braid Tool] Cache store failed for %s:', toolName, cacheErr.message);
@@ -360,10 +372,12 @@ export async function executeBraidTool(
         if (invalidatedEntity && tenantUuid) {
           // Invalidate all braid cache keys for this tenant and entity type
           const _pattern = `braid:${tenantUuid}:*${invalidatedEntity}*`;
-          console.log(
-            '[Braid Tool] Invalidating cache for %s (tenant: %s...)',
-            invalidatedEntity,
-            tenantUuid?.substring(0, 8),
+          logger.debug(
+            {
+              invalidatedEntity,
+              tenantPrefix: tenantUuid?.substring(0, 8),
+            },
+            '[Braid Tool] Invalidating cache for entity',
           );
           await cacheManager.invalidateTenant(tenantUuid, 'braid');
         }
@@ -407,11 +421,13 @@ export async function executeBraidTool(
     return result;
   } catch (error) {
     const executionTimeMs = Date.now() - startTime;
-    console.error('[Braid Tool] EXCEPTION', {
-      toolName,
-      message: error.message,
-      stack: error.stack?.substring?.(0, 300),
-    });
+    logger.error(
+      {
+        toolName,
+        error: toSafeErrorMeta(error),
+      },
+      '[Braid Tool] Exception',
+    );
 
     const errorResult = {
       tag: 'Err',
