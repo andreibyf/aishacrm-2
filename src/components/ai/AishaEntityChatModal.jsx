@@ -8,12 +8,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, CheckCircle2, Circle, Clock, ExternalLink } from 'lucide-react';
+import { Loader2, Send, CheckCircle2, Circle, Clock, ExternalLink, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
 import { processChatEmailDraft } from '@/api/functions';
+import { draftFromTemplate } from '@/api/emailTemplates';
 import { useTenant } from '@/components/shared/tenantContext';
 import { useUser } from '@/components/shared/useUser';
+import EmailTemplatePicker from './EmailTemplatePicker';
 
 const EMAIL_DRAFT_PATTERNS = [
   /\bdraft\b.*\bemail\b/i,
@@ -41,6 +43,7 @@ export default function AishaEntityChatModal({
   const [taskResult, setTaskResult] = useState(null);
   const [draftRun, setDraftRun] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const { selectedTenantId } = useTenant();
   const { user } = useUser();
   // Use selectedTenantId (for superadmins) or fallback to user's tenant_id (for tenant admins)
@@ -152,6 +155,51 @@ export default function AishaEntityChatModal({
     }
   };
 
+  const handleTemplateSelect = async ({ templateId, variables, additionalPrompt }) => {
+    setIsLoading(true);
+    try {
+      const result = await draftFromTemplate({
+        tenantId,
+        templateId,
+        entityType,
+        entityId,
+        variables,
+        additionalPrompt,
+        requireApproval: true,
+      });
+
+      const payload = result?.data || {};
+      if (result?.status >= 400 || payload?.status === 'error') {
+        throw new Error(payload?.message || 'Failed to draft email from template');
+      }
+
+      const draftData = payload?.data || {};
+      const generationResult = draftData?.generation_result || {};
+      setDraftRun({
+        status: generationResult?.status || 'completed',
+        result:
+          payload?.response || draftData?.response || 'AiSHA drafted an email using the template.',
+        recipientEmail: draftData?.recipient_email || null,
+        subject: draftData?.subject || null,
+      });
+      setShowTemplatePicker(false);
+      setTaskId(null);
+      setTaskStatus(null);
+      setTaskResult(null);
+
+      toast.success(
+        generationResult?.status === 'pending_approval'
+          ? 'Template email draft sent for approval'
+          : 'Template email draft generated',
+      );
+    } catch (error) {
+      console.error('Template draft error:', error);
+      toast.error(error.message || 'Failed to generate template draft');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const startPolling = (id) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
@@ -234,61 +282,80 @@ export default function AishaEntityChatModal({
 
         <div className="py-4">
           {!hasRunResult ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm text-slate-400">
-                  What would you like me to do with this {entityType}?
-                </p>
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="e.g., Generate next steps, Draft an email..."
-                  className="bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  autoFocus
-                />
-              </div>
+            showTemplatePicker ? (
+              <EmailTemplatePicker
+                entityType={entityType}
+                onSelect={handleTemplateSelect}
+                onCancel={() => setShowTemplatePicker(false)}
+                isLoading={isLoading}
+              />
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-400">
+                    What would you like me to do with this {entityType}?
+                  </p>
+                  <Input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="e.g., Generate next steps, Draft an email..."
+                    className="bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500"
+                    autoFocus
+                  />
+                </div>
 
-              {/* Quick suggestion chips */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  'Create a note and set up a meeting for tomorrow',
-                  'Draft a follow-up email',
-                  'Summarise this record and suggest next steps',
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setInput(suggestion)}
-                    className="text-xs px-3 py-1.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:border-blue-500 hover:text-blue-300 transition-colors"
+                {/* Quick suggestion chips */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'Create a note and set up a meeting for tomorrow',
+                    'Draft a follow-up email',
+                    'Summarise this record and suggest next steps',
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setInput(suggestion)}
+                      className="text-xs px-3 py-1.5 rounded-full bg-slate-800 border border-slate-600 text-slate-300 hover:border-blue-500 hover:text-blue-300 transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openOffice}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Watch in Office
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplatePicker(true)}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-300 transition-colors border border-slate-600 hover:border-blue-500 px-2.5 py-1 rounded-full"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Use Template
+                    </button>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isLoading || !input.trim()}
+                    className="bg-blue-600 hover:bg-blue-500 text-white"
                   >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={openOffice}
-                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Watch in Office
-                </button>
-                <Button
-                  type="submit"
-                  disabled={isLoading || !input.trim()}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 mr-2" />
-                  )}
-                  Start Task
-                </Button>
-              </div>
-            </form>
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4 mr-2" />
+                    )}
+                    Start Task
+                  </Button>
+                </div>
+              </form>
+            )
           ) : (
             <div className="space-y-4">
               {/* Status + Watch in Office */}
@@ -374,6 +441,7 @@ export default function AishaEntityChatModal({
                 setTaskResult(null);
                 setDraftRun(null);
                 setInput('');
+                setShowTemplatePicker(false);
               }}
               variant="outline"
               className="border-slate-700 hover:bg-slate-800 text-slate-400"
