@@ -110,6 +110,29 @@ describe('emailStyleGuardrailsContract', () => {
       const result = validateGuardrailsConfig({});
       assert.equal(result.valid, true);
     });
+
+    it('rejects non-boolean require_recipient_name', () => {
+      const result = validateGuardrailsConfig({ require_recipient_name: 'false' });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('require_recipient_name')));
+    });
+
+    it('rejects non-boolean check_robotic_patterns', () => {
+      const result = validateGuardrailsConfig({ check_robotic_patterns: 0 });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('check_robotic_patterns')));
+    });
+
+    it('rejects null for boolean flags', () => {
+      const result = validateGuardrailsConfig({ require_recipient_name: null, check_robotic_patterns: null });
+      assert.equal(result.valid, false);
+      assert.equal(result.errors.length, 2);
+    });
+
+    it('accepts explicit boolean values', () => {
+      const result = validateGuardrailsConfig({ require_recipient_name: false, check_robotic_patterns: true });
+      assert.equal(result.valid, true);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -192,6 +215,18 @@ describe('emailStyleGuardrailsContract', () => {
       assert.ok(result.violations.some((v) => v.message.includes('AI self-reference')));
     });
 
+    it('includes matched_phrase on robotic violations', () => {
+      const body = 'I hope this email finds you well. Let us leverage our synergy.';
+      const result = evaluateDraft(body, {});
+      const roboticViolations = result.violations.filter((v) => v.rule === 'robotic_pattern');
+      assert.ok(roboticViolations.length >= 1);
+      for (const v of roboticViolations) {
+        assert.ok(v.matched_phrase, 'violation should include matched_phrase');
+        assert.equal(typeof v.matched_phrase, 'string');
+        assert.ok(v.matched_phrase.length > 0, 'matched_phrase should not be empty');
+      }
+    });
+
     it('passes clean human-sounding email', () => {
       const body =
         'Hi Sarah, Thanks for the great call yesterday. I pulled together the pricing proposal — see attached. Can we lock in a time Thursday to go over the details?';
@@ -233,6 +268,13 @@ describe('emailStyleGuardrailsContract', () => {
       const body = 'Looking forward to this! 🚀🎉🔥';
       const result = evaluateDraft(body, { max_emoji_count: 1 });
       assert.ok(result.violations.some((v) => v.rule === 'excessive_emoji'));
+    });
+
+    it('counts multi-codepoint emoji as single units', () => {
+      // Family emoji (ZWJ sequence) should count as 1, not multiple
+      const body = 'Hello 👨‍👩‍👧‍👦';
+      const result = evaluateDraft(body, { max_emoji_count: 5 });
+      assert.ok(result.stats.emoji_count <= 2, `Expected <=2 but got ${result.stats.emoji_count}`);
     });
   });
 

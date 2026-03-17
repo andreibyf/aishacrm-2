@@ -144,6 +144,14 @@ export function validateGuardrailsConfig(config) {
     errors.push('max_emoji_count must be a non-negative integer');
   }
 
+  if (config.require_recipient_name !== undefined && typeof config.require_recipient_name !== 'boolean') {
+    errors.push('require_recipient_name must be a boolean');
+  }
+
+  if (config.check_robotic_patterns !== undefined && typeof config.check_robotic_patterns !== 'boolean') {
+    errors.push('check_robotic_patterns must be a boolean');
+  }
+
   return { valid: errors.length === 0, errors };
 }
 
@@ -169,10 +177,17 @@ export function countWords(text) {
  */
 function countEmoji(text) {
   if (!text) return 0;
-  const emojiRegex =
-    /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}]/gu;
-  const matches = text.match(emojiRegex);
-  return matches ? matches.length : 0;
+  // Use grapheme segmentation to count visible emoji as single units.
+  // This correctly handles multi-codepoint sequences (ZWJ families, skin tones, flags).
+  const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  let count = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    // Check if the grapheme cluster contains an emoji codepoint
+    if (/\p{Emoji_Presentation}/u.test(segment) || /\p{Extended_Pictographic}/u.test(segment)) {
+      count++;
+    }
+  }
+  return count;
 }
 
 /**
@@ -214,11 +229,13 @@ export function evaluateDraft(draftBody, guardrails, context = {}) {
   // --- Robotic pattern check ---
   if (config.check_robotic_patterns) {
     for (const { pattern, label } of ROBOTIC_PATTERNS) {
-      if (pattern.test(body)) {
+      const match = body.match(pattern);
+      if (match) {
         violations.push({
           severity: GUARDRAIL_SEVERITY.WARNING,
           rule: 'robotic_pattern',
           message: `Detected robotic pattern: "${label}"`,
+          matched_phrase: match[0],
         });
       }
     }
