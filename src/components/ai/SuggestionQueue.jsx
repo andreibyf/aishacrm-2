@@ -168,15 +168,57 @@ function ConfidenceIndicator({ confidence }) {
 }
 
 /**
+ * Parse body_prompt into instruction vs thread context.
+ * The CARE playbook appends canonical thread metadata after the human instruction.
+ */
+function parseBodyPrompt(bodyPrompt) {
+  if (!bodyPrompt) return { instruction: '', context: '' };
+  // Split on the first occurrence of "Canonical thread" which marks context data
+  const marker = /\n\s*Canonical thread[:\s]/i;
+  const match = bodyPrompt.match(marker);
+  if (!match) return { instruction: bodyPrompt.trim(), context: '' };
+  const idx = bodyPrompt.indexOf(match[0]);
+  return {
+    instruction: bodyPrompt.slice(0, idx).trim(),
+    context: bodyPrompt.slice(idx).trim(),
+  };
+}
+
+/**
+ * Parse canonical thread history lines into structured entries.
+ */
+function parseThreadHistory(context) {
+  if (!context) return [];
+  const lines = context.split('\n');
+  const entries = [];
+  const historyPattern = /^-\s*\[(inbound|outbound)\]\s*(\S+)\s+(\S+)\s+(.+)$/i;
+  for (const line of lines) {
+    const m = line.trim().match(historyPattern);
+    if (m) {
+      const [, direction, dateStr, sender, rest] = m;
+      // rest is like "Re: Subject :: #2. Message body"
+      const sepIdx = rest.indexOf('::');
+      const subject = sepIdx >= 0 ? rest.slice(0, sepIdx).trim() : '';
+      const body = sepIdx >= 0 ? rest.slice(sepIdx + 2).trim() : rest.trim();
+      entries.push({ direction, date: dateStr, sender, subject, body });
+    }
+  }
+  return entries;
+}
+
+/**
  * Human-readable email preview for send_email suggestions.
  */
 function EmailPreview({ action }) {
+  const [showContext, setShowContext] = useState(false);
   const args = action?.tool_args || {};
   const comms = args.communications || {};
   const participants = comms.participants || [];
   const sender = participants.find((p) => p.role === 'sender');
   const recipients = participants.filter((p) => p.role === 'to');
   const isReply = Boolean(args.email?.in_reply_to);
+  const { instruction, context } = parseBodyPrompt(args.body_prompt);
+  const historyEntries = parseThreadHistory(context);
 
   return (
     <div className="space-y-3">
@@ -215,19 +257,54 @@ function EmailPreview({ action }) {
         </div>
       </div>
 
-      {/* Body prompt / draft instructions */}
-      {args.body_prompt && (
+      {/* AI drafting instruction */}
+      {instruction && (
         <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20 p-3">
           <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400 mb-1">
             AI will draft this message using:
           </p>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {args.body_prompt}
+            {instruction}
           </p>
         </div>
       )}
 
-      {/* Thread context */}
+      {/* Thread history (collapsible) */}
+      {historyEntries.length > 0 && (
+        <div className="rounded-lg border text-sm">
+          <button
+            type="button"
+            className="flex items-center justify-between w-full px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+            onClick={() => setShowContext((v) => !v)}
+          >
+            <span>Thread History ({historyEntries.length} message{historyEntries.length !== 1 ? 's' : ''})</span>
+            {showContext ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {showContext && (
+            <div className="border-t divide-y">
+              {historyEntries.map((entry, i) => (
+                <div key={i} className="px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${entry.direction === 'inbound' ? 'border-blue-400 text-blue-500' : 'border-green-400 text-green-500'}`}
+                    >
+                      {entry.direction === 'inbound' ? '← In' : '→ Out'}
+                    </Badge>
+                    <span className="text-muted-foreground truncate">{entry.sender}</span>
+                    <span className="text-muted-foreground ml-auto shrink-0">
+                      {new Date(entry.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground line-clamp-2">{entry.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Thread metadata footer */}
       {comms.thread_id && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Users className="w-3 h-3" />

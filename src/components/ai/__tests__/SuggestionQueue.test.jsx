@@ -171,6 +171,60 @@ describe('SuggestionQueue', () => {
     expect(screen.queryByText(/"tool_args"/)).not.toBeInTheDocument();
   });
 
+  it('separates instruction from canonical thread context in body_prompt', async () => {
+    const bodyPromptWithContext =
+      'Draft a professional reply.\n\nCanonical thread: {"id":"5262bbbf","mailbox_id":"owner-primary"}\n\nCanonical thread history:\n- [outbound] 2026-03-15T10:00:00Z andrei@crm.com Re: Test :: Hello there\n- [inbound] 2026-03-15T11:00:00Z client@co.com Re: Test :: Thanks!';
+
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          suggestions: [
+            {
+              id: 'suggestion-003',
+              trigger_type: 'followup_needed',
+              record_name: 'Context Record',
+              record_type: 'lead',
+              record_id: 'lead-003',
+              created_at: '2026-03-16T18:00:00.000Z',
+              priority: 'high',
+              confidence: 0.92,
+              reasoning: 'Test.',
+              action: {
+                tool_name: 'send_email',
+                tool_args: {
+                  to: 'client@co.com',
+                  subject: 'Re: Test',
+                  body_prompt: bodyPromptWithContext,
+                  source: 'care_playbook',
+                  email: { in_reply_to: '<abc@test.com>' },
+                  communications: {
+                    thread_id: '5262bbbf-45bc-4bb0-b111-40608aae79a8',
+                    participants: [
+                      { role: 'sender', email: 'andrei@crm.com' },
+                      { role: 'to', email: 'client@co.com' },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      }),
+    }));
+
+    render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-003" />);
+
+    await waitFor(() => expect(screen.getByText('Context Record')).toBeInTheDocument());
+
+    // Shows only the instruction, NOT canonical thread JSON
+    expect(screen.getByText('Draft a professional reply.')).toBeInTheDocument();
+    expect(screen.queryByText(/mailbox_id/)).not.toBeInTheDocument();
+
+    // Shows collapsible thread history count
+    expect(screen.getByText(/Thread History \(2 messages\)/)).toBeInTheDocument();
+  });
+
   it('renders raw JSON for non-email tool suggestions', async () => {
     render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-002" />);
 
