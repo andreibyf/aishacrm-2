@@ -3,12 +3,13 @@
  */
 import { getBackendUrl } from '@/api/backendUrl';
 
-async function getHeaders() {
+async function getHeaders(explicitTenantId) {
   const headers = { 'Content-Type': 'application/json' };
   const tenantId =
-    typeof localStorage !== 'undefined'
+    explicitTenantId ||
+    (typeof localStorage !== 'undefined'
       ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id')
-      : '';
+      : '');
   if (tenantId) headers['x-tenant-id'] = tenantId;
 
   const { getAuthorizationHeader } = await import('@/api/functions');
@@ -27,7 +28,7 @@ export async function draftFromTask({
 }) {
   const resp = await fetch(`${getBackendUrl()}/api/ai/draft-from-task`, {
     method: 'POST',
-    headers: await getHeaders(),
+    headers: await getHeaders(tenantId),
     credentials: 'include',
     body: JSON.stringify({
       tenant_id: tenantId,
@@ -54,7 +55,7 @@ export async function draftFromNotes({
 }) {
   const resp = await fetch(`${getBackendUrl()}/api/ai/draft-from-notes`, {
     method: 'POST',
-    headers: await getHeaders(),
+    headers: await getHeaders(tenantId),
     credentials: 'include',
     body: JSON.stringify({
       tenant_id: tenantId,

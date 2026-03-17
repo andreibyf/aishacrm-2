@@ -63,7 +63,7 @@ export async function generateNotesDrivenEmailDraft(
   if (hasNoteIds) {
     const { data, error } = await supabase
       .from('note')
-      .select('id, title, content, created_at')
+      .select('id, title, content, related_type, related_id, created_at')
       .eq('tenant_id', tenantId)
       .in('id', noteIds);
 
@@ -77,6 +77,18 @@ export async function generateNotesDrivenEmailDraft(
         404,
         'notes_email_notes_not_found',
         'None of the specified notes were found',
+      );
+    }
+
+    // Validate that all notes belong to the requested entity context
+    const mismatched = notes.filter(
+      (n) => n.related_type !== normalizedEntityType || n.related_id !== entityId,
+    );
+    if (mismatched.length > 0) {
+      throw buildServiceError(
+        403,
+        'notes_email_cross_entity',
+        'One or more notes do not belong to the specified entity',
       );
     }
   } else {
@@ -126,8 +138,10 @@ export async function generateNotesDrivenEmailDraft(
   }
 
   // 3. Build merged prompt with notes context + CRM context
+  // Use buildNotesContextPrompt for the primary notes content, and pass empty
+  // notes array to formatContextBlock to avoid duplicating note text in the prompt.
   const notesContext = buildNotesContextPrompt(notes);
-  const crmContext = formatContextBlock(contextRecord, entity, notes, communications);
+  const crmContext = formatContextBlock(contextRecord, entity, [], communications);
   const userPrompt =
     cleanString(prompt) || 'Draft a professional email using the attached notes as context.';
 

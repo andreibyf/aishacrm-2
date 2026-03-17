@@ -148,7 +148,7 @@ export async function generateTaskEmailDraft(
   const generationResult = await executeSendEmailAction(
     supabase,
     tenantId,
-    entityType || 'activities',
+    entityType || 'activity',
     entityId || activityId,
     {
       to: recipientEmail,

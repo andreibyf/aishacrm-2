@@ -660,6 +660,37 @@ export default function createAIRoutes(pgPool) {
         });
       }
 
+      // Record-level visibility check
+      if (req.user) {
+        const supabaseCheck = getSupabaseClient();
+        const { data: activityRecord, error: actError } = await supabaseCheck
+          .from('activities')
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenantRecord.id)
+          .eq('id', activityId)
+          .maybeSingle();
+
+        if (actError) throw new Error(actError.message);
+        if (!activityRecord) {
+          return res.status(404).json({ status: 'error', message: 'Activity not found' });
+        }
+
+        const scope = await getVisibilityScope(req.user, supabaseCheck);
+        const access = getAccessLevel(
+          scope,
+          activityRecord.assigned_to_team,
+          activityRecord.assigned_to,
+          req.user.id,
+        );
+
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to draft AI emails for this activity',
+          });
+        }
+      }
+
       const result = await generateTaskEmailDraft({
         tenantId: tenantRecord.id,
         activityId,
@@ -714,6 +745,44 @@ export default function createAIRoutes(pgPool) {
           status: 'error',
           message: 'entity_type and entity_id are required',
         });
+      }
+
+      // Record-level visibility check
+      if (req.user) {
+        const supabaseCheck = getSupabaseClient();
+        const normalizedType = normalizeEmailEntityType(entityType);
+        const tableName = buildEntityTableName(normalizedType);
+
+        if (!tableName) {
+          return res.status(400).json({ status: 'error', message: 'Unsupported entity_type' });
+        }
+
+        const { data: record, error: recordError } = await supabaseCheck
+          .from(tableName)
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenantRecord.id)
+          .eq('id', entityId)
+          .maybeSingle();
+
+        if (recordError) throw new Error(recordError.message);
+        if (!record) {
+          return res.status(404).json({ status: 'error', message: 'Record not found' });
+        }
+
+        const scope = await getVisibilityScope(req.user, supabaseCheck);
+        const access = getAccessLevel(
+          scope,
+          record.assigned_to_team,
+          record.assigned_to,
+          req.user.id,
+        );
+
+        if (access !== 'full') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to draft AI emails for this record',
+          });
+        }
       }
 
       const result = await generateNotesDrivenEmailDraft({

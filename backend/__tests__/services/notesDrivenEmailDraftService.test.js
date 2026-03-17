@@ -124,8 +124,8 @@ const LEAD = {
 };
 
 const NOTES = [
-  { id: 'note-1', title: 'Discovery Call', content: 'Discussed pricing tiers and timeline.', created_at: '2026-01-20T10:00:00Z' },
-  { id: 'note-2', title: 'Follow Up', content: 'Needs proposal by Friday.', created_at: '2026-01-21T10:00:00Z' },
+  { id: 'note-1', title: 'Discovery Call', content: 'Discussed pricing tiers and timeline.', related_type: 'lead', related_id: 'lead-001', created_at: '2026-01-20T10:00:00Z' },
+  { id: 'note-2', title: 'Follow Up', content: 'Needs proposal by Friday.', related_type: 'lead', related_id: 'lead-001', created_at: '2026-01-21T10:00:00Z' },
 ];
 
 test('generateNotesDrivenEmailDraft creates email from specific notes', async () => {
@@ -300,6 +300,39 @@ test('generateNotesDrivenEmailDraft rejects invalid entity type', async () => {
       ),
     (err) => {
       assert.equal(err.code, 'notes_email_invalid_context');
+      return true;
+    },
+  );
+});
+
+test('generateNotesDrivenEmailDraft rejects notes from a different entity', async () => {
+  const crossEntityNotes = [
+    { id: 'note-x', title: 'Wrong Entity', content: 'Belongs to another lead.', related_type: 'lead', related_id: 'lead-999', created_at: '2026-01-20T10:00:00Z' },
+  ];
+
+  const supabase = createSupabaseStub({
+    notesByIds: crossEntityNotes,
+    relatedEntities: { leads: LEAD },
+  });
+
+  await assert.rejects(
+    () =>
+      generateNotesDrivenEmailDraft(
+        {
+          tenantId: 'tenant-001',
+          noteIds: ['note-x'],
+          entityType: 'lead',
+          entityId: 'lead-001',
+          user: { id: 'user-1', email: 'owner@example.com' },
+        },
+        {
+          supabase,
+          executeSendEmailAction: createExecuteSendEmailAction(supabase.calls),
+        },
+      ),
+    (err) => {
+      assert.equal(err.code, 'notes_email_cross_entity');
+      assert.equal(err.statusCode, 403);
       return true;
     },
   );
