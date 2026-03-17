@@ -4,6 +4,6 @@
   "summary": "Implement Inbound Thread Matcher",
   "description": "Match inbound email to an existing thread using RFC identifiers and tenant-local fallbacks.",
   "labels": ["communications", "threading", "inbound"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Email Ingestion Service"
 }

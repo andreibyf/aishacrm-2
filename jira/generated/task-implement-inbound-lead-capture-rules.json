@@ -4,6 +4,6 @@
   "summary": "Implement Inbound Lead Capture Rules",
   "description": "Define when unknown inbound business mail becomes a lead-capture candidate and how it is promoted through Braid.",
   "labels": ["communications", "lead-capture", "email"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Inbound Lead Capture From Email"
 }

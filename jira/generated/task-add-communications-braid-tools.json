@@ -4,6 +4,6 @@
   "summary": "Add Communications Braid Tools",
   "description": "Define the Braid tools required for thread upsert, message ingest, outbound queueing, entity linking, lead capture, and meeting reply handling.",
   "labels": ["communications", "braid", "ai"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Communications Platform Foundation"
 }

@@ -1,7 +1,7 @@
 Title: Implement Email Activity Timeline Sync
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 CRM Email Threading and Linking

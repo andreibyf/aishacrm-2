@@ -1,7 +1,7 @@
 Title: Add Outbound Delivery Status Reconciliation
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 Outbound Email Service

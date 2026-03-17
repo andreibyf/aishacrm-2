@@ -4,6 +4,6 @@
   "summary": "Add Communications Integration Tests",
   "description": "Define the Docker-based integration test plan for inbound ingest, outbound send, linking, lead capture, meeting replies, and tenant isolation.",
   "labels": ["communications", "testing", "integration"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Communications Platform Foundation"
 }

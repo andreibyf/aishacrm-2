@@ -1,7 +1,7 @@
 Title: CRM Email Threading and Linking
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Goal:
 Store every email as a durable thread and link it to the existing CRM entity graph.

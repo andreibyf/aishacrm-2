@@ -21,4 +21,4 @@ Dependencies:
 
 - Inbound Lead Capture From Email
 - CRM Email Threading and Linking
-- Self-Hosted Communications Module
+- AI Email Intelligence Layer

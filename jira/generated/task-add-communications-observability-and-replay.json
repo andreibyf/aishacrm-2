@@ -4,6 +4,6 @@
   "summary": "Add Communications Observability and Replay",
   "description": "Define logging, metrics, dead-letter handling, and replay behavior for the communications pipeline.",
   "labels": ["communications", "observability", "reliability"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Communications Platform Foundation"
 }

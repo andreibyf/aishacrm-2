@@ -25,7 +25,7 @@ Architecture Summary:
 
 Dependencies:
 
-- Self-Hosted Communications Module
+- Communications Platform Foundation (provider adapters, sync state, inbound safety contracts)
 - Inbound Lead Capture From Email
 - CRM Email Threading and Linking
 - Implement Email Activity Timeline Sync

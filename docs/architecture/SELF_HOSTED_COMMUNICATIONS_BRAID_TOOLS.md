@@ -1,4 +1,4 @@
-# Self-Hosted Communications Braid Tools
+# Communications Braid Tools
 
 > **Status:** Phase 1 tool surface contract
 > **Updated:** 2026-03-13
@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This document defines the Braid tool surface for the self-hosted communications module.
+This document defines the Braid tool surface for the communications module.
 
 It does not implement `.braid` files yet. It scopes which communications actions should be represented as Braid tools, which actions remain deterministic backend logic, and how those tools align with the internal backend API contract.
 

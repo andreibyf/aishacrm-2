@@ -1,7 +1,7 @@
 Title: Inbound Lead Capture From Email
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Goal:
 Turn unknown inbound business email into controlled CRM lead capture for the owner tenant.

@@ -1,7 +1,7 @@
 Title: Create Email Message Schema
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 CRM Email Threading and Linking

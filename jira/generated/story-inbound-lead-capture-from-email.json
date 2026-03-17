@@ -4,5 +4,5 @@
   "summary": "Inbound Lead Capture From Email",
   "description": "Convert unknown inbound business email into a tenant-scoped lead-capture and promotion flow.",
   "labels": ["communications", "lead-capture", "email"],
-  "epic": "Self-Hosted Communications Module"
+  "epic": "AI Email Intelligence Layer"
 }

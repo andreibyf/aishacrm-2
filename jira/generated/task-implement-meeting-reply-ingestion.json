@@ -4,6 +4,6 @@
   "summary": "Implement Meeting Reply Ingestion",
   "description": "Process inbound accept, decline, and tentative meeting replies and update CRM Activities through backend/Braid.",
   "labels": ["communications", "meeting", "inbound"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Self-Hosted Meeting Scheduling"
 }

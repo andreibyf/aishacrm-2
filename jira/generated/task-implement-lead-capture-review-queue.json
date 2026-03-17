@@ -4,6 +4,6 @@
   "summary": "Implement Lead Capture Review Queue",
   "description": "Define the review queue record for inbound mail that cannot be safely auto-promoted into a Lead.",
   "labels": ["communications", "review-queue", "lead-capture"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Inbound Lead Capture From Email"
 }

@@ -1,7 +1,7 @@
 Title: Implement Inbound Thread Matcher
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 Email Ingestion Service

@@ -1,7 +1,7 @@
 Title: Implement Meeting Reply Ingestion
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 Self-Hosted Meeting Scheduling

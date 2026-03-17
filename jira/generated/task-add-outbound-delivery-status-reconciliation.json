@@ -4,6 +4,6 @@
   "summary": "Add Outbound Delivery Status Reconciliation",
   "description": "Feed bounces, deferrals, and confirmations back into CRM state through backend/Braid.",
   "labels": ["communications", "delivery", "email"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "Outbound Email Service"
 }

@@ -1,7 +1,7 @@
 Title: Add Communications Braid Tools
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 Communications Platform Foundation

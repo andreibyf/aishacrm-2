@@ -4,5 +4,5 @@
   "summary": "CRM Email Threading and Linking",
   "description": "Add tenant-scoped thread and message storage plus deterministic linking to Lead, Contact, Account, Opportunity, and Activity.",
   "labels": ["communications", "crm", "threading"],
-  "epic": "Self-Hosted Communications Module"
+  "epic": "AI Email Intelligence Layer"
 }

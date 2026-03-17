@@ -1,4 +1,4 @@
-# Self-Hosted Communications Internal API
+# Communications Internal API
 
 > **Status:** Phase 1 backend contract
 > **Updated:** 2026-03-14

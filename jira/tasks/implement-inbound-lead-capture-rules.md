@@ -1,7 +1,7 @@
 Title: Implement Inbound Lead Capture Rules
 
 Epic:
-Self-Hosted Communications Module
+AI Email Intelligence Layer
 
 Story:
 Inbound Lead Capture From Email

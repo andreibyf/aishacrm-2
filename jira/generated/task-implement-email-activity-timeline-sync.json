@@ -4,6 +4,6 @@
   "summary": "Implement Email Activity Timeline Sync",
   "description": "Mirror communications messages into CRM Activities of type `email` and keep status synchronized.",
   "labels": ["communications", "activities", "timeline"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "CRM Email Threading and Linking"
 }

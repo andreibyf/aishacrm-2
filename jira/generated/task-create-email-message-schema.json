@@ -4,6 +4,6 @@
   "summary": "Create Email Message Schema",
   "description": "Define the tenant-scoped `communications_messages` schema and indexes.",
   "labels": ["communications", "schema", "messages"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "CRM Email Threading and Linking"
 }

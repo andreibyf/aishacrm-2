@@ -4,6 +4,6 @@
   "summary": "Implement Entity Linking Rules",
   "description": "Define deterministic linking of communications to Lead, Contact, Account, Opportunity, and Activity.",
   "labels": ["communications", "crm", "linking"],
-  "epic": "Self-Hosted Communications Module",
+  "epic": "AI Email Intelligence Layer",
   "story": "CRM Email Threading and Linking"
 }
