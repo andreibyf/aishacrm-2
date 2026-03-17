@@ -37,3 +37,15 @@ export {
   parseSpamScore,
   parseAuthenticationResults,
 } from './inboundSafetyContract.js';
+
+export {
+  EMAIL_TONE,
+  EMAIL_LENGTH_TIER,
+  GUARDRAIL_SEVERITY,
+  LENGTH_LIMITS,
+  buildDefaultGuardrails,
+  validateGuardrailsConfig,
+  evaluateDraft,
+  buildStyleDirective,
+  countWords,
+} from './emailStyleGuardrailsContract.js';
