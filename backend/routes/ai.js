@@ -50,6 +50,8 @@ import {
 import { getVisibilityScope, getAccessLevel } from '../lib/teamVisibility.js';
 import { generateChatDrivenEmailDraft } from '../services/chatDrivenEmailDraftService.js';
 import { generateTemplateDrivenEmailDraft } from '../services/templateEmailDraftService.js';
+import { generateTaskEmailDraft } from '../services/taskEmailDraftService.js';
+import { generateNotesDrivenEmailDraft } from '../services/notesDrivenEmailDraftService.js';
 import {
   normalizeEmailEntityType,
   buildEntityTableName,
@@ -620,6 +622,118 @@ export default function createAIRoutes(pgPool) {
       return res.status(error.statusCode || 500).json({
         status: 'error',
         code: error.code || 'template_email_generation_failed',
+        message: error.message,
+      });
+    }
+  });
+
+  // POST /api/ai/draft-from-task — Generate email draft from a task/activity
+  router.post('/draft-from-task', async (req, res) => {
+    try {
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        logger.warn('[AI Security] Task draft blocked - unauthorized tenant access');
+        return res
+          .status(authCheck.status || 403)
+          .json({ status: 'error', message: authCheck.error });
+      }
+
+      const {
+        activity_id: activityId,
+        prompt,
+        subject,
+        conversation_id: conversationId,
+        require_approval: requireApproval,
+      } = req.body || {};
+
+      if (!activityId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'activity_id is required',
+        });
+      }
+
+      const result = await generateTaskEmailDraft({
+        tenantId: tenantRecord.id,
+        activityId,
+        prompt,
+        subject,
+        conversationId,
+        requireApproval,
+        user: req.user,
+      });
+
+      return res.json({ status: 'success', response: result.response, data: result });
+    } catch (error) {
+      logger.error('[AI draft-from-task] Error:', error);
+      return res.status(error.statusCode || 500).json({
+        status: 'error',
+        code: error.code || 'task_email_generation_failed',
+        message: error.message,
+      });
+    }
+  });
+
+  // POST /api/ai/draft-from-notes — Generate email draft using notes as context
+  router.post('/draft-from-notes', async (req, res) => {
+    try {
+      const tenantIdentifier = getTenantId(req);
+      const tenantRecord = await resolveTenantRecord(tenantIdentifier);
+
+      if (!tenantRecord?.id) {
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id required' });
+      }
+
+      const authCheck = validateUserTenantAccess(req, tenantIdentifier, tenantRecord);
+      if (!authCheck.authorized) {
+        logger.warn('[AI Security] Notes draft blocked - unauthorized tenant access');
+        return res
+          .status(authCheck.status || 403)
+          .json({ status: 'error', message: authCheck.error });
+      }
+
+      const {
+        note_ids: noteIds,
+        entity_type: entityType,
+        entity_id: entityId,
+        prompt,
+        subject,
+        conversation_id: conversationId,
+        require_approval: requireApproval,
+      } = req.body || {};
+
+      if (!entityType || !entityId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'entity_type and entity_id are required',
+        });
+      }
+
+      const result = await generateNotesDrivenEmailDraft({
+        tenantId: tenantRecord.id,
+        noteIds,
+        entityType,
+        entityId,
+        prompt,
+        subject,
+        conversationId,
+        requireApproval,
+        user: req.user,
+      });
+
+      return res.json({ status: 'success', response: result.response, data: result });
+    } catch (error) {
+      logger.error('[AI draft-from-notes] Error:', error);
+      return res.status(error.statusCode || 500).json({
+        status: 'error',
+        code: error.code || 'notes_email_generation_failed',
         message: error.message,
       });
     }
