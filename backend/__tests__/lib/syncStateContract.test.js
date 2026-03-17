@@ -81,6 +81,52 @@ describe('syncStateContract', () => {
       const result = validateSyncState({ last_polled_at: 'not-a-date' });
       assert.equal(result.valid, false);
     });
+
+    it('rejects invalid last_message_at', () => {
+      const result = validateSyncState({ last_message_at: 'not-a-date' });
+      assert.equal(result.valid, false);
+    });
+
+    it('rejects invalid updated_at', () => {
+      const result = validateSyncState({ updated_at: 'garbage' });
+      assert.equal(result.valid, false);
+    });
+
+    it('rejects invalid cursor_strategy', () => {
+      const result = validateSyncState({ cursor_strategy: 'magic' });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('cursor_strategy')));
+    });
+
+    it('accepts valid cursor_strategy', () => {
+      const result = validateSyncState({ cursor_strategy: 'uid' });
+      assert.equal(result.valid, true);
+    });
+
+    it('rejects negative poll_errors', () => {
+      const result = validateSyncState({ poll_errors: -1 });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('poll_errors')));
+    });
+
+    it('accepts valid poll_errors count', () => {
+      const result = validateSyncState({ poll_errors: 3 });
+      assert.equal(result.valid, true);
+    });
+
+    it('accepts a full state with all optional fields', () => {
+      const result = validateSyncState({
+        cursor: { strategy: 'uid', value: 500 },
+        raw_retention_days: 30,
+        replay_enabled: true,
+        last_polled_at: '2025-12-01T00:00:00Z',
+        last_message_at: '2025-12-01T00:00:00Z',
+        updated_at: '2025-12-01T00:00:00Z',
+        cursor_strategy: 'uid',
+        poll_errors: 0,
+      });
+      assert.equal(result.valid, true);
+    });
   });
 
   describe('validateRetentionPolicy', () => {

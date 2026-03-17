@@ -30,16 +30,16 @@ export const ADAPTER_LIFECYCLE_STATES = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
-// Required method signatures (name → minimum arity)
+// Required method names
 // ---------------------------------------------------------------------------
 
-export const REQUIRED_ADAPTER_METHODS = Object.freeze({
-  fetchInboundMessages: 1, // (options) => FetchResult
-  acknowledgeCursor: 1, // (cursor)  => AckResult
-  sendMessage: 1, // (message) => SendResult
-  normalizeProviderError: 1, // (error, context?) => NormalizedError
-  getConnectionHealth: 0, // ()        => HealthResult
-});
+export const REQUIRED_ADAPTER_METHODS = Object.freeze([
+  'fetchInboundMessages', // (options) => FetchResult
+  'acknowledgeCursor', // (cursor)  => AckResult
+  'sendMessage', // (message) => SendResult
+  'normalizeProviderError', // (error, context?) => NormalizedError
+  'getConnectionHealth', // ()        => HealthResult
+]);
 
 // ---------------------------------------------------------------------------
 // Return-shape validators
@@ -187,14 +187,9 @@ export function assertAdapterConformsToContract(adapter) {
     throw new Error('Provider adapter must be a non-null object');
   }
 
-  for (const [methodName, minArity] of Object.entries(REQUIRED_ADAPTER_METHODS)) {
+  for (const methodName of REQUIRED_ADAPTER_METHODS) {
     if (typeof adapter[methodName] !== 'function') {
       throw new Error(`Provider adapter missing required method: ${methodName}`);
-    }
-    if (adapter[methodName].length < minArity) {
-      throw new Error(
-        `Provider adapter method ${methodName} must accept at least ${minArity} argument(s)`,
-      );
     }
   }
 

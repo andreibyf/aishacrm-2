@@ -34,6 +34,8 @@ describe('inboundSafetyContract', () => {
         verdict: 'quarantined',
         categories: ['spam'],
         quarantine_reason: 'High spam score',
+        classified_at: '2025-12-01T00:00:00Z',
+        classified_by: 'imap_smtp',
       });
       assert.equal(result.valid, true);
     });
@@ -42,6 +44,8 @@ describe('inboundSafetyContract', () => {
       const result = validateSafetyClassification({
         verdict: 'quarantined',
         categories: ['spam'],
+        classified_at: '2025-12-01T00:00:00Z',
+        classified_by: 'imap_smtp',
       });
       assert.equal(result.valid, false);
       assert.ok(result.errors.some((e) => e.includes('quarantine_reason')));
@@ -66,8 +70,38 @@ describe('inboundSafetyContract', () => {
       const result = validateSafetyClassification({
         verdict: 'accepted',
         auth_results: [{ type: '', result: '' }],
+        classified_at: '2025-12-01T00:00:00Z',
+        classified_by: 'imap_smtp',
       });
       assert.equal(result.valid, false);
+    });
+
+    it('rejects missing classified_at', () => {
+      const result = validateSafetyClassification({
+        verdict: 'accepted',
+        classified_by: 'imap_smtp',
+      });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('classified_at')));
+    });
+
+    it('rejects invalid classified_at', () => {
+      const result = validateSafetyClassification({
+        verdict: 'accepted',
+        classified_at: 'not-a-date',
+        classified_by: 'imap_smtp',
+      });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('classified_at')));
+    });
+
+    it('rejects missing classified_by', () => {
+      const result = validateSafetyClassification({
+        verdict: 'accepted',
+        classified_at: '2025-12-01T00:00:00Z',
+      });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.some((e) => e.includes('classified_by')));
     });
   });
 

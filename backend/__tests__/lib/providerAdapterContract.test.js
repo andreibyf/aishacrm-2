@@ -57,6 +57,28 @@ describe('providerAdapterContract', () => {
       delete adapter.providerType;
       assert.throws(() => assertAdapterConformsToContract(adapter), /providerType/);
     });
+
+    it('accepts adapter with default-parameter methods', () => {
+      const adapter = {
+        providerType: 'defaults_provider',
+        fetchInboundMessages(options = {}) {
+          return { ok: true, provider_type: 'defaults_provider', messages: [], cursor: null };
+        },
+        acknowledgeCursor(cursor = null) {
+          return { ok: true, provider_type: 'defaults_provider', status: 'cursor_acknowledged' };
+        },
+        sendMessage(msg = {}) {
+          return { ok: true, provider_type: 'defaults_provider', message_id: 'x' };
+        },
+        normalizeProviderError(err = null, context = {}) {
+          return { code: 'test', message: 'test error', retryable: false };
+        },
+        getConnectionHealth() {
+          return { ok: true, provider_type: 'defaults_provider', status: 'connected' };
+        },
+      };
+      assert.equal(assertAdapterConformsToContract(adapter), true);
+    });
   });
 
   describe('getAdapterCapabilities', () => {
@@ -168,9 +190,10 @@ describe('providerAdapterContract', () => {
     });
 
     it('exports all required method names', () => {
-      assert.ok(Object.keys(REQUIRED_ADAPTER_METHODS).includes('fetchInboundMessages'));
-      assert.ok(Object.keys(REQUIRED_ADAPTER_METHODS).includes('sendMessage'));
-      assert.equal(Object.keys(REQUIRED_ADAPTER_METHODS).length, 5);
+      assert.ok(Array.isArray(REQUIRED_ADAPTER_METHODS));
+      assert.ok(REQUIRED_ADAPTER_METHODS.includes('fetchInboundMessages'));
+      assert.ok(REQUIRED_ADAPTER_METHODS.includes('sendMessage'));
+      assert.equal(REQUIRED_ADAPTER_METHODS.length, 5);
     });
   });
 });

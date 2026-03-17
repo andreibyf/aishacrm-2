@@ -143,6 +143,18 @@ export function validateSafetyClassification(safety) {
     }
   }
 
+  // classified_at (required, ISO-8601)
+  if (!isNonEmptyString(safety.classified_at)) {
+    errors.push('classified_at is required');
+  } else if (Number.isNaN(Date.parse(safety.classified_at))) {
+    errors.push('classified_at must be a valid ISO-8601 date string');
+  }
+
+  // classified_by (required, non-empty string)
+  if (!isNonEmptyString(safety.classified_by)) {
+    errors.push('classified_by is required');
+  }
+
   // quarantine_reason (required when verdict = quarantined)
   if (safety.verdict === SAFETY_VERDICTS.QUARANTINED) {
     if (!isNonEmptyString(safety.quarantine_reason)) {
@@ -155,6 +167,12 @@ export function validateSafetyClassification(safety) {
 
 /**
  * Validate a single authentication result entry.
+ *
+ * Note: `type` and `result` are validated as non-empty strings but are NOT
+ * restricted to the `AUTH_RESULT_TYPES` / `AUTH_RESULT_VALUES` enums.
+ * Adapters may return vendor-specific values (e.g. Microsoft `compauth`,
+ * Gmail `arc`). The exported enums represent the canonical set for
+ * display and reporting; validation intentionally permits extension.
  */
 export function validateAuthResult(ar) {
   const errors = [];

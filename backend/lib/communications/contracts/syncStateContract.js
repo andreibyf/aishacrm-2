@@ -66,8 +66,7 @@ function isValidISODate(v) {
  * ```json
  * {
  *   "strategy": "uid",
- *   "value":    12345,
- *   "updated_at": "2025-12-01T00:00:00Z"
+ *   "value":    12345
  * }
  * ```
  */
@@ -143,8 +142,45 @@ export function validateSyncState(state) {
     errors.push('last_polled_at must be a valid ISO-8601 date string');
   }
 
+  if (
+    state.last_message_at !== undefined &&
+    state.last_message_at !== null &&
+    !isValidISODate(state.last_message_at)
+  ) {
+    errors.push('last_message_at must be a valid ISO-8601 date string');
+  }
+
+  if (
+    state.updated_at !== undefined &&
+    state.updated_at !== null &&
+    !isValidISODate(state.updated_at)
+  ) {
+    errors.push('updated_at must be a valid ISO-8601 date string');
+  }
+
   if (typeof state.replay_enabled !== 'undefined' && typeof state.replay_enabled !== 'boolean') {
     errors.push('replay_enabled must be a boolean when provided');
+  }
+
+  if (
+    state.cursor_strategy !== undefined &&
+    state.cursor_strategy !== null
+  ) {
+    if (!isNonEmptyString(state.cursor_strategy)) {
+      errors.push('cursor_strategy must be a non-empty string when provided');
+    } else if (!Object.values(CURSOR_STRATEGIES).includes(state.cursor_strategy)) {
+      errors.push(
+        `cursor_strategy must be one of: ${Object.values(CURSOR_STRATEGIES).join(', ')}`,
+      );
+    }
+  }
+
+  if (
+    state.poll_errors !== undefined &&
+    state.poll_errors !== null &&
+    (!Number.isInteger(state.poll_errors) || state.poll_errors < 0)
+  ) {
+    errors.push('poll_errors must be a non-negative integer when provided');
   }
 
   return { valid: errors.length === 0, errors };
