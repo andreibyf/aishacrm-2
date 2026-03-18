@@ -17,6 +17,7 @@
     "test:system": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/system/*.test.js",
     "test:integration": "NODE_ENV=test node --test --test-force-exit --test-timeout=60000 --test-reporter tap __tests__/integration/*.test.js",
     "test:validation": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/validation/*.test.js",
+    "test:schema-alignment": "sh scripts/test-schema-alignment.sh",
     "test:coverage": "NODE_ENV=test c8 --reporter=text-summary --reporter=lcov node --test --test-force-exit --test-timeout=120000 --test-reporter tap __tests__/**/*.test.js lib/care/*.test.js lib/care/__tests__/*.test.js",
     "verify:phase3": "node scripts/run_phase3_verification.js",
     "seed": "node scripts/run_seed.js",
