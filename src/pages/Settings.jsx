@@ -43,6 +43,8 @@ import {
   RefreshCw, // for SyncHealthMonitor
   Server, // for MCPServerMonitor
   Zap, // for CareSettings
+  BarChart2, // for Booking Analytics
+  CalendarCheck, // for Calendar Sync
 } from 'lucide-react';
 import { User as UserEntity } from '@/api/entities';
 import { useTenant } from '@/components/shared/tenantContext';
@@ -116,6 +118,9 @@ const BraidSDKMonitor = lazy(() => import('../components/settings/BraidSDKMonito
 const AiSettings = lazy(() => import('../components/settings/AiSettings'));
 const CareSettings = lazy(() => import('../components/settings/CareSettings'));
 const McpAdmin = lazy(() => import('./McpAdmin'));
+// Cal.com Scheduling - lazy loaded
+const BookingAnalytics = lazy(() => import('../components/scheduling/BookingAnalytics'));
+const CalendarSync = lazy(() => import('../components/settings/CalendarSync'));
 
 export default function SettingsPage() {
   const getInitialTabFromUrl = useCallback(() => {
@@ -286,6 +291,22 @@ export default function SettingsPage() {
           category: 'system',
           roles: ['admin'],
         },
+        {
+          id: 'booking-analytics',
+          label: 'Booking Analytics',
+          description: 'Session package revenue and booking metrics',
+          icon: BarChart2,
+          category: 'integrations',
+          roles: ['admin'],
+        },
+        {
+          id: 'calendar-sync',
+          label: 'Calendar Sync',
+          description: 'Connect external calendars via Cal.com',
+          icon: CalendarCheck,
+          category: 'integrations',
+          roles: ['admin'],
+        },
       );
     }
 
@@ -390,6 +411,22 @@ export default function SettingsPage() {
           icon: Zap,
           category: 'integrations',
           roles: ['superadmin', 'admin'],
+        },
+        {
+          id: 'booking-analytics',
+          label: 'Booking Analytics',
+          description: 'Session package revenue and booking metrics',
+          icon: BarChart2,
+          category: 'integrations',
+          roles: ['superadmin'],
+        },
+        {
+          id: 'calendar-sync',
+          label: 'Calendar Sync',
+          description: 'Connect external calendars via Cal.com',
+          icon: CalendarCheck,
+          category: 'integrations',
+          roles: ['superadmin'],
         },
 
         // System
@@ -878,6 +915,44 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                   <CareSettings isSuperadmin={isSuperadmin} />
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === 'booking-analytics' && isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart2 className="w-5 h-5 text-blue-400" />
+                    Booking Analytics
+                  </CardTitle>
+                  <CardDescription>
+                    Session package revenue, booking metrics, and credit utilization
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SettingsLoader>
+                    <BookingAnalytics tenantId={selectedTenantId} />
+                  </SettingsLoader>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === 'calendar-sync' && isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarCheck className="w-5 h-5 text-green-400" />
+                    Calendar Sync
+                  </CardTitle>
+                  <CardDescription>
+                    Connect external calendars (Google, Outlook, CalDAV) via Cal.com
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SettingsLoader>
+                    <CalendarSync tenantId={selectedTenantId} />
+                  </SettingsLoader>
                 </CardContent>
               </Card>
             )}

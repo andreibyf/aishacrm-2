@@ -56,6 +56,7 @@
     "improve:baseline": "npm run validate:ci"
   },
   "dependencies": {
+    "@calcom/embed-react": "^1.5.3",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
