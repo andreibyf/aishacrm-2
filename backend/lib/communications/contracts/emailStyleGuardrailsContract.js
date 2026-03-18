@@ -340,10 +340,17 @@ export function buildStyleDirective(guardrails, context = {}) {
     '--- EMAIL STYLE GUIDELINES ---',
     `Tone: ${toneDescriptions[config.tone]}`,
     `Length: Keep the email under ${maxWords} words (${config.length_tier} tier).`,
-    'Write like a real person — avoid clichés, corporate buzzwords, and AI-sounding phrases.',
-    'Avoid: "I hope this finds you well", "Please don\'t hesitate to", "Feel free to reach out", "moving forward", "synergy", "leverage", "circle back".',
-    'Start with the point. Skip filler openers.',
-    'End with a clear next step or action, not a generic closing.',
+    'Write like a real human — not like an AI or a corporate template.',
+    'NEVER start with "I hope this message finds you well" or "I hope this email finds you well" or any variation. These are dead giveaways of AI-generated text.',
+    'Instead, open naturally the way a real person would:',
+    '  - "Hi [Name], thanks for expressing interest in ..."',
+    '  - "Hi [Name], how are you? Hope your week is going well."',
+    '  - "Hi [Name], just following up on our conversation about ..."',
+    '  - "Hi [Name], I wanted to reach out about ..."',
+    '  - Jump straight to the reason for the email.',
+    'Vary your openers — do not reuse the same one across emails.',
+    'Avoid these robotic/AI phrases: "I hope this finds you well", "Please don\'t hesitate to", "Feel free to reach out", "I wanted to take a moment to", "I\'m writing to inform you that", "moving forward", "synergy", "leverage", "circle back", "per my last email", "please be advised".',
+    'End with a clear, specific next step — not a generic closing like "Looking forward to hearing from you."',
   ];
 
   if (config.require_recipient_name && context.recipient_name) {
