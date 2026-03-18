@@ -30,7 +30,7 @@ function SalesPipeline(props) {
   const { cachedRequest } = useApiManager();
   const { loading: userLoading } = useUser();
   const { authCookiesReady } = useAuthCookiesReady();
-  const { getVisibleCardsForEntity } = useStatusCardPreferences();
+  const { getVisibleCardsForEntity, getCardLabel } = useStatusCardPreferences();
   const { plural: opportunitiesLabel } = useEntityLabel('opportunities');
 
   // Get visible opportunity stages from preferences
@@ -75,8 +75,8 @@ function SalesPipeline(props) {
         qualification: { name: 'Qualification', count: 0, value: 0, key: 'qualification' },
         proposal: { name: 'Proposal', count: 0, value: 0, key: 'proposal' },
         negotiation: { name: 'Negotiation', count: 0, value: 0, key: 'negotiation' },
-        closed_won: { name: 'Closed Won', count: 0, value: 0, key: 'closed_won' },
-        closed_lost: { name: 'Closed Lost', count: 0, value: 0, key: 'closed_lost' },
+        closed_won: { name: getCardLabel('opportunity_won') || 'Closed Won', count: 0, value: 0, key: 'closed_won' },
+        closed_lost: { name: getCardLabel('opportunity_lost') || 'Closed Lost', count: 0, value: 0, key: 'closed_lost' },
       };
 
       const stageAliasMap = {
@@ -247,7 +247,7 @@ function SalesPipeline(props) {
                   key: 'negotiation',
                 },
                 closed_won: {
-                  name: 'Closed Won',
+                  name: getCardLabel('opportunity_won') || 'Closed Won',
                   value:
                     dashboardData.pipeline.find((s) => s.stage === 'closed_won')?.[
                       `value_${suffix}`
@@ -259,7 +259,7 @@ function SalesPipeline(props) {
                   key: 'closed_won',
                 },
                 closed_lost: {
-                  name: 'Closed Lost',
+                  name: getCardLabel('opportunity_lost') || 'Closed Lost',
                   value:
                     dashboardData.pipeline.find((s) => s.stage === 'closed_lost')?.[
                       `value_${suffix}`

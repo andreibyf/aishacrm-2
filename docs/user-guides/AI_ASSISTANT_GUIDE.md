@@ -10,6 +10,8 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 
 ### v5.10.0 - Latest Features
 
+- **Email Drafting via Chat:** Say "draft an email to [contact] about [topic]" — AiSHA creates a draft in the **AI Suggestions** approval queue instead of sending immediately. Review and approve before anything is sent.
+- **AI Suggestions in Sidebar:** The **AI Suggestions** page is now directly accessible from the left sidebar. This is where email drafts, stale-deal alerts, and other AI-generated actions wait for your approval.
 - **User Impersonation:** Super-admins can now impersonate any tenant user for support and debugging
 - **Employee Name Cache:** Fast lookups for employee names across UI (no raw UUIDs exposed)
 - **Agent Workflow Delegation:** Delegate tasks like "Have the sales manager follow up" to trigger specialized workflows
@@ -153,7 +155,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 
 ### 4.5 Activities & Tasks
 
-**Keywords:** activity, activities, task, tasks, todo, to-do, to do, call, calls, calling, phone call, follow up, follow-up, followup, meeting, meetings, appointment, appointments, calendar, schedule, scheduled, scheduling, reschedule, rescheduling, book, booked, booking, email, emails, emailing, note, notes, log, logged, reminder, reminders, due, overdue, pending, completed, done
+**Keywords:** activity, activities, task, tasks, todo, to-do, to do, call, calls, calling, phone call, follow up, follow-up, followup, meeting, meetings, appointment, appointments, calendar, schedule, scheduled, scheduling, reschedule, rescheduling, book, booked, booking, note, notes, log, logged, reminder, reminders, due, overdue, pending, completed, done
 
 **Time References:** today, tomorrow, this week, next week, Monday, Tuesday, Wednesday, Thursday, Friday, morning, afternoon, evening, 9am, 10am, 11am, 2pm, 3pm, etc.
 
@@ -166,6 +168,12 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 - "Book a meeting with Jane for tomorrow afternoon"
 - "What tasks are due this week?"
 - "Log a note about my call with John"
+
+> **📧 Email Drafting is different from Activities**
+>
+> When you ask AiSHA to *draft*, *write*, or *compose* an email, AiSHA uses a dedicated **email drafting tool** that routes the message to the **AI Suggestions** approval queue — it does **NOT** create an activity. The email is not sent automatically. See [Section 4.8 Email Drafting](#48-email-drafting) below.
+
+### 4.6 Dashboard & Analytics
 
 ### 4.6 Dashboard & Analytics
 
@@ -190,6 +198,58 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 | **Convert**   | convert, converting                                                | "Convert this lead to an account"                               |
 | **Export**    | export, download                                                   | "Export my contacts", "Download the report"                     |
 | **Delete**    | delete, deleting, remove, removing                                 | "Delete this task" (requires confirmation)                      |
+| **Draft Email** | draft, compose, write an email, send an email to                 | "Draft an email to Jennifer about the proposal"                 |
+
+### 4.8 Email Drafting
+
+AiSHA can draft personalized emails on your behalf. Unlike activities or notes, email drafts go through an **approval queue** before being sent — so you always have final say on what leaves your CRM.
+
+#### How to Request an Email Draft
+
+Simply ask AiSHA in natural language:
+
+```
+"Draft an email to Jennifer Martinez about the Q4 proposal"
+"Write an email to the Acme Corp contact following up on yesterday's call"
+"Compose a follow-up email for the One Charge lead"
+"Send an email to John Smith thanking him for the demo"
+```
+
+#### What Happens Behind the Scenes
+
+```
+You: "Draft an email to Jennifer about the proposal"
+        ↓
+AiSHA calls the draft_email tool
+        ↓
+Backend generates a personalized draft using AI
+        ↓
+Draft saved to AI Suggestions (status: pending)
+        ↓
+You review and approve in AI Suggestions page
+        ↓
+Email sent via SMTP
+```
+
+1. AiSHA uses the `draft_email` tool, which calls the backend email drafting engine.
+2. The engine generates a personalized email body using AI, taking context from the contact/lead/account record.
+3. The draft is saved as an **AI Suggestion** with status `pending` — it is **not sent yet**.
+4. You receive a confirmation message from AiSHA with a link to the AI Suggestions page.
+5. In the **AI Suggestions** page (accessible from the sidebar), review the draft and click **Approve** to send, or **Reject** to discard.
+
+#### After Approval
+
+Once you approve an email draft:
+
+- The email is queued and sent via your configured email integration (SMTP/SendGrid)
+- The AI Suggestion status changes to `approved`
+- An email activity is automatically logged against the related contact/lead/account
+
+> **⚠️ IMPORTANT:** AiSHA never sends emails automatically. Every email draft requires your explicit approval in the AI Suggestions queue before it leaves the system.
+
+#### Checking Your Pending Drafts
+
+Navigate to **AI Suggestions** in the left sidebar to see all pending email drafts and other AI-generated actions requiring your review.
 
 ---
 
@@ -401,9 +461,9 @@ When you delegate to an agent workflow, it:
 
 ---
 
-## 9. Available AI Tools (52 Functions)
+## 9. Available AI Tools (53 Functions)
 
-AiSHA has access to 52 specialized tools for CRM operations:
+AiSHA has access to 53 specialized tools for CRM operations:
 
 ### Data Retrieval
 
@@ -421,6 +481,10 @@ AiSHA has access to 52 specialized tools for CRM operations:
 
 - \`updateLead\`, \`updateAccount\`, \`updateContact\`, \`updateOpportunity\`, \`updateActivity\` - Modify existing records
 - \`convertLeadToAccount\` - Convert qualified leads
+
+### **Email Drafting (v5.10.0+)**
+
+- \`draft_email\` - Draft a personalized email for a contact/lead/account. The draft goes to **AI Suggestions** for your approval before sending. Use phrases like "draft an email to...", "write an email for...", or "compose a follow-up email".
 
 ### Workflows & Automation
 
@@ -477,6 +541,8 @@ AiSHA has access to 52 specialized tools for CRM operations:
 | Create a lead   | "Create a new lead for [company]"        |
 | Get details     | "Tell me about [name]"                   |
 | Dashboard       | "Show me the dashboard"                  |
+| Draft an email  | "Draft an email to [name] about [topic]" |
+| View pending approvals | "Navigate to AI Suggestions"      |
 
 ### Agent Delegation Commands (v3.7.0+)
 

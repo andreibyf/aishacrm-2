@@ -82,6 +82,7 @@
 - [10.3 Campaign Types](#103-campaign-types)
 - [10.4 Managing Campaign Progress](#104-managing-campaign-progress)
 - [10.5 Campaign Performance Metrics](#105-campaign-performance-metrics)
+- [10.6 AI Suggestions (Approval Queue)](#106-ai-suggestions-approval-queue)
 
 ### Chapter 11: Reports and Analytics
 
@@ -366,6 +367,7 @@ The collapsible left sidebar provides quick access to:
 - **Favorites**: Starred contacts/accounts
 - **Quick Create**: Fast entry forms
 - **Saved Searches**: Frequently used filters
+- **AI Suggestions**: Pending AI-generated actions (email drafts, alerts) awaiting your approval
 
 > **💡 TIP**
 >
@@ -2282,6 +2284,72 @@ After campaigns complete, AI shows what it learned:
 > **💡 TIP:**
 >
 > Run small test campaigns (20-50 contacts) before scaling to your full list. This lets AI learn optimal approaches without burning through your audience.
+
+---
+
+## 10.6 AI Suggestions (Approval Queue)
+
+### Overview
+
+**AI Suggestions** is your approval queue for all AI-generated actions that require human review before execution. Think of it as AiSHA's "waiting room" — nothing in here has happened yet, and nothing will happen until you approve it.
+
+Navigate to **AI Suggestions** from the left sidebar (listed between AI Campaigns and Employees).
+
+### What Appears in AI Suggestions?
+
+| Source | Example | When Created |
+|--------|---------|--------------|
+| **Email Drafts** | "Draft an email to Jennifer..." | When you ask AiSHA to draft/compose/write an email |
+| **Stale Deal Alerts** | Deal inactive for 14+ days | Nightly AI triggers worker |
+| **Lead Follow-up Nudges** | Lead stagnant with no activity | Nightly AI engine check |
+| **CARE Workflow Emails** | Triggered by playbook rule | When a CARE workflow action fires with `require_approval: true` |
+| **Account Risk Alerts** | Account showing risk signals | AI analysis of account health |
+
+### Reviewing an Email Draft
+
+When you ask AiSHA to "draft an email to [contact]", the flow is:
+
+```
+Chat: "Draft an email to Jennifer about the Q4 proposal"
+    ↓
+AiSHA drafts a personalized email using AI
+    ↓
+Draft saved to AI Suggestions (status: pending)
+    ↓
+AiSHA confirms: "I've created a draft in AI Suggestions. Review and approve when ready."
+    ↓
+You open AI Suggestions from the sidebar
+    ↓
+Review the email subject and body
+    ↓
+Click Approve → Email sent via SMTP
+```
+
+### Actions You Can Take
+
+| Action | Result |
+|--------|--------|
+| **Approve** | Email is sent, activity logged against the record |
+| **Reject** | Draft discarded, no email sent |
+| **Edit** | (Where supported) Modify the draft before approving |
+
+> **⚠️ IMPORTANT:** AiSHA never sends emails automatically. You must explicitly approve each draft in AI Suggestions.
+
+### Understanding Suggestion Statuses
+
+| Status | Meaning |
+|--------|---------|
+| **Pending** | Awaiting your review |
+| **Approved** | You approved it; action executed |
+| **Rejected** | You rejected it; no action taken |
+| **Expired** | Aged out without action (configurable) |
+
+### Tips for Managing AI Suggestions
+
+- Check AI Suggestions daily — drafts and alerts accumulate here
+- Use AiSHA to navigate directly: say "Show me AI Suggestions" or "Navigate to AI Suggestions"
+- Old pending suggestions do not get automatically approved; they sit until you act
+- Each suggestion shows which CRM record it relates to (contact, lead, account, etc.)
 
 ---
 

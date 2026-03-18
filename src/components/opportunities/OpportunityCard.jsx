@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DollarSign, Calendar, TrendingUp, MoreHorizontal, Edit, Trash2, Eye } from "lucide-react";
 import { format } from "date-fns";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 // Matching the stat card colors from Opportunities page - semi-transparent backgrounds
 const stageColors = {
@@ -25,6 +26,11 @@ const stageLabels = {
   closed_lost: "Closed Lost"
 };
 
+const stageToCardId = {
+  closed_won: 'opportunity_won',
+  closed_lost: 'opportunity_lost',
+};
+
 export default function OpportunityCard({
   opportunity,
   accountName,
@@ -36,6 +42,7 @@ export default function OpportunityCard({
   isSelected,
   onSelect
 }) {
+  const { getCardLabel } = useStatusCardPreferences();
   const formattedAmount = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -62,7 +69,7 @@ export default function OpportunityCard({
                 data-variant="status"
                 data-status={opportunity.stage}
               >
-                {stageLabels[opportunity.stage] || opportunity.stage?.replace(/_/g, ' ')}
+                {(stageToCardId[opportunity.stage] ? getCardLabel(stageToCardId[opportunity.stage]) : null) || stageLabels[opportunity.stage] || opportunity.stage?.replace(/_/g, ' ')}
               </Badge>
               
               <h3 

@@ -1,6 +1,6 @@
 # Repository Audit vs AI Rules Documentation
 
-**Audit date:** 2025-03-06  
+**Audit date:** 2025-03-06 (last full audit) | **Reviewed:** March 2026 — no new violations found; findings below remain accurate  
 **Reference:** `CLAUDE.md` and `docs/developer-docs/COPILOT_PLAYBOOK.md` (API layer, service layer, data layer, AI/Braid, utilities, drift detection)
 
 ---
@@ -175,6 +175,15 @@ No production entry points were found that import from archive. No other clearly
 | Duplicate utilities (UUID) | Consolidated into `backend/lib/uuidValidator.js`; `backend/lib/validation.js` re-exports route helpers.     |
 | Raw SQL in lib             | Added `backend/data/tenant.js`; `backend/lib/tenantResolver.js` uses `getTenantDomainAndName()`.            |
 | Raw SQL in middleware      | Added `backend/data/systemLogs.js`; `backend/middleware/productionSafetyGuard.js` uses `insertSystemLog()`. |
+
+## Post-audit fixes applied (March 2026)
+
+| Issue                                | Fix                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `contacts.company` does not exist    | `activities.v2.js` and `aiEmailDraftingSupport.js` now use `accounts!contacts_account_id_fkey(name)` FK join instead of `.company` column. |
+| `rawBody` missing for webhook HMAC   | `backend/startup/initMiddleware.js` adds `verify` callback to `express.json()` storing `req.rawBody`; Cal.com webhook uses this for signature verification. |
+| New route: `calcom-webhook.js`       | Cal.com booking webhook handler added on `feature/calcom-booking-system` branch (pending merge to main). |
+| `backend/services/aiEmailDraftingSupport.js` | New service extracted for AI email drafting support; routes through `ai_suggestions` → `emailWorker` flow (not auto-send). |
 
 **Remaining issues** (per .cursorrules: _Avoid large architectural changes_ — left for planned refactors):
 

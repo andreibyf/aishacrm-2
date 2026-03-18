@@ -1,6 +1,13 @@
 # Merge candidates: inline stats + 400 tenant_id fix (from goofy-taussig)
 
+**Last reviewed:** March 18, 2026  
+**Status:** ⏳ Still pending — NOT yet merged to `main`
+
 **Context:** Inline stats (stats returned with list data) and the AiSHA 400 fix (tenant_id in body/header + selected tenant for superadmin) were implemented in a prior session. Those changes live on **`claude/goofy-taussig`** and were either never merged to `main` or were overwritten by a merge. The test file `v2-inline-stats.test.js` on main expects `data.stats` on all five entities, but only Opportunities and Contacts currently return it; Leads, Activities, and Accounts do not.
+
+> **Note (March 2026):** `activities.v2.js` on `fix/prod-bugs-mar18` has had a separate bugfix applied (contacts company FK join — commit `8933579f`). When merging from `goofy-taussig`, apply that branch's `activities.v2.js` inline-stats changes **on top of** the bugfix, not as a replacement. The bugfix changes are:
+> - Contact `select` in `lookupRelatedEntity` uses `accounts!contacts_account_id_fkey(name)` (not `company`)
+> - Name-building uses `data.accounts?.name` (not `data.company`)
 
 ---
 

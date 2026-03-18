@@ -157,11 +157,13 @@ describe('SuggestionQueue', () => {
     expect(screen.getByText('Re: New Thread Test')).toBeInTheDocument();
     expect(screen.getByText('andrei.byfield@aishacrm.com')).toBeInTheDocument();
 
-    // Should show the body prompt context
+    // Should show the body prompt context (instruction shown inline, no header label)
     expect(
       screen.getByText('Draft a concise, professional reply to the latest message.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/AI will draft this message using/)).toBeInTheDocument();
+
+    // Should NOT show the old verbose header label
+    expect(screen.queryByText(/AI will draft this message using/)).not.toBeInTheDocument();
 
     // Should show source badge
     expect(screen.getByText('via care playbook')).toBeInTheDocument();

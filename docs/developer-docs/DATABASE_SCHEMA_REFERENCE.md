@@ -169,6 +169,8 @@ leads
 
 ### contacts
 
+> **⚠️ Critical:** `contacts` has NO `company` column. Company is derived by joining the `accounts` table via `account_id`. In Supabase client: `accounts!contacts_account_id_fkey(name)`. Frontend sees this as `contact.account_name` (populated in `contacts.v2.js`).
+
 ```sql
 contacts
 ├── [common columns]
@@ -176,10 +178,17 @@ contacts
 ├── last_name TEXT
 ├── email TEXT
 ├── phone TEXT
-├── account_id UUID REFERENCES accounts(id)
+├── account_id UUID REFERENCES accounts(id) -- company name via join only
 ├── title TEXT
 ├── department TEXT
 └── notes TEXT
+```
+
+**Getting company name in queries:**
+```javascript
+// Supabase query
+.select('*, accounts!contacts_account_id_fkey(id, name)')
+// Result: row.account = { id, name }  → flatten to row.account_name = row.account.name
 ```
 
 ### accounts
@@ -219,13 +228,21 @@ activities
 ├── type TEXT (call | email | meeting | task | note)
 ├── subject TEXT
 ├── description TEXT
-├── status TEXT (pending | completed | cancelled)
+├── status TEXT (pending | completed | cancelled | in_progress | overdue)
 ├── due_date TIMESTAMPTZ
+├── due_time TEXT
 ├── completed_at TIMESTAMPTZ
-├── related_type TEXT (lead | contact | account | opportunity)
+├── related_to TEXT (lead | contact | account | opportunity | bizdev_source)
 ├── related_id UUID
-└── priority TEXT
+├── related_name TEXT -- denormalized display name (populated by lookupRelatedEntity)
+├── related_email TEXT
+├── priority TEXT (low | medium | high)
+├── is_ai_generated BOOLEAN DEFAULT false
+├── ai_context JSONB -- AI enrichment context
+└── draft_body TEXT -- AI email draft content
 ```
+
+**Note on `related_name` population:** The `activities.v2.js` `lookupRelatedEntity` function resolves the display name at write time. For contacts, this joins `accounts!contacts_account_id_fkey(name)` to get the company name as fallback.
 
 ### bizdev_sources
 
@@ -293,6 +310,48 @@ entity_labels
 ├── created_at TIMESTAMPTZ
 └── updated_at TIMESTAMPTZ
 ```
+
+### ai_suggestions
+
+AI-generated action suggestions pending human approval (used by the AI email draft and C.A.R.E. pipeline).
+
+```sql
+ai_suggestions
+├── id UUID PRIMARY KEY
+├── tenant_id UUID REFERENCES tenant(id)
+├── trigger_id TEXT -- e.g. 'playbook_email', 'care_trigger'
+├── record_type TEXT (lead | contact | account | opportunity | activity)
+├── record_id UUID
+├── status TEXT (pending | approved | rejected | executed)
+├── action JSONB  -- { tool_name, tool_args, ... }
+├── confidence NUMERIC
+├── reasoning TEXT
+├── created_at TIMESTAMPTZ
+└── updated_at TIMESTAMPTZ
+```
+
+**Flow:** C.A.R.E. or AI email routes insert with `status='pending'` → user reviews in UI → approval sets `status='approved'` → `emailWorker` or C.A.R.E. executor picks up and acts.
+
+---
+
+### tenant_integrations
+
+Per-tenant third-party integration configuration and runtime state.
+
+```sql
+tenant_integrations
+├── id UUID PRIMARY KEY
+├── tenant_id UUID REFERENCES tenant(id)
+├── integration_type TEXT (calcom | communications | stripe | ...)
+├── config JSONB        -- normalized provider config (no plaintext secrets)
+├── api_credentials JSONB -- secret references (e.g. COMM_INBOUND_PASS ref)
+├── metadata JSONB      -- runtime state (e.g. sync cursor, last_synced_at)
+├── is_active BOOLEAN DEFAULT true
+├── created_at TIMESTAMPTZ
+└── updated_at TIMESTAMPTZ
+```
+
+**Communications sync cursor** is stored in `metadata.communications.sync.cursor` (see `COMMUNICATIONS_CONFIG_SCHEMA.md`).
 
 ---
 

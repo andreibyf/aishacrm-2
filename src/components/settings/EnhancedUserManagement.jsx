@@ -103,6 +103,7 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
         moduleName: 'Document Processing & Management',
       },
       { key: 'AICampaigns', label: 'AI Campaigns', moduleName: 'AI Campaigns' },
+      { key: 'AISuggestions', label: 'AI Suggestions', moduleName: 'AI Suggestions' },
       { key: 'Employees', label: 'Employees', moduleName: 'Employee Management' },
       { key: 'Reports', label: 'Reports', moduleName: 'Analytics & Reports' },
       { key: 'Integrations', label: 'Integrations', moduleName: 'Integrations' },

@@ -45,6 +45,7 @@ import {
   Workflow,
   Menu,
   Copy,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -94,6 +95,7 @@ const NAV_MODULES = [
   { key: 'DocumentProcessing', label: 'Document Processing', icon: FileText, description: 'AI document processing' },
   { key: 'DocumentManagement', label: 'Document Management', icon: FileText, description: 'File storage and management' },
   { key: 'AICampaigns', label: 'AI Campaigns', icon: Target, description: 'AI-powered marketing campaigns' },
+  { key: 'AISuggestions', label: 'AI Suggestions', icon: Sparkles, description: 'Review and approve AI-generated email drafts' },
   { key: 'Employees', label: 'Employees', icon: Users, description: 'Employee directory and management' },
   { key: 'Reports', label: 'Reports', icon: BarChart3, description: 'Analytics and reporting dashboards' },
   { key: 'Integrations', label: 'Integrations', icon: Settings, description: 'Third-party integrations' },
@@ -128,6 +130,7 @@ const DEFAULT_NAV_PERMISSIONS = {
   DocumentProcessing: true,
   DocumentManagement: true,
   AICampaigns: true,
+  AISuggestions: true,
   PaymentPortal: true,
   // Admin/restricted modules - off by default
   Employees: false, // Off by default - requires perm_employees
@@ -170,6 +173,7 @@ export default function UserFormWizard({
 }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [deletingTeams, setDeletingTeams] = useState(false);
   
   // Determine if this is create or edit mode
   const isEdit = mode === 'edit' || (mode === undefined && !!user?.id);
@@ -264,21 +268,25 @@ export default function UserFormWizard({
   useEffect(() => {
     setForm((prev) => {
       const newNavPerms = { ...prev.nav_permissions };
+      let changed = false;
       
-      // If they have perm_reports, enable Reports nav
+      // If they have perm_reports, force-enable Reports nav
       if (prev.perm_reports && !newNavPerms.Reports) {
         newNavPerms.Reports = true;
+        changed = true;
       }
-      // If they have perm_employees, enable Employees nav
+      // If they have perm_employees, force-enable Employees nav
       if (prev.perm_employees && !newNavPerms.Employees) {
         newNavPerms.Employees = true;
+        changed = true;
       }
-      // If they have perm_settings, enable Settings nav
+      // If they have perm_settings, force-enable Settings nav
       if (prev.perm_settings && !newNavPerms.Settings) {
         newNavPerms.Settings = true;
+        changed = true;
       }
       
-      return { ...prev, nav_permissions: newNavPerms };
+      return changed ? { ...prev, nav_permissions: newNavPerms } : prev;
     });
   }, [form.perm_reports, form.perm_employees, form.perm_settings]);
 
@@ -354,6 +362,48 @@ export default function UserFormWizard({
         [key]: !prev.nav_permissions[key],
       },
     }));
+  };
+
+  // Delete selected teams permanently
+  const handleDeleteSelectedTeams = async () => {
+    const selectedIds = availableTeams
+      .filter((t) => form.teams[t.id]?.selected)
+      .map((t) => t.id);
+    if (selectedIds.length === 0) return;
+
+    const names = availableTeams
+      .filter((t) => selectedIds.includes(t.id))
+      .map((t) => t.name)
+      .join(', ');
+
+    if (!window.confirm(`Permanently delete ${selectedIds.length} team(s)?\n\n${names}\n\nThis cannot be undone.`)) return;
+
+    setDeletingTeams(true);
+    let deleted = 0;
+    const tenantId = user?.tenant_id || currentUser?.tenant_id;
+    for (const id of selectedIds) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          deleted++;
+          // Remove from form state
+          setForm((prev) => {
+            const teams = { ...prev.teams };
+            delete teams[id];
+            return { ...prev, teams };
+          });
+        }
+      } catch (err) {
+        console.error('Delete team error:', err);
+      }
+    }
+    setDeletingTeams(false);
+    if (deleted > 0) toast.success(`Deleted ${deleted} team(s)`);
+    // Refresh available teams via parent — signal via a custom event
+    window.dispatchEvent(new CustomEvent('aisha:teams-changed'));
   };
 
   // Generate plain English summary
@@ -488,19 +538,27 @@ export default function UserFormWizard({
         const Icon = s.icon;
         const isActive = i === step;
         const isComplete = i < step;
-        
+        // In edit mode all steps are immediately reachable; in create mode only up to current
+        const isClickable = isEdit || i <= step;
+
         return (
           <div key={s.key} className="flex items-center">
-            <div
+            <button
+              type="button"
+              onClick={() => isClickable && setStep(i)}
+              title={isClickable ? `Go to ${s.label}` : `Complete previous steps first`}
               className={`
                 flex items-center justify-center w-8 h-8 rounded-full transition-all
                 ${isActive ? 'bg-blue-600 text-white' : ''}
-                ${isComplete ? 'bg-green-600 text-white' : ''}
+                ${isComplete ? 'bg-green-600 text-white hover:bg-green-500' : ''}
                 ${!isActive && !isComplete ? 'bg-slate-700 text-slate-400' : ''}
+                ${isClickable && !isActive ? 'hover:opacity-80 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800' : ''}
+                ${!isClickable ? 'cursor-not-allowed opacity-50' : ''}
+                ${isActive ? 'cursor-default' : ''}
               `}
             >
               {isComplete ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
-            </div>
+            </button>
             {i < STEPS.length - 1 && (
               <div className={`w-6 h-0.5 mx-0.5 ${i < step ? 'bg-green-600' : 'bg-slate-700'}`} />
             )}
@@ -712,6 +770,50 @@ export default function UserFormWizard({
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Select all / Deselect all + bulk delete */}
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="wizard-select-all-teams"
+                        checked={availableTeams.length > 0 && availableTeams.every((t) => form.teams[t.id]?.selected)}
+                        onCheckedChange={(checked) => {
+                          setForm((prev) => {
+                            const updated = { ...prev.teams };
+                            availableTeams.forEach((t) => {
+                              updated[t.id] = {
+                                selected: !!checked,
+                                access_level: prev.teams[t.id]?.access_level || 'view_own',
+                              };
+                            });
+                            return { ...prev, teams: updated };
+                          });
+                        }}
+                        className="border-slate-500"
+                      />
+                      <label htmlFor="wizard-select-all-teams" className="text-xs text-slate-400 cursor-pointer select-none">
+                        {availableTeams.every((t) => form.teams[t.id]?.selected) && availableTeams.length > 0
+                          ? `All ${availableTeams.length} selected`
+                          : `Select all`}
+                      </label>
+                    </div>
+                    {availableTeams.some((t) => form.teams[t.id]?.selected) && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleDeleteSelectedTeams}
+                        disabled={deletingTeams}
+                        className="h-7 px-2 text-xs bg-red-700 hover:bg-red-600"
+                      >
+                        {deletingTeams ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        ) : (
+                          <Trash2 className="w-3 h-3 mr-1" />
+                        )}
+                        Delete {availableTeams.filter((t) => form.teams[t.id]?.selected).length} team(s)
+                      </Button>
+                    )}
+                  </div>
+
                   {availableTeams.map((team) => {
                     const isSelected = form.teams[team.id]?.selected;
                     const accessLevel = form.teams[team.id]?.access_level || 'view_own';
@@ -852,8 +954,9 @@ export default function UserFormWizard({
                   const Icon = module.icon;
                   const isEnabled = form.nav_permissions[module.key];
                   
-                  // Check if this is auto-enabled by org permissions
-                  const autoEnabled = (
+                  // "Auto" just means this was force-enabled by an org-wide permission —
+                  // user can still manually toggle it off if they choose
+                  const autoForced = (
                     (module.key === 'Reports' && form.perm_reports) ||
                     (module.key === 'Employees' && form.perm_employees) ||
                     (module.key === 'Settings' && form.perm_settings)
@@ -862,10 +965,9 @@ export default function UserFormWizard({
                   return (
                     <div
                       key={module.key}
-                      onClick={() => !autoEnabled && toggleNavPerm(module.key)}
+                      onClick={() => toggleNavPerm(module.key)}
                       className={`
-                        flex items-center gap-3 p-3 rounded-lg border transition-all
-                        ${autoEnabled ? 'cursor-not-allowed' : 'cursor-pointer'}
+                        flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer
                         ${isEnabled 
                           ? 'bg-blue-500/10 border-blue-500' 
                           : 'bg-slate-900 border-slate-700 hover:border-slate-600'}
@@ -879,7 +981,7 @@ export default function UserFormWizard({
                           <span className={`text-sm font-medium ${isEnabled ? 'text-slate-200' : 'text-slate-400'}`}>
                             {module.label}
                           </span>
-                          {autoEnabled && (
+                          {autoForced && (
                             <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
                               Auto
                             </Badge>
@@ -889,8 +991,7 @@ export default function UserFormWizard({
                       </div>
                       <Switch
                         checked={isEnabled}
-                        disabled={autoEnabled}
-                        onCheckedChange={() => !autoEnabled && toggleNavPerm(module.key)}
+                        onCheckedChange={() => toggleNavPerm(module.key)}
                       />
                     </div>
                   );
@@ -902,7 +1003,7 @@ export default function UserFormWizard({
                   <Sparkles className="w-4 h-4 text-blue-400" />
                   <span>
                     Modules marked <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30 mx-1">Auto</Badge> 
-                    are automatically enabled based on organization-wide permissions.
+                    were enabled based on organization-wide permissions. You can still toggle them off.
                   </span>
                 </div>
               </div>

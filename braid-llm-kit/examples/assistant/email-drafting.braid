@@ -1,0 +1,39 @@
+// Executive Assistant Tools - AI Email Drafting
+// Draft outbound emails using AI, queued for human review before sending.
+// The draft is stored in ai_suggestions (status=pending_approval) — NOT sent immediately.
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+// Generate an AI email draft for a CRM record and queue it for approval.
+// entity_type: lead | contact | account | opportunity
+// prompt: plain-English instructions for what to write
+// subject: optional subject line (AI will infer if blank)
+// conversation_id: optional — pass the current AiSHA conversation ID for traceability
+@policy(WRITE_OPERATIONS)
+fn draftEmail(
+  tenant_id: String,
+  entity_type: String,
+  entity_id: String,
+  prompt: String,
+  subject: String,
+  conversation_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/ai/chat-draft-email";
+  let body = {
+    tenant_id: tenant_id,
+    entity_type: entity_type,
+    entity_id: entity_id,
+    prompt: prompt,
+    subject: subject,
+    conversation_id: conversation_id,
+    require_approval: true
+  };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => Err({ tag: "APIError", url: url, code: error.status, operation: "draft_email" }),
+    _ => Err({ tag: "NetworkError", url: url, code: 500 })
+  };
+}

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { ChevronDown, Tag, Trash2, UserCheck } from "lucide-react";
 import LazyEmployeeSelector from "../shared/LazyEmployeeSelector";
+import { useStatusCardPreferences } from "@/hooks/useStatusCardPreferences";
 
 export default function BulkActionsMenu({
   selectedCount,
@@ -39,6 +40,7 @@ export default function BulkActionsMenu({
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [newStage, setNewStage] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
+  const { getCardLabel } = useStatusCardPreferences();
 
   const displayCount = selectAllMode ? totalCount : selectedCount;
   const countLabel = selectAllMode ? `All ${displayCount}` : displayCount;
@@ -151,13 +153,13 @@ export default function BulkActionsMenu({
                     value="closed_won"
                     className="text-slate-200 hover:bg-slate-700"
                   >
-                    Closed Won
+                    {getCardLabel('opportunity_won') || 'Closed Won'}
                   </SelectItem>
                   <SelectItem
                     value="closed_lost"
                     className="text-slate-200 hover:bg-slate-700"
                   >
-                    Closed Lost
+                    {getCardLabel('opportunity_lost') || 'Closed Lost'}
                   </SelectItem>
                 </SelectContent>
               </Select>
