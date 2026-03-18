@@ -9,7 +9,7 @@
     "dev": "node dev-server.js",
     "dev:unlimited": "node --watch server.js",
     "test": "NODE_ENV=test node --test --test-force-exit --test-timeout=120000 --test-reporter tap __tests__/**/*.test.js lib/care/*.test.js lib/care/__tests__/*.test.js",
-    "test:safe": "bash scripts/run-tests-safe.sh",
+    "test:safe": "sh scripts/run-tests-safe.sh",
     "test:care": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap lib/care/*.test.js lib/care/__tests__/*.test.js",
     "test:routes": "NODE_ENV=test node --test --test-force-exit --test-timeout=60000 --test-reporter tap __tests__/routes/*.test.js",
     "test:auth": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/auth/*.test.js",

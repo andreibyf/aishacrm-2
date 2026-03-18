@@ -35,9 +35,9 @@ export default function EntityAiSummaryCard({
 
   return (
     <>
-      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5 mb-6 shadow-sm">
+      <div className="bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 rounded-lg p-5 mb-6 shadow-sm">
         <div className="flex flex-row items-center justify-between pb-2">
-          <h3 className="text-lg font-bold flex items-center gap-2 text-indigo-900">
+          <h3 className="text-lg font-bold flex items-center gap-2 text-indigo-900 dark:text-indigo-100">
             <Sparkles className="w-5 h-5" />
             AI Summary
           </h3>
@@ -46,7 +46,7 @@ export default function EntityAiSummaryCard({
               variant="outline"
               size="sm"
               onClick={() => setIsModalOpen(true)}
-              className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
+              className="bg-white dark:bg-indigo-900 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-200 text-xs h-8"
             >
               Task AiSHA
             </Button>
@@ -54,7 +54,7 @@ export default function EntityAiSummaryCard({
               variant="outline"
               size="sm"
               onClick={handleBackOfficeClick}
-              className="bg-white border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs h-8"
+              className="bg-white dark:bg-indigo-900 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-200 text-xs h-8"
               title="Open AiSHA Office Viz"
             >
               <ExternalLink className="w-4 h-4 mr-1" />
@@ -63,12 +63,12 @@ export default function EntityAiSummaryCard({
           </div>
         </div>
         <div className="space-y-4">
-          <div className="prose prose-sm max-w-none text-indigo-800 leading-relaxed">
+          <div className="prose prose-sm max-w-none text-indigo-800 dark:text-indigo-200 leading-relaxed">
             {aiSummaryLoading ? (
               <div className="space-y-2 animate-pulse">
-                <div className="h-3 bg-indigo-200 rounded w-full" />
-                <div className="h-3 bg-indigo-200 rounded w-5/6" />
-                <div className="h-3 bg-indigo-200 rounded w-4/6" />
+                <div className="h-3 bg-indigo-200 dark:bg-indigo-800 rounded w-full" />
+                <div className="h-3 bg-indigo-200 dark:bg-indigo-800 rounded w-5/6" />
+                <div className="h-3 bg-indigo-200 dark:bg-indigo-800 rounded w-4/6" />
               </div>
             ) : (
               aiSummary || 'No summary available yet. Ask AiSHA to generate one.'
@@ -76,7 +76,7 @@ export default function EntityAiSummaryCard({
           </div>
 
           {lastUpdated && !aiSummaryLoading && (
-            <div className="flex items-center gap-2 text-xs text-indigo-400 pt-2 border-t border-indigo-200/50">
+            <div className="flex items-center gap-2 text-xs text-indigo-400 dark:text-indigo-400 pt-2 border-t border-indigo-200/50 dark:border-indigo-700/50">
               <Clock className="w-3 h-3" />
               <span>
                 Last updated {formatDistanceToNow(new Date(lastUpdated), { addSuffix: true })}

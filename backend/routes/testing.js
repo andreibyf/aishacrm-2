@@ -281,29 +281,56 @@ export default function createTestingRoutes(_pgPool) {
         });
       }
 
-      // Tables that have is_test_data flag in metadata
-      const tables = [
+      // Tables with a direct is_test_data boolean column (migration 053)
+      const directFlagTables = [
         'activities',
         'contacts',
         'leads',
         'accounts',
         'opportunities',
+      ];
+
+      // Tables that store is_test_data inside JSONB metadata
+      const metadataFlagTables = [
         'system_logs',
       ];
 
       const results = {};
       let totalDeleted = 0;
 
-      for (const table of tables) {
+      // Pass 1: Tables with direct is_test_data column
+      for (const table of directFlagTables) {
         try {
-          // Build DELETE query with metadata check
+          let query = `DELETE FROM ${table} WHERE is_test_data = true`;
+          const params = [];
+
+          if (tenant_id) {
+            query += ` AND tenant_id = $1`;
+            params.push(tenant_id);
+          }
+
+          query += ` RETURNING id`;
+
+          const result = await _pgPool.query(query, params);
+          const count = result.rowCount || 0;
+
+          results[table] = { deleted: count, success: true };
+          totalDeleted += count;
+        } catch (error) {
+          logger.error(`Error cleaning ${table}:`, error);
+          results[table] = { deleted: 0, success: false, error: error.message };
+        }
+      }
+
+      // Pass 2: Tables with metadata-based is_test_data
+      for (const table of metadataFlagTables) {
+        try {
           let query = `
             DELETE FROM ${table}
             WHERE (metadata->>'is_test_data')::boolean = true
           `;
           const params = [];
 
-          // Add tenant filter if specified
           if (tenant_id) {
             query += ` AND tenant_id = $1`;
             params.push(tenant_id);

@@ -668,14 +668,27 @@ const createFunctionProxy = (functionName) => {
       // ========================================
 
       if (functionName === 'cleanupTestRecords') {
-        logDev('[Local Dev Mode] cleanupTestRecords: returning mock cleanup result');
-        return {
-          data: {
-            success: true,
-            message: 'Test records cleanup (local-dev mock)',
-            deleted: 0,
-          },
-        };
+        try {
+          const BACKEND_URL = getBackendUrl();
+          const tenantId = args[0]?.tenant_id || localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
+          const authHeader = await getAuthorizationHeader();
+          const headers = { 'Content-Type': 'application/json' };
+          if (authHeader) headers['Authorization'] = authHeader;
+          const response = await fetch(`${BACKEND_URL}/api/testing/cleanup-test-data`, {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify({ confirm: true, tenant_id: tenantId || undefined }),
+          });
+          const json = await response.json();
+          if (!response.ok) {
+            throw new Error(json?.message || response.statusText);
+          }
+          return { data: { success: true, ...json.data } };
+        } catch (err) {
+          console.error('[cleanupTestRecords] Error:', err);
+          throw err;
+        }
       }
 
       if (functionName === 'cleanupOrphanedData') {
