@@ -103,9 +103,13 @@ For C.A.R.E. to execute autonomous actions (without human approval), **ALL** of 
 
 ### Step 2: Add CARE Start Node
 
-1. From the **Node Library** panel on the left, locate the **"CARE Start"** trigger node
+1. From the **Node Library** panel on the left, locate the **"CARE Start"** trigger node (code type: `care_trigger`)
 2. Drag the **"CARE Start"** node onto the workflow canvas
 3. Position it as the first node in your workflow
+
+> **📝 NOTE**
+>
+> The "CARE Start" node is labeled in the UI but uses `type: 'care_trigger'` in the backend database. Both names refer to the same node type.
 
 ### Step 3: Configure CARE Start Node
 

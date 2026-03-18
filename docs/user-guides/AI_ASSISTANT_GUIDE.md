@@ -1,6 +1,6 @@
 # AiSHA Assistant User Guide
 
-_Last updated: January 2, 2025_
+_Last updated: March 17, 2026_
 
 AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that runs inside the CRM sidebar. This guide explains how end users, product, and support teams should interact with the Phase 4-ready assistant experience, including layout, quick actions, guided forms, voice controls, natural language commands, and **agent workflow delegation** (v3.7.0+).
 
@@ -8,12 +8,19 @@ AiSHA (AI Super Hi-performing Assistant) is the executive-assistant layer that r
 
 ## What's New
 
-### v3.7.0 - Agent Workflow Delegation
+### v5.10.0 - Latest Features
 
-- **Delegate to Agents:** Say "Have the sales manager follow up" to trigger specialized agent workflows
-- **AI-Powered Actions:** Workflows now generate personalized emails, summaries, and notes using OpenAI
-- **Progress Tracking:** Check workflow status with "What has the sales manager done?"
-- **4 New Tools:** `delegate_to_workflow`, `get_workflow_progress`, `list_active_workflows`, `get_workflow_notes`
+- **User Impersonation:** Super-admins can now impersonate any tenant user for support and debugging
+- **Employee Name Cache:** Fast lookups for employee names across UI (no raw UUIDs exposed)
+- **Agent Workflow Delegation:** Delegate tasks like "Have the sales manager follow up" to trigger specialized workflows
+- **AI-Powered Actions:** Workflows generate personalized emails, summaries, and notes
+- **4 Workflow Tools:** `delegate_to_workflow`, `get_workflow_progress`, `list_active_workflows`, `get_workflow_notes`
+
+### Recent Improvements (v4.7+)
+
+- **Braid Type System:** Type-safe AI-to-database tool execution
+- **Realtime Voice Stability:** Improved WebRTC connection handling
+- **Wake Word Accuracy:** Enhanced "Hey Aisha" detection with phonetic variants
 
 ---
 
