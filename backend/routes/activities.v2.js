@@ -24,7 +24,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
   // B2B CRM: Different entities have different columns
   const entityConfig = {
     lead: { table: 'leads', select: 'company, first_name, last_name, email' },
-    contact: { table: 'contacts', select: 'first_name, last_name, email' },
+    contact: { table: 'contacts', select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)' },
     account: { table: 'accounts', select: 'name, email, phone' },
     opportunity: { table: 'opportunities', select: 'name' },
     bizdev_source: {
@@ -64,9 +64,9 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
         name = companyField || personName || null;
       }
     } else if (relatedTo === 'contact') {
-      // Contacts: full name, fall back to company
+      // Contacts: full name, fall back to account name (company via FK join)
       const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
-      name = fullName || data.company || null;
+      name = fullName || data.accounts?.name || null;
     } else {
       // Accounts, Opportunities: just name field
       name = data.name || null;
