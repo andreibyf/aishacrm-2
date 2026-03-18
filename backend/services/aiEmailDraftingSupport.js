@@ -52,6 +52,8 @@ function buildEntitySelectColumns(entityType) {
   if (entityType === 'account') return 'id, name, email, assigned_to, assigned_to_team';
   if (entityType === 'opportunity')
     return 'id, name, contact_id, lead_id, assigned_to, assigned_to_team';
+  // contacts table has no 'company' column — only leads do
+  if (entityType === 'contact') return 'id, first_name, last_name, email, assigned_to, assigned_to_team';
   return 'id, first_name, last_name, company, email, assigned_to, assigned_to_team';
 }
 

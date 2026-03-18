@@ -24,7 +24,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
   // B2B CRM: Different entities have different columns
   const entityConfig = {
     lead: { table: 'leads', select: 'company, first_name, last_name, email' },
-    contact: { table: 'contacts', select: 'company, first_name, last_name, email' },
+    contact: { table: 'contacts', select: 'first_name, last_name, email' },
     account: { table: 'accounts', select: 'name, email, phone' },
     opportunity: { table: 'opportunities', select: 'name' },
     bizdev_source: {
