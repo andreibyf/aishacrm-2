@@ -1,3 +1,4 @@
+import { formatDate } from '@/utils/dateFormatting';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -78,6 +79,9 @@ export default function LeadTable({
                   Assigned To
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                  Last Updated
+                </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Actions</th>
               </tr>
             </thead>
@@ -209,6 +213,11 @@ export default function LeadTable({
                       >
                         {lead.status}
                       </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
+                      {lead.updated_date
+                        ? formatDate(lead.updated_date)
+                        : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

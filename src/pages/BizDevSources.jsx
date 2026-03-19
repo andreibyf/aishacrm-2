@@ -55,6 +55,24 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 
+/**
+ * Shared helper — avoids duplicating the updatedFilter logic in both
+ * the visible-rows useMemo and the stats useMemo below.
+ */
+function matchesUpdatedFilter(updatedAtRaw, updatedFilter) {
+  if (updatedFilter === 'all') return true;
+  const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : null;
+  if (!updatedAt) return updatedFilter === 'stale';
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
+  if (updatedFilter === 'today') return updatedAt >= startOfToday;
+  if (updatedFilter === 'week') return diffDays <= 7;
+  if (updatedFilter === 'month') return diffDays <= 30;
+  if (updatedFilter === 'stale') return diffDays > 30;
+  return true;
+}
+
 export default function BizDevSourcesPage() {
   const navigate = useNavigate();
   const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
@@ -82,6 +100,7 @@ export default function BizDevSourcesPage() {
   const [, setEmployees] = useState([]);
   const [batchFilter, setBatchFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [updatedFilter, setUpdatedFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [selectedTags, setSelectedTags] = useState([]);
@@ -613,6 +632,9 @@ export default function BizDevSourcesPage() {
         ? !source.assigned_to
         : source.assigned_to === selectedEmployeeId);
 
+    // Updated filter (client-side)
+    const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
+
     return (
       matchesSearch &&
       matchesStatus &&
@@ -621,7 +643,8 @@ export default function BizDevSourcesPage() {
       matchesSource &&
       matchesTags &&
       matchesAssignedTo &&
-      matchesEmployee
+      matchesEmployee &&
+      matchesUpdated
     );
   });
 
@@ -712,6 +735,7 @@ export default function BizDevSourcesPage() {
     sortField,
     sortDirection,
     selectedEmployeeId,
+    updatedFilter,
   ]);
 
   const stats = useMemo(() => {
@@ -744,6 +768,7 @@ export default function BizDevSourcesPage() {
         (selectedEmployeeId === 'unassigned'
           ? !source.assigned_to
           : source.assigned_to === selectedEmployeeId);
+      const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
       return (
         matchesSearch &&
         matchesLicenseStatus &&
@@ -751,7 +776,8 @@ export default function BizDevSourcesPage() {
         matchesSource &&
         matchesTags &&
         matchesAssignedTo &&
-        matchesEmployee
+        matchesEmployee &&
+        matchesUpdated
       );
     });
     return {
@@ -770,6 +796,7 @@ export default function BizDevSourcesPage() {
     selectedTags,
     assignedToFilter,
     selectedEmployeeId,
+    updatedFilter,
   ]);
 
   if (loading && sources.length === 0) {
@@ -1042,12 +1069,31 @@ export default function BizDevSourcesPage() {
                 setCurrentPage(1);
               }}
             />
+            <Select
+              value={updatedFilter}
+              onValueChange={(value) => {
+                setUpdatedFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-44 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
+                <SelectValue placeholder="Updated in..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="today">Updated today</SelectItem>
+                <SelectItem value="week">Last 7 days</SelectItem>
+                <SelectItem value="month">Last 30 days</SelectItem>
+                <SelectItem value="stale">30+ days ago</SelectItem>
+              </SelectContent>
+            </Select>
             {(searchTerm ||
               licenseStatusFilter !== 'all' ||
               assignedToFilter !== 'all' ||
               batchFilter !== 'all' ||
               sourceFilter !== 'all' ||
-              selectedTags.length > 0) && (
+              selectedTags.length > 0 ||
+              updatedFilter !== 'all') && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1059,6 +1105,7 @@ export default function BizDevSourcesPage() {
                   setBatchFilter('all');
                   setSourceFilter('all');
                   setSelectedTags([]);
+                  setUpdatedFilter('all');
                   setCurrentPage(1);
                 }}
                 className="text-slate-400 hover:text-slate-200 whitespace-nowrap"

@@ -149,8 +149,8 @@ function parseBodyPrompt(bodyPrompt) {
     ? bodyPrompt.slice(bodyPrompt.indexOf(threadMatch[0])).trim()
     : '';
 
-  // Extract and strip "Related CRM record: {...}" JSON blob.
-  // The blob ends at the next blank line (or end of string) — don't over-capture.
+  // Extract and strip "Related CRM record: {...}" JSON blob — stops at blank line
+  // so that sections appended after the JSON (e.g. "Recent notes") are preserved.
   let crmEntity = null;
   beforeThread = beforeThread.replace(
     /Related CRM record:\s*(\{[^\n]*(?:\n(?!\n)[^\n]*)*)/i,
