@@ -14,31 +14,33 @@
  *     booking_sessions. pullCalcomBookings() provides a manual reconciliation pass
  *     for any bookings that arrived while the webhook was down.
  *
- * Target Architecture:
+ * Architecture:
  *
  *   Personal Calendar (Google/Outlook) ←→ AiSHA CRM ←→ Cal.com
  *
- *   AiSHA CRM is the hub. Tenants connect their Google/Outlook calendar directly to
- *   AiSHA (via tenant_integrations), not to Cal.com. Cal.com communicates only with
- *   AiSHA CRM via webhooks + API. AiSHA owns all calendar state and mediates both sides.
+ *   AiSHA CRM is the single hub. Both sides talk only to AiSHA CRM:
+ *     - Tenants connect Google/Outlook directly to AiSHA (via tenant_integrations OAuth).
+ *     - Cal.com communicates with AiSHA only via webhooks + API.
  *
- *   Direction A — Client books via Cal.com:
- *     Cal.com booking → webhook → AiSHA CRM (Activity + booking_session created)
- *     AiSHA CRM → Google/Outlook API: creates event on organizer's personal calendar.  [TODO]
+ *   All events — regardless of origin — flow through AiSHA CRM activities.
+ *   The single pushActivityToCalcom() hook handles propagation to Cal.com for all of them:
  *
- *   Direction B — Organizer creates CRM activity:
- *     AiSHA CRM Activity → pushActivityToCalcom() → Cal.com blocker booking  [IMPLEMENTED]
- *     AiSHA CRM → Google/Outlook API: creates event on organizer's personal calendar.  [TODO]
+ *   Client books via Cal.com:
+ *     Cal.com → webhook → AiSHA CRM activity created → pushActivityToCalcom() skips
+ *     (already exists in Cal.com) → Google/Outlook API: write event  [TODO]
  *
- *   Direction C — Personal calendar blocks a slot:
- *     Google/Outlook → AiSHA CRM reads busy times via Google/Outlook API  [TODO]
- *     → AiSHA CRM communicates blocked slots to Cal.com as blockers.
+ *   Organizer creates CRM activity (manual or from personal calendar import):
+ *     AiSHA CRM activity created → pushActivityToCalcom() → Cal.com blocker  [IMPLEMENTED]
+ *                                 → Google/Outlook API: write event           [TODO]
  *
- *   Personal calendar sync (Directions A/B/C) requires a dedicated Google Calendar
- *   service (Google Calendar API) and Outlook service (Microsoft Graph API) to be
- *   built. The tenant_integrations table already stores the OAuth credentials.
- *   See: backend/lib/googleCalendarService.js (to be created)
- *        backend/lib/outlookCalendarService.js (to be created)
+ *   Personal calendar event imported into AiSHA CRM:
+ *     Google/Outlook API → AiSHA CRM activity created → pushActivityToCalcom() → Cal.com blocker
+ *     No separate path needed — same activity hook handles it automatically.
+ *
+ *   Personal calendar write (TODO) requires:
+ *     backend/lib/googleCalendarService.js  — Google Calendar API
+ *     backend/lib/outlookCalendarService.js — Microsoft Graph API
+ *   The tenant_integrations table already stores the OAuth credentials for both.
  *
  * Requirements:
  *   - Tenant has an active Cal.com integration in tenant_integrations
