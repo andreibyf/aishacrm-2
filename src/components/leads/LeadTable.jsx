@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { formatDate } from '@/utils/dateFormatting';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -216,7 +216,7 @@ export default function LeadTable({
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
                       {lead.updated_date
-                        ? format(new Date(lead.updated_date), 'MMM d, yyyy')
+                        ? formatDate(lead.updated_date)
                         : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3">

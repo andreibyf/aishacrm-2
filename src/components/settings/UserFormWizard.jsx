@@ -380,7 +380,8 @@ export default function UserFormWizard({
 
     setDeletingTeams(true);
     let deleted = 0;
-    const tenantId = user?.tenant_id || currentUser?.tenant_id;
+    const failed = [];
+    const tenantId = form.tenant_id || user?.tenant_id || currentUser?.tenant_id;
     for (const id of selectedIds) {
       try {
         const res = await fetch(`${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`, {
@@ -395,13 +396,19 @@ export default function UserFormWizard({
             delete teams[id];
             return { ...prev, teams };
           });
+        } else {
+          let reason = `HTTP ${res.status}`;
+          try { const body = await res.json(); reason = body?.error || reason; } catch (_) {}
+          failed.push(reason);
         }
       } catch (err) {
         console.error('Delete team error:', err);
+        failed.push(err.message || 'Network error');
       }
     }
     setDeletingTeams(false);
     if (deleted > 0) toast.success(`Deleted ${deleted} team(s)`);
+    if (failed.length > 0) toast.error(`${failed.length} team(s) could not be deleted: ${failed.join('; ')}`);
     // Refresh available teams via parent — signal via a custom event
     window.dispatchEvent(new CustomEvent('aisha:teams-changed'));
   };

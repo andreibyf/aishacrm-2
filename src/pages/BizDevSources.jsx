@@ -55,6 +55,24 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 
+/**
+ * Shared helper — avoids duplicating the updatedFilter logic in both
+ * the visible-rows useMemo and the stats useMemo below.
+ */
+function matchesUpdatedFilter(updatedAtRaw, updatedFilter) {
+  if (updatedFilter === 'all') return true;
+  const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : null;
+  if (!updatedAt) return updatedFilter === 'stale';
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
+  if (updatedFilter === 'today') return updatedAt >= startOfToday;
+  if (updatedFilter === 'week') return diffDays <= 7;
+  if (updatedFilter === 'month') return diffDays <= 30;
+  if (updatedFilter === 'stale') return diffDays > 30;
+  return true;
+}
+
 export default function BizDevSourcesPage() {
   const navigate = useNavigate();
   const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
@@ -615,21 +633,7 @@ export default function BizDevSourcesPage() {
         : source.assigned_to === selectedEmployeeId);
 
     // Updated filter (client-side)
-    let matchesUpdated = true;
-    if (updatedFilter !== 'all') {
-      const updatedAt = source.updated_at ? new Date(source.updated_at) : null;
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      if (!updatedAt) {
-        matchesUpdated = updatedFilter === 'stale';
-      } else {
-        const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
-        if (updatedFilter === 'today') matchesUpdated = updatedAt >= startOfToday;
-        else if (updatedFilter === 'week') matchesUpdated = diffDays <= 7;
-        else if (updatedFilter === 'month') matchesUpdated = diffDays <= 30;
-        else if (updatedFilter === 'stale') matchesUpdated = diffDays > 30;
-      }
-    }
+    const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
 
     return (
       matchesSearch &&
@@ -764,21 +768,7 @@ export default function BizDevSourcesPage() {
         (selectedEmployeeId === 'unassigned'
           ? !source.assigned_to
           : source.assigned_to === selectedEmployeeId);
-      let matchesUpdated = true;
-      if (updatedFilter !== 'all') {
-        const updatedAt = source.updated_at ? new Date(source.updated_at) : null;
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        if (!updatedAt) {
-          matchesUpdated = updatedFilter === 'stale';
-        } else {
-          const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
-          if (updatedFilter === 'today') matchesUpdated = updatedAt >= startOfToday;
-          else if (updatedFilter === 'week') matchesUpdated = diffDays <= 7;
-          else if (updatedFilter === 'month') matchesUpdated = diffDays <= 30;
-          else if (updatedFilter === 'stale') matchesUpdated = diffDays > 30;
-        }
-      }
+      const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
       return (
         matchesSearch &&
         matchesLicenseStatus &&

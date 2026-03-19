@@ -395,7 +395,7 @@ conversation_messages -- Chat messages
 ```sql
 ai_suggestions   -- AI-generated actions pending human approval
                  -- Used by C.A.R.E. playbooks and AI email drafting
-                 -- status: pending | approved | rejected | executed
+                 -- status: pending | approved | rejected | applied | expired
 
 tenant_integrations -- Per-tenant integration config and runtime state
                  -- Covers: calcom, communications (IMAP/SMTP), Stripe, etc.
