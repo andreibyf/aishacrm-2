@@ -1,6 +1,7 @@
 import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { pushActivityToCalcom, removeActivityFromCalcom } from '../lib/calcomSyncService.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { generateScheduledAiEmailDraft as defaultGenerateScheduledAiEmailDraft } from '../services/scheduledAiEmailService.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
@@ -889,6 +890,9 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
       const created = expandMetadata(data);
       const aiContext = await buildActivityAiContext(created, {});
 
+      // Fire-and-forget: push timed activities to Cal.com as blocker bookings (non-blocking)
+      pushActivityToCalcom(tenant_id, created).catch(() => {});
+
       res.status(201).json({
         status: 'success',
         data: { activity: created, aiContext },
@@ -1314,6 +1318,10 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
       }
 
       const updated = expandMetadata(data);
+
+      // Fire-and-forget: push updated time to Cal.com (reschedule or create block)
+      pushActivityToCalcom(tenant_id, updated).catch(() => {});
+
       res.json({ status: 'success', data: { activity: updated } });
     } catch (error) {
       logger.error('Error in v2 activity update:', error);
@@ -1396,6 +1404,9 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
         logger.warn('[Activities V2 DELETE] Delete returned no data:', { id, tenant_id });
         return res.status(404).json({ status: 'error', message: 'Activity not found' });
       }
+
+      // Fire-and-forget: cancel the Cal.com blocker booking for this activity
+      removeActivityFromCalcom(tenant_id, data).catch(() => {});
 
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {

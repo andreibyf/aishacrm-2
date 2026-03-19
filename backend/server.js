@@ -243,6 +243,7 @@ import createSessionPackageRoutes from './routes/session-packages.js';
 import createSessionCreditsRoutes from './routes/session-credits.js';
 import calcomWebhookRouter from './routes/calcom-webhook.js';
 import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
+import createCalcomSyncRoutes from './routes/calcom-sync.js';
 import { stripeWebhookRouter } from './routes/stripe-webhook.js';
 import braidAuditRoutes from './routes/braidAudit.js';
 import braidChainRoutes from './routes/braidChain.js';
@@ -547,6 +548,9 @@ app.use('/api/session-credits', defaultLimiter, authenticateRequest, createSessi
 // Booking analytics — tenant-scoped reporting
 logger.debug('Mounting /api/analytics routes');
 app.use('/api/analytics', defaultLimiter, authenticateRequest, createBookingAnalyticsRoutes());
+// Cal.com bidirectional sync — admin-only, requires tenant auth
+logger.debug('Mounting /api/calcom-sync routes');
+app.use('/api/calcom-sync', defaultLimiter, authenticateRequest, createCalcomSyncRoutes());
 // Cal.com webhook — no auth middleware; HMAC signature verified inside handler
 logger.debug('Mounting /api/webhooks/calcom route');
 app.use('/api/webhooks', defaultLimiter, calcomWebhookRouter);

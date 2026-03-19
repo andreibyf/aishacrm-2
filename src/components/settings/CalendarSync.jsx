@@ -196,14 +196,27 @@ export default function CalendarSync({ tenantId }) {
   async function handleRefreshSync() {
     setSyncing(true);
     try {
-      const res = await apiFetch(`/api/session-packages/calcom/sync?tenant_id=${tenantId}`, {
+      // Trigger full bidirectional sync:
+      //   1. Pull Cal.com bookings → CRM (reconcile missed webhooks)
+      //   2. Push unsynced CRM timed activities → Cal.com (create blocker bookings)
+      const res = await apiFetch(`/api/calcom-sync/trigger?tenant_id=${tenantId}`, {
         method: 'POST',
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
         throw new Error(json.message || `Server returned ${res.status}`);
       }
-      toast.success('Calendar sync triggered');
+      const json = await res.json();
+      const { bookings_pulled = 0, activities_pushed = 0, errors = [] } = json.data || {};
+      if (errors.length > 0) {
+        toast.warning(
+          `Sync completed with ${errors.length} error(s). Pulled ${bookings_pulled}, pushed ${activities_pushed}.`,
+        );
+      } else {
+        toast.success(
+          `Sync complete — ${bookings_pulled} booking(s) pulled, ${activities_pushed} activit${activities_pushed === 1 ? 'y' : 'ies'} pushed to Cal.com.`,
+        );
+      }
       await fetchCalendars();
     } catch (err) {
       toast.error(err.message || 'Failed to trigger sync');
