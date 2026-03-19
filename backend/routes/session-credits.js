@@ -12,8 +12,8 @@ import express from 'express';
 import Stripe from 'stripe';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
-import { validateTenantAccess } from '../middleware/validateTenant.js';
-import { invalidateCache } from '../lib/cacheMiddleware.js';
+import { validateTenantAccess, requireAdminRole } from '../middleware/validateTenant.js';
+import { invalidateTenantCache } from '../lib/cacheMiddleware.js';
 
 function resolveTenantId(req) {
   const fromMiddleware = req.tenant?.id;
@@ -177,8 +177,7 @@ export default function createSessionCreditsRoutes() {
 
       if (creditErr) throw new Error(creditErr.message);
 
-      const entityKey = contact_id ? `contact_${contact_id}` : `lead_${lead_id}`;
-      invalidateCache(`session_credits_${tenant_id}_${entityKey}`);
+      await invalidateTenantCache(tenant_id, 'session_credits');
 
       res.status(201).json({ status: 'success', data: credit });
     } catch (err) {
@@ -399,7 +398,7 @@ export default function createSessionCreditsRoutes() {
 
   // POST /api/session-credits/grant — admin manual credit grant
   // Body: { tenant_id, contact_id?, lead_id?, package_id, credits_count, note? }
-  router.post('/grant', async (req, res) => {
+  router.post('/grant', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });

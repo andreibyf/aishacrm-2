@@ -50,7 +50,7 @@ function verifyCalcomSignature(rawBody, signatureHeader, secret) {
 async function resolveTenantFromSignature(supabase, rawBody, signatureHeader) {
   const { data: integrations, error } = await supabase
     .from('tenant_integrations')
-    .select('tenant_id, config')
+    .select('tenant_id, api_credentials')
     .eq('integration_type', 'calcom')
     .eq('is_active', true);
 
@@ -60,9 +60,9 @@ async function resolveTenantFromSignature(supabase, rawBody, signatureHeader) {
   }
 
   for (const row of integrations || []) {
-    const secret = row.config?.calcom?.webhook_secret;
+    const secret = row.api_credentials?.webhook_secret;
     if (secret && verifyCalcomSignature(rawBody, signatureHeader, secret)) {
-      return { tenant_id: row.tenant_id, calcomConfig: row.config?.calcom };
+      return { tenant_id: row.tenant_id, calcomConfig: row.api_credentials };
     }
   }
   return null;
@@ -245,7 +245,7 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
 async function handleBookingCancelled(supabase, tenant_id, payload, calcomConfig) {
   const { data: booking } = await supabase
     .from('booking_sessions')
-    .select('id, credit_id, scheduled_start, status')
+    .select('id, credit_id, scheduled_start, status, activity_id')
     .eq('tenant_id', tenant_id)
     .eq('calcom_booking_id', payload.uid)
     .single();

@@ -8,8 +8,8 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
-import { validateTenantAccess } from '../middleware/validateTenant.js';
-import { invalidateCache, cacheList } from '../lib/cacheMiddleware.js';
+import { validateTenantAccess, requireAdminRole } from '../middleware/validateTenant.js';
+import { invalidateTenantCache, cacheList } from '../lib/cacheMiddleware.js';
 
 function resolveTenantId(req) {
   const fromMiddleware = req.tenant?.id;
@@ -31,7 +31,7 @@ export default function createSessionPackageRoutes() {
   // GET /api/session-packages — list active packages for tenant
   router.get(
     '/',
-    cacheList('session_packages', (req) => req.tenant?.id),
+    cacheList('session_packages', 30),
     async (req, res) => {
       try {
         const { tenant_id, error } = resolveTenantId(req);
@@ -85,7 +85,7 @@ export default function createSessionPackageRoutes() {
   });
 
   // POST /api/session-packages — create package (admin)
-  router.post('/', async (req, res) => {
+  router.post('/', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -117,7 +117,7 @@ export default function createSessionPackageRoutes() {
 
       if (dbErr) throw new Error(dbErr.message);
 
-      invalidateCache(`session_packages_${tenant_id}`);
+      await invalidateTenantCache(tenant_id, 'session_packages');
       res.status(201).json({ status: 'success', data });
     } catch (err) {
       logger.error('[SessionPackages] POST / error', { error: err.message });
@@ -126,7 +126,7 @@ export default function createSessionPackageRoutes() {
   });
 
   // PUT /api/session-packages/:id — update package
-  router.put('/:id', async (req, res) => {
+  router.put('/:id', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -156,7 +156,7 @@ export default function createSessionPackageRoutes() {
       if (dbErr || !data)
         return res.status(404).json({ status: 'error', message: 'Not found or not updated' });
 
-      invalidateCache(`session_packages_${tenant_id}`);
+      await invalidateTenantCache(tenant_id, 'session_packages');
       res.json({ status: 'success', data });
     } catch (err) {
       logger.error('[SessionPackages] PUT /:id error', { error: err.message });
@@ -165,7 +165,7 @@ export default function createSessionPackageRoutes() {
   });
 
   // DELETE /api/session-packages/:id — soft delete (set is_active=false)
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -179,7 +179,7 @@ export default function createSessionPackageRoutes() {
 
       if (dbErr) throw new Error(dbErr.message);
 
-      invalidateCache(`session_packages_${tenant_id}`);
+      await invalidateTenantCache(tenant_id, 'session_packages');
       res.json({ status: 'success', message: 'Package deactivated' });
     } catch (err) {
       logger.error('[SessionPackages] DELETE /:id error', { error: err.message });

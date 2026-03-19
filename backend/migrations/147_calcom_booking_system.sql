@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_session_packages_tenant
 ALTER TABLE public.session_packages ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY session_packages_tenant_isolation ON public.session_packages
-    USING (tenant_id = (SELECT id FROM public.tenant WHERE id = tenant_id));
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 -- Service role bypass (backend uses service role key — needs unrestricted access)
 CREATE POLICY session_packages_service_role ON public.session_packages
@@ -73,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_session_credits_package
 ALTER TABLE public.session_credits ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY session_credits_tenant_isolation ON public.session_credits
-    USING (tenant_id = (SELECT id FROM public.tenant WHERE id = tenant_id));
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY session_credits_service_role ON public.session_credits
     TO service_role USING (true) WITH CHECK (true);
@@ -121,7 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_booking_sessions_credit
 ALTER TABLE public.booking_sessions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY booking_sessions_tenant_isolation ON public.booking_sessions
-    USING (tenant_id = (SELECT id FROM public.tenant WHERE id = tenant_id));
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 CREATE POLICY booking_sessions_service_role ON public.booking_sessions
     TO service_role USING (true) WITH CHECK (true);

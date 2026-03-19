@@ -25,9 +25,14 @@ export const stripeWebhookRouter = express.Router();
 
 // Raw body required for Stripe sig verification
 stripeWebhookRouter.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  const rawBody = req.body;
+  // Prefer req.rawBody (set by express.json verify callback in initMiddleware) over
+  // req.body (express.raw buffer) — avoids issues when express.json() runs first globally
+  const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : null);
   const sigHeader = req.headers['stripe-signature'];
 
+  if (!rawBody) {
+    return res.status(400).json({ error: 'Unable to read request body' });
+  }
   if (!sigHeader) {
     return res.status(400).json({ error: 'Missing Stripe-Signature header' });
   }

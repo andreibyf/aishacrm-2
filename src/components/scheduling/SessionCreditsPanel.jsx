@@ -30,7 +30,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { CalendarCheck, CreditCard, ShoppingCart, Loader2, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, formatDistance } from 'date-fns';
+import { formatDate, formatRelativeTime } from '@/utils/dateFormatting';
 import { getBackendUrl } from '@/api/backendUrl';
 import { supabase } from '@/lib/supabase';
 
@@ -58,7 +58,7 @@ const STATUS_COLORS = {
   no_show: 'destructive',
 };
 
-export default function SessionCreditsPanel({ entityId, entityType, tenantId }) {
+export default function SessionCreditsPanel({ entityId, entityType, email, tenantId }) {
   const [credits, setCredits] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -210,7 +210,7 @@ export default function SessionCreditsPanel({ entityId, entityType, tenantId }) 
             {expiringCredits.map((c) => (
               <span key={c.id} className="font-medium">
                 {c.credits_remaining} session{c.credits_remaining !== 1 ? 's' : ''} expire{' '}
-                {formatDistance(new Date(c.expiry_date), new Date(), { addSuffix: true })}
+                      {formatRelativeTime(c.expiry_date)}
               </span>
             ))}
           </span>
@@ -270,7 +270,7 @@ export default function SessionCreditsPanel({ entityId, entityType, tenantId }) 
               >
                 <div>
                   <div className="font-medium">
-                    {format(new Date(b.scheduled_start), 'MMM d, yyyy – h:mm a')}
+                    {formatDate(b.scheduled_start, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </div>
                   <div className="text-xs text-muted-foreground">{b.calcom_booking_id}</div>
                 </div>

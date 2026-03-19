@@ -14,11 +14,12 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
-import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { validateTenantAccess, requireAdminRole } from '../middleware/validateTenant.js';
 
 export default function createBookingAnalyticsRoutes() {
   const router = express.Router();
   router.use(validateTenantAccess);
+  router.use(requireAdminRole);
 
   function resolveTenantId(req) {
     const id = req.tenant?.id || req.query?.tenant_id;
@@ -32,6 +33,9 @@ export default function createBookingAnalyticsRoutes() {
     const from = query.from
       ? new Date(query.from)
       : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    if (isNaN(to.getTime()) || isNaN(from.getTime())) {
+      return { error: 'Invalid date range. Use ISO 8601 format for \'from\' and \'to\'.' };
+    }
     return { from: from.toISOString(), to: to.toISOString() };
   }
 
@@ -41,7 +45,8 @@ export default function createBookingAnalyticsRoutes() {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
 
-      const { from, to } = parseDateRange(req.query);
+      const { from, to, error: rangeError } = parseDateRange(req.query);
+      if (rangeError) return res.status(400).json({ status: 'error', message: rangeError });
       const supabase = getSupabaseClient();
 
       // Bookings by status within date range
@@ -115,7 +120,8 @@ export default function createBookingAnalyticsRoutes() {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
 
-      const { from, to } = parseDateRange(req.query);
+      const { from, to, error: rangeError } = parseDateRange(req.query);
+      if (rangeError) return res.status(400).json({ status: 'error', message: rangeError });
       const supabase = getSupabaseClient();
 
       // Credits purchased (= packages sold) in date range

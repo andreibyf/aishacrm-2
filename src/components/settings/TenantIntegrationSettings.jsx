@@ -1686,7 +1686,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               <p className="text-xs text-muted-foreground">
                 Set in Cal.com → Settings → Webhooks → create webhook pointing to{' '}
                 <code className="text-xs">
-                  {window.location.origin.replace(':4000', ':4001')}/api/webhooks/calcom
+                  {getBackendUrl()}/api/webhooks/calcom
                 </code>
                 .
               </p>

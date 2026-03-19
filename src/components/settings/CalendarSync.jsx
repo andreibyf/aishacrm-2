@@ -126,15 +126,10 @@ export default function CalendarSync({ tenantId }) {
       }
 
       // Fetch connected calendars via Cal.com API (proxied through backend)
-      const calRes = await apiFetch(`/api/session-packages/calcom/calendars?tenant_id=${tenantId}`);
-      if (calRes.ok) {
-        const calJson = await calRes.json();
-        setCalendars(calJson.data?.calendars || []);
-        setPrimaryCalendarId(calJson.data?.primary_calendar_id || null);
-      } else {
-        // Cal.com proxy not yet implemented — show placeholder
-        setCalendars([]);
-      }
+      // Note: Cal.com proxy routes (/api/session-packages/calcom/*) are not yet
+      // implemented — show placeholder until the backend endpoints are added.
+      setCalendars([]);
+      setPrimaryCalendarId(null);
     } catch {
       toast.error('Failed to load calendar connections');
     } finally {
@@ -162,14 +157,21 @@ export default function CalendarSync({ tenantId }) {
 
   async function handleSetPrimary(calendarId) {
     try {
-      await apiFetch(`/api/session-packages/calcom/calendars/primary?tenant_id=${tenantId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ calendar_id: calendarId }),
-      });
+      const res = await apiFetch(
+        `/api/session-packages/calcom/calendars/primary?tenant_id=${tenantId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ calendar_id: calendarId }),
+        },
+      );
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.message || `Server returned ${res.status}`);
+      }
       setPrimaryCalendarId(calendarId);
       toast.success('Primary calendar updated');
-    } catch {
-      toast.error('Failed to update primary calendar');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update primary calendar');
     }
   }
 
@@ -194,13 +196,17 @@ export default function CalendarSync({ tenantId }) {
   async function handleRefreshSync() {
     setSyncing(true);
     try {
-      await apiFetch(`/api/session-packages/calcom/sync?tenant_id=${tenantId}`, {
+      const res = await apiFetch(`/api/session-packages/calcom/sync?tenant_id=${tenantId}`, {
         method: 'POST',
       });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.message || `Server returned ${res.status}`);
+      }
       toast.success('Calendar sync triggered');
       await fetchCalendars();
-    } catch {
-      toast.error('Failed to trigger sync');
+    } catch (err) {
+      toast.error(err.message || 'Failed to trigger sync');
     } finally {
       setSyncing(false);
     }
