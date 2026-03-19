@@ -17,6 +17,8 @@ import express from 'express';
 import crypto from 'crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
+import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../lib/googleCalendarService.js';
+import { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent } from '../lib/outlookCalendarService.js';
 
 const router = express.Router();
 
@@ -233,6 +235,22 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
     logger.error('[CalcomWebhook] Failed to upsert booking_sessions', { error: insertErr.message });
   }
 
+  // Fire-and-forget: sync the new booking activity to personal calendars (Google/Outlook)
+  if (activity_id) {
+    const calActivity = {
+      id: activity_id,
+      activity_type: 'booking_scheduled',
+      subject: `Booking Scheduled`,
+      activity_date: payload.startTime,
+      scheduled_start: payload.startTime,
+      end_time: payload.endTime,
+      scheduled_end: payload.endTime,
+      metadata: { calcom_booking_id: payload.uid },
+    };
+    createGoogleEvent(tenant_id, calActivity).catch(() => {});
+    createOutlookEvent(tenant_id, calActivity).catch(() => {});
+  }
+
   logger.info('[CalcomWebhook] BOOKING_CREATED processed', {
     tenant_id,
     uid: payload.uid,
@@ -289,11 +307,19 @@ async function handleBookingCancelled(supabase, tenant_id, payload, calcomConfig
 
   // Mark linked activity as cancelled if present
   if (booking.activity_id) {
-    await supabase
+    const { data: activityData } = await supabase
       .from('activities')
       .update({ status: 'cancelled' })
       .eq('id', booking.activity_id)
-      .eq('tenant_id', tenant_id);
+      .eq('tenant_id', tenant_id)
+      .select('id, metadata')
+      .maybeSingle();
+
+    // Fire-and-forget: remove from personal calendars
+    if (activityData) {
+      deleteGoogleEvent(tenant_id, activityData).catch(() => {});
+      deleteOutlookEvent(tenant_id, activityData).catch(() => {});
+    }
   }
 
   logger.info('[CalcomWebhook] BOOKING_CANCELLED processed', {
@@ -325,14 +351,29 @@ async function handleBookingRescheduled(supabase, tenant_id, payload) {
     .single();
 
   if (booking?.activity_id) {
-    await supabase
+    const { data: activityData } = await supabase
       .from('activities')
       .update({
         activity_date: payload.startTime,
         due_date: payload.startTime?.split('T')[0],
       })
       .eq('id', booking.activity_id)
-      .eq('tenant_id', tenant_id);
+      .eq('tenant_id', tenant_id)
+      .select('id, activity_type, subject, metadata')
+      .maybeSingle();
+
+    // Fire-and-forget: update personal calendars with new time
+    if (activityData) {
+      const rescheduled = {
+        ...activityData,
+        activity_date: payload.startTime,
+        scheduled_start: payload.startTime,
+        end_time: payload.endTime,
+        scheduled_end: payload.endTime,
+      };
+      updateGoogleEvent(tenant_id, rescheduled).catch(() => {});
+      updateOutlookEvent(tenant_id, rescheduled).catch(() => {});
+    }
   }
 
   logger.info('[CalcomWebhook] BOOKING_RESCHEDULED processed', { uid: payload.uid });

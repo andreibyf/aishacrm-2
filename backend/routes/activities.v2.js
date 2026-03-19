@@ -2,6 +2,8 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { pushActivityToCalcom, removeActivityFromCalcom } from '../lib/calcomSyncService.js';
+import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../lib/googleCalendarService.js';
+import { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent } from '../lib/outlookCalendarService.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { generateScheduledAiEmailDraft as defaultGenerateScheduledAiEmailDraft } from '../services/scheduledAiEmailService.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
@@ -892,6 +894,9 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       // Fire-and-forget: push timed activities to Cal.com as blocker bookings (non-blocking)
       pushActivityToCalcom(tenant_id, created).catch(() => {});
+      // Fire-and-forget: sync to personal calendars (Google/Outlook)
+      createGoogleEvent(tenant_id, created).catch(() => {});
+      createOutlookEvent(tenant_id, created).catch(() => {});
 
       res.status(201).json({
         status: 'success',
@@ -1321,6 +1326,9 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       // Fire-and-forget: push updated time to Cal.com (reschedule or create block)
       pushActivityToCalcom(tenant_id, updated).catch(() => {});
+      // Fire-and-forget: sync to personal calendars (Google/Outlook)
+      updateGoogleEvent(tenant_id, updated).catch(() => {});
+      updateOutlookEvent(tenant_id, updated).catch(() => {});
 
       res.json({ status: 'success', data: { activity: updated } });
     } catch (error) {
@@ -1407,6 +1415,9 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       // Fire-and-forget: cancel the Cal.com blocker booking for this activity
       removeActivityFromCalcom(tenant_id, data).catch(() => {});
+      // Fire-and-forget: remove from personal calendars (Google/Outlook)
+      deleteGoogleEvent(tenant_id, data).catch(() => {});
+      deleteOutlookEvent(tenant_id, data).catch(() => {});
 
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
