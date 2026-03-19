@@ -28,6 +28,8 @@ export default function LeadFilters({
   ageFilter,
   setAgeFilter,
   ageBuckets,
+  updatedFilter,
+  setUpdatedFilter,
   allTags,
   selectedTags,
   setSelectedTags,
@@ -91,6 +93,26 @@ export default function LeadFilters({
             setCurrentPage(1);
           }}
         />
+
+        {/* Updated In Filter */}
+        <Select
+          value={updatedFilter ?? 'all'}
+          onValueChange={(value) => {
+            setUpdatedFilter(value);
+            setCurrentPage(1);
+          }}
+        >
+          <SelectTrigger className="w-44 bg-slate-800 border-slate-700 text-slate-200">
+            <SelectValue placeholder="Updated in..." />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-800 border-slate-700">
+            <SelectItem value="all" className="text-slate-200 hover:bg-slate-700">All time</SelectItem>
+            <SelectItem value="today" className="text-slate-200 hover:bg-slate-700">Updated today</SelectItem>
+            <SelectItem value="week" className="text-slate-200 hover:bg-slate-700">Last 7 days</SelectItem>
+            <SelectItem value="month" className="text-slate-200 hover:bg-slate-700">Last 30 days</SelectItem>
+            <SelectItem value="stale" className="text-slate-200 hover:bg-slate-700">30+ days ago</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Assigned To Filter */}
         <AssignedToSelect

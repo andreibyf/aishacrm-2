@@ -659,16 +659,16 @@ export default function BizDevSourceDetailPanel({
           <div>
             <p className="text-xs text-slate-400 mb-1">Created</p>
             <p className="text-sm text-slate-300">
-              {currentSource.created_date
-                ? format(new Date(currentSource.created_date), 'MMM d, yyyy h:mm a')
+              {(currentSource.created_at || currentSource.created_date)
+                ? format(new Date(currentSource.created_at || currentSource.created_date), 'MMM d, yyyy h:mm a')
                 : 'N/A'}
             </p>
           </div>
           <div>
             <p className="text-xs text-slate-400 mb-1">Updated</p>
             <p className="text-sm text-slate-300">
-              {currentSource.updated_date
-                ? format(new Date(currentSource.updated_date), 'MMM d, yyyy h:mm a')
+              {(currentSource.updated_at || currentSource.updated_date)
+                ? format(new Date(currentSource.updated_at || currentSource.updated_date), 'MMM d, yyyy h:mm a')
                 : 'N/A'}
             </p>
           </div>

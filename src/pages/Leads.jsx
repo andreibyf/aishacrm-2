@@ -48,6 +48,7 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
+  const [updatedFilter, setUpdatedFilter] = useState('all');
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [sortField, setSortField] = useState('created_date');
   const [sortDirection, setSortDirection] = useState('desc');
@@ -181,6 +182,7 @@ export default function LeadsPage() {
     sortField,
     sortDirection,
     ageFilter,
+    updatedFilter,
     selectedTags,
     showTestData,
     ageBuckets,
@@ -394,6 +396,7 @@ export default function LeadsPage() {
     setSearchTerm('');
     setStatusFilter('all');
     setAgeFilter('all');
+    setUpdatedFilter('all');
     setAssignedToFilter('all');
     setSelectedTags([]);
     setSortField('created_date');
@@ -440,6 +443,7 @@ export default function LeadsPage() {
       searchTerm !== '' ||
       statusFilter !== 'all' ||
       ageFilter !== 'all' ||
+      updatedFilter !== 'all' ||
       assignedToFilter !== 'all' ||
       selectedTags.length > 0 ||
       sortField !== 'created_date' ||
@@ -449,6 +453,7 @@ export default function LeadsPage() {
     searchTerm,
     statusFilter,
     ageFilter,
+    updatedFilter,
     assignedToFilter,
     selectedTags,
     sortField,
@@ -691,6 +696,8 @@ export default function LeadsPage() {
           ageFilter={ageFilter}
           setAgeFilter={setAgeFilter}
           ageBuckets={ageBuckets}
+          updatedFilter={updatedFilter}
+          setUpdatedFilter={setUpdatedFilter}
           allTags={allTags}
           selectedTags={selectedTags}
           setSelectedTags={setSelectedTags}

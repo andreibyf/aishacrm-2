@@ -45,6 +45,7 @@ export function useLeadsData({
   sortField,
   sortDirection,
   ageFilter,
+  updatedFilter = 'all',
   assignedToFilter = 'all',
   selectedTags,
   showTestData,
@@ -424,7 +425,7 @@ export function useLeadsData({
         }
 
         // Determine pagination strategy
-        const useBackendPagination = ageFilter === 'all';
+        const useBackendPagination = ageFilter === 'all' && updatedFilter === 'all';
         const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
         const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
 
@@ -458,6 +459,22 @@ export function useLeadsData({
               return age >= 0 && age >= selectedBucket.min && age <= selectedBucket.max;
             });
           }
+        }
+
+        // Apply client-side updated filter if needed
+        if (updatedFilter !== 'all') {
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          allFilteredLeads = allFilteredLeads.filter((lead) => {
+            const updatedAt = lead.updated_date ? new Date(lead.updated_date) : null;
+            if (!updatedAt) return updatedFilter === 'stale';
+            const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
+            if (updatedFilter === 'today') return updatedAt >= startOfToday;
+            if (updatedFilter === 'week') return diffDays <= 7;
+            if (updatedFilter === 'month') return diffDays <= 30;
+            if (updatedFilter === 'stale') return diffDays > 30;
+            return true;
+          });
         }
 
         // Apply client-side pagination if age filtering was used
@@ -545,6 +562,7 @@ export function useLeadsData({
       statusFilter,
       selectedTags,
       ageFilter,
+      updatedFilter,
       assignedToFilter,
       sortField,
       sortDirection,
@@ -565,6 +583,7 @@ export function useLeadsData({
     searchTerm,
     statusFilter,
     ageFilter,
+    updatedFilter,
     selectedTags,
     sortField,
     sortDirection,
