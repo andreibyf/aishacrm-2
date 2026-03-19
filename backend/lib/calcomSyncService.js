@@ -15,11 +15,27 @@
  *     for any bookings that arrived while the webhook was down.
  *
  * Architecture:
- *   Personal Calendar  ←→  Cal.com  ←→  AiSHA CRM
  *
- *   Cal.com handles the personal-calendar sync (via OAuth-connected Google/Outlook
- *   calendars). AiSHA is the go-between: CRM activities become Cal.com blocker
- *   bookings, and Cal.com bookings become CRM activities.
+ *   AiSHA CRM is the single hub between Cal.com and the organizer's personal calendar.
+ *   Cal.com communicates ONLY with AiSHA CRM — it has no direct OAuth connection to
+ *   Google Calendar or Outlook. AiSHA CRM holds the personal calendar credentials and
+ *   mediates all calendar traffic in both directions.
+ *
+ *   Direction A — Client books via Cal.com:
+ *     Cal.com booking → webhook → AiSHA CRM (Activity + booking_session created)
+ *     AiSHA CRM syncs the event to the organizer's personal calendar (Google/Outlook).
+ *
+ *   Direction B — Organizer creates CRM activity:
+ *     AiSHA CRM Activity → pushActivityToCalcom() → Cal.com blocker booking
+ *     AiSHA CRM also writes the event to the organizer's personal calendar.
+ *
+ *   Direction C — Personal calendar blocks a slot:
+ *     Google/Outlook busy event → AiSHA CRM reads it and reports the slot as unavailable
+ *     → AiSHA CRM communicates the blocked availability to Cal.com.
+ *     Cal.com never reads personal calendars directly.
+ *
+ *   Summary: Personal Calendar (Google/Outlook) ←→ AiSHA CRM ←→ Cal.com
+ *   AiSHA CRM owns all calendar state; Cal.com is a booking front-end only.
  *
  * Requirements:
  *   - Tenant has an active Cal.com integration in tenant_integrations
