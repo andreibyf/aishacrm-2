@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getBackendUrl } from '@/api/backendUrl';
 
@@ -8,6 +8,7 @@ import { getBackendUrl } from '@/api/backendUrl';
  * Returns:
  *   teams:   Array of { id, name } objects
  *   loading: boolean
+ *   refetch: function — manually re-fetch teams
  *
  * Also returns team_members mapping so we can filter employees by team.
  *   membersByTeam: { [teamId]: string[] } — employee IDs per team
@@ -16,6 +17,15 @@ export default function useTeams(tenantId) {
   const [teams, setTeams] = useState([]);
   const [membersByTeam, setMembersByTeam] = useState({});
   const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
+
+  const refetch = useCallback(() => setTick((n) => n + 1), []);
+
+  useEffect(() => {
+    const handler = () => setTick((n) => n + 1);
+    window.addEventListener('aisha:teams-changed', handler);
+    return () => window.removeEventListener('aisha:teams-changed', handler);
+  }, []);
 
   useEffect(() => {
     if (!tenantId) {
@@ -70,7 +80,7 @@ export default function useTeams(tenantId) {
     };
 
     fetchTeams();
-  }, [tenantId]);
+  }, [tenantId, tick]);
 
-  return { teams, membersByTeam, loading };
+  return { teams, membersByTeam, loading, refetch };
 }

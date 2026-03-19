@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -123,6 +124,10 @@ export default function TeamManagement() {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editParent, setEditParent] = useState('');
+
+  // Bulk selection
+  const [selectedTeamIds, setSelectedTeamIds] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Note: Team membership is now managed via User Management wizard
   // (add/remove members removed from this component per design spec)
@@ -251,8 +256,8 @@ export default function TeamManagement() {
     }
   };
 
-  // Build role options dynamically from labels
-  const ROLE_OPTIONS = [
+  // Build role options dynamically from labels (used by member UI if re-enabled)
+  const _ROLE_OPTIONS = [
     { value: 'member', label: roleLabels.member },
     { value: 'manager', label: roleLabels.manager },
     { value: 'director', label: roleLabels.director },
@@ -326,6 +331,38 @@ export default function TeamManagement() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const toDelete = teams.filter((t) => selectedTeamIds.has(t.id));
+    const withMembers = toDelete.filter((t) => t.member_count > 0);
+    const canDelete = toDelete.filter((t) => t.member_count === 0);
+
+    if (withMembers.length > 0 && canDelete.length === 0) {
+      toast.error(`All selected teams have members. Remove members first.`);
+      return;
+    }
+
+    const msg = withMembers.length > 0
+      ? `Delete ${canDelete.length} empty team(s)? (${withMembers.length} team(s) with members will be skipped)`
+      : `Permanently delete ${canDelete.length} team(s)? This cannot be undone.`;
+
+    if (!window.confirm(msg)) return;
+
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const team of canDelete) {
+      try {
+        await apiFetch(`/api/v2/teams/${team.id}?hard=true&tenant_id=${tenantId}`, { method: 'DELETE' });
+        deleted++;
+      } catch (err) {
+        toast.error(`Failed to delete "${team.name}": ${err.message}`);
+      }
+    }
+    setBulkDeleting(false);
+    setSelectedTeamIds(new Set());
+    if (deleted > 0) toast.success(`Deleted ${deleted} team(s)`);
+    await loadTeams();
+  };
+
   const handleToggleTeamActive = async (team) => {
     try {
       if (team.is_active) {
@@ -357,65 +394,10 @@ export default function TeamManagement() {
     }
   };
 
-  const handleAddMember = async (teamId) => {
-    if (!newMemberEmployeeId) return;
-    try {
-      await apiFetch(`/api/v2/teams/${teamId}/members`, {
-        method: 'POST',
-        body: JSON.stringify({
-          tenant_id: tenantId,
-          employee_id: newMemberEmployeeId,
-          role: newMemberRole,
-        }),
-      });
-      toast.success('Member added');
-      setAddingMemberTeamId(null);
-      setNewMemberEmployeeId('');
-      setNewMemberRole('member');
-      await loadMembers(teamId);
-      await loadTeams(); // refresh member counts
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleUpdateMemberRole = async (teamId, memberId, newRole) => {
-    try {
-      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ tenant_id: tenantId, role: newRole }),
-      });
-      toast.success('Role updated');
-      await loadMembers(teamId);
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleRemoveMember = async (teamId, memberId, empName) => {
-    try {
-      await apiFetch(`/api/v2/teams/${teamId}/members/${memberId}?tenant_id=${tenantId}`, {
-        method: 'DELETE',
-      });
-      toast.success(`${empName || 'Member'} removed from team`);
-      await loadMembers(teamId);
-      await loadTeams(); // refresh member counts
-    } catch (err) {
-      toast.error(err.message);
-    }
-  };
-
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   const activeTeams = teams.filter((t) => t.is_active);
   const getTeamName = (id) => teams.find((t) => t.id === id)?.name || '';
-
-  // Employees not already in a specific team
-  const getAvailableEmployees = (teamId) => {
-    const teamMembers = members[teamId] || [];
-    const memberEmpIds = new Set(teamMembers.map((m) => m.employee_id));
-    return employees.filter((e) => !memberEmpIds.has(e.id));
-  };
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -636,14 +618,32 @@ export default function TeamManagement() {
                   : `${activeTeams.length} active team${activeTeams.length !== 1 ? 's' : ''}`}
               </CardDescription>
             </div>
-            <Button
-              size="sm"
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              New Team
-            </Button>
+            <div className="flex items-center gap-2">
+              {selectedTeamIds.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                  className="bg-red-700 hover:bg-red-600"
+                >
+                  {bulkDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-1" />
+                  )}
+                  Delete {selectedTeamIds.size} selected
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                New Team
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -717,16 +717,45 @@ export default function TeamManagement() {
             </div>
           )}
 
+          {teams.length > 0 && (
+            <div className="flex items-center gap-2 px-1 pb-1">
+              <Checkbox
+                id="select-all-teams"
+                checked={teams.length > 0 && selectedTeamIds.size === teams.length}
+                onCheckedChange={(checked) => {
+                  setSelectedTeamIds(checked === true ? new Set(teams.map((t) => t.id)) : new Set());
+                }}
+                className="border-slate-500"
+              />
+              <label htmlFor="select-all-teams" className="text-xs text-slate-400 cursor-pointer select-none">
+                Select all
+              </label>
+            </div>
+          )}
+
           {teams.map((team) => (
             <div
               key={team.id}
-              className={`rounded-lg border ${team.is_active ? 'border-slate-600 bg-slate-700/30' : 'border-slate-700/50 bg-slate-800/30 opacity-60'}`}
+              className={`rounded-lg border ${team.is_active ? 'border-slate-600 bg-slate-700/30' : 'border-slate-700/50 bg-slate-800/30 opacity-60'} ${selectedTeamIds.has(team.id) ? 'ring-1 ring-red-500/40' : ''}`}
             >
               {/* Team row header */}
               <div
                 className="flex items-center gap-3 p-3 cursor-pointer"
                 onClick={() => handleExpandTeam(team.id)}
               >
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedTeamIds.has(team.id)}
+                    onCheckedChange={(checked) => {
+                      setSelectedTeamIds((prev) => {
+                        const next = new Set(prev);
+                        if (checked === true) next.add(team.id); else next.delete(team.id);
+                        return next;
+                      });
+                    }}
+                    className="border-slate-500"
+                  />
+                </div>
                 <div className="text-slate-400">
                   {expandedTeamId === team.id ? (
                     <ChevronDown className="w-4 h-4" />

@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   Mic,
   Settings,
+  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -185,6 +186,18 @@ const defaultModules = [
       "Automated Follow-ups",
       "Campaign Performance Tracking",
       "Custom Prompts",
+    ],
+  },
+  {
+    id: "ai_suggestions",
+    name: "AI Suggestions",
+    description: "Review and approve AI-generated email drafts and recommended actions",
+    icon: Sparkles,
+    features: [
+      "Email Draft Approval Queue",
+      "One-click Send or Discard",
+      "AI Action Recommendations",
+      "Pending Review Inbox",
     ],
   },
   {

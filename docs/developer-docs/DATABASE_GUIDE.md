@@ -338,6 +338,8 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 Aisha CRM has **50+ tables** organized into functional groups:
 
+> **⚠️ Schema Gotcha — contacts.company:** The `contacts` table has **NO `company` column**. Company is derived by joining `accounts` via `account_id`. Always use `accounts!contacts_account_id_fkey(name)` in Supabase queries. See [DATABASE_SCHEMA_REFERENCE.md](./DATABASE_SCHEMA_REFERENCE.md) for details.
+
 #### CRM Core (7 tables)
 
 ```sql
@@ -386,6 +388,28 @@ workflow_execution -- Workflow run history
 cron_job         -- Scheduled tasks
 conversations    -- AI conversation threads
 conversation_messages -- Chat messages
+```
+
+#### AI & Suggestions (2 tables)
+
+```sql
+ai_suggestions   -- AI-generated actions pending human approval
+                 -- Used by C.A.R.E. playbooks and AI email drafting
+                 -- status: pending | approved | rejected | executed
+
+tenant_integrations -- Per-tenant integration config and runtime state
+                 -- Covers: calcom, communications (IMAP/SMTP), Stripe, etc.
+                 -- config: normalized settings | api_credentials: secret refs
+                 -- metadata: runtime state (e.g. sync cursors)
+```
+
+#### C.A.R.E. Autonomy (4 tables)
+
+```sql
+care_playbook    -- Playbook definitions (trigger + steps)
+care_playbook_execution -- Run history per playbook + entity
+care_states      -- Behavioural state tracking per entity
+care_audit_log   -- Autonomous action log (action_origin: human | care_autonomous)
 ```
 
 #### Documents & Storage (1 table)

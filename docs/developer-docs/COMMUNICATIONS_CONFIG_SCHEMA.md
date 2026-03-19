@@ -1,7 +1,7 @@
 # Communications Config Schema
 
-> **Status:** Phase 1 design
-> **Updated:** 2026-03-14
+> **Status:** Phase 1 design — inbound sync live, outbound via emailWorker
+> **Updated:** 2026-03-18
 > **Scope:** Tenant-level provider-agnostic communications configuration and environment contract
 
 ## Purpose
@@ -12,6 +12,12 @@ The module is provider-agnostic:
 
 - mailbox providers handle delivery and mailbox hosting
 - AiSHA handles sync, normalization, threading, CRM linking, scheduling, and Braid-mediated automation
+
+### Outbound email delivery (emailWorker)
+
+Outbound emails originate from the AI email draft flow or C.A.R.E. playbooks. They are inserted into `activities` with an email type, then picked up by `backend/workers/emailWorker.js` which sends via the tenant's configured SMTP credentials (stored in `tenant_integrations.api_credentials`).
+
+AI-drafted emails first land in `ai_suggestions` with `status='pending'` for human approval before the emailWorker processes them — see `DEVELOPER_MANUAL.md § AI Email Draft Architecture`.
 
 ## Tenant Configuration Shape
 

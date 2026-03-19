@@ -150,6 +150,13 @@ export const TOOL_REGISTRY = {
     policy: 'WRITE_OPERATIONS',
   },
 
+  // Email Drafting
+  draft_email: {
+    file: 'email-drafting.braid',
+    function: 'draftEmail',
+    policy: 'WRITE_OPERATIONS',
+  },
+
   // Bizdev Sources
   create_bizdev_source: {
     file: 'bizdev-sources.braid',
@@ -617,7 +624,11 @@ export const TOOL_DESCRIPTIONS = {
 
   // Activities
   create_activity:
-    'Create a new Activity (task, meeting, call, email). REQUIRED: subject (title), activity_type, due_date (ISO format WITH user timezone offset from system prompt), entity_type, entity_id. OPTIONAL: assigned_to, body. DATE RULES: 1) Use due_date for when - NEVER in subject or body. 2) NEVER past dates. 3) "today" = 5:00 PM today. 4) "tomorrow" = 9:00 AM tomorrow. 5) Default = tomorrow 9:00 AM. 6) ALWAYS use the timezone offset from system prompt, IGNORE any timezone user mentions.',
+    'Create a new Activity (task, meeting, or call) to schedule or log work. ⚠️ For EMAIL DRAFTING use the draft_email tool instead — NOT this tool. REQUIRED: subject (title), activity_type (task | meeting | call), due_date (ISO format WITH user timezone offset from system prompt), entity_type, entity_id. OPTIONAL: assigned_to, body. DATE RULES: 1) Use due_date for when - NEVER in subject or body. 2) NEVER past dates. 3) "today" = 5:00 PM today. 4) "tomorrow" = 9:00 AM tomorrow. 5) Default = tomorrow 9:00 AM. 6) ALWAYS use the timezone offset from system prompt, IGNORE any timezone user mentions.',
+
+  // Email Drafting
+  draft_email:
+    '⚠️ USE THIS tool (NOT create_activity) when the user asks to "draft", "compose", "write", or "send" an email. Generates an AI email draft for a CRM record and stores it in the approval queue for human review before sending — the email is NOT sent immediately. REQUIRED: entity_type (lead | contact | account | opportunity), entity_id (UUID of the record), prompt (plain-English instructions for what the email should say). OPTIONAL: subject (AI will infer if blank), conversation_id. Returns a confirmation with recipient_email and suggestion_id.',
   update_activity:
     'Update/reschedule an existing Activity by its ID. Pass activity_id and updates object with new due_date (ISO format with user timezone offset from system prompt). Put dates in due_date field only. NEVER set dates in the past. ALWAYS use the timezone offset from system prompt.',
   mark_activity_complete:
@@ -694,7 +705,7 @@ export const TOOL_DESCRIPTIONS = {
 
   // Navigation
   navigate_to_page:
-    'Navigate the user to a specific CRM page or open a record detail panel. CRITICAL: When user says "open lead details for XYX Corp", you MUST pass "XYX Corp" as the record_identifier - the system will resolve it to a UUID. Example: navigate_to_page(tenant, "leads", "XYX Corp"). Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports. Do NOT pass null for record_identifier when user mentions a specific company or person name.',
+    'Navigate the user to a specific CRM page or open a record detail panel. CRITICAL: When user says "open lead details for XYX Corp", you MUST pass "XYX Corp" as the record_identifier - the system will resolve it to a UUID. Example: navigate_to_page(tenant, "leads", "XYX Corp"). Valid pages: dashboard, leads, contacts, accounts, opportunities, activities, calendar, settings, workflows, reports, aisuggestions (AI email draft approval queue). Do NOT pass null for record_identifier when user mentions a specific company or person name.',
   get_current_page:
     'Get information about the current page the user is viewing. Useful for context-aware responses.',
 
@@ -959,9 +970,15 @@ When users ask "how many", "count", "total number of" ANY entity (leads, account
 
 **IMPORTANT:** The dashboard bundle returns PRE-CALCULATED totals like totalLeads=50. Do NOT list individual records when asked for counts!
 
+**!!! CRITICAL: EMAIL DRAFTING = draft_email TOOL !!!**
+- When the user asks to "draft", "compose", "write", or "send" an email to a contact, lead, or account → call **draft_email** tool IMMEDIATELY.
+- **NEVER use create_activity for email drafting.** create_activity is for tasks, meetings, and calls ONLY.
+- draft_email queues the AI-written email for human approval before it is sent. After calling it, confirm: "I've drafted an email to [recipient] and it's in your Pending Approvals queue for review."
+
 **Your Capabilities:**
 - **CRM Management:** Create, read, update accounts, leads, contacts, opportunities
-- **Calendar & Activities:** Schedule meetings, track tasks, manage deadlines
+- **Calendar & Activities:** Schedule meetings, track tasks, manage deadlines (use create_activity for task/meeting/call)
+- **Email Drafting:** Compose AI-written outbound emails for any record (use draft_email tool)
 - **Notes & Documentation:** Create, search, and organize notes across all records
 - **Sales Pipeline:** Track opportunities, update stages, forecast revenue
 - **Web Research:** Search for company information, fetch external data

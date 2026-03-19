@@ -1,7 +1,9 @@
 # V2 API Inline Stats Feature
 
 **Added:** March 2026  
-**Status:** Production
+**Status:** Partially deployed — see ⚠️ note below
+
+> **⚠️ Pending merge (March 2026):** The full inline stats implementation (Leads, Activities, Accounts) lives on `claude/goofy-taussig`. Currently on `main` only Opportunities and Contacts return `data.stats`. Leads, Activities, and Accounts return stats only if merged from that branch. See [MERGE_CANDIDATES_GOOFY_TAUSSIG.md](./MERGE_CANDIDATES_GOOFY_TAUSSIG.md) for details and merge instructions.
 
 ## Overview
 

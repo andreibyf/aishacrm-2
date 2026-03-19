@@ -1,5 +1,8 @@
 # Test Coverage Guide - AiSHA CRM
 
+**Last Updated:** March 2026  
+**Current backend test suite:** ~2082 passing / 2094 total (0 failures)
+
 ## Overview
 
 This guide documents testing practices, conventions, and coverage status for the AiSHA CRM project.
@@ -139,73 +142,90 @@ test('user can complete workflow', async ({ page }) => {
 
 ### Backend Routes
 
-**Tested Routes (41):**
+**Tested Routes (62+):**
 
 - ✅ accounts.js
-- ✅ activities.js
-- ✅ ai.js
+- ✅ accounts.v2.js (tenant validation)
+- ✅ activities.js (filters, AI email, general)
+- ✅ ai.js (chat draft email, execution records, lead correction)
 - ✅ aicampaigns.js
-- ✅ aiRealtime.js (NEW)
-- ✅ aiSettings.js (NEW)
-- ✅ announcements.js (NEW)
-- ✅ apikeys.js (NEW)
-- ✅ audit-logs.js (NEW)
+- ✅ aiRealtime.js
+- ✅ aiSettings.js
+- ✅ announcements.js
+- ✅ apikeys.js
+- ✅ audit-logs.js
 - ✅ auth.js
+- ✅ bizdevsources.js (assignedTo)
+- ✅ bulk assign
+- ✅ cache.js
+- ✅ communications.v2.js
 - ✅ contacts.js
 - ✅ cron.js
-- ✅ employees.js
+- ✅ deprecation enforcement
+- ✅ employees.js (lookup, routes)
 - ✅ entitylabels.js
-- ✅ leads.js
+- ✅ integrations.communications.js
+- ✅ internal-communications.js (validation)
+- ✅ leads.js (pagination, routes)
 - ✅ memory-mcp.js
-- ✅ metrics.js (NEW)
+- ✅ metrics.js
 - ✅ notes.js
 - ✅ opportunities.js
+- ✅ opportunities.v2.js
+- ✅ opportunity stage update
+- ✅ pep (care-entities, query-node, saved-reports)
 - ✅ reports.js
 - ✅ security-system.js
 - ✅ storage.js
+- ✅ teams.v2.js
+- ✅ team visibility routes
 - ✅ telephony.js
+- ✅ tenant-integrations.communications.js
+- ✅ tenantintegrations.js
 - ✅ tenants.js
 - ✅ testing.js
-- ✅ users.js (comprehensive)
+- ✅ twilio integration
+- ✅ users.js (auth, creation, deletion, invite, listing, middleware, password, profile, rate-limiting)
 - ✅ utils.js
+- ✅ v2-inline-stats (all 5 entities)
 - ✅ webhooks.js
+- ✅ whatsapp.js
 - ✅ workflows.js
-- ... (35 total with variants)
+- ✅ r2 artifacts / conversation context
+- ✅ telemetry
+- ✅ bundles
 
-**Untested Routes (41):**
+**Untested / Needs Tests:**
 
-- ❌ accounts.v2.js
-- ❌ activities.v2.js
+- ❌ activities.v2.js (fixed March 2026 — no test file yet)
+- ❌ accounts.v2.js (full route test)
 - ❌ aiSummary.js
 - ❌ assistant.js
 - ❌ billing.js
 - ❌ bizdev.js
-- ❌ bizdevsources.js
 - ❌ braidAudit.js
 - ❌ braidChain.js
 - ❌ braidGraph.js
 - ❌ braidMetrics.js
 - ❌ cashflow.js
 - ❌ clients.js
-- ❌ construction-\*.js
+- ❌ construction-*.js
 - ❌ contacts.v2.js
 - ❌ dashboard-funnel.js
 - ❌ database.js
 - ❌ devai.js
-- ❌ documentation.js
-- ❌ documentationfiles.js
-- ❌ documents.js
-- ❌ documents.v2.js
+- ❌ documentation.js / documentationfiles.js
+- ❌ documents.js / documents.v2.js
 - ❌ edgeFunctions.js
 - ❌ github-issues.js
-- ❌ integrations.js
 - ❌ leads.v2.js
 - ❌ mcp.js (integration test exists)
 - ❌ memory.js
 - ❌ modulesettings.js
 - ❌ notifications.js
-- ❌ opportunities.v2.js
+- ❌ opportunities.v2.js (full route)
 - ❌ permissions.js
+- ❌ profile.js
 - ❌ reports.v2.js
 - ❌ security.js
 - ❌ suggestions.js
@@ -214,16 +234,22 @@ test('user can complete workflow', async ({ page }) => {
 - ❌ system.js
 - ❌ system-logs.js
 - ❌ system-settings.js
-- ❌ ... (see full list in issue)
+- ❌ calcom-webhook.js (feature/calcom-booking-system branch — test file at `backend/__tests__/routes/booking-analytics.test.js`)
+- ❌ agentOffice.js
+- ❌ workers.js
+- ❌ workflow-templates.js
+- ❌ email-templates.v2.js
+- ❌ careConfig.js
+- ❌ carePlaybooks.js
 
 ### Coverage Targets
 
-| Category            | Current             | Target |
-| ------------------- | ------------------- | ------ |
-| Backend Routes      | ~54% (41/76 routes) | 80%    |
-| Backend Code        | TBD                 | 60%    |
-| Frontend Components | ~40% (27 files)     | 50%    |
-| E2E Critical Flows  | ~50% (8 specs)      | 90%    |
+| Category            | Current              | Target |
+| ------------------- | -------------------- | ------ |
+| Backend Routes      | ~60% (62/80+ routes) | 80%    |
+| Backend Code        | TBD                  | 60%    |
+| Frontend Components | ~40% (27 files)      | 50%    |
+| E2E Critical Flows  | ~50% (8 specs)       | 90%    |
 
 ## CI Integration
 

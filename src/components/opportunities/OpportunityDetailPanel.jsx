@@ -37,6 +37,7 @@ import { Activity } from '@/api/entities';
 import { createPageUrl } from '@/utils';
 import { Link } from 'react-router-dom';
 import StatusHelper from '../shared/StatusHelper'; // New import
+import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
 export default function OpportunityDetailPanel({
   opportunity,
@@ -54,6 +55,19 @@ export default function OpportunityDetailPanel({
   const [relatedActivities, setRelatedActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [creatingActivity, setCreatingActivity] = useState(false);
+  const { getCardLabel } = useStatusCardPreferences();
+
+  const stageToCardId = {
+    closed_won: 'opportunity_won',
+    closed_lost: 'opportunity_lost',
+  };
+
+  const getStageLabel = (stage) => {
+    if (stageToCardId[stage]) {
+      return getCardLabel(stageToCardId[stage]) || stage?.replace(/_/g, ' ');
+    }
+    return stage?.replace(/_/g, ' ');
+  };
 
   // Update localOpportunity when the prop changes
   useEffect(() => {
@@ -279,7 +293,7 @@ export default function OpportunityDetailPanel({
                   data-variant="status"
                   data-status={localOpportunity.stage}
                 >
-                  {localOpportunity.stage?.replace(/_/g, ' ')}
+                  {getStageLabel(localOpportunity.stage)}
                 </Badge>
                 <StatusHelper statusKey={`opportunity_${localOpportunity.stage}`} />
               </div>
@@ -378,13 +392,13 @@ export default function OpportunityDetailPanel({
                 onClick={() => handleStageUpdate('closed_won')}
                 className="hover:bg-slate-700"
               >
-                Closed Won
+                {getStageLabel('closed_won')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleStageUpdate('closed_lost')}
                 className="hover:bg-slate-700"
               >
-                Closed Lost
+                {getStageLabel('closed_lost')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

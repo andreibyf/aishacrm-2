@@ -40,6 +40,7 @@ import {
   Moon,
   Plug, // NEW: Added for Integrations
   Settings,
+  Sparkles, // AI Suggestions
   Sun,
   Target, // Changed Leads icon to Target
   TrendingUp, // Changed Opportunities icon to TrendingUp
@@ -123,6 +124,7 @@ const navItems = [
     label: 'Document Management',
   },
   { href: 'AICampaigns', icon: Megaphone, label: 'AI Campaigns' }, // Changed icon to Megaphone
+  { href: 'AISuggestions', icon: Sparkles, label: 'AI Suggestions' },
   { href: 'Employees', icon: Users, label: 'Employees' }, // Changed icon to Users
   { href: 'Reports', icon: BarChart3, label: 'Reports' },
   { href: 'Integrations', icon: Plug, label: 'Integrations' }, // Changed icon to Plug

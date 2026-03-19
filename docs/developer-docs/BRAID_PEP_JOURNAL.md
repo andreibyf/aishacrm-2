@@ -264,7 +264,7 @@ kept unchanged as a reference implementation and test fallback.
 - All 15 existing PEP tests pass: `node --test pep/tests/compiler.test.js` (using `useLegacyParser: true`)
 - All 8 new LLM parser tests pass: `node --experimental-test-module-mocks --test pep/tests/llmParser.test.js` (mocked, no real LLM calls)
 - `node pep/programs/cashflow/generate.js` exits 0 — compiled artifacts regenerated successfully
-- `docker exec aishacrm-backend npm test` — full backend suite passes (1236 tests, 0 failures)
+- `docker exec aishacrm-backend npm test` — full backend suite passes (1236 tests at time of merge; 2082 tests as of March 2026, 0 failures)
 - `curl http://localhost:11436/api/tags` — confirms `qwen2.5-coder:3b` available in Ollama container
 
 ### Test Coverage

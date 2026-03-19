@@ -66,48 +66,13 @@ async function getAuthHeaders() {
 
 // Trigger type icons and labels
 const TRIGGER_CONFIG = {
-  lead_stagnant: { 
-    icon: Clock, 
-    label: 'Stagnant Lead', 
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-100'
-  },
-  deal_decay: { 
-    icon: TrendingUp, 
-    label: 'Deal Decay', 
-    color: 'text-red-500',
-    bgColor: 'bg-red-100'
-  },
-  activity_overdue: { 
-    icon: Calendar, 
-    label: 'Overdue Activity', 
-    color: 'text-yellow-500',
-    bgColor: 'bg-yellow-100'
-  },
-  opportunity_hot: { 
-    icon: Lightbulb, 
-    label: 'Hot Opportunity', 
-    color: 'text-green-500',
-    bgColor: 'bg-green-100'
-  },
-  contact_inactive: { 
-    icon: User, 
-    label: 'Inactive Contact', 
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-100'
-  },
-  followup_needed: { 
-    icon: Phone, 
-    label: 'Follow-up Needed', 
-    color: 'text-purple-500',
-    bgColor: 'bg-purple-100'
-  },
-  account_risk: { 
-    icon: AlertTriangle, 
-    label: 'Account at Risk', 
-    color: 'text-red-600',
-    bgColor: 'bg-red-100'
-  },
+  lead_stagnant: { icon: Clock, label: 'Stagnant Lead', color: 'text-orange-400' },
+  deal_decay: { icon: TrendingUp, label: 'Deal Decay', color: 'text-red-400' },
+  activity_overdue: { icon: Calendar, label: 'Overdue Activity', color: 'text-yellow-400' },
+  opportunity_hot: { icon: Lightbulb, label: 'Hot Opportunity', color: 'text-green-400' },
+  contact_inactive: { icon: User, label: 'Inactive Contact', color: 'text-blue-400' },
+  followup_needed: { icon: Phone, label: 'Follow-up Needed', color: 'text-purple-400' },
+  account_risk: { icon: AlertTriangle, label: 'Account at Risk', color: 'text-red-400' },
 };
 
 // Priority colors
@@ -150,13 +115,13 @@ function ConfidenceIndicator({ confidence }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="flex items-center gap-1">
-            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
               <div 
                 className={`h-full ${colorClass} transition-all`}
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="text-xs text-muted-foreground">{percentage}%</span>
+            <span className="text-xs text-slate-400">{percentage}%</span>
           </div>
         </TooltipTrigger>
         <TooltipContent>
@@ -172,16 +137,35 @@ function ConfidenceIndicator({ confidence }) {
  * The CARE playbook appends canonical thread metadata after the human instruction.
  */
 function parseBodyPrompt(bodyPrompt) {
-  if (!bodyPrompt) return { instruction: '', context: '' };
-  // Split on the first occurrence of "Canonical thread" which marks context data
-  const marker = /\n\s*Canonical thread[:\s]/i;
-  const match = bodyPrompt.match(marker);
-  if (!match) return { instruction: bodyPrompt.trim(), context: '' };
-  const idx = bodyPrompt.indexOf(match[0]);
-  return {
-    instruction: bodyPrompt.slice(0, idx).trim(),
-    context: bodyPrompt.slice(idx).trim(),
-  };
+  if (!bodyPrompt) return { instruction: '', context: '', crmEntity: null };
+
+  // Split off thread history
+  const threadMarker = /\n\s*Canonical thread[:\s]/i;
+  const threadMatch = bodyPrompt.match(threadMarker);
+  let beforeThread = threadMatch
+    ? bodyPrompt.slice(0, bodyPrompt.indexOf(threadMatch[0]))
+    : bodyPrompt;
+  const context = threadMatch
+    ? bodyPrompt.slice(bodyPrompt.indexOf(threadMatch[0])).trim()
+    : '';
+
+  // Extract and strip "Related CRM record: {...}" JSON blob.
+  // The blob ends at the next blank line (or end of string) — don't over-capture.
+  let crmEntity = null;
+  beforeThread = beforeThread.replace(
+    /Related CRM record:\s*(\{[^\n]*(?:\n(?!\n)[^\n]*)*)/i,
+    (_, json) => {
+      try {
+        const parsed = JSON.parse(json.trim());
+        crmEntity = parsed.entity || parsed;
+      } catch (_e) {
+        // JSON parse failed — ignore
+      }
+      return '';
+    },
+  );
+
+  return { instruction: beforeThread.trim(), context, crmEntity };
 }
 
 /**
@@ -217,8 +201,16 @@ function EmailPreview({ action }) {
   const sender = participants.find((p) => p.role === 'sender');
   const recipients = participants.filter((p) => p.role === 'to');
   const isReply = Boolean(args.email?.in_reply_to);
-  const { instruction, context } = parseBodyPrompt(args.body_prompt);
+  const { instruction, context, crmEntity } = parseBodyPrompt(args.body_prompt);
   const historyEntries = parseThreadHistory(context);
+
+  // Build a friendly name from the CRM entity if available
+  const entityLabel = crmEntity
+    ? [crmEntity.first_name, crmEntity.last_name].filter(Boolean).join(' ') ||
+      crmEntity.name ||
+      crmEntity.email ||
+      null
+    : null;
 
   return (
     <div className="space-y-3">
@@ -238,65 +230,71 @@ function EmailPreview({ action }) {
       </div>
 
       {/* Email fields */}
-      <div className="border rounded-lg divide-y text-sm">
+      <div className="border border-slate-700 rounded-lg divide-y divide-slate-700 text-sm bg-slate-900">
         {sender && (
           <div className="flex gap-2 px-3 py-2">
-            <span className="text-muted-foreground w-16 shrink-0">From</span>
-            <span className="truncate">{sender.email}</span>
+            <span className="text-slate-400 w-16 shrink-0">From</span>
+            <span className="truncate text-slate-200">{sender.email}</span>
           </div>
         )}
         <div className="flex gap-2 px-3 py-2">
-          <span className="text-muted-foreground w-16 shrink-0">To</span>
-          <span className="truncate">
+          <span className="text-slate-400 w-16 shrink-0">To</span>
+          <span className="truncate text-slate-200">
             {args.to || recipients.map((p) => p.email).join(', ') || '—'}
           </span>
         </div>
         <div className="flex gap-2 px-3 py-2">
-          <span className="text-muted-foreground w-16 shrink-0">Subject</span>
-          <span className="font-medium truncate">{args.subject || '(no subject)'}</span>
+          <span className="text-slate-400 w-16 shrink-0">Subject</span>
+          <span className="font-medium truncate text-slate-100">{args.subject || '(no subject)'}</span>
         </div>
       </div>
 
       {/* AI drafting instruction */}
       {instruction && (
-        <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-950/20 p-3">
-          <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400 mb-1">
-            AI will draft this message using:
-          </p>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-            {instruction}
-          </p>
+        <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-500/10 px-3 py-2 flex items-start gap-2">
+          <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+          <div className="min-w-0 space-y-0.5">
+            <span className="text-sm text-slate-200">{instruction}</span>
+            {entityLabel && (
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-slate-400">
+                <User className="w-3 h-3" />{entityLabel}
+              </span>
+            )}
+            <p className="text-xs text-slate-500 mt-1">
+              AI will generate the full email body when approved. Add a richer instruction in your C.A.R.E. playbook for better results.
+            </p>
+          </div>
         </div>
       )}
 
       {/* Thread history (collapsible) */}
       {historyEntries.length > 0 && (
-        <div className="rounded-lg border text-sm">
+        <div className="rounded-lg border border-slate-700 text-sm">
           <button
             type="button"
-            className="flex items-center justify-between w-full px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+            className="flex items-center justify-between w-full px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/50 transition-colors"
             onClick={() => setShowContext((v) => !v)}
           >
             <span>Thread History ({historyEntries.length} message{historyEntries.length !== 1 ? 's' : ''})</span>
             {showContext ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           {showContext && (
-            <div className="border-t divide-y">
+            <div className="border-t border-slate-700 divide-y divide-slate-700">
               {historyEntries.map((entry, i) => (
                 <div key={i} className="px-3 py-2 text-xs">
                   <div className="flex items-center gap-2 mb-1">
                     <Badge
                       variant="outline"
-                      className={`text-[10px] ${entry.direction === 'inbound' ? 'border-blue-400 text-blue-500' : 'border-green-400 text-green-500'}`}
+                      className={`text-[10px] ${entry.direction === 'inbound' ? 'border-blue-400 text-blue-400' : 'border-green-400 text-green-400'}`}
                     >
                       {entry.direction === 'inbound' ? '← In' : '→ Out'}
                     </Badge>
-                    <span className="text-muted-foreground truncate">{entry.sender}</span>
-                    <span className="text-muted-foreground ml-auto shrink-0">
+                    <span className="text-slate-400 truncate">{entry.sender}</span>
+                    <span className="text-slate-500 ml-auto shrink-0">
                       {new Date(entry.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-muted-foreground line-clamp-2">{entry.body}</p>
+                  <p className="text-slate-400 line-clamp-2">{entry.body}</p>
                 </div>
               ))}
             </div>
@@ -306,7 +304,7 @@ function EmailPreview({ action }) {
 
       {/* Thread metadata footer */}
       {comms.thread_id && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
           <Users className="w-3 h-3" />
           <span>Thread: {comms.thread_id.slice(0, 8)}...</span>
           {participants.length > 0 && (
@@ -344,7 +342,7 @@ function SuggestionCard({
 
   return (
     <Card
-      className={`border-l-4 ${config.bgColor} border-l-current ${
+      className={`border border-slate-700 bg-slate-800/80 border-l-4 border-l-current ${
         isHighlighted ? 'ring-2 ring-cyan-500/60 shadow-[0_0_0_1px_rgba(34,211,238,0.2)]' : ''
       }`}
     >
@@ -354,11 +352,11 @@ function SuggestionCard({
             <div className="flex items-center gap-2">
               <Icon className={`w-5 h-5 ${config.color}`} />
               <div>
-                <CardTitle className="text-base">
+                <CardTitle className="text-base text-slate-100">
                   {suggestion.record_name ||
                     `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
                 </CardTitle>
-                <CardDescription className="text-xs">
+                <CardDescription className="text-xs text-slate-400">
                   {config.label} • {formatRelativeTime(suggestion.created_at)}
                 </CardDescription>
               </div>
@@ -383,7 +381,7 @@ function SuggestionCard({
         <CardContent className="pt-0">
           {/* Summary view */}
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-400">
               {suggestion.reasoning?.slice(0, 150)}
               {suggestion.reasoning?.length > 150 ? '...' : ''}
             </p>
@@ -398,25 +396,25 @@ function SuggestionCard({
 
           {/* Expanded details */}
           <CollapsibleContent className="mt-4 space-y-4">
-            <div className="p-3 bg-muted rounded-lg">
-              <h4 className="font-medium text-sm mb-2">Full Reasoning</h4>
-              <p className="text-sm text-muted-foreground">{suggestion.reasoning}</p>
+            <div className="p-3 bg-slate-900 border border-slate-700 rounded-lg">
+              <h4 className="font-medium text-sm mb-2 text-slate-200">Full Reasoning</h4>
+              <p className="text-sm text-slate-400">{suggestion.reasoning}</p>
             </div>
 
             {suggestion.action && (
-              <div className="p-3 bg-muted rounded-lg">
-                <h4 className="font-medium text-sm mb-2">Proposed Action</h4>
+              <div className="p-3 bg-slate-900 border border-slate-700 rounded-lg">
+                <h4 className="font-medium text-sm mb-2 text-slate-200">Proposed Action</h4>
                 {suggestion.action.tool_name === 'send_email' ? (
                   <EmailPreview action={suggestion.action} />
                 ) : (
-                  <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                  <pre className="text-xs overflow-x-auto whitespace-pre-wrap text-slate-400">
                     {JSON.stringify(suggestion.action, null, 2)}
                   </pre>
                 )}
               </div>
             )}
 
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-slate-500">
               <p>
                 Expires:{' '}
                 {suggestion.expires_at ? new Date(suggestion.expires_at).toLocaleString() : 'Never'}
@@ -426,7 +424,7 @@ function SuggestionCard({
           </CollapsibleContent>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-700">
             <Button
               size="sm"
               variant="default"
@@ -653,7 +651,7 @@ export default function SuggestionQueue({
   if (isLoading && suggestions.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
       </div>
     );
   }
@@ -663,8 +661,8 @@ export default function SuggestionQueue({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">AI Suggestions</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-lg font-semibold text-slate-100">AI Suggestions</h2>
+          <p className="text-sm text-slate-400">
             {displayedSuggestions.length} pending suggestion
             {displayedSuggestions.length !== 1 ? 's' : ''} for review
           </p>
@@ -681,13 +679,13 @@ export default function SuggestionQueue({
           ) : null}
           {!focusId ? (
             <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] bg-slate-800 border-slate-600 text-slate-200">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
                 {availableTriggerTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
+                  <SelectItem key={type} value={type} className="text-slate-200">
                     {type === 'all' ? 'All Suggestions' : TRIGGER_CONFIG[type]?.label || type}
                   </SelectItem>
                 ))}
@@ -703,10 +701,10 @@ export default function SuggestionQueue({
 
       {/* Error state */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-500/30 bg-red-500/10">
           <CardContent className="py-4">
-            <p className="text-sm text-red-600">{error}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={fetchSuggestions}>
+            <p className="text-sm text-red-400">{error}</p>
+            <Button variant="outline" size="sm" className="mt-2 border-slate-600 text-slate-300" onClick={fetchSuggestions}>
               Try Again
             </Button>
           </CardContent>
@@ -716,9 +714,9 @@ export default function SuggestionQueue({
       {!error && focusedSuggestionMissing && (
         <Card className="border-dashed border-cyan-500/40 bg-cyan-500/5">
           <CardContent className="py-8 text-center">
-            <Lightbulb className="w-12 h-12 mx-auto text-cyan-300 mb-4" />
-            <h3 className="font-medium">Focused suggestion not found</h3>
-            <p className="text-sm text-muted-foreground mt-1">
+            <Lightbulb className="w-12 h-12 mx-auto text-cyan-400 mb-4" />
+            <h3 className="font-medium text-slate-200">Focused suggestion not found</h3>
+            <p className="text-sm text-slate-400 mt-1">
               Suggestion {focusId} may already have been approved, rejected, or removed from the
               pending queue.
             </p>
@@ -733,11 +731,11 @@ export default function SuggestionQueue({
 
       {/* Empty state */}
       {!error && !focusedSuggestionMissing && displayedSuggestions.length === 0 && (
-        <Card className="border-dashed">
+        <Card className="border-dashed border-slate-700 bg-slate-800/50">
           <CardContent className="py-8 text-center">
-            <Lightbulb className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="font-medium">No pending suggestions</h3>
-            <p className="text-sm text-muted-foreground mt-1">
+            <Lightbulb className="w-12 h-12 mx-auto text-slate-500 mb-4" />
+            <h3 className="font-medium text-slate-300">No pending suggestions</h3>
+            <p className="text-sm text-slate-500 mt-1">
               AI will generate suggestions when it detects opportunities for improvement.
             </p>
           </CardContent>

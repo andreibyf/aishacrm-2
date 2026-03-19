@@ -1,6 +1,6 @@
 # Aisha CRM Developer Technical Manual
 
-**Version 2.0** | **Updated: November 2025**
+**Version 3.0** | **Updated: March 2026**
 
 ---
 
@@ -631,34 +631,171 @@ src/components/
 
 ### Backend Route Organization
 
+> **Note:** The backend has grown to **80+ route files** as of March 2026. Only the most-used are listed below; see `backend/routes/` for the complete set.
+
 ```
 backend/routes/
-├── system.js          # Health, status, diagnostics
-├── reports.js         # Dashboard stats, exports
-├── validation.js      # Duplicate detection
-├── database.js        # Sync, archive, cleanup
-├── accounts.js        # Account CRUD
-├── contacts.js        # Contact CRUD
-├── leads.js           # Lead CRUD
-├── opportunities.js   # Opportunity CRUD
-├── activities.js      # Activity CRUD
-├── employees.js       # Employee management
-├── users.js           # User management
-├── tenants.js         # Tenant management
-├── ai.js              # AI conversations
-├── documents.js       # Document processing
-├── bizdevsources.js   # BizDev data sources
-├── cashflow.js        # Cash flow tracking
-├── integrations.js    # Third-party integrations
-├── webhooks.js        # Webhook handling
-├── workflows.js       # Workflow automation (experimental)
-├── billing.js         # Billing & subscriptions
-├── apikeys.js         # API key management
-├── modulesettings.js  # Module configuration
-├── notifications.js   # Notification system
-├── permissions.js     # Permission management
-├── telephony.js       # Phone integration
-└── utils.js           # Utility endpoints
+# --- Core CRM ---
+├── accounts.js / accounts.v2.js    # Account CRUD (V1 legacy / V2 canonical)
+├── contacts.js / contacts.v2.js    # Contact CRUD
+├── leads.js / leads.v2.js          # Lead CRUD
+├── opportunities.js / opportunities.v2.js  # Opportunity CRUD
+├── activities.v2.js                # Activity CRUD (V1 RETIRED, V2 only)
+├── notes.js                        # Notes
+├── bizdevsources.js                # BizDev top-of-funnel sources
+├── tasks.js                        # Task management
+
+# --- AI & Automation ---
+├── ai.js                           # AI chat, conversations, email drafting
+├── aicampaigns.js                  # AI-driven campaigns
+├── aiSummary.js                    # AI summarization (must mount before ai.js)
+├── aiRealtime.js                   # Voice/realtime AI
+├── aiSettings.js                   # AI provider settings
+├── assistant.js                    # AiSHA assistant
+├── workflows.js / workflows.v2.js  # Workflow automation
+├── workflowexecutions.js           # Execution history
+├── workflow-templates.js           # Reusable templates
+├── careConfig.js                   # C.A.R.E. per-tenant config
+├── carePlaybooks.js                # C.A.R.E. playbook CRUD
+├── suggestions.js                  # AI suggestions (pending_approval items)
+
+# --- Communications ---
+├── communications.v2.js            # Inbound/outbound email sync
+├── internal-communications.js      # Internal messaging
+├── email-templates.v2.js           # Email template CRUD
+├── whatsapp.js                     # WhatsApp via Twilio
+├── telephony.js                    # Phone/Twilio
+├── calcom-webhook.js               # Cal.com booking webhooks (feature branch)
+
+# --- Braid SDK ---
+├── braidAudit.js                   # Tool audit log  /api/braid/audit
+├── braidChain.js                   # Tool chaining   /api/braid/chain
+├── braidMetrics.js                 # Usage metrics   /api/braid/metrics
+├── braidGraph.js                   # Dependency graph /api/braid/graph
+
+# --- System & Config ---
+├── system.js                       # Health, status, diagnostics
+├── system-settings.js              # System-level settings
+├── system-logs.js                  # System audit log
+├── reports.js / reports.v2.js      # Dashboard stats, exports
+├── bundles.js                      # Optimized page-load bundles
+├── dashboard-funnel.js             # Funnel counts (materialized view)
+├── modulesettings.js               # Module enable/disable per tenant
+├── entity-labels.js                # Custom entity naming per tenant
+├── systembrandings.js              # Brand customization
+├── announcements.js                # System announcements
+
+# --- Users & Auth ---
+├── auth.js                         # Authentication
+├── users.js                        # User management
+├── employees.js                    # Employee HR data
+├── teams.v2.js                     # Team management
+├── permissions.js                  # Permission management
+├── tenants.js                      # Tenant management
+├── tenant-resolve.js               # Tenant slug resolution
+├── tenantintegrations.js           # Tenant integration config
+├── profile.js                      # User profile/dossier
+├── apikeys.js                      # API key management
+├── audit-logs.js                   # Per-entity audit trail
+├── security.js / security-system.js # Security controls
+
+# --- Dev & Internal ---
+├── devai.js / devaiHealthAlerts.js # Developer AI (superadmin only)
+├── pep.js                          # PEP natural-language report queries
+├── mcp.js                          # Model Context Protocol
+├── memory.js                       # Memory MCP
+├── edgeFunctions.js                # Supabase Edge Functions proxy
+├── supabaseProxy.js                # Supabase proxy
+├── database.js                     # DB sync/archive/cleanup
+├── testing.js                      # Test data endpoints
+├── cache.js                        # Cache management
+├── utils.js                        # Utility endpoints
+├── validation.js                   # Duplicate detection
+├── metrics.js                      # Performance metrics
+├── agentOffice.js                  # Agent Office integration
+├── workers.js                      # Background worker status
+├── synchealths.js                  # Sync health checks
+├── notifications.js                # Notification system
+├── billing.js                      # Billing & subscriptions
+├── storage.js                      # File storage
+├── documents.js / documents.v2.js  # Document management
+├── documentation.js / documentationfiles.js  # In-app documentation
+├── github-issues.js                # GitHub integration
+├── integrations.js                 # Third-party integrations
+├── clients.js                      # Client portal
+├── cashflow.js                     # Cash flow tracking
+└── ... (more in backend/routes/)
+```
+
+### Critical Schema Notes
+
+#### contacts Table — NO `company` Column
+
+> **⚠️ Common Bug (March 2026):** The `contacts` table has NO direct `company` column. Attempting to SELECT it causes a Postgres error.
+
+The company/organization for a contact is always retrieved via the accounts FK join:
+
+```javascript
+// ✅ CORRECT — Supabase FK join syntax
+.select('first_name, last_name, email, accounts!contacts_account_id_fkey(name)')
+// Result: data.accounts.name  ← this is the company name
+
+// ❌ WRONG — will crash with "column contacts.company does not exist"
+.select('first_name, last_name, email, company')
+```
+
+**Tables WITH a direct `company` column**: `leads`, `bizdev_sources`  
+**Tables WITHOUT**: `contacts`, `accounts`, `opportunities`, `activities`
+
+In the frontend, `contact.account_name` is the flattened version — populated by `contacts.v2.js` via:
+```javascript
+expanded.account_name = contact.account.name;  // contacts.v2.js ~line 281
+```
+
+#### activities.v2.js — lookupRelatedEntity
+
+The `lookupRelatedEntity` function in `activities.v2.js` resolves the display name for linked entities when creating/listing activities. Correct config per entity type:
+
+```javascript
+const entityConfig = {
+  lead:         { table: 'leads',         select: 'company, first_name, last_name, email' },
+  contact:      { table: 'contacts',      select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)' },
+  account:      { table: 'accounts',      select: 'name, email, phone' },
+  opportunity:  { table: 'opportunities', select: 'name' },
+  bizdev_source:{ table: 'bizdev_sources',select: 'company_name, first_name, last_name, email' },
+};
+```
+
+### AI Email Draft Architecture
+
+AI-drafted emails are **not sent directly**. They flow through a human-approval queue:
+
+```
+POST /api/ai/chat-draft-email
+       ↓
+executeCareSendEmailAction()   [backend/lib/care/carePlaybookExecutor.js]
+       ↓ (if require_approval != false)
+INSERT ai_suggestions (status='pending', action.tool_name='send_email')
+       ↓
+Notification sent to user
+       ↓
+User reviews in UI (/activities or suggestions panel)
+       ↓ (approved)
+emailWorker [backend/workers/emailWorker.js]
+       ↓
+SMTP send via tenant-configured provider
+```
+
+**Key services:**  
+- `backend/services/aiEmailDraftingSupport.js` — builds entity context, selects columns, formats AI context block  
+- `backend/services/scheduledAiEmailService.js` — orchestrates the full draft generation and notification workflow  
+- `backend/workers/emailWorker.js` — polls for approved email activities and sends via SMTP  
+
+**Important:** `buildEntitySelectColumns()` in `aiEmailDraftingSupport.js` must never request `company` from the `contacts` table:
+```javascript
+// contacts branch must use accounts FK join:
+if (entityType === 'contact')
+  return 'id, first_name, last_name, email, assigned_to, assigned_to_team, accounts!contacts_account_id_fkey(name)';
 ```
 
 ## 2.4 Data Flow

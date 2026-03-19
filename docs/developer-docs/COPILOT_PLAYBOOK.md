@@ -2,7 +2,7 @@
 
 > **Critical operational procedures and lessons learned for AI assistants working on this codebase**
 
-**Last Updated**: February 4, 2026  
+**Last Updated**: March 18, 2026  
 **Version**: 3.0.x
 
 ---
@@ -29,14 +29,34 @@ cd C:\Users\andre\Documents\GitHub\aishacrm-2
 ```bash
 git branch --show-current
 
-# Expected: main (production) or feature/* (preview)
+# Expected: main (production) or feature/* or fix/* (dev branches)
 ```
 
 **Branch Strategy**:
 
 - `main` - Production deployments, stable code only
-- `feature/*` - Preview/development branches
+- `feature/*` - New feature development
+- `fix/*` - Targeted bug-fix branches
 - **NEVER commit directly to main without testing**
+
+### 3. Commit Workflow — WAIT for approval
+
+> **🚨 CRITICAL RULE (March 18, 2026):** NEVER `git commit` or `git push` without explicit user approval.
+
+```bash
+# CORRECT WORKFLOW:
+# 1. Stage changes
+git add path/to/changed/files
+
+# 2. Show diff to user
+git diff --cached
+
+# 3. WAIT — ask: "Tests pass. Ready to commit?"
+# 4. Only commit after user says "yes" / "commit it" / "go ahead"
+git commit --no-verify -m "fix: description"
+```
+
+**Why `--no-verify`?** The project has a pre-commit git hook that tries to run `docker compose` and hangs indefinitely. Always use `--no-verify` to bypass it.
 
 ### 3. Check Container Status
 
@@ -205,6 +225,7 @@ doppler run -- bash -c 'psql "$DATABASE_URL" -c "INSERT INTO your_table (require
 | **Multiple functions**   | Unpredictable behavior           | Check `SELECT oid FROM pg_proc WHERE proname=...`  |
 | **Search path**          | Functions not found              | Set `search_path = public, pg_catalog` in function |
 | **Supabase cache**       | Changes not visible              | Wait 1-2 min OR use port 6543 (transaction pooler) |
+| **contacts.company**     | `column contacts.company does not exist` | `contacts` has NO company column — use `accounts!contacts_account_id_fkey(name)` join |
 
 ---
 
@@ -657,6 +678,73 @@ See [docs/CARE_SETUP_GUIDE.md](./docs/CARE_SETUP_GUIDE.md) for complete setup in
 ---
 
 ## 🎓 LESSONS LEARNED ARCHIVE
+
+### March 18, 2026: contacts Table Has No `company` Column
+
+**Problem**: `GET /api/v2/activities` crashed with `column contacts.company does not exist` during task creation when a contact was selected as the related entity.
+
+**Root Cause**: `backend/routes/activities.v2.js` `lookupRelatedEntity` config was selecting `company` from the `contacts` table — but that column does not exist. Only the `leads` table has a direct `company` column.
+
+**Investigation**:
+
+```javascript
+// WRONG (what caused crash):
+contact: { table: 'contacts', select: 'first_name, last_name, email, company' }
+
+// The contacts table has no 'company' column!
+// Company for a contact comes from the related account:
+// contacts.account_id → accounts.name
+```
+
+**Fix** (applied in `backend/routes/activities.v2.js` and `backend/services/aiEmailDraftingSupport.js`):
+
+```javascript
+// CORRECT: Join accounts table via FK
+contact: { table: 'contacts', select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)' }
+
+// Name-building:
+const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+name = fullName || data.accounts?.name || null;  // data.accounts?.name is the company
+```
+
+**Key Takeaway**: `contacts` has NO `company` column. Company is always derived via the `account_id` FK:
+- Supabase join: `accounts!contacts_account_id_fkey(name)`
+- Result: `data.accounts.name` (nested object from Supabase)
+- Frontend display: `contact.account_name` (flattened in contacts.v2.js line ~281)
+
+**Tables with a direct `company` column**: `leads`, `bizdev_sources` only.
+
+---
+
+### March 18, 2026: Webhook Raw Body — HMAC Signature Verification
+
+**Problem**: Cal.com webhooks were returning 400/401 because the HMAC signature check failed even with correct secrets.
+
+**Root Cause**: `express.json()` parses and re-serializes the request body before the webhook handler sees it. The JSON re-serialization changes whitespace/key ordering, which breaks HMAC verification against the original raw bytes.
+
+**Fix** (applied in `backend/startup/initMiddleware.js`):
+
+```javascript
+// Store raw body BEFORE json() parses it
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf; // Buffer of original bytes for HMAC
+  }
+}));
+```
+
+**Then in webhook handler**:
+
+```javascript
+// Use rawBody for signature verification
+const body = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : null);
+```
+
+**Key Takeaway**: Any route that validates an HMAC/webhook signature MUST use `req.rawBody`. The webhook route path must NOT be excluded from `express.json()` because you still want `req.body` parsed for the handler logic — just capture the raw bytes first via `verify`.
+
+**Applies to**: `backend/routes/calcom-webhook.js` and any future provider webhooks (Stripe, SendGrid, etc.).
+
+---
 
 ### Feb 4, 2026: Polymorphic Function Type Resolution
 
