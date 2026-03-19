@@ -552,6 +552,8 @@ export default function UserFormWizard({
           <div key={s.key} className="flex items-center">
             <button
               type="button"
+              disabled={!isClickable}
+              aria-disabled={!isClickable}
               onClick={() => isClickable && setStep(i)}
               title={isClickable ? `Go to ${s.label}` : `Complete previous steps first`}
               className={`

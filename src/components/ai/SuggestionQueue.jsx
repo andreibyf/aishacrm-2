@@ -66,48 +66,13 @@ async function getAuthHeaders() {
 
 // Trigger type icons and labels
 const TRIGGER_CONFIG = {
-  lead_stagnant: { 
-    icon: Clock, 
-    label: 'Stagnant Lead', 
-    color: 'text-orange-400',
-    bgColor: 'bg-orange-500/10'
-  },
-  deal_decay: { 
-    icon: TrendingUp, 
-    label: 'Deal Decay', 
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10'
-  },
-  activity_overdue: { 
-    icon: Calendar, 
-    label: 'Overdue Activity', 
-    color: 'text-yellow-400',
-    bgColor: 'bg-yellow-500/10'
-  },
-  opportunity_hot: { 
-    icon: Lightbulb, 
-    label: 'Hot Opportunity', 
-    color: 'text-green-400',
-    bgColor: 'bg-green-500/10'
-  },
-  contact_inactive: { 
-    icon: User, 
-    label: 'Inactive Contact', 
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10'
-  },
-  followup_needed: { 
-    icon: Phone, 
-    label: 'Follow-up Needed', 
-    color: 'text-purple-400',
-    bgColor: 'bg-purple-500/10'
-  },
-  account_risk: { 
-    icon: AlertTriangle, 
-    label: 'Account at Risk', 
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10'
-  },
+  lead_stagnant: { icon: Clock, label: 'Stagnant Lead', color: 'text-orange-400' },
+  deal_decay: { icon: TrendingUp, label: 'Deal Decay', color: 'text-red-400' },
+  activity_overdue: { icon: Calendar, label: 'Overdue Activity', color: 'text-yellow-400' },
+  opportunity_hot: { icon: Lightbulb, label: 'Hot Opportunity', color: 'text-green-400' },
+  contact_inactive: { icon: User, label: 'Inactive Contact', color: 'text-blue-400' },
+  followup_needed: { icon: Phone, label: 'Follow-up Needed', color: 'text-purple-400' },
+  account_risk: { icon: AlertTriangle, label: 'Account at Risk', color: 'text-red-400' },
 };
 
 // Priority colors
@@ -191,7 +156,7 @@ function parseBodyPrompt(bodyPrompt) {
     /Related CRM record:\s*(\{[^\n]*(?:\n(?!\n)[^\n]*)*)/i,
     (_, json) => {
       try {
-        const parsed = JSON.parse(json);
+        const parsed = JSON.parse(json.trim());
         crmEntity = parsed.entity || parsed;
       } catch (_e) {
         // JSON parse failed — ignore

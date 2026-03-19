@@ -723,7 +723,7 @@ export default function TeamManagement() {
                 id="select-all-teams"
                 checked={teams.length > 0 && selectedTeamIds.size === teams.length}
                 onCheckedChange={(checked) => {
-                  setSelectedTeamIds(checked ? new Set(teams.map((t) => t.id)) : new Set());
+                  setSelectedTeamIds(checked === true ? new Set(teams.map((t) => t.id)) : new Set());
                 }}
                 className="border-slate-500"
               />
@@ -749,7 +749,7 @@ export default function TeamManagement() {
                     onCheckedChange={(checked) => {
                       setSelectedTeamIds((prev) => {
                         const next = new Set(prev);
-                        if (checked) next.add(team.id); else next.delete(team.id);
+                        if (checked === true) next.add(team.id); else next.delete(team.id);
                         return next;
                       });
                     }}
