@@ -1,6 +1,6 @@
 // Executive Assistant Tools - AI Email Drafting
 // Draft outbound emails using AI, queued for human review before sending.
-// The draft is stored in ai_suggestions (status=pending_approval) — NOT sent immediately.
+// The draft is stored in ai_suggestions (status='pending') — NOT sent immediately.
 
 import { Result, CRMError } from "../../spec/types.braid"
 

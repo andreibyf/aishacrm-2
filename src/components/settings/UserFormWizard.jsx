@@ -380,7 +380,7 @@ export default function UserFormWizard({
 
     setDeletingTeams(true);
     let deleted = 0;
-    const tenantId = user?.tenant_id || currentUser?.tenant_id;
+    const tenantId = form.tenant_id || user?.tenant_id || currentUser?.tenant_id;
     for (const id of selectedIds) {
       try {
         const res = await fetch(`${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`, {
@@ -545,6 +545,8 @@ export default function UserFormWizard({
           <div key={s.key} className="flex items-center">
             <button
               type="button"
+              disabled={!isClickable}
+              aria-disabled={!isClickable}
               onClick={() => isClickable && setStep(i)}
               title={isClickable ? `Go to ${s.label}` : `Complete previous steps first`}
               className={`

@@ -64,7 +64,7 @@ export const moduleMapping = {
   Integrations: 'integrations',
   PaymentPortal: 'payment_portal',
   AICampaigns: 'ai_campaigns',
-  AISuggestions: null,
+  AISuggestions: 'ai_suggestions',
   Agent: 'ai_agent',
   Utilities: 'utilities',
   ClientOnboarding: 'client_onboarding',

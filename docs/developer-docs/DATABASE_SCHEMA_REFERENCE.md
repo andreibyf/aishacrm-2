@@ -322,7 +322,7 @@ ai_suggestions
 ├── trigger_id TEXT -- e.g. 'playbook_email', 'care_trigger'
 ├── record_type TEXT (lead | contact | account | opportunity | activity)
 ├── record_id UUID
-├── status TEXT (pending | approved | rejected | executed)
+├── status TEXT (pending | approved | rejected | executed | expired)
 ├── action JSONB  -- { tool_name, tool_args, ... }
 ├── confidence NUMERIC
 ├── reasoning TEXT
