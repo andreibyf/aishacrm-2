@@ -60,7 +60,7 @@ export default function OpportunityStatsCards({
       filter: 'closed_won',
       bgColor: 'bg-emerald-900/20',
       borderColor: 'border-emerald-700',
-      tooltip: 'opportunity_closed_won',
+      tooltip: 'opportunity_won',
     },
     {
       label: 'Closed Lost',
@@ -68,7 +68,7 @@ export default function OpportunityStatsCards({
       filter: 'closed_lost',
       bgColor: 'bg-red-900/20',
       borderColor: 'border-red-700',
-      tooltip: 'opportunity_closed_lost',
+      tooltip: 'opportunity_lost',
     },
   ];
 

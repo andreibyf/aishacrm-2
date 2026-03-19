@@ -5,14 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RotateCcw, Save, Eye, EyeOff } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
 export default function StatusCardsManager() {
   const { preferences, loading, savePreferences, resetToDefaults, DEFAULT_STATUS_CARDS } = useStatusCardPreferences();
   const [localPrefs, setLocalPrefs] = useState(null);
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (preferences && !loading) {
@@ -50,17 +49,10 @@ export default function StatusCardsManager() {
     setSaving(true);
     try {
       await Promise.resolve(savePreferences(localPrefs));
-      toast({
-        title: 'Success',
-        description: 'Status card preferences saved successfully!',
-      });
+      toast.success('Status card preferences saved successfully!');
     } catch (error) {
       console.error('Error saving preferences:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save preferences',
-        variant: 'destructive',
-      });
+      toast.error('Failed to save preferences');
     } finally {
       setSaving(false);
     }
@@ -70,18 +62,13 @@ export default function StatusCardsManager() {
     if (confirm('Reset all status cards to defaults?')) {
       resetToDefaults();
       setLocalPrefs(preferences);
-      toast({
-        title: 'Reset Complete',
-        description: 'Status cards reset to defaults',
-      });
+      toast.success('Status cards reset to defaults');
     }
   };
 
   const handleResetCard = (cardId, originalLabel) => {
     handleLabelChange(cardId, originalLabel);
-    toast({
-      description: `Reset to "${originalLabel}"`,
-    });
+    toast.success(`Reset to "${originalLabel}"`);
   };
 
   if (loading || !localPrefs) {
