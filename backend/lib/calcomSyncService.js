@@ -27,20 +27,21 @@
  *
  *   Client books via Cal.com:
  *     Cal.com → webhook → AiSHA CRM activity created → pushActivityToCalcom() skips
- *     (already exists in Cal.com) → Google/Outlook API: write event  [TODO]
+ *     (already exists in Cal.com) → Google/Outlook API: write event  [IMPLEMENTED]
  *
  *   Organizer creates CRM activity (manual or from personal calendar import):
  *     AiSHA CRM activity created → pushActivityToCalcom() → Cal.com blocker  [IMPLEMENTED]
- *                                 → Google/Outlook API: write event           [TODO]
+ *                                 → Google/Outlook API: write event           [IMPLEMENTED]
  *
  *   Personal calendar event imported into AiSHA CRM:
  *     Google/Outlook API → AiSHA CRM activity created → pushActivityToCalcom() → Cal.com blocker
  *     No separate path needed — same activity hook handles it automatically.
  *
- *   Personal calendar write (TODO) requires:
- *     backend/lib/googleCalendarService.js  — Google Calendar API
+ *   Personal calendar write/delete/update is handled by:
+ *     backend/lib/googleCalendarService.js  — Google Calendar API v3
  *     backend/lib/outlookCalendarService.js — Microsoft Graph API
- *   The tenant_integrations table already stores the OAuth credentials for both.
+ *   Hooked from activities.v2.js (POST/PUT/DELETE) and calcom-webhook.js (all booking events).
+ *   Import endpoint: GET /api/calcom-sync/import-personal-calendar
  *
  * Requirements:
  *   - Tenant has an active Cal.com integration in tenant_integrations
