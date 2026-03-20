@@ -368,6 +368,7 @@ export default function TenantIntegrationSettings() {
       stripe: CreditCard,
       slack: MessageSquare,
       google_calendar: Calendar,
+      calcom: Calendar,
       zapier: Zap,
       other: Link,
     };
@@ -606,6 +607,18 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('OpenAI API Key is required for this integration type.');
       return;
     }
+    if (formData.integration_type === 'calcom' && !formData.api_credentials.api_key) {
+      toast.error('Cal.com API Key is required.');
+      return;
+    }
+    if (formData.integration_type === 'calcom' && !formData.api_credentials.webhook_secret) {
+      toast.error('Cal.com Webhook Secret is required.');
+      return;
+    }
+    if (formData.integration_type === 'calcom' && !formData.config.cal_link) {
+      toast.error('Cal.com booking link (cal_link) is required.');
+      return;
+    }
     if (
       formData.integration_type === 'twilio' &&
       (!formData.api_credentials.account_sid || !formData.api_credentials.auth_token)
@@ -719,6 +732,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             <SelectItem value="stripe">Stripe (Payments)</SelectItem>
             <SelectItem value="slack">Slack</SelectItem>
             <SelectItem value="google_calendar">Google Calendar</SelectItem>
+            <SelectItem value="calcom">Cal.com (Booking System)</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
@@ -1618,6 +1632,125 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                   Azure Portal
                 </a>
                 .
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Cal.com ── */}
+      {formData.integration_type === 'calcom' && (
+        <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+          <CardContent className="space-y-4 pt-4">
+            <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <AlertDescription className="text-sm">
+                Connect your self-hosted Cal.com instance. The API Key and Webhook Secret are used
+                to authenticate booking events. The cal_link (e.g. <code>your-username/30min</code>)
+                is embedded in contact and lead panels.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_api_key" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                API Key
+              </Label>
+              <Input
+                id="calcom_api_key"
+                type="password"
+                value={formData.api_credentials.api_key || ''}
+                onChange={(e) => handleCredentialChange('api_key', e.target.value)}
+                placeholder="cal_live_xxxxxxxxxxxxxxxx"
+                className="font-mono"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Create an API key in Cal.com → Settings → Security → API Keys.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_webhook_secret" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                Webhook Secret
+              </Label>
+              <Input
+                id="calcom_webhook_secret"
+                type="password"
+                value={formData.api_credentials.webhook_secret || ''}
+                onChange={(e) => handleCredentialChange('webhook_secret', e.target.value)}
+                placeholder="whsec_xxxxxxxxxxxxxxxx"
+                className="font-mono"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Set in Cal.com → Settings → Webhooks → create webhook pointing to{' '}
+                <code className="text-xs">
+                  {getBackendUrl()}/api/webhooks/calcom
+                </code>
+                .
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_cal_link">Booking Link (cal_link)</Label>
+              <Input
+                id="calcom_cal_link"
+                value={formData.config.cal_link || ''}
+                onChange={(e) => handleConfigChange('cal_link', e.target.value)}
+                placeholder="username/30min-consultation"
+                className="font-mono"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                The slug shown in your Cal.com booking URL, e.g.{' '}
+                <code className="text-xs">cal.com/username/30min</code>.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_event_type_id">Event Type ID (optional)</Label>
+              <Input
+                id="calcom_event_type_id"
+                type="number"
+                value={formData.config.event_type_id || ''}
+                onChange={(e) =>
+                  handleConfigChange('event_type_id', e.target.value ? Number(e.target.value) : '')
+                }
+                placeholder="123"
+              />
+              <p className="text-xs text-muted-foreground">
+                Found in Cal.com → Event Types → edit event → URL bar.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_cancellation_policy_hours">Cancellation Policy (hours)</Label>
+              <Input
+                id="calcom_cancellation_policy_hours"
+                type="number"
+                value={formData.config.cancellation_policy_hours ?? 24}
+                onChange={(e) =>
+                  handleConfigChange('cancellation_policy_hours', Number(e.target.value))
+                }
+                placeholder="24"
+              />
+              <p className="text-xs text-muted-foreground">
+                Credits will not be refunded for cancellations within this window.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="calcom_base_url">Cal.com Base URL (optional)</Label>
+              <Input
+                id="calcom_base_url"
+                value={formData.config.base_url || ''}
+                onChange={(e) => handleConfigChange('base_url', e.target.value)}
+                placeholder="https://cal.com"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Only needed for self-hosted instances. Defaults to https://cal.com.
               </p>
             </div>
           </CardContent>

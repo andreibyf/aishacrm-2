@@ -239,6 +239,12 @@ import { createTasksRoutes } from './routes/tasks.js';
 import createDashboardFunnelRoutes from './routes/dashboard-funnel.js';
 import createCareConfigRoutes from './routes/careConfig.js';
 import createCarePlaybookRoutes from './routes/carePlaybooks.js';
+import createSessionPackageRoutes from './routes/session-packages.js';
+import createSessionCreditsRoutes from './routes/session-credits.js';
+import calcomWebhookRouter from './routes/calcom-webhook.js';
+import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
+import createCalcomSyncRoutes from './routes/calcom-sync.js';
+import { stripeWebhookRouter } from './routes/stripe-webhook.js';
 import braidAuditRoutes from './routes/braidAudit.js';
 import braidChainRoutes from './routes/braidChain.js';
 import braidMetricsRoutes from './routes/braidMetrics.js';
@@ -534,6 +540,23 @@ app.use(
   authenticateRequest,
   createSuggestionsRoutes(measuredPgPool),
 );
+// Cal.com booking system routes
+logger.debug('Mounting /api/session-packages routes');
+app.use('/api/session-packages', defaultLimiter, authenticateRequest, createSessionPackageRoutes());
+logger.debug('Mounting /api/session-credits routes');
+app.use('/api/session-credits', defaultLimiter, authenticateRequest, createSessionCreditsRoutes());
+// Booking analytics — tenant-scoped reporting
+logger.debug('Mounting /api/analytics routes');
+app.use('/api/analytics', defaultLimiter, authenticateRequest, createBookingAnalyticsRoutes());
+// Cal.com bidirectional sync — admin-only, requires tenant auth
+logger.debug('Mounting /api/calcom-sync routes');
+app.use('/api/calcom-sync', defaultLimiter, authenticateRequest, createCalcomSyncRoutes());
+// Cal.com webhook — no auth middleware; HMAC signature verified inside handler
+logger.debug('Mounting /api/webhooks/calcom route');
+app.use('/api/webhooks', defaultLimiter, calcomWebhookRouter);
+// Stripe webhook — no auth middleware; raw body + Stripe-Signature HMAC verification inside handler
+logger.debug('Mounting /api/webhooks/stripe route');
+app.use('/api/webhooks', defaultLimiter, stripeWebhookRouter);
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res, next) => {

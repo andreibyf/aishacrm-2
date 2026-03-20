@@ -1,15 +1,22 @@
-
 import { useState } from 'react';
-import UniversalDetailPanel from "../shared/UniversalDetailPanel";
-import { Star, Phone, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { universalAICall } from "@/api/functions";
-import { generateAIEmailDraft } from "@/api/functions";
-import { sendAIEmail } from "@/api/functions";
-import { toast } from "sonner";
+import UniversalDetailPanel from '../shared/UniversalDetailPanel';
+import SessionCreditsPanel from '../scheduling/SessionCreditsPanel';
+import BookingWidget from '../scheduling/BookingWidget';
+import { Star, Phone, Mail, CalendarCheck } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { universalAICall } from '@/api/functions';
+import { generateAIEmailDraft } from '@/api/functions';
+import { sendAIEmail } from '@/api/functions';
+import { toast } from 'sonner';
 
 export default function ContactDetailPanel({
   contact,
@@ -20,13 +27,13 @@ export default function ContactDetailPanel({
   onOpenChange,
   onEdit,
   onDelete,
-  user
+  user,
 }) {
   const [showCallDialog, setShowCallDialog] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [callPrompt, setCallPrompt] = useState("");
-  const [emailPrompt, setEmailPrompt] = useState("");
-  const [emailDraft, setEmailDraft] = useState("");
+  const [callPrompt, setCallPrompt] = useState('');
+  const [emailPrompt, setEmailPrompt] = useState('');
+  const [emailDraft, setEmailDraft] = useState('');
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
@@ -37,16 +44,18 @@ export default function ContactDetailPanel({
 
   const handleMakeCall = () => {
     if (!contact.phone && !contact.mobile) {
-      toast.error("No phone number available for this contact");
+      toast.error('No phone number available for this contact');
       return;
     }
-    setCallPrompt(`Call ${contact.first_name} ${contact.last_name} from ${accountName || contact.account_name || 'their company'} for a follow-up conversation.`);
+    setCallPrompt(
+      `Call ${contact.first_name} ${contact.last_name} from ${accountName || contact.account_name || 'their company'} for a follow-up conversation.`,
+    );
     setShowCallDialog(true);
   };
 
   const handleInitiateCall = async () => {
     if (!callPrompt.trim()) {
-      toast.error("Please provide a call objective");
+      toast.error('Please provide a call objective');
       return;
     }
 
@@ -57,13 +66,13 @@ export default function ContactDetailPanel({
         contactPhone: phone,
         contactName: `${contact.first_name} ${contact.last_name}`,
         prompt: callPrompt,
-        callObjective: "follow_up"
+        callObjective: 'follow_up',
       });
-      toast.success("AI call initiated successfully");
+      toast.success('AI call initiated successfully');
       setShowCallDialog(false);
     } catch (error) {
-      console.error("Error initiating call:", error);
-      toast.error(`Failed to initiate call: ${error.message || "Unknown error"}`);
+      console.error('Error initiating call:', error);
+      toast.error(`Failed to initiate call: ${error.message || 'Unknown error'}`);
     } finally {
       setIsCalling(false);
     }
@@ -71,17 +80,19 @@ export default function ContactDetailPanel({
 
   const handleComposeEmail = () => {
     if (!contact.email) {
-      toast.error("No email address available for this contact");
+      toast.error('No email address available for this contact');
       return;
     }
-    setEmailPrompt(`Write a professional follow-up email to ${contact.first_name} ${contact.last_name} from ${accountName || contact.account_name || 'their company'}.`);
-    setEmailDraft("");
+    setEmailPrompt(
+      `Write a professional follow-up email to ${contact.first_name} ${contact.last_name} from ${accountName || contact.account_name || 'their company'}.`,
+    );
+    setEmailDraft('');
     setShowEmailDialog(true);
   };
 
   const handleGenerateEmail = async () => {
     if (!emailPrompt.trim()) {
-      toast.error("Please provide email instructions");
+      toast.error('Please provide email instructions');
       return;
     }
 
@@ -91,18 +102,18 @@ export default function ContactDetailPanel({
         recipientEmail: contact.email,
         recipientName: `${contact.first_name} ${contact.last_name}`,
         context: `Contact from ${accountName || contact.account_name || 'company'}, current status: ${contact.status}`,
-        prompt: emailPrompt
+        prompt: emailPrompt,
       });
 
       if (response.data && response.data.draft) {
         setEmailDraft(response.data.draft);
-        toast.success("Email draft generated successfully");
+        toast.success('Email draft generated successfully');
       } else {
-        throw new Error("Failed to generate email draft");
+        throw new Error('Failed to generate email draft');
       }
     } catch (error) {
-      console.error("Error generating email:", error);
-      toast.error(`Failed to generate email: ${error.message || "Unknown error"}`);
+      console.error('Error generating email:', error);
+      toast.error(`Failed to generate email: ${error.message || 'Unknown error'}`);
     } finally {
       setIsGeneratingEmail(false);
     }
@@ -110,24 +121,24 @@ export default function ContactDetailPanel({
 
   const handleSendEmail = async () => {
     if (!emailDraft.trim()) {
-      toast.error("Please generate an email draft first");
+      toast.error('Please generate an email draft first');
       return;
     }
 
     setIsSendingEmail(true);
     try {
       await sendAIEmail({
-        entityType: "contact",
+        entityType: 'contact',
         entityId: contact.id,
         to: contact.email,
         subject: `Follow-up: ${contact.first_name} ${contact.last_name}`,
-        body: emailDraft
+        body: emailDraft,
       });
-      toast.success("Email sent successfully");
+      toast.success('Email sent successfully');
       setShowEmailDialog(false);
     } catch (error) {
-      console.error("Error sending email:", error);
-      toast.error(`Failed to send email: ${error.message || "Unknown error"}`);
+      console.error('Error sending email:', error);
+      toast.error(`Failed to send email: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSendingEmail(false);
     }
@@ -136,10 +147,10 @@ export default function ContactDetailPanel({
   const handleViewAccount = (e) => {
     if (e) e.preventDefault();
     if (!accountId) {
-      console.log("No accountId provided");
+      console.log('No accountId provided');
       return;
     }
-    
+
     // Navigate to Accounts page with accountId query parameter
     // The Accounts page will automatically open the AccountDetailPanel
     window.location.href = `/Accounts?accountId=${accountId}`;
@@ -149,26 +160,26 @@ export default function ContactDetailPanel({
 
   if (contact.phone || contact.mobile) {
     customActions.push({
-      label: "Make AI Call",
+      label: 'Make AI Call',
       icon: <Phone className="w-4 h-4" />,
-      onClick: handleMakeCall
+      onClick: handleMakeCall,
     });
   }
 
   if (contact.email) {
     customActions.push({
-      label: "Compose AI Email",
+      label: 'Compose AI Email',
       icon: <Mail className="w-4 h-4" />,
-      onClick: handleComposeEmail
+      onClick: handleComposeEmail,
     });
   }
 
   customActions.push({
-    label: "Convert to Lead",
+    label: 'Convert to Lead',
     icon: <Star className="w-4 h-4" />,
     onClick: (contact) => {
-      console.log("Convert to lead:", contact);
-    }
+      console.log('Convert to lead:', contact);
+    },
   });
 
   return (
@@ -182,7 +193,7 @@ export default function ContactDetailPanel({
         onDelete={onDelete}
         user={user}
         displayData={{
-          "Account Name": accountId ? (
+          'Account Name': accountId ? (
             <button
               onClick={handleViewAccount}
               className="text-blue-400 hover:text-blue-300 hover:underline text-left mt-1 cursor-pointer"
@@ -190,20 +201,40 @@ export default function ContactDetailPanel({
               {accountName || contact.account_name || 'Unknown Account'}
             </button>
           ) : accountName || contact.account_name ? (
-            <p className="text-slate-200 font-medium mt-1">
-              {accountName || contact.account_name}
-            </p>
+            <p className="text-slate-200 font-medium mt-1">{accountName || contact.account_name}</p>
           ) : (
             <p className="text-slate-500 italic mt-1">No account linked</p>
           ),
-          "Assigned To": (
+          'Assigned To': (
             <p className="text-slate-200 font-medium mt-1">
               {assignedUserName || contact.assigned_to_name || contact.assigned_to || 'Unassigned'}
             </p>
-          )
+          ),
         }}
         customActions={customActions}
         showNotes={true}
+        customSections={[
+          {
+            title: 'Session Booking',
+            icon: <CalendarCheck className="w-4 h-4" />,
+            content: (
+              <>
+                <SessionCreditsPanel
+                  entityId={contact.id}
+                  entityType="contact"
+                  email={contact.email}
+                  tenantId={contact.tenant_id || user?.tenant_id}
+                />
+                <BookingWidget
+                  contactName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+                  contactEmail={contact.email}
+                  contactId={contact.id}
+                  tenantId={contact.tenant_id || user?.tenant_id}
+                />
+              </>
+            ),
+          },
+        ]}
       />
 
       <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
@@ -213,11 +244,17 @@ export default function ContactDetailPanel({
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-slate-300">Calling: {contact.first_name} {contact.last_name}</Label>
-              <p className="text-sm text-slate-400 mt-1">Phone: {contact.phone || contact.mobile}</p>
+              <Label className="text-slate-300">
+                Calling: {contact.first_name} {contact.last_name}
+              </Label>
+              <p className="text-sm text-slate-400 mt-1">
+                Phone: {contact.phone || contact.mobile}
+              </p>
             </div>
             <div>
-              <Label htmlFor="callPrompt" className="text-slate-300">Call Objective</Label>
+              <Label htmlFor="callPrompt" className="text-slate-300">
+                Call Objective
+              </Label>
               <Textarea
                 id="callPrompt"
                 value={callPrompt}
@@ -229,11 +266,19 @@ export default function ContactDetailPanel({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCallDialog(false)} className="bg-slate-700 border-slate-600 hover:bg-slate-600">
+            <Button
+              variant="outline"
+              onClick={() => setShowCallDialog(false)}
+              className="bg-slate-700 border-slate-600 hover:bg-slate-600"
+            >
               Cancel
             </Button>
-            <Button onClick={handleInitiateCall} disabled={isCalling || !callPrompt.trim()} className="bg-blue-600 hover:bg-blue-700">
-              {isCalling ? "Initiating..." : "Make Call"}
+            <Button
+              onClick={handleInitiateCall}
+              disabled={isCalling || !callPrompt.trim()}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isCalling ? 'Initiating...' : 'Make Call'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -246,11 +291,15 @@ export default function ContactDetailPanel({
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-slate-300">To: {contact.first_name} {contact.last_name}</Label>
+              <Label className="text-slate-300">
+                To: {contact.first_name} {contact.last_name}
+              </Label>
               <p className="text-sm text-slate-400 mt-1">{contact.email}</p>
             </div>
             <div>
-              <Label htmlFor="emailPrompt" className="text-slate-300">Email Instructions</Label>
+              <Label htmlFor="emailPrompt" className="text-slate-300">
+                Email Instructions
+              </Label>
               <Textarea
                 id="emailPrompt"
                 value={emailPrompt}
@@ -259,18 +308,20 @@ export default function ContactDetailPanel({
                 className="mt-2 bg-slate-700 border-slate-600 text-slate-200"
                 rows={3}
               />
-              <Button 
-                onClick={handleGenerateEmail} 
+              <Button
+                onClick={handleGenerateEmail}
                 disabled={isGeneratingEmail || !emailPrompt.trim()}
                 className="mt-2 bg-green-600 hover:bg-green-700"
                 size="sm"
               >
-                {isGeneratingEmail ? "Generating..." : "Generate Draft"}
+                {isGeneratingEmail ? 'Generating...' : 'Generate Draft'}
               </Button>
             </div>
             {emailDraft && (
               <div>
-                <Label htmlFor="emailDraft" className="text-slate-300">Email Draft</Label>
+                <Label htmlFor="emailDraft" className="text-slate-300">
+                  Email Draft
+                </Label>
                 <Textarea
                   id="emailDraft"
                   value={emailDraft}
@@ -282,15 +333,19 @@ export default function ContactDetailPanel({
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEmailDialog(false)} className="bg-slate-700 border-slate-600 hover:bg-slate-600">
+            <Button
+              variant="outline"
+              onClick={() => setShowEmailDialog(false)}
+              className="bg-slate-700 border-slate-600 hover:bg-slate-600"
+            >
               Cancel
             </Button>
-            <Button 
-              onClick={handleSendEmail} 
+            <Button
+              onClick={handleSendEmail}
               disabled={isSendingEmail || !emailDraft.trim()}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {isSendingEmail ? "Sending..." : "Send Email"}
+              {isSendingEmail ? 'Sending...' : 'Send Email'}
             </Button>
           </DialogFooter>
         </DialogContent>

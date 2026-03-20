@@ -267,7 +267,15 @@ export function initMiddleware(app, pgPool) {
   // Apply CSRF protection to API routes (after CORS and rate limiting)
   app.use('/api', csrfProtection);
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req, _res, buf) => {
+        // Store raw body buffer so webhook handlers can verify HMAC signatures
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // Performance logging middleware (must be after body parsers, before routes)
