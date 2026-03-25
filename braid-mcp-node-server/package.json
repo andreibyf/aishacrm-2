@@ -29,6 +29,6 @@
     "@types/node": "^25.3.3",
     "dotenv": "^17.3.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.0"
+    "typescript": "^6.0.2"
   }
 }
