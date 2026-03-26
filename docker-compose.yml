@@ -296,13 +296,16 @@ services:
       - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
+      # NEXTAUTH_URL must be the *internal* container URL (port 3000) so server-side
+      # NextAuth CSRF/session fetches don't try to reach the host-mapped port 3002.
+      - NEXTAUTH_URL=http://localhost:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
       - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
       - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
       - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+      # Public URL is what the browser uses — the host-mapped port.
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
     ports:
       - "3002:3000"
