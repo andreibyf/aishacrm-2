@@ -264,7 +264,7 @@ services:
       - aishanet
     environment:
       POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
-      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD:-calcom_local}
       POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
     volumes:
       - calcom_db_data:/var/lib/postgresql/data
@@ -290,12 +290,11 @@ services:
     networks:
       - aishanet
     environment:
-      # Defaults to the bundled calcom-db container. Override CALCOM_DATABASE_URL in
-      # Doppler/env to point at an external DB (e.g. a separate Supabase project).
-      - DATABASE_URL=${CALCOM_DATABASE_URL:-postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}}
-      # For local/direct Postgres (no pooler) both URLs are the same.
-      # Set CALCOM_DATABASE_DIRECT_URL separately only when using PgBouncer.
-      - DATABASE_DIRECT_URL=${CALCOM_DATABASE_DIRECT_URL:-${CALCOM_DATABASE_URL:-postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}}}
+      # Always use the bundled calcom-db container for local dev.
+      # CALCOM_DATABASE_URL from Doppler may point to Supabase (which has RLS enabled
+      # and rejects Cal.com's raw Prisma/pg connections). The bundled postgres has no RLS.
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
