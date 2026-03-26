@@ -250,17 +250,52 @@ services:
       - aishanet
 
   # Cal.com - Self-hosted booking & scheduling system
-  # Start with: docker compose --profile scheduling up -d calcom
+  # Start with: docker compose --profile scheduling up -d
   # Access at http://localhost:3002 (or scheduling.aishacrm.com via reverse proxy)
-  calcom:
-    image: calcom/cal.com:latest
-    container_name: aishacrm-calcom
+
+  # Dedicated Postgres for Cal.com — isolated from the AiSHA Supabase database.
+  # Cal.com runs its own Prisma migrations and schema; sharing AiSHA's DB is not supported.
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-calcom-db
     restart: unless-stopped
     profiles: [scheduling]
     networks:
       - aishanet
     environment:
-      - DATABASE_URL=${CALCOM_DATABASE_URL}
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - calcom_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  calcom:
+    image: calcom/cal.com:latest
+    container_name: aishacrm-calcom
+    restart: unless-stopped
+    profiles: [scheduling]
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet
+    environment:
+      # Defaults to the bundled calcom-db container. Override CALCOM_DATABASE_URL in
+      # Doppler/env to point at an external DB (e.g. a separate Supabase project).
+      - DATABASE_URL=${CALCOM_DATABASE_URL:-postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}}
+      # For local/direct Postgres (no pooler) both URLs are the same.
+      # Set CALCOM_DATABASE_DIRECT_URL separately only when using PgBouncer.
+      - DATABASE_DIRECT_URL=${CALCOM_DATABASE_DIRECT_URL:-${CALCOM_DATABASE_URL:-postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}}}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
@@ -403,6 +438,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  calcom_db_data:
     driver: local
   n8n_data:
     driver: local
