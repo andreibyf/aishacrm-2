@@ -228,10 +228,10 @@ export default [
       'no-restricted-imports': 'off',
     },
   },
-  // calcomDb.js: deliberate direct pg connection to the separate calcom-db container.
-  // The Supabase client cannot reach external PostgreSQL instances.
+  // calcomDb.js + calcom-sync.test.js: deliberate direct pg connection to the separate
+  // calcom-db container. The Supabase client cannot reach external PostgreSQL instances.
   {
-    files: ['backend/lib/calcomDb.js'],
+    files: ['backend/lib/calcomDb.js', 'backend/__tests__/routes/calcom-sync.test.js'],
     rules: {
       'no-restricted-imports': 'off',
     },
