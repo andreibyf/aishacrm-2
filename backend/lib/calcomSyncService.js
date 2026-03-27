@@ -50,8 +50,10 @@
  *   - config.base_url          — Cal.com base URL (optional, default: https://app.cal.com)
  */
 
+import { randomUUID } from 'crypto';
 import logger from './logger.js';
 import { getSupabaseClient } from './supabase-db.js';
+import { getCalcomDb } from './calcomDb.js';
 
 // Activity types that represent time-blocked events and should sync to Cal.com
 const SYNC_ACTIVITY_TYPES = new Set([
@@ -63,21 +65,28 @@ const SYNC_ACTIVITY_TYPES = new Set([
   'consultation',
 ]);
 
-const CALCOM_TIMEOUT_MS = 8000;
-
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
 /**
  * Fetch the tenant's active Cal.com integration config from the DB.
- * Returns null if not configured or API key is missing.
+ * Returns null if not configured or if calcom-db is unavailable.
+ *
+ * Expected tenant_integrations.config shape:
+ *   {
+ *     event_type_id: <number>,   // Cal.com EventType id for blocker bookings
+ *     calcom_user_id: <number>,  // Cal.com users.id for this tenant
+ *   }
  */
 async function getTenantCalcomConfig(tenantId) {
+  const db = getCalcomDb();
+  if (!db) return null; // Cal.com DB not configured
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('tenant_integrations')
-    .select('api_credentials, config')
+    .select('config')
     .eq('tenant_id', tenantId)
     .eq('integration_type', 'calcom')
     .eq('is_active', true)
@@ -85,43 +94,14 @@ async function getTenantCalcomConfig(tenantId) {
 
   if (error || !data) return null;
 
-  const apiKey = data.api_credentials?.api_key;
-  if (!apiKey) return null;
-
-  const baseUrl = (data.config?.base_url || 'https://app.cal.com').replace(/\/$/, '');
+  const calcomUserId = data.config?.calcom_user_id || null;
+  const eventTypeId = data.config?.event_type_id || null;
 
   return {
-    apiKey,
-    eventTypeId: data.config?.event_type_id || null,
-    baseUrl,
+    calcomUserId,
+    eventTypeId,
     config: data.config,
   };
-}
-
-/**
- * Make an authenticated request to the Cal.com v1 API.
- */
-async function calcomFetch(baseUrl, path, method, apiKey, body) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CALCOM_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const json = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data: json };
-  } catch (err) {
-    clearTimeout(timeout);
-    throw err;
-  }
 }
 
 /**
@@ -149,43 +129,39 @@ function isSyncableActivity(activity) {
 export async function pushActivityToCalcom(tenantId, activity) {
   if (!isSyncableActivity(activity)) return;
 
+  const db = getCalcomDb();
+  if (!db) return;
+
   try {
     const calcom = await getTenantCalcomConfig(tenantId);
     if (!calcom) return;
 
-    if (!calcom.eventTypeId) {
-      logger.debug('[CalcomSync] No event_type_id configured — skipping CRM→Cal.com push', {
+    if (!calcom.eventTypeId || !calcom.calcomUserId) {
+      logger.debug('[CalcomSync] Missing event_type_id or calcom_user_id — skipping push', {
         tenantId,
         activityId: activity.id,
       });
       return;
     }
 
-    // Build start/end as ISO strings (CRM stores due_date as YYYY-MM-DD, due_time as HH:MM in UTC)
-    const start = `${activity.due_date}T${activity.due_time}:00.000Z`;
+    // Build start/end timestamps (CRM stores due_date as YYYY-MM-DD, due_time as HH:MM in UTC)
+    const start = new Date(`${activity.due_date}T${activity.due_time}:00.000Z`);
     const durationMin = activity.duration_minutes || 60;
-    const end = new Date(new Date(start).getTime() + durationMin * 60 * 1000).toISOString();
+    const end = new Date(start.getTime() + durationMin * 60 * 1000);
 
     const existingBlockUid = activity.metadata?.calcom_block_uid;
 
     if (existingBlockUid) {
-      // Reschedule the existing Cal.com blocker booking
-      const { ok, status, data } = await calcomFetch(
-        calcom.baseUrl,
-        `/api/v1/bookings/${existingBlockUid}/reschedule`,
-        'PATCH',
-        calcom.apiKey,
-        { start, end, reason: 'CRM activity updated' },
+      // Reschedule: update startTime/endTime on the existing blocker booking
+      const result = await db.query(
+        `UPDATE "Booking" SET "startTime" = $1, "endTime" = $2, "updatedAt" = NOW()
+         WHERE uid = $3 AND "userId" = $4`,
+        [start, end, existingBlockUid, calcom.calcomUserId],
       );
-
-      if (!ok) {
-        logger.warn('[CalcomSync] Failed to reschedule Cal.com block', {
-          status,
-          error: data?.message,
-          uid: existingBlockUid,
-        });
-      } else {
+      if (result.rowCount > 0) {
         logger.debug('[CalcomSync] Rescheduled Cal.com block', { uid: existingBlockUid });
+      } else {
+        logger.warn('[CalcomSync] Reschedule found no matching booking', { uid: existingBlockUid });
       }
       return;
     }
@@ -193,53 +169,46 @@ export async function pushActivityToCalcom(tenantId, activity) {
     // Create a new Cal.com blocker booking
     const blockerEmail = activity.related_email || `crm-block-${tenantId}@internal.aisha`;
     const blockerName = activity.subject || 'CRM Activity';
+    const uid = randomUUID();
+    const bookingMeta = JSON.stringify({ crm_activity_id: activity.id, crm_tenant_id: tenantId });
 
-    const { ok, status, data: booking } = await calcomFetch(
-      calcom.baseUrl,
-      '/api/v1/bookings',
-      'POST',
-      calcom.apiKey,
-      {
-        eventTypeId: calcom.eventTypeId,
-        start,
-        end,
-        name: blockerName,
-        email: blockerEmail,
-        timeZone: 'UTC',
-        language: 'en',
-        customInputs: [],
-        metadata: { crm_activity_id: activity.id, crm_tenant_id: tenantId },
-        responses: { name: blockerName, email: blockerEmail },
-      },
+    const { rows } = await db.query(
+      `INSERT INTO "Booking" (uid, "userId", "eventTypeId", title, "startTime", "endTime",
+         status, metadata, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, 'accepted'::"BookingStatus", $7::jsonb, NOW(), NOW())
+       RETURNING id`,
+      [uid, calcom.calcomUserId, calcom.eventTypeId, blockerName, start, end, bookingMeta],
     );
 
-    if (ok && booking?.uid) {
-      // Persist the Cal.com booking UID back into the CRM activity metadata
-      const supabase = getSupabaseClient();
-      const updatedMeta = { ...(activity.metadata || {}), calcom_block_uid: booking.uid };
-      const { error: metaErr } = await supabase
-        .from('activities')
-        .update({ metadata: updatedMeta })
-        .eq('id', activity.id)
-        .eq('tenant_id', tenantId);
+    const bookingId = rows[0]?.id;
+    if (!bookingId) {
+      logger.warn('[CalcomSync] Booking INSERT returned no id', { activityId: activity.id });
+      return;
+    }
 
-      if (metaErr) {
-        logger.warn('[CalcomSync] Could not store calcom_block_uid in activity metadata', {
-          error: metaErr.message,
-          activityId: activity.id,
-        });
-      } else {
-        logger.info('[CalcomSync] Created Cal.com block booking', {
-          uid: booking.uid,
-          activityId: activity.id,
-        });
-      }
-    } else {
-      logger.warn('[CalcomSync] Failed to create Cal.com block', {
-        status,
-        error: booking?.message,
+    // Insert the required attendee row
+    await db.query(
+      `INSERT INTO "Attendee" (email, name, "timeZone", locale, "bookingId")
+       VALUES ($1, $2, 'UTC', 'en', $3)`,
+      [blockerEmail, blockerName, bookingId],
+    );
+
+    // Persist the Cal.com booking UID back into the CRM activity metadata
+    const supabase = getSupabaseClient();
+    const updatedMeta = { ...(activity.metadata || {}), calcom_block_uid: uid };
+    const { error: metaErr } = await supabase
+      .from('activities')
+      .update({ metadata: updatedMeta })
+      .eq('id', activity.id)
+      .eq('tenant_id', tenantId);
+
+    if (metaErr) {
+      logger.warn('[CalcomSync] Could not store calcom_block_uid in activity metadata', {
+        error: metaErr.message,
         activityId: activity.id,
       });
+    } else {
+      logger.info('[CalcomSync] Created Cal.com block booking', { uid, activityId: activity.id });
     }
   } catch (err) {
     // Non-fatal — activity is already saved; log and continue
@@ -259,22 +228,20 @@ export async function removeActivityFromCalcom(tenantId, activity) {
   const blockUid = activity?.metadata?.calcom_block_uid;
   if (!blockUid) return;
 
+  const db = getCalcomDb();
+  if (!db) return;
+
   try {
-    const calcom = await getTenantCalcomConfig(tenantId);
-    if (!calcom) return;
-
-    const { ok, status } = await calcomFetch(
-      calcom.baseUrl,
-      `/api/v1/bookings/${blockUid}/cancel`,
-      'DELETE',
-      calcom.apiKey,
-      { cancellationReason: 'CRM activity removed' },
+    const result = await db.query(
+      `UPDATE "Booking" SET status = 'cancelled'::"BookingStatus",
+         "cancellationReason" = 'CRM activity removed', "updatedAt" = NOW()
+       WHERE uid = $1`,
+      [blockUid],
     );
-
-    if (ok) {
+    if (result.rowCount > 0) {
       logger.info('[CalcomSync] Cancelled Cal.com block booking', { uid: blockUid });
     } else {
-      logger.warn('[CalcomSync] Failed to cancel Cal.com block', { uid: blockUid, status });
+      logger.warn('[CalcomSync] Cancel found no matching booking', { uid: blockUid });
     }
   } catch (err) {
     logger.error('[CalcomSync] removeActivityFromCalcom error (non-fatal)', {
@@ -292,60 +259,52 @@ export async function removeActivityFromCalcom(tenantId, activity) {
  * @returns {{ synced: number, errors: string[] }}
  */
 export async function pullCalcomBookings(tenantId) {
+  const db = getCalcomDb();
+  if (!db) return { synced: 0, errors: ['Cal.com DB not configured'] };
+
   const calcom = await getTenantCalcomConfig(tenantId);
   if (!calcom) return { synced: 0, errors: ['Cal.com integration not configured'] };
+  if (!calcom.calcomUserId) return { synced: 0, errors: ['calcom_user_id not set in config'] };
 
   const errors = [];
   let synced = 0;
 
   try {
-    const { ok, data } = await calcomFetch(
-      calcom.baseUrl,
-      '/api/v1/bookings?status=upcoming&take=100',
-      'GET',
-      calcom.apiKey,
+    // Pull upcoming accepted bookings for this tenant's Cal.com user,
+    // excluding blockers we created ourselves (they carry crm_activity_id in metadata).
+    const { rows: bookings } = await db.query(
+      `SELECT uid, "eventTypeId", "startTime", "endTime", status, metadata
+         FROM "Booking"
+        WHERE "userId" = $1
+          AND status = 'accepted'
+          AND "startTime" > NOW()
+          AND (metadata IS NULL OR metadata->>'crm_activity_id' IS NULL)
+        ORDER BY "startTime"
+        LIMIT 100`,
+      [calcom.calcomUserId],
     );
 
-    if (!ok) {
-      return { synced, errors: [`Cal.com API error: ${data?.message || 'unknown'}`] };
-    }
-
-    const bookings = data?.bookings || [];
     const supabase = getSupabaseClient();
 
     for (const booking of bookings) {
-      if (!booking.uid) continue;
+      const { error: upsertErr } = await supabase.from('booking_sessions').upsert(
+        [
+          {
+            tenant_id: tenantId,
+            calcom_booking_id: booking.uid,
+            calcom_event_type_id: booking.eventTypeId || null,
+            scheduled_start: booking.startTime,
+            scheduled_end: booking.endTime,
+            status: booking.status === 'cancelled' ? 'cancelled' : 'confirmed',
+          },
+        ],
+        { onConflict: 'tenant_id,calcom_booking_id' },
+      );
 
-      // Skip bookings we created ourselves as blockers (they have our CRM metadata)
-      if (booking.metadata?.crm_activity_id) continue;
-
-      const { data: existing } = await supabase
-        .from('booking_sessions')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .eq('calcom_booking_id', booking.uid)
-        .maybeSingle();
-
-      if (!existing) {
-        const { error: upsertErr } = await supabase.from('booking_sessions').upsert(
-          [
-            {
-              tenant_id: tenantId,
-              calcom_booking_id: booking.uid,
-              calcom_event_type_id: booking.eventTypeId || null,
-              scheduled_start: booking.startTime,
-              scheduled_end: booking.endTime,
-              status: booking.status === 'cancelled' ? 'cancelled' : 'confirmed',
-            },
-          ],
-          { onConflict: 'tenant_id,calcom_booking_id' },
-        );
-
-        if (upsertErr) {
-          errors.push(`Booking ${booking.uid}: ${upsertErr.message}`);
-        } else {
-          synced++;
-        }
+      if (upsertErr) {
+        errors.push(`Booking ${booking.uid}: ${upsertErr.message}`);
+      } else {
+        synced++;
       }
     }
   } catch (err) {
@@ -398,9 +357,12 @@ export async function fullBidirectionalSync(tenantId) {
       }
     }
   } else {
-    logger.debug('[CalcomSync] fullBidirectionalSync: skipping CRM→Cal.com push (no event_type_id)', {
-      tenantId,
-    });
+    logger.debug(
+      '[CalcomSync] fullBidirectionalSync: skipping CRM→Cal.com push (no event_type_id)',
+      {
+        tenantId,
+      },
+    );
   }
 
   logger.info('[CalcomSync] Full sync complete', {

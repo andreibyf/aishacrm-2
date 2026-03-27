@@ -141,6 +141,8 @@ services:
       - MCP_NODE_ID=aishacrm-backend
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
+      # Cal.com direct DB connection (calcom-db container, scheduling profile)
+      - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       # Supabase credentials (fallback if Doppler fails - from .env)
       - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}

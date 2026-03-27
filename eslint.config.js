@@ -228,6 +228,14 @@ export default [
       'no-restricted-imports': 'off',
     },
   },
+  // calcomDb.js: deliberate direct pg connection to the separate calcom-db container.
+  // The Supabase client cannot reach external PostgreSQL instances.
+  {
+    files: ['backend/lib/calcomDb.js'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
   // Root scripts override: Node environment for maintenance/utility scripts at repo root
   {
     files: ['*.js', 'scripts/**/*.js'],
