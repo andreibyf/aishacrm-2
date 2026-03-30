@@ -18,6 +18,7 @@ import { authenticateRequest } from '../middleware/authenticate.js';
 import { resolveQuery } from '../../pep/compiler/resolver.js';
 import { emitQuery, buildConfirmationString } from '../../pep/compiler/emitter.js';
 import { parseLLM } from '../../pep/compiler/llmParser.js';
+import { fetchEntityLabels, generateEntityLabelPrompt } from '../lib/entityLabelInjector.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -326,8 +327,19 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
     }
 
     try {
-      // Build the Phase 3 query system prompt and pass it via context
-      const systemPrompt = buildQuerySystemPrompt();
+      // Build the Phase 3 query system prompt and enrich with tenant custom labels
+      let systemPrompt = buildQuerySystemPrompt();
+
+      // Inject tenant custom entity labels (e.g., "Potential Leads" → bizdev_sources)
+      try {
+        const labels = await fetchEntityLabels(null, tenant_id);
+        const labelPrompt = generateEntityLabelPrompt(labels);
+        if (labelPrompt) {
+          systemPrompt += labelPrompt;
+        }
+      } catch (labelErr) {
+        logger.warn({ err: labelErr.message }, '[PEP] Failed to fetch entity labels, using defaults');
+      }
 
       // Use the LLM parser with the query-oriented system prompt
       const parsed = await parseLLM(

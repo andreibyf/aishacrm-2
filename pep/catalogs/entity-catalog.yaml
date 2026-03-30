@@ -95,6 +95,9 @@ entities:
       - name: tags
         type: string
         operators: [contains]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
 
   - id: Contact
     description: A contact person record linked to an account
@@ -129,6 +132,9 @@ entities:
       - name: worker_role
         type: string
         operators: [eq, neq, in, is_null, is_not_null]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
 
   - id: Opportunity
     description: A sales opportunity or deal in the pipeline
@@ -160,6 +166,9 @@ entities:
       - name: last_activity_date
         type: date
         operators: [eq, gt, gte, lt, lte, is_null, is_not_null]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
 
   - id: Account
     description: A company or organization account record
@@ -197,6 +206,9 @@ entities:
       - name: is_placeholder
         type: boolean
         operators: [eq]
+      - name: updated_at
+        type: date
+        operators: [eq, gt, gte, lt, lte]
 
   - id: Activity
     description: A CRM activity such as a call, email, meeting, or task
@@ -231,6 +243,9 @@ entities:
       - name: created_date
         type: date
         operators: [eq, gt, gte, lt, lte]
+      - name: updated_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
 
   - id: BizDevSource
     description: A business development source record tracking lead generation channels
@@ -263,6 +278,9 @@ entities:
         type: number
         operators: [eq, neq, gt, gte, lt, lte]
       - name: created_date
+        type: date
+        operators: [eq, gt, gte, lt, lte]
+      - name: updated_at
         type: date
         operators: [eq, gt, gte, lt, lte]
 
