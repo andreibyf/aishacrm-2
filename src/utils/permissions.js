@@ -316,7 +316,7 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     Activities: 'Activity Tracking',
     Communications: 'Activity Tracking',
     Calendar: 'Calendar',
-    BizDevSources: 'BizDev Sources',
+    BizDevSources: 'Potential Leads',
     CashFlow: 'Cash Flow Management',
     DocumentProcessing: 'Document Processing & Management',
     DocumentManagement: 'Document Processing & Management',

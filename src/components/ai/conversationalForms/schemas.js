@@ -21,13 +21,17 @@ const baseSteps = {
     prompt: `Let's capture the primary details for this ${entityName}.`,
     required: true,
     fields: [
-      { name: 'name', label: `${entityName.charAt(0).toUpperCase() + entityName.slice(1)} name`, placeholder: 'e.g. Acme Corporation' }
+      {
+        name: 'name',
+        label: `${entityName.charAt(0).toUpperCase() + entityName.slice(1)} name`,
+        placeholder: 'e.g. Acme Corporation',
+      },
     ],
     validate: (answers) => ({
       valid: requiredField(answers.name),
-      error: 'Please provide a name before moving on.'
-    })
-  })
+      error: 'Please provide a name before moving on.',
+    }),
+  }),
 };
 
 export const conversationalSchemas = {
@@ -42,20 +46,25 @@ export const conversationalSchemas = {
         required: true,
         fields: [
           { name: 'first_name', label: 'First name', placeholder: 'e.g. Jordan' },
-          { name: 'last_name', label: 'Last name', placeholder: 'e.g. Winters' }
+          { name: 'last_name', label: 'Last name', placeholder: 'e.g. Winters' },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.first_name) && requiredField(answers.last_name),
-          error: 'First and last name are required.'
-        })
+          error: 'First and last name are required.',
+        }),
       },
       {
         id: 'lead-contact',
         prompt: 'How can we reach them? Include the best email and phone number.',
         required: true,
         fields: [
-          { name: 'email', label: 'Email address', type: 'email', placeholder: 'jordan@example.com' },
-          { name: 'phone', label: 'Phone', type: 'tel', placeholder: '+1 (555) 123-4567' }
+          {
+            name: 'email',
+            label: 'Email address',
+            type: 'email',
+            placeholder: 'jordan@example.com',
+          },
+          { name: 'phone', label: 'Phone', type: 'tel', placeholder: '+1 (555) 123-4567' },
         ],
         validate: (answers) => {
           const hasEmail = requiredField(answers.email);
@@ -67,7 +76,7 @@ export const conversationalSchemas = {
             return { valid: false, error: 'Email address looks invalid.' };
           }
           return { valid: true };
-        }
+        },
       },
       {
         id: 'lead-company',
@@ -75,8 +84,8 @@ export const conversationalSchemas = {
         required: false,
         fields: [
           { name: 'company', label: 'Company', placeholder: 'Acme Corp' },
-          { name: 'job_title', label: 'Job title', placeholder: 'VP of Operations' }
-        ]
+          { name: 'job_title', label: 'Job title', placeholder: 'VP of Operations' },
+        ],
       },
       {
         id: 'lead-status',
@@ -93,8 +102,8 @@ export const conversationalSchemas = {
               { value: 'email', label: 'Email' },
               { value: 'social_media', label: 'Social media' },
               { value: 'advertising', label: 'Advertising' },
-              { value: 'other', label: 'Other' }
-            ]
+              { value: 'other', label: 'Other' },
+            ],
           },
           {
             name: 'status',
@@ -105,19 +114,24 @@ export const conversationalSchemas = {
               { value: 'contacted', label: 'Contacted' },
               { value: 'qualified', label: 'Qualified' },
               { value: 'nurture', label: 'Nurture' },
-              { value: 'converted', label: 'Converted' }
-            ]
-          }
-        ]
+              { value: 'converted', label: 'Converted' },
+            ],
+          },
+        ],
       },
       {
         id: 'lead-notes',
         prompt: 'Add any notes or context that will help the team follow up.',
         required: false,
         fields: [
-          { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Met at SaaStr – wants pricing by Friday.' }
-        ]
-      }
+          {
+            name: 'notes',
+            label: 'Notes',
+            type: 'textarea',
+            placeholder: 'Met at SaaStr – wants pricing by Friday.',
+          },
+        ],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -130,9 +144,9 @@ export const conversationalSchemas = {
       job_title: normalizeText(answers.job_title),
       source: normalizeText(answers.source) || 'website',
       status: normalizeText(answers.status) || 'new',
-      notes: normalizeText(answers.notes)
+      notes: normalizeText(answers.notes),
     }),
-    previewFields: ['first_name', 'last_name', 'email', 'phone', 'company', 'status']
+    previewFields: ['first_name', 'last_name', 'email', 'phone', 'company', 'status'],
   },
   account: {
     id: 'account',
@@ -145,25 +159,35 @@ export const conversationalSchemas = {
         prompt: 'Share core account details like industry and website.',
         fields: [
           { name: 'industry', label: 'Industry', placeholder: 'e.g. SaaS' },
-          { name: 'website', label: 'Website', placeholder: 'https://acme.com' }
-        ]
+          { name: 'website', label: 'Website', placeholder: 'https://acme.com' },
+        ],
       },
       {
         id: 'account-size',
         prompt: 'Optional: estimated revenue and employee count.',
         fields: [
-          { name: 'revenue', label: 'Annual revenue (USD)', type: 'number', placeholder: '5000000' },
-          { name: 'employee_count', label: 'Employees', type: 'number', placeholder: '200' }
-        ]
+          {
+            name: 'revenue',
+            label: 'Annual revenue (USD)',
+            type: 'number',
+            placeholder: '5000000',
+          },
+          { name: 'employee_count', label: 'Employees', type: 'number', placeholder: '200' },
+        ],
       },
       {
         id: 'account-notes',
         prompt: 'Add any notes or tags for this account.',
         fields: [
           { name: 'tags', label: 'Tags (comma separated)', placeholder: 'strategic, tier-1' },
-          { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Focused on LATAM expansion.' }
-        ]
-      }
+          {
+            name: 'notes',
+            label: 'Notes',
+            type: 'textarea',
+            placeholder: 'Focused on LATAM expansion.',
+          },
+        ],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -173,10 +197,15 @@ export const conversationalSchemas = {
       website: normalizeText(answers.website),
       estimated_revenue: numberFromInput(answers.revenue),
       employee_count: numberFromInput(answers.employee_count),
-      tags: answers.tags ? answers.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : undefined,
-      notes: normalizeText(answers.notes)
+      tags: answers.tags
+        ? answers.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        : undefined,
+      notes: normalizeText(answers.notes),
     }),
-    previewFields: ['name', 'industry', 'website', 'estimated_revenue', 'employee_count']
+    previewFields: ['name', 'industry', 'website', 'estimated_revenue', 'employee_count'],
   },
   contact: {
     id: 'contact',
@@ -189,43 +218,47 @@ export const conversationalSchemas = {
         required: true,
         fields: [
           { name: 'first_name', label: 'First name', placeholder: 'e.g. Priya' },
-          { name: 'last_name', label: 'Last name', placeholder: 'e.g. Menon' }
+          { name: 'last_name', label: 'Last name', placeholder: 'e.g. Menon' },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.first_name) && requiredField(answers.last_name),
-          error: 'First and last name are required.'
-        })
+          error: 'First and last name are required.',
+        }),
       },
       {
         id: 'contact-info',
         prompt: 'How do we get in touch?',
         fields: [
           { name: 'email', label: 'Email', type: 'email' },
-          { name: 'phone', label: 'Phone', type: 'tel' }
+          { name: 'phone', label: 'Phone', type: 'tel' },
         ],
         validate: (answers) => {
           if (answers.email && !emailLooksValid(answers.email)) {
             return { valid: false, error: 'Email address looks invalid.' };
           }
           return { valid: true };
-        }
+        },
       },
       {
         id: 'contact-company',
         prompt: 'Associate the contact with an account and role.',
         fields: [
           { name: 'account_name', label: 'Account', placeholder: 'Acme Corp' },
-          { name: 'job_title', label: 'Job title', placeholder: 'Head of Finance' }
-        ]
+          { name: 'job_title', label: 'Job title', placeholder: 'Head of Finance' },
+        ],
       },
       {
         id: 'contact-notes',
         prompt: 'Any notes or tags to capture?',
         fields: [
-          { name: 'tags', label: 'Tags (comma separated)', placeholder: 'decision-maker, advocate' },
-          { name: 'notes', label: 'Notes', type: 'textarea' }
-        ]
-      }
+          {
+            name: 'tags',
+            label: 'Tags (comma separated)',
+            placeholder: 'decision-maker, advocate',
+          },
+          { name: 'notes', label: 'Notes', type: 'textarea' },
+        ],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -236,10 +269,15 @@ export const conversationalSchemas = {
       phone: normalizeText(answers.phone),
       job_title: normalizeText(answers.job_title),
       account_name: normalizeText(answers.account_name),
-      tags: answers.tags ? answers.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : undefined,
-      notes: normalizeText(answers.notes)
+      tags: answers.tags
+        ? answers.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        : undefined,
+      notes: normalizeText(answers.notes),
     }),
-    previewFields: ['first_name', 'last_name', 'email', 'phone', 'account_name']
+    previewFields: ['first_name', 'last_name', 'email', 'phone', 'account_name'],
   },
   opportunity: {
     id: 'opportunity',
@@ -252,12 +290,12 @@ export const conversationalSchemas = {
         required: true,
         fields: [
           { name: 'name', label: 'Opportunity name', placeholder: 'Q2 renewal - Acme' },
-          { name: 'account_name', label: 'Account', placeholder: 'Acme Corp' }
+          { name: 'account_name', label: 'Account', placeholder: 'Acme Corp' },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.name),
-          error: 'Opportunity name is required.'
-        })
+          error: 'Opportunity name is required.',
+        }),
       },
       {
         id: 'opportunity-value',
@@ -273,27 +311,25 @@ export const conversationalSchemas = {
               { value: 'proposal', label: 'Proposal' },
               { value: 'negotiation', label: 'Negotiation' },
               { value: 'closed_won', label: 'Closed Won' },
-              { value: 'closed_lost', label: 'Closed Lost' }
-            ]
+              { value: 'closed_lost', label: 'Closed Lost' },
+            ],
           },
-          { name: 'amount', label: 'Amount (USD)', type: 'number', placeholder: '25000' }
-        ]
+          { name: 'amount', label: 'Amount (USD)', type: 'number', placeholder: '25000' },
+        ],
       },
       {
         id: 'opportunity-dates',
         prompt: 'When do you expect this to close?',
         fields: [
           { name: 'close_date', label: 'Close date', type: 'date' },
-          { name: 'probability', label: 'Probability %', type: 'number', placeholder: '60' }
-        ]
+          { name: 'probability', label: 'Probability %', type: 'number', placeholder: '60' },
+        ],
       },
       {
         id: 'opportunity-notes',
         prompt: 'Add next steps or notes for this deal.',
-        fields: [
-          { name: 'notes', label: 'Notes', type: 'textarea' }
-        ]
-      }
+        fields: [{ name: 'notes', label: 'Notes', type: 'textarea' }],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -304,9 +340,9 @@ export const conversationalSchemas = {
       amount: numberFromInput(answers.amount),
       close_date: normalizeText(answers.close_date),
       probability: numberFromInput(answers.probability),
-      notes: normalizeText(answers.notes)
+      notes: normalizeText(answers.notes),
     }),
-    previewFields: ['name', 'account_name', 'stage', 'amount', 'close_date']
+    previewFields: ['name', 'account_name', 'stage', 'amount', 'close_date'],
   },
   activity: {
     id: 'activity',
@@ -326,39 +362,37 @@ export const conversationalSchemas = {
               { value: 'call', label: 'Call' },
               { value: 'email', label: 'Email' },
               { value: 'meeting', label: 'Meeting' },
-              { value: 'task', label: 'Task' }
-            ]
+              { value: 'task', label: 'Task' },
+            ],
           },
-          { name: 'subject', label: 'Subject', placeholder: 'Follow-up with Delta Inc.' }
+          { name: 'subject', label: 'Subject', placeholder: 'Follow-up with Delta Inc.' },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.activity_type) && requiredField(answers.subject),
-          error: 'Activity type and subject are required.'
-        })
+          error: 'Activity type and subject are required.',
+        }),
       },
       {
         id: 'activity-association',
         prompt: 'Which lead/contact/account does this relate to?',
         fields: [
           { name: 'lead_name', label: 'Lead (optional)' },
-          { name: 'account_name', label: 'Account (optional)' }
-        ]
+          { name: 'account_name', label: 'Account (optional)' },
+        ],
       },
       {
         id: 'activity-timing',
         prompt: 'When is it due or when did it happen?',
         fields: [
           { name: 'due_date', label: 'Due date', type: 'date' },
-          { name: 'completed_at', label: 'Completed at', type: 'date' }
-        ]
+          { name: 'completed_at', label: 'Completed at', type: 'date' },
+        ],
       },
       {
         id: 'activity-notes',
         prompt: 'Add notes or outcomes.',
-        fields: [
-          { name: 'notes', label: 'Notes', type: 'textarea' }
-        ]
-      }
+        fields: [{ name: 'notes', label: 'Notes', type: 'textarea' }],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -369,34 +403,46 @@ export const conversationalSchemas = {
       account_name: normalizeText(answers.account_name),
       due_date: normalizeText(answers.due_date),
       completed_at: normalizeText(answers.completed_at),
-      notes: normalizeText(answers.notes)
+      notes: normalizeText(answers.notes),
     }),
-    previewFields: ['activity_type', 'subject', 'lead_name', 'account_name', 'due_date']
+    previewFields: ['activity_type', 'subject', 'lead_name', 'account_name', 'due_date'],
   },
   bizdevsource: {
     id: 'bizdevsource',
-    label: 'New BizDev Source',
+    label: 'New Potential Lead',
     entity: 'bizdevsources',
     steps: [
       {
         id: 'bizdev-company',
-        prompt: "What company did you find? This is the first step in the v3.0.0 workflow.",
+        prompt: 'What company did you find? This is the first step in the v3.0.0 workflow.',
         required: true,
         fields: [
-          { name: 'company_name', label: 'Company name', placeholder: 'e.g. Acme Construction LLC' },
-          { name: 'dba_name', label: 'DBA / Trade name (optional)', placeholder: 'e.g. Acme Builders' }
+          {
+            name: 'company_name',
+            label: 'Company name',
+            placeholder: 'e.g. Acme Construction LLC',
+          },
+          {
+            name: 'dba_name',
+            label: 'DBA / Trade name (optional)',
+            placeholder: 'e.g. Acme Builders',
+          },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.company_name),
-          error: 'Company name is required.'
-        })
+          error: 'Company name is required.',
+        }),
       },
       {
         id: 'bizdev-source',
         prompt: 'Where did this lead source come from?',
         required: true,
         fields: [
-          { name: 'source_name', label: 'Source name', placeholder: 'e.g. Construction Directory Q4 2025' },
+          {
+            name: 'source_name',
+            label: 'Source name',
+            placeholder: 'e.g. Construction Directory Q4 2025',
+          },
           {
             name: 'source_type',
             label: 'Source type',
@@ -408,14 +454,14 @@ export const conversationalSchemas = {
               { value: 'web_scrape', label: 'Web Scrape' },
               { value: 'purchased_list', label: 'Purchased List' },
               { value: 'manual', label: 'Manual Entry' },
-              { value: 'other', label: 'Other' }
-            ]
-          }
+              { value: 'other', label: 'Other' },
+            ],
+          },
         ],
         validate: (answers) => ({
           valid: requiredField(answers.source_name),
-          error: 'Source name is required.'
-        })
+          error: 'Source name is required.',
+        }),
       },
       {
         id: 'bizdev-contact',
@@ -424,8 +470,8 @@ export const conversationalSchemas = {
         fields: [
           { name: 'contact_person', label: 'Contact person', placeholder: 'e.g. John Smith' },
           { name: 'email', label: 'Email', type: 'email', placeholder: 'info@acme.com' },
-          { name: 'phone_number', label: 'Phone', type: 'tel', placeholder: '+1 (555) 123-4567' }
-        ]
+          { name: 'phone_number', label: 'Phone', type: 'tel', placeholder: '+1 (555) 123-4567' },
+        ],
       },
       {
         id: 'bizdev-details',
@@ -441,10 +487,10 @@ export const conversationalSchemas = {
             options: [
               { value: 'high', label: 'High' },
               { value: 'medium', label: 'Medium' },
-              { value: 'low', label: 'Low' }
-            ]
-          }
-        ]
+              { value: 'low', label: 'Low' },
+            ],
+          },
+        ],
       },
       {
         id: 'bizdev-address',
@@ -454,17 +500,22 @@ export const conversationalSchemas = {
           { name: 'address_line_1', label: 'Address', placeholder: '123 Main St' },
           { name: 'city', label: 'City', placeholder: 'Austin' },
           { name: 'state_province', label: 'State', placeholder: 'TX' },
-          { name: 'postal_code', label: 'Zip', placeholder: '78701' }
-        ]
+          { name: 'postal_code', label: 'Zip', placeholder: '78701' },
+        ],
       },
       {
         id: 'bizdev-notes',
         prompt: 'Any notes about this prospect?',
         required: false,
         fields: [
-          { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Found via industry directory. Large commercial projects.' }
-        ]
-      }
+          {
+            name: 'notes',
+            label: 'Notes',
+            type: 'textarea',
+            placeholder: 'Found via industry directory. Large commercial projects.',
+          },
+        ],
+      },
     ],
     buildPayload: (answers, { tenantId, userId }) => ({
       tenant_id: tenantId,
@@ -484,8 +535,8 @@ export const conversationalSchemas = {
       state_province: normalizeText(answers.state_province),
       postal_code: normalizeText(answers.postal_code),
       notes: normalizeText(answers.notes),
-      status: 'active'
+      status: 'active',
     }),
-    previewFields: ['company_name', 'source_name', 'contact_person', 'email', 'priority']
-  }
+    previewFields: ['company_name', 'source_name', 'contact_person', 'email', 'priority'],
+  },
 };

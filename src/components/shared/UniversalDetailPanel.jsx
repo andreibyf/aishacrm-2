@@ -600,7 +600,7 @@ export default function UniversalDetailPanel({
       case 'activity':
         return entity.subject;
       case 'bizdev':
-        return entity.name || entity.company_name || entity.contact_person || 'BizDev Source';
+        return entity.name || entity.company_name || entity.contact_person || 'Potential Lead';
       default:
         return 'Details';
     }

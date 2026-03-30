@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Users,
   TrendingUp,
@@ -17,11 +17,11 @@ import {
   Phone,
   Mail,
   FileText,
-  Star
-} from "lucide-react";
+  Star,
+} from 'lucide-react';
 
 export default function WorkflowGuide() {
-  const [activeRole, setActiveRole] = useState("employee");
+  const [activeRole, setActiveRole] = useState('employee');
 
   return (
     <div className="space-y-6">
@@ -172,8 +172,8 @@ export default function WorkflowGuide() {
               <Alert className="bg-blue-900/20 border-blue-700/50 text-blue-300">
                 <Lightbulb className="w-4 h-4" />
                 <AlertDescription>
-                  <strong>Success Tip:</strong> Aim for 50+ calls/day and convert 10-15% of new leads to qualified status. 
-                  Quality conversations beat quantity!
+                  <strong>Success Tip:</strong> Aim for 50+ calls/day and convert 10-15% of new
+                  leads to qualified status. Quality conversations beat quantity!
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -303,8 +303,9 @@ export default function WorkflowGuide() {
               <Alert className="bg-purple-900/20 border-purple-700/50 text-purple-300">
                 <Award className="w-4 h-4" />
                 <AlertDescription>
-                  <strong>Manager Best Practice:</strong> Use bulk actions to reassign leads, update stages, and manage large datasets efficiently. 
-                  Regularly coach your team using actual call/email data from the CRM.
+                  <strong>Manager Best Practice:</strong> Use bulk actions to reassign leads, update
+                  stages, and manage large datasets efficiently. Regularly coach your team using
+                  actual call/email data from the CRM.
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -346,18 +347,18 @@ export default function WorkflowGuide() {
             title="Solar Installation Company: From 20 to 100 Deals/Month"
             industry="Green Energy & Solar"
             challenge="Small team overwhelmed by manual lead follow-up. Losing qualified leads to competitors."
-            solution="Implemented AI calling for initial outreach + structured BizDev Sources workflow"
+            solution="Implemented AI calling for initial outreach + structured Potential Leads workflow"
             results={[
-              "300% increase in contacted leads (from 50/week to 200/week)",
-              "Lead-to-opportunity conversion improved from 8% to 22%",
-              "Sales cycle reduced from 45 days to 28 days",
-              "5x ROI within first quarter"
+              '300% increase in contacted leads (from 50/week to 200/week)',
+              'Lead-to-opportunity conversion improved from 8% to 22%',
+              'Sales cycle reduced from 45 days to 28 days',
+              '5x ROI within first quarter',
             ]}
             workflow={[
-              "Import BizDev Sources from trade shows and directories",
-              "AI calls all new sources within 48 hours",
-              "Qualified leads promoted to Accounts and Opportunities",
-              "Employees focus on closing deals, not cold calling"
+              'Import Potential Leads from trade shows and directories',
+              'AI calls all new sources within 48 hours',
+              'Qualified leads promoted to Accounts and Opportunities',
+              'Employees focus on closing deals, not cold calling',
             ]}
           />
 
@@ -367,16 +368,16 @@ export default function WorkflowGuide() {
             challenge="Losing track of large opportunities ($50K+). Poor handoff between sales and ops."
             solution="Implemented Opportunity stages with Activities tracking + Manager oversight"
             results={[
-              "Won 12 major contracts (avg $75K) in 6 months",
-              "No more missed follow-ups or forgotten quotes",
-              "Client satisfaction up 40% due to organized communication",
-              "Manager visibility into entire pipeline"
+              'Won 12 major contracts (avg $75K) in 6 months',
+              'No more missed follow-ups or forgotten quotes',
+              'Client satisfaction up 40% due to organized communication',
+              'Manager visibility into entire pipeline',
             ]}
             workflow={[
-              "Manager creates Opportunities from qualified BizDev sources",
-              "Each opportunity gets detailed Activities: site visit, quote, follow-ups",
-              "Weekly pipeline review with team using Kanban board",
-              "Close-won opportunities automatically create Account + initial follow-up activity"
+              'Manager creates Opportunities from qualified Potential Leads',
+              'Each opportunity gets detailed Activities: site visit, quote, follow-ups',
+              'Weekly pipeline review with team using Kanban board',
+              'Close-won opportunities automatically create Account + initial follow-up activity',
             ]}
           />
 
@@ -386,16 +387,16 @@ export default function WorkflowGuide() {
             challenge="Slow season (winter) = idle sales team. Need proactive outreach."
             solution="Launched AI Campaign targeting 500 past customers for spring maintenance"
             results={[
-              "45% response rate to AI calls",
-              "120 appointments booked automatically",
-              "$180K in pre-season revenue secured",
-              "Sales team focused on closing, not calling"
+              '45% response rate to AI calls',
+              '120 appointments booked automatically',
+              '$180K in pre-season revenue secured',
+              'Sales team focused on closing, not calling',
             ]}
             workflow={[
-              "Filter Contacts: customers with last service > 1 year ago",
+              'Filter Contacts: customers with last service > 1 year ago',
               "Create AI Campaign: 'Spring Maintenance Special'",
-              "AI calls contacts, qualifies interest, books appointments",
-              "Sales team follows up with quotes and closes deals"
+              'AI calls contacts, qualifies interest, books appointments',
+              'Sales team follows up with quotes and closes deals',
             ]}
           />
 
@@ -410,29 +411,32 @@ export default function WorkflowGuide() {
               <div className="flex gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-200">Automate the Grunt Work:</strong> Use AI for initial outreach and qualification. 
-                  Your team should focus on building relationships and closing deals.
+                  <strong className="text-slate-200">Automate the Grunt Work:</strong> Use AI for
+                  initial outreach and qualification. Your team should focus on building
+                  relationships and closing deals.
                 </div>
               </div>
               <div className="flex gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-200">Structured Workflow Wins:</strong> BizDev Sources → Leads → Contacts → Opportunities. 
-                  Follow this flow and you won&apos;t lose prospects.
+                  <strong className="text-slate-200">Structured Workflow Wins:</strong> Potential
+                  Leads → Leads → Contacts → Opportunities. Follow this flow and you won&apos;t lose
+                  prospects.
                 </div>
               </div>
               <div className="flex gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-200">Manager Oversight is Critical:</strong> Use &apos;All Leads&apos; view and bulk actions. 
-                  A good manager can 3x team performance with proper CRM usage.
+                  <strong className="text-slate-200">Manager Oversight is Critical:</strong> Use
+                  &apos;All Leads&apos; view and bulk actions. A good manager can 3x team
+                  performance with proper CRM usage.
                 </div>
               </div>
               <div className="flex gap-3">
                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-slate-200">Track Everything:</strong> Activities, notes, call recordings. 
-                  Data-driven decisions beat gut feelings.
+                  <strong className="text-slate-200">Track Everything:</strong> Activities, notes,
+                  call recordings. Data-driven decisions beat gut feelings.
                 </div>
               </div>
             </CardContent>

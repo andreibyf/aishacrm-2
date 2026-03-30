@@ -12,6 +12,7 @@ import { Employee } from '@/api/entities';
 import { useTenant } from './tenantContext';
 import { useUser } from './useUser';
 import { getBackendUrl } from '@/api/backendUrl';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 const EmployeeScopeContext = createContext(null);
 
@@ -92,15 +93,29 @@ export const EmployeeScopeProvider = ({ children }) => {
     setTeamsLoading(true);
     try {
       const BACKEND_URL = getBackendUrl();
+      // Build auth headers (Supabase JWT)
+      const authHeaders = { Accept: 'application/json' };
+      if (isSupabaseConfigured()) {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            authHeaders['Authorization'] = `Bearer ${session.access_token}`;
+          }
+        } catch {
+          /* continue without token */
+        }
+      }
       // Fetch teams + members and team settings (visibility mode) in parallel
       const [teamsRes, settingsRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/v2/leads/teams-with-members?tenant_id=${tenantId}`, {
           credentials: 'include',
-          headers: { Accept: 'application/json' },
+          headers: authHeaders,
         }),
         fetch(`${BACKEND_URL}/api/v2/teams/settings?tenant_id=${tenantId}`, {
           credentials: 'include',
-          headers: { Accept: 'application/json' },
+          headers: authHeaders,
         }).catch(() => null), // non-critical
       ]);
       if (teamsRes.ok) {

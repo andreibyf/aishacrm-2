@@ -123,9 +123,9 @@ const conversationalFormHandlers = {
   bizdevsource: {
     create: (payload) => BizDevSource.create(payload),
     success: (record) => {
-      const company = record?.company_name || 'BizDev Source';
+      const company = record?.company_name || 'Potential Lead';
       const priority = record?.priority ? ` (${record.priority} priority)` : '';
-      return `Created BizDev source: ${company}${priority} — ready for promotion to Lead`;
+      return `Created Potential Lead: ${company}${priority} — ready for promotion to Lead`;
     },
   },
   lead: {

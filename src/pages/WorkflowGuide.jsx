@@ -1,8 +1,8 @@
-import { useNavigate } from "react-router-dom";
-import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Database,
   TrendingUp,
@@ -16,47 +16,54 @@ import {
   ArrowLeft,
   Lightbulb,
   BookOpen,
-} from "lucide-react";
+} from 'lucide-react';
 
-const WorkflowStage = ({ icon: Icon, title, description, onClick, color = "blue", className = "" }) => {
+const WorkflowStage = ({
+  icon: Icon,
+  title,
+  description,
+  onClick,
+  color = 'blue',
+  className = '',
+}) => {
   // Map color prop to full Tailwind classes (JIT compiler needs complete class names)
   const colorClasses = {
     cyan: {
-      bg: "bg-cyan-600/20",
-      text: "text-cyan-500",
-      hoverBorder: "hover:border-cyan-500",
-      hoverShadow: "hover:shadow-cyan-500/20"
+      bg: 'bg-cyan-600/20',
+      text: 'text-cyan-500',
+      hoverBorder: 'hover:border-cyan-500',
+      hoverShadow: 'hover:shadow-cyan-500/20',
     },
     blue: {
-      bg: "bg-blue-600/20",
-      text: "text-blue-500",
-      hoverBorder: "hover:border-blue-500",
-      hoverShadow: "hover:shadow-blue-500/20"
+      bg: 'bg-blue-600/20',
+      text: 'text-blue-500',
+      hoverBorder: 'hover:border-blue-500',
+      hoverShadow: 'hover:shadow-blue-500/20',
     },
     purple: {
-      bg: "bg-purple-600/20",
-      text: "text-purple-500",
-      hoverBorder: "hover:border-purple-500",
-      hoverShadow: "hover:shadow-purple-500/20"
+      bg: 'bg-purple-600/20',
+      text: 'text-purple-500',
+      hoverBorder: 'hover:border-purple-500',
+      hoverShadow: 'hover:shadow-purple-500/20',
     },
     indigo: {
-      bg: "bg-indigo-600/20",
-      text: "text-indigo-500",
-      hoverBorder: "hover:border-indigo-500",
-      hoverShadow: "hover:shadow-indigo-500/20"
+      bg: 'bg-indigo-600/20',
+      text: 'text-indigo-500',
+      hoverBorder: 'hover:border-indigo-500',
+      hoverShadow: 'hover:shadow-indigo-500/20',
     },
     emerald: {
-      bg: "bg-emerald-600/20",
-      text: "text-emerald-500",
-      hoverBorder: "hover:border-emerald-500",
-      hoverShadow: "hover:shadow-emerald-500/20"
+      bg: 'bg-emerald-600/20',
+      text: 'text-emerald-500',
+      hoverBorder: 'hover:border-emerald-500',
+      hoverShadow: 'hover:shadow-emerald-500/20',
     },
     teal: {
-      bg: "bg-teal-600/20",
-      text: "text-teal-500",
-      hoverBorder: "hover:border-teal-500",
-      hoverShadow: "hover:shadow-teal-500/20"
-    }
+      bg: 'bg-teal-600/20',
+      text: 'text-teal-500',
+      hoverBorder: 'hover:border-teal-500',
+      hoverShadow: 'hover:shadow-teal-500/20',
+    },
   };
 
   const colors = colorClasses[color] || colorClasses.blue;
@@ -67,7 +74,9 @@ const WorkflowStage = ({ icon: Icon, title, description, onClick, color = "blue"
       onClick={onClick}
     >
       <CardContent className="p-6 text-center">
-        <div className={`inline-flex items-center justify-center w-16 h-16 rounded-lg ${colors.bg} mb-4`}>
+        <div
+          className={`inline-flex items-center justify-center w-16 h-16 rounded-lg ${colors.bg} mb-4`}
+        >
           <Icon className={`w-8 h-8 ${colors.text}`} />
         </div>
         <h3 className="text-xl font-bold text-slate-100 mb-2">{title}</h3>
@@ -77,8 +86,9 @@ const WorkflowStage = ({ icon: Icon, title, description, onClick, color = "blue"
   );
 };
 
-const WorkflowArrow = ({ direction = "down", className = "" }) => {
-  const ArrowIcon = direction === "down" ? ArrowDown : direction === "right" ? ArrowRight : ArrowLeft;
+const WorkflowArrow = ({ direction = 'down', className = '' }) => {
+  const ArrowIcon =
+    direction === 'down' ? ArrowDown : direction === 'right' ? ArrowRight : ArrowLeft;
   return (
     <div className={`flex items-center justify-center ${className}`}>
       <ArrowIcon className="w-8 h-8 text-slate-500 animate-pulse" />
@@ -86,23 +96,23 @@ const WorkflowArrow = ({ direction = "down", className = "" }) => {
   );
 };
 
-const DecisionDiamond = ({ title, onClick, color = "green" }) => {
+const DecisionDiamond = ({ title, onClick, color = 'green' }) => {
   // Map color prop to full Tailwind classes
   const colorClasses = {
     green: {
-      bg: "bg-green-600/20",
-      border: "border-green-500",
-      hoverBorder: "hover:border-green-400",
-      hoverShadow: "hover:shadow-green-500/30",
-      text: "text-green-500"
+      bg: 'bg-green-600/20',
+      border: 'border-green-500',
+      hoverBorder: 'hover:border-green-400',
+      hoverShadow: 'hover:shadow-green-500/30',
+      text: 'text-green-500',
     },
     yellow: {
-      bg: "bg-yellow-600/20",
-      border: "border-yellow-500",
-      hoverBorder: "hover:border-yellow-400",
-      hoverShadow: "hover:shadow-yellow-500/30",
-      text: "text-yellow-500"
-    }
+      bg: 'bg-yellow-600/20',
+      border: 'border-yellow-500',
+      hoverBorder: 'hover:border-yellow-400',
+      hoverShadow: 'hover:shadow-yellow-500/30',
+      text: 'text-yellow-500',
+    },
   };
 
   const colors = colorClasses[color] || colorClasses.green;
@@ -111,12 +121,12 @@ const DecisionDiamond = ({ title, onClick, color = "green" }) => {
     <div className="flex items-center justify-center">
       <div
         className={`relative w-32 h-32 ${colors.bg} border-2 ${colors.border} ${colors.hoverBorder} hover:shadow-lg ${colors.hoverShadow} transition-all duration-300 cursor-pointer`}
-        style={{ transform: "rotate(45deg)" }}
+        style={{ transform: 'rotate(45deg)' }}
         onClick={onClick}
       >
         <div
           className="absolute inset-0 flex items-center justify-center"
-          style={{ transform: "rotate(-45deg)" }}
+          style={{ transform: 'rotate(-45deg)' }}
         >
           <div className="text-center">
             <Trophy className={`w-8 h-8 ${colors.text} mx-auto mb-1`} />
@@ -134,48 +144,48 @@ export default function WorkflowGuide() {
   const stages = [
     {
       icon: Database,
-      title: "BizDev Sources",
-      description: "Import and manage potential business leads from external sources",
-      page: "BizDevSources",
-      color: "cyan",
+      title: 'Potential Leads',
+      description: 'Import and manage potential business leads from external sources',
+      page: 'BizDevSources',
+      color: 'cyan',
     },
     {
       icon: TrendingUp,
-      title: "Leads",
-      description: "Qualify and nurture prospects through the sales funnel",
-      page: "Leads",
-      color: "blue",
+      title: 'Leads',
+      description: 'Qualify and nurture prospects through the sales funnel',
+      page: 'Leads',
+      color: 'blue',
     },
     {
       icon: Target,
-      title: "Opportunities",
-      description: "Track active deals and move them through sales stages",
-      page: "Opportunities",
-      color: "purple",
+      title: 'Opportunities',
+      description: 'Track active deals and move them through sales stages',
+      page: 'Opportunities',
+      color: 'purple',
     },
     {
       icon: CheckSquare,
-      title: "Activities",
-      description: "Schedule and complete tasks, calls, meetings, and follow-ups",
-      page: "Activities",
-      color: "indigo",
+      title: 'Activities',
+      description: 'Schedule and complete tasks, calls, meetings, and follow-ups',
+      page: 'Activities',
+      color: 'indigo',
     },
   ];
 
   const finalStages = [
     {
       icon: Users,
-      title: "Contacts",
-      description: "Manage individual customer relationships and communication",
-      page: "Contacts",
-      color: "emerald",
+      title: 'Contacts',
+      description: 'Manage individual customer relationships and communication',
+      page: 'Contacts',
+      color: 'emerald',
     },
     {
       icon: Building2,
-      title: "Accounts",
-      description: "Track company-level relationships and organizational details",
-      page: "Accounts",
-      color: "teal",
+      title: 'Accounts',
+      description: 'Track company-level relationships and organizational details',
+      page: 'Accounts',
+      color: 'teal',
     },
   ];
 
@@ -189,8 +199,8 @@ export default function WorkflowGuide() {
           </div>
           <h1 className="text-4xl font-bold text-slate-100">CRM Workflow Guide</h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-            Follow this visual guide to understand how data flows through your CRM.
-            Click on any stage to navigate directly to that section.
+            Follow this visual guide to understand how data flows through your CRM. Click on any
+            stage to navigate directly to that section.
           </p>
         </div>
 
@@ -252,7 +262,7 @@ export default function WorkflowGuide() {
           <div className="flex flex-col items-center my-8">
             <DecisionDiamond
               title="Won"
-              onClick={() => navigate(createPageUrl("Opportunities") + "?filter=closed_won")}
+              onClick={() => navigate(createPageUrl('Opportunities') + '?filter=closed_won')}
               color="green"
             />
             <div className="mt-8 text-center">
@@ -292,11 +302,25 @@ export default function WorkflowGuide() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-slate-300 space-y-2 text-sm">
-              <p>• <strong>Sources:</strong> Import bulk data from directories, trade shows, or marketing campaigns</p>
-              <p>• <strong>Leads:</strong> Qualify prospects and track their journey through your sales funnel</p>
-              <p>• <strong>Opportunities:</strong> Convert qualified leads into active deals with revenue potential</p>
-              <p>• <strong>Activities:</strong> Schedule follow-ups, calls, and meetings to move deals forward</p>
-              <p>• <strong>Contacts & Accounts:</strong> Maintain relationships after deals are won</p>
+              <p>
+                • <strong>Sources:</strong> Import bulk data from directories, trade shows, or
+                marketing campaigns
+              </p>
+              <p>
+                • <strong>Leads:</strong> Qualify prospects and track their journey through your
+                sales funnel
+              </p>
+              <p>
+                • <strong>Opportunities:</strong> Convert qualified leads into active deals with
+                revenue potential
+              </p>
+              <p>
+                • <strong>Activities:</strong> Schedule follow-ups, calls, and meetings to move
+                deals forward
+              </p>
+              <p>
+                • <strong>Contacts & Accounts:</strong> Maintain relationships after deals are won
+              </p>
             </CardContent>
           </Card>
 
@@ -310,11 +334,17 @@ export default function WorkflowGuide() {
             <CardContent className="text-slate-300 space-y-3 text-sm">
               <div>
                 <Badge className="bg-purple-600 text-white mb-2">Manager Role</Badge>
-                <p className="text-slate-400">Full visibility across all stages. Focus on pipeline review, team performance, and strategic decisions.</p>
+                <p className="text-slate-400">
+                  Full visibility across all stages. Focus on pipeline review, team performance, and
+                  strategic decisions.
+                </p>
               </div>
               <div>
                 <Badge className="bg-blue-600 text-white mb-2">Employee Role</Badge>
-                <p className="text-slate-400">Focus on assigned leads and opportunities. Execute activities and update progress daily.</p>
+                <p className="text-slate-400">
+                  Focus on assigned leads and opportunities. Execute activities and update progress
+                  daily.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -323,7 +353,7 @@ export default function WorkflowGuide() {
         {/* CTA */}
         <div className="text-center mt-12">
           <Button
-            onClick={() => navigate(createPageUrl("Documentation"))}
+            onClick={() => navigate(createPageUrl('Documentation'))}
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
           >
             <BookOpen className="w-4 h-4 mr-2" />

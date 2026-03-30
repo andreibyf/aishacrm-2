@@ -54,8 +54,8 @@ const PLAYBOOK_SUGGESTIONS: Record<string, Array<{ label: string; command: strin
     { label: 'Overdue follow-ups', command: 'List overdue follow-up activities' }
   ],
   bizdev_sources: [
-    { label: 'Active sources', command: 'Show my active BizDev sources' },
-    { label: 'Source performance', command: 'Summarize lead conversion by BizDev source' }
+    { label: 'Active sources', command: 'Show my active Potential Leads' },
+    { label: 'Source performance', command: 'Summarize lead conversion by Potential Lead' }
   ],
   dashboard: [
     { label: 'Dashboard overview', command: 'Give me a dashboard summary' }

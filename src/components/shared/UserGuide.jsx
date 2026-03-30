@@ -15,6 +15,9 @@ import {
   Shield,
   Eye,
   EyeOff,
+  Briefcase,
+  Mic,
+  Calendar,
 } from 'lucide-react';
 
 export default function UserGuide() {
@@ -25,6 +28,7 @@ export default function UserGuide() {
     { id: 'roles', name: 'Roles & Permissions', icon: Shield },
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'contacts', name: 'Contacts', icon: Users },
+    { id: 'bizdev', name: 'Potential Leads', icon: Briefcase },
     { id: 'leads', name: 'Leads', icon: Target },
     { id: 'accounts', name: 'Accounts', icon: Building2 },
     { id: 'opportunities', name: 'Opportunities', icon: TrendingUp },
@@ -75,13 +79,27 @@ export default function UserGuide() {
 
               <h3 className="text-slate-100 text-lg font-semibold">What You Can Do</h3>
               <ul className="list-disc list-inside space-y-1">
-                <li>Track and nurture leads through your sales pipeline</li>
-                <li>Manage contact information and communication history</li>
+                <li>
+                  Capture raw prospects in <strong>Potential Leads</strong> and promote them to
+                  active Leads with one click
+                </li>
+                <li>Track and nurture leads through your qualification pipeline</li>
+                <li>
+                  Convert qualified leads into Contacts, Accounts, and Opportunities simultaneously
+                </li>
+                <li>Manage contact information and full communication history</li>
                 <li>Organize accounts (companies) and their associated contacts</li>
                 <li>Monitor sales opportunities and forecast revenue</li>
-                <li>Schedule and log activities (calls, meetings, tasks)</li>
+                <li>
+                  Schedule meetings via the booking widget — confirmations automatically create CRM
+                  activities
+                </li>
+                <li>
+                  Log activities (calls, meetings, tasks, emails) and keep a full interaction
+                  timeline
+                </li>
                 <li>Generate reports and insights with AI assistance</li>
-                <li>Collaborate with your team on deals and accounts</li>
+                <li>Collaborate with your team using role-based and team-based visibility</li>
               </ul>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">Navigation</h3>
@@ -286,6 +304,73 @@ export default function UserGuide() {
           </Card>
         </TabsContent>
 
+        {/* BizDev Sources */}
+        <TabsContent value="bizdev">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-slate-100 flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-cyan-400" />
+                Potential Leads
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="prose prose-invert prose-slate max-w-none space-y-4 text-slate-300">
+              <p>
+                Potential Leads are the <strong>top of your sales funnel</strong> — raw prospect
+                data from directories, trade shows, purchased lists, referrals, or web research. You
+                review them here and promote the worthwhile ones to active Leads.
+              </p>
+
+              <h3 className="text-slate-100 text-lg font-semibold">The v3.0 Sales Lifecycle</h3>
+              <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 font-mono text-sm text-center">
+                <span className="text-cyan-400">Potential Lead</span>
+                <span className="text-slate-500"> → promote → </span>
+                <span className="text-yellow-400">Lead</span>
+                <span className="text-slate-500"> → qualify → </span>
+                <span className="text-green-400">Lead (Qualified)</span>
+                <span className="text-slate-500"> → convert → </span>
+                <span className="text-purple-400">Contact + Account + Opportunity</span>
+              </div>
+
+              <h3 className="text-slate-100 text-lg font-semibold mt-4">Adding Potential Leads</h3>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Navigate to <strong>Potential Leads</strong> in the sidebar
+                </li>
+                <li>
+                  Click <strong>&quot;Add Source&quot;</strong>
+                </li>
+                <li>Fill in prospect details (name, company, email, phone, source channel)</li>
+                <li>
+                  Set a status: <em>Active</em>, <em>Pending Review</em>, or <em>Archived</em>
+                </li>
+                <li>
+                  Click <strong>&quot;Save&quot;</strong>
+                </li>
+              </ol>
+
+              <h3 className="text-slate-100 text-lg font-semibold mt-4">Promoting to a Lead</h3>
+              <p>When a Potential Lead looks promising enough to pursue actively:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Open the Potential Lead card</li>
+                <li>
+                  Click <strong>&quot;Promote to Lead&quot;</strong>
+                </li>
+                <li>The system creates a Lead with all available data pre-filled</li>
+                <li>The source card is linked to the new lead for tracking</li>
+              </ol>
+
+              <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 mt-4">
+                <p className="text-sm text-slate-400">
+                  <strong className="text-slate-200">Tip:</strong> You can bulk-promote multiple
+                  Potential Leads at once using the checkbox selection and{' '}
+                  <strong>Bulk Actions</strong> menu. The card footer shows the last-updated date so
+                  you can quickly spot stale records.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Contacts */}
         <TabsContent value="contacts">
           <Card className="bg-slate-800 border-slate-700">
@@ -370,23 +455,25 @@ export default function UserGuide() {
             </CardHeader>
             <CardContent className="prose prose-invert prose-slate max-w-none space-y-4 text-slate-300">
               <p>
-                Leads are potential customers who haven&apos;t been qualified yet. They move through
-                stages: New → Contacted → Qualified → Converted (or Lost).
+                Leads are prospects being actively qualified. They typically enter the system by
+                being promoted from a <strong>Potential Lead</strong>, or can be created manually.
+                Once qualified, a lead converts into a Contact, Account, and Opportunity
+                simultaneously.
               </p>
 
               <h3 className="text-slate-100 text-lg font-semibold">Lead Lifecycle</h3>
               <ol className="list-decimal list-inside space-y-1">
                 <li>
-                  <strong>New:</strong> Just entered your system
+                  <strong>New:</strong> Just promoted from Potential Leads or created manually
                 </li>
                 <li>
                   <strong>Contacted:</strong> You&apos;ve reached out (call, email, meeting)
                 </li>
                 <li>
-                  <strong>Qualified:</strong> They meet your buying criteria and are interested
+                  <strong>Qualified:</strong> They meet your buying criteria — ready to convert
                 </li>
                 <li>
-                  <strong>Converted:</strong> Turned into a Contact, Account, or Opportunity
+                  <strong>Converted:</strong> Became a Contact + Account + Opportunity
                 </li>
                 <li>
                   <strong>Lost:</strong> Not a fit or not interested
@@ -411,14 +498,20 @@ export default function UserGuide() {
                   Click <strong>&quot;Convert Lead&quot;</strong>
                 </li>
                 <li>
-                  Choose what to create:
+                  The system creates:
                   <ul className="list-disc list-inside ml-6 mt-1">
-                    <li>Contact (always created)</li>
-                    <li>Account (if they&apos;re from a company)</li>
-                    <li>Opportunity (if there&apos;s a potential deal)</li>
+                    <li>
+                      A <strong>Contact</strong> (always created)
+                    </li>
+                    <li>
+                      An <strong>Account</strong> (new or linked to an existing company record)
+                    </li>
+                    <li>
+                      An <strong>Opportunity</strong> (with value and expected close date)
+                    </li>
                   </ul>
                 </li>
-                <li>Review and confirm the conversion</li>
+                <li>Review the pre-filled details and confirm</li>
               </ol>
 
               <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 mt-4">
@@ -734,24 +827,53 @@ export default function UserGuide() {
                 Ai-SHA CRM includes several AI-powered features to help you work smarter and faster.
               </p>
 
-              <h3 className="text-slate-100 text-lg font-semibold">AI Assistant (Avatar)</h3>
-              <p>Click the AI avatar in the bottom-right corner to:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Ask questions about your CRM data</li>
-                <li>Get summaries of contacts, leads, or opportunities</li>
-                <li>Research companies or contacts using web search</li>
-                <li>Draft emails to prospects</li>
-                <li>Navigate the CRM with voice commands</li>
-              </ul>
+              <h3 className="text-slate-100 text-lg font-semibold">
+                AiSHA — AI Executive Assistant
+              </h3>
+              <p>Open the AI panel from the sidebar to interact with AiSHA in two modes:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 not-prose mt-2">
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
+                  <h4 className="text-slate-200 font-medium flex items-center gap-2 mb-2">
+                    <FileText className="w-4 h-4 text-blue-400" /> Chat Mode
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1 list-disc list-inside">
+                    <li>Ask questions about your CRM data</li>
+                    <li>Create or update records via natural language</li>
+                    <li>Research companies using web search</li>
+                    <li>Draft emails and messages</li>
+                    <li>Navigate to any CRM page</li>
+                  </ul>
+                </div>
+                <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
+                  <h4 className="text-slate-200 font-medium flex items-center gap-2 mb-2">
+                    <Mic className="w-4 h-4 text-green-400" /> Realtime Voice Mode
+                  </h4>
+                  <ul className="text-sm text-slate-400 space-y-1 list-disc list-inside">
+                    <li>Speak directly to AiSHA hands-free</li>
+                    <li>AiSHA responds with voice in real time</li>
+                    <li>Full tool access — same as chat mode</li>
+                    <li>Ideal for quick lookups while on a call</li>
+                  </ul>
+                </div>
+              </div>
 
-              <h3 className="text-slate-100 text-lg font-semibold mt-6">Lead Scoring</h3>
-              <p>The AI automatically scores leads (0-100) based on:</p>
+              <h3 className="text-slate-100 text-lg font-semibold mt-6">
+                Calendar Booking Integration
+              </h3>
+              <p>
+                When a prospect books a meeting through your scheduling link (powered by Cal.com),
+                AiSHA automatically:
+              </p>
               <ul className="list-disc list-inside space-y-1">
-                <li>Company size and industry</li>
-                <li>Engagement history (opens, clicks, replies)</li>
-                <li>Job title and decision-making authority</li>
-                <li>Lead source quality</li>
+                <li>
+                  Creates a <strong>Meeting</strong> activity in the CRM
+                </li>
+                <li>Links it to the matching Lead or Contact based on email</li>
+                <li>Records attendee details, time, and meeting notes</li>
               </ul>
+              <p className="text-sm text-slate-400 mt-1">
+                No manual logging needed — confirmed bookings appear automatically in Activities.
+              </p>
 
               <h3 className="text-slate-100 text-lg font-semibold mt-6">AI Email Composer</h3>
               <p>When creating an activity of type &quot;Email&quot;:</p>
