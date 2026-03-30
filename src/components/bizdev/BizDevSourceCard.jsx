@@ -17,6 +17,7 @@ import {
   Save,
   X,
   User,
+  Clock,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -564,7 +565,7 @@ export default function BizDevSourceCard({
         )}
 
         <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className={statusColorClass}>
               {source.status || 'Active'}
             </Badge>
@@ -573,8 +574,31 @@ export default function BizDevSourceCard({
               className={`flex items-center gap-1 text-xs ${assignedName ? 'text-slate-300' : 'text-slate-500 italic'}`}
             >
               <User className="w-3 h-3 text-slate-400" />
-              {assignedName || (source.assigned_to ? <span>Updating<span className="animate-ellipsis"></span></span> : 'Unassigned')}
+              {assignedName ||
+                (source.assigned_to ? (
+                  <span>
+                    Updating<span className="animate-ellipsis"></span>
+                  </span>
+                ) : (
+                  'Unassigned'
+                ))}
             </span>
+            {source.updated_at && (
+              <>
+                <span className="text-slate-600 mx-1">·</span>
+                <span
+                  className="flex items-center gap-1 text-xs text-slate-500"
+                  title={new Date(source.updated_at).toLocaleString()}
+                >
+                  <Clock className="w-3 h-3 text-slate-500" />
+                  {new Date(source.updated_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </span>
+              </>
+            )}
             {source.batch_id && (
               <>
                 <span className="text-slate-600 mx-1">·</span>
