@@ -732,7 +732,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             <SelectItem value="stripe">Stripe (Payments)</SelectItem>
             <SelectItem value="slack">Slack</SelectItem>
             <SelectItem value="google_calendar">Google Calendar</SelectItem>
-            <SelectItem value="calcom">Cal.com (Booking System)</SelectItem>
+            <SelectItem value="calcom">Booking Scheduler</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
@@ -1644,9 +1644,9 @@ function IntegrationForm({ integration, onSave, onCancel }) {
           <CardContent className="space-y-4 pt-4">
             <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
               <AlertDescription className="text-sm">
-                Connect your self-hosted Cal.com instance. The API Key and Webhook Secret are used
-                to authenticate booking events. The cal_link (e.g. <code>your-username/30min</code>)
-                is embedded in contact and lead panels.
+                Connect your self-hosted scheduling instance. The API Key and Webhook Secret are
+                used to authenticate booking events. The cal_link (e.g.{' '}
+                <code>your-username/30min</code>) is embedded in contact and lead panels.
               </AlertDescription>
             </Alert>
 
@@ -1665,7 +1665,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Create an API key in Cal.com → Settings → Security → API Keys.
+                Create an API key in your scheduling system → Settings → Security → API Keys.
               </p>
             </div>
 
@@ -1684,11 +1684,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Set in Cal.com → Settings → Webhooks → create webhook pointing to{' '}
-                <code className="text-xs">
-                  {getBackendUrl()}/api/webhooks/calcom
-                </code>
-                .
+                Set in your scheduling system → Settings → Webhooks → create webhook pointing to{' '}
+                <code className="text-xs">{getBackendUrl()}/api/webhooks/calcom</code>.
               </p>
             </div>
 
@@ -1703,8 +1700,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                The slug shown in your Cal.com booking URL, e.g.{' '}
-                <code className="text-xs">cal.com/username/30min</code>.
+                The slug shown in your booking URL, e.g.{' '}
+                <code className="text-xs">your-domain.com/username/30min</code>.
               </p>
             </div>
 
@@ -1720,7 +1717,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 placeholder="123"
               />
               <p className="text-xs text-muted-foreground">
-                Found in Cal.com → Event Types → edit event → URL bar.
+                Found in your scheduling system → Event Types → edit event → URL bar.
               </p>
             </div>
 
@@ -1741,7 +1738,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="calcom_base_url">Cal.com Base URL (optional)</Label>
+              <Label htmlFor="calcom_base_url">Scheduling System Base URL (optional)</Label>
               <Input
                 id="calcom_base_url"
                 value={formData.config.base_url || ''}
@@ -1750,7 +1747,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                Only needed for self-hosted instances. Defaults to https://cal.com.
+                Base URL of your self-hosted scheduling instance.
               </p>
             </div>
           </CardContent>

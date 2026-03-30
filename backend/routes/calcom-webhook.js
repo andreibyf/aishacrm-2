@@ -35,10 +35,16 @@ function verifyCalcomSignature(rawBody, signatureHeader, secret) {
   if (!secret) return false;
   if (!signatureHeader) return false;
 
-  const expected = `sha256=${crypto.createHmac('sha256', secret).update(rawBody).digest('hex')}`;
+  const computedHex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+  // Cal.com sends just the hex digest (no prefix). Normalise both sides so we
+  // accept either format: "<hex>" or "sha256=<hex>".
+  const normalise = (s) => (s.startsWith('sha256=') ? s.slice(7) : s);
+  const incoming = normalise(signatureHeader);
+  const expected = normalise(computedHex);
 
   try {
-    return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+    return crypto.timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
   } catch {
     return false;
   }
@@ -129,7 +135,7 @@ async function findActiveCredit(supabase, tenant_id, contact_id, lead_id) {
 // Helper: create an activity record for the booking
 // ---------------------------------------------------------------------------
 
-async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id, booking }) {
+async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id, booking, attendeeName, attendeeEmail }) {
   const { calcom_booking_id, calcom_event_type_id, scheduled_start, scheduled_end } = booking;
 
   const durationMinutes = Math.round((new Date(scheduled_end) - new Date(scheduled_start)) / 60000);
@@ -139,17 +145,22 @@ async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id,
     timeZone: 'UTC',
   });
 
+  // Activities table uses related_to/related_id pattern (not contact_id/lead_id direct columns)
+  const related_to = lead_id ? 'lead' : contact_id ? 'contact' : null;
+  const related_id = lead_id || contact_id || null;
+
   const { data, error } = await supabase
     .from('activities')
     .insert([
       {
         tenant_id,
-        contact_id,
-        lead_id,
+        related_to,
+        related_id,
+        ...(attendeeName ? { related_name: attendeeName } : {}),
+        ...(attendeeEmail ? { related_email: attendeeEmail } : {}),
         type: 'booking_scheduled',
         subject: `Booking Scheduled — ${startLabel}`,
         body: `Cal.com session booked for ${startLabel} (${durationMinutes} min)`,
-        activity_date: scheduled_start,
         due_date: scheduled_start?.split('T')[0],
         status: 'scheduled',
         metadata: {
@@ -164,7 +175,7 @@ async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id,
     .single();
 
   if (error) {
-    logger.warn('[CalcomWebhook] Could not create activity', { error: error.message });
+    logger.error('[CalcomWebhook] Could not create activity', { error: error.message, code: error.code, details: error.details, hint: error.hint });
     return null;
   }
   return data?.id || null;
@@ -175,8 +186,21 @@ async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id,
 // ---------------------------------------------------------------------------
 
 async function handleBookingCreated(supabase, tenant_id, payload) {
+  // Prefer CRM entity IDs embedded in the booking URL metadata — these are set by
+  // BookingWidget and cannot be changed by the attendee, unlike the email field.
+  // Fall back to email lookup for backwards compatibility (manual bookings, old links).
+  let contact_id = payload.metadata?.crm_contact_id || null;
+  let lead_id = payload.metadata?.crm_lead_id || null;
   const attendeeEmail = payload.attendees?.[0]?.email;
-  const { contact_id, lead_id } = await resolveEntityByEmail(supabase, tenant_id, attendeeEmail);
+
+  if (!contact_id && !lead_id) {
+    ({ contact_id, lead_id } = await resolveEntityByEmail(supabase, tenant_id, attendeeEmail));
+  } else {
+    logger.info('[CalcomWebhook] BOOKING_CREATED: resolved entity from metadata', {
+      contact_id,
+      lead_id,
+    });
+  }
 
   const credit = await findActiveCredit(supabase, tenant_id, contact_id, lead_id);
   if (!credit) {
@@ -213,6 +237,8 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
     contact_id,
     lead_id,
     booking: bookingData,
+    attendeeName: payload.attendees?.[0]?.name,
+    attendeeEmail,
   });
 
   // Record in booking_sessions

@@ -122,6 +122,16 @@ describe('Activities scheduled AI email route', () => {
         server.close((error) => (error ? reject(error) : resolve())),
       );
     }
+    // Close the Bull playbook queue opened transitively via activities.v2.js →
+    // scheduledAiEmailService → carePlaybookExecutor → carePlaybookQueue.
+    // Without this, open Redis connections keep the worker alive and can emit
+    // errors that corrupt the test runner's IPC pipe.
+    try {
+      const { playbookQueue } = await import('../../lib/care/carePlaybookQueue.js');
+      await playbookQueue.close();
+    } catch {
+      // ignore — queue may already be closed or never connected
+    }
   });
 
   it('POST /:id/generate-ai-email invokes the scheduled draft service', async () => {

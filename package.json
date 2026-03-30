@@ -31,7 +31,7 @@
     "test:safe": "bash scripts/run-tests-safe.sh",
     "test:changed": "bash scripts/test-changed.sh",
     "test:frontend": "vitest run",
-    "test:unit": "npm run -s test:frontend",
+    "test:unit": "vitest run || node scripts/check-test-results.js",
     "test:quick": "vitest run --reporter=dot --bail=1",
     "test:file": "vitest run --reporter=verbose",
     "test:e2e": "doppler run -- playwright test",

@@ -239,10 +239,10 @@ export default function CalendarSync({ tenantId }) {
         <CardContent className="pt-6">
           <div className="flex flex-col items-center gap-3 py-4 text-center">
             <CalendarX className="w-10 h-10 text-yellow-400" />
-            <p className="font-medium">Cal.com Integration Not Configured</p>
+            <p className="font-medium">Booking Integration Not Configured</p>
             <p className="text-sm text-muted-foreground max-w-sm">
-              Add your Cal.com API key in <strong>Settings → Tenant Integrations</strong> before
-              connecting calendars.
+              Configure your booking integration in <strong>Settings → Tenant Integrations</strong>{' '}
+              before connecting calendars.
             </p>
           </div>
         </CardContent>
@@ -257,7 +257,7 @@ export default function CalendarSync({ tenantId }) {
         <div>
           <h3 className="font-medium">Connected Calendars</h3>
           <p className="text-sm text-muted-foreground">
-            Calendars connected via Cal.com. Busy times are automatically blocked.
+            Connected calendars. Busy times are automatically blocked.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -391,8 +391,8 @@ export default function CalendarSync({ tenantId }) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-3">
-            OAuth authorization happens through Cal.com. Your credentials are stored only in Cal.com
-            — not in AiSHA CRM.
+            OAuth authorization is handled by the scheduling service. Your calendar credentials are
+            not stored in AiSHA CRM.
           </p>
         </CardContent>
       </Card>
@@ -400,14 +400,14 @@ export default function CalendarSync({ tenantId }) {
       {/* Cal.com deep link */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <ExternalLink className="w-4 h-4" />
-        <span>Manage advanced availability settings directly in</span>
+        <span>Manage advanced availability settings in your</span>
         <a
           href={calcomIntegration?.config?.base_url || 'https://app.cal.com'}
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-400 hover:text-blue-300 underline"
         >
-          Cal.com Dashboard
+          Scheduling Dashboard
         </a>
       </div>
 
@@ -418,7 +418,7 @@ export default function CalendarSync({ tenantId }) {
             <AlertDialogTitle>Disconnect Calendar?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove <strong>{removeTarget?.name || removeTarget?.email}</strong> from
-              your Cal.com availability. Existing bookings will not be affected.
+              your availability calendar. Existing bookings will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

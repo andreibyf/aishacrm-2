@@ -15,7 +15,7 @@ import { useTenant } from '../shared/tenantContext';
 import { Employee } from '@/api/entities';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
-import { Users, ExternalLink, Link2 } from 'lucide-react';
+import { Users, ExternalLink, Link2, CalendarCheck, Search } from 'lucide-react';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -64,9 +64,75 @@ export default function EmployeeForm({
     notes: employee?.notes || '',
     tags: employee?.tags || [],
     is_active: employee?.is_active !== false,
+    // Per-employee booking calendar fields (stored in employees.metadata)
+    calcom_cal_link: employee?.metadata?.calcom_cal_link || '',
+    calcom_user_id: employee?.metadata?.calcom_user_id || '',
+    calcom_event_type_id: employee?.metadata?.calcom_event_type_id || '',
   }));
 
   const [saving, setSaving] = useState(false);
+
+  // Cal.com lookup state
+  const [calcomLookup, setCalcomLookup] = useState({ loading: false, error: null, eventTypes: [] });
+
+  const handleCalcomLookup = async () => {
+    const username = formData.calcom_cal_link?.split('/')[0]?.trim();
+    if (!username) {
+      setCalcomLookup({
+        loading: false,
+        error: 'Enter a booking link first (e.g. username/30min)',
+        eventTypes: [],
+      });
+      return;
+    }
+    setCalcomLookup({ loading: true, error: null, eventTypes: [] });
+    try {
+      const params = new URLSearchParams({ username, tenant_id: tenantId });
+      const res = await fetch(`${BACKEND_URL}/api/calcom-sync/lookup-user?${params}`, {
+        credentials: 'include',
+      });
+      const payload = await res.json();
+      if (!res.ok || payload.status !== 'success') {
+        setCalcomLookup({
+          loading: false,
+          error: payload.message || 'Lookup failed',
+          eventTypes: [],
+        });
+        return;
+      }
+      const { user_id, event_types } = payload.data;
+      onChange('calcom_user_id', String(user_id));
+      // Auto-select first event type if none set
+      if (!formData.calcom_event_type_id && event_types.length > 0) {
+        onChange('calcom_event_type_id', String(event_types[0].id));
+      }
+      setCalcomLookup({ loading: false, error: null, eventTypes: event_types });
+      toast.success(`Found scheduler user ID ${user_id} with ${event_types.length} event type(s)`);
+    } catch (err) {
+      setCalcomLookup({
+        loading: false,
+        error: 'Could not reach scheduler database',
+        eventTypes: [],
+      });
+    }
+  };
+
+  // Auto-load event types when editing an employee that already has a cal link configured
+  useEffect(() => {
+    if (!employee?.metadata?.calcom_cal_link || !tenantId) return;
+    const username = employee.metadata.calcom_cal_link.split('/')[0].trim();
+    if (!username) return;
+    const params = new URLSearchParams({ username, tenant_id: tenantId });
+    fetch(`${BACKEND_URL}/api/calcom-sync/lookup-user?${params}`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((payload) => {
+        if (payload.status === 'success') {
+          setCalcomLookup((prev) => ({ ...prev, eventTypes: payload.data.event_types }));
+        }
+      })
+      .catch(() => {}); // non-fatal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Team assignments from linked user (read-only display)
   const [linkedUserInfo, setLinkedUserInfo] = useState(null);
@@ -214,6 +280,15 @@ export default function EmployeeForm({
         notes: formData.notes || null,
         tags: formData.tags,
         is_active: formData.is_active,
+        // Merge per-employee booking fields into metadata
+        metadata: {
+          ...(employee?.metadata || {}),
+          ...(formData.calcom_cal_link ? { calcom_cal_link: formData.calcom_cal_link } : {}),
+          ...(formData.calcom_user_id ? { calcom_user_id: Number(formData.calcom_user_id) } : {}),
+          ...(formData.calcom_event_type_id
+            ? { calcom_event_type_id: Number(formData.calcom_event_type_id) }
+            : {}),
+        },
         ...(tenantId ? { tenant_id: tenantId } : {}),
       };
 
@@ -486,6 +561,139 @@ export default function EmployeeForm({
           </CardContent>
         </Card>
       )}
+
+      {/* Booking Calendar */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <CalendarCheck className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-medium text-slate-100">Booking Calendar</h3>
+            </div>
+            <a
+              href={`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/auth/signup`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+            >
+              Create booking account
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          </div>
+          <p className="text-xs text-slate-400">
+            Set per-employee booking details. When an activity is assigned to this employee their
+            calendar is used for scheduling. Leave blank to use the tenant default.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <Label className="text-slate-200">Personal Booking Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={formData.calcom_cal_link}
+                  onChange={(e) => onChange('calcom_cal_link', e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-slate-100 font-mono flex-1"
+                  placeholder="username/30min"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCalcomLookup}
+                  disabled={calcomLookup.loading || !formData.calcom_cal_link}
+                  className="bg-slate-700 border-slate-600 text-slate-200 shrink-0"
+                  title="Look up scheduler user ID and event types"
+                >
+                  {calcomLookup.loading ? (
+                    <span className="text-xs">...</span>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-1" />
+                      Lookup
+                    </>
+                  )}
+                </Button>
+              </div>
+              {calcomLookup.error && (
+                <p className="text-xs text-red-400 mt-1">{calcomLookup.error}</p>
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                The slug from the employee&apos;s booking URL (e.g. <code>username/30min</code>).
+                Customers will see this employee&apos;s availability when booking.
+              </p>
+              {formData.calcom_cal_link && (
+                <a
+                  href={`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/${formData.calcom_cal_link}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 mt-1 font-mono"
+                >
+                  {`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/${formData.calcom_cal_link}`}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                </a>
+              )}
+            </div>
+            <div>
+              <Label className="text-slate-200">Scheduler User ID</Label>
+              <Input
+                type="number"
+                value={formData.calcom_user_id}
+                onChange={(e) => onChange('calcom_user_id', e.target.value)}
+                className="bg-slate-900 border-slate-700 text-slate-100 font-mono"
+                placeholder="Auto-filled by Lookup"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Numeric user ID in the scheduling system (used for blocker bookings). Auto-filled
+                when you click Lookup.
+              </p>
+            </div>
+            <div>
+              <Label className="text-slate-200">Event Type ID</Label>
+              {calcomLookup.eventTypes.length > 0 ? (
+                <Select
+                  value={String(formData.calcom_event_type_id)}
+                  onValueChange={(v) => onChange('calcom_event_type_id', v)}
+                >
+                  <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                    <SelectValue placeholder="Select event type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
+                    {calcomLookup.eventTypes.map((et) => (
+                      <SelectItem key={et.id} value={String(et.id)}>
+                        {et.title} ({et.length} min)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type="number"
+                  value={formData.calcom_event_type_id}
+                  onChange={(e) => onChange('calcom_event_type_id', e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-slate-100 font-mono"
+                  placeholder="Auto-filled by Lookup"
+                />
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Event type used for blocking the employee&apos;s calendar when a CRM activity is
+                created. Auto-filled when you click Lookup.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Form Actions */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-700">

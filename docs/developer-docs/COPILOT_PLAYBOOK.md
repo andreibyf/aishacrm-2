@@ -104,7 +104,11 @@ cd braid-mcp-node-server && docker compose up -d && cd ..
 
 # Agent Office (if missing)
 cd addons/agent-office && docker compose -f docker-compose.agent-office.yml up -d && cd ../..
-```
+# Cal.com scheduling (MUST use doppler run --)
+# Cal.com uses a pre-built image with no Doppler CLI inside. docker-compose substitutes
+# ${CALCOM_NEXTAUTH_SECRET} and ${CALCOM_ENCRYPTION_KEY} from the host shell at startup time.
+# Plain 'docker compose up' leaves these blank and Cal.com crashes on boot.
+doppler run -- docker compose --profile scheduling up -d```
 
 ---
 

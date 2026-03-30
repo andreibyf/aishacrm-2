@@ -2,7 +2,6 @@ import UniversalDetailPanel from '../shared/UniversalDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Building2, UserCheck, CalendarCheck } from 'lucide-react';
 import AssignmentHistory from './AssignmentHistory';
-import SessionCreditsPanel from '../scheduling/SessionCreditsPanel';
 import BookingWidget from '../scheduling/BookingWidget';
 
 export default function LeadDetailPanel({
@@ -77,20 +76,13 @@ export default function LeadDetailPanel({
           title: 'Session Booking',
           icon: <CalendarCheck className="w-4 h-4" />,
           content: (
-            <>
-              <SessionCreditsPanel
-                entityId={lead.id}
-                entityType="lead"
-                email={lead.email}
-                tenantId={lead.tenant_id || user?.tenant_id}
-              />
-              <BookingWidget
-                contactName={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
-                contactEmail={lead.email}
-                leadId={lead.id}
-                tenantId={lead.tenant_id || user?.tenant_id}
-              />
-            </>
+            <BookingWidget
+              contactName={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
+              contactEmail={lead.email}
+              leadId={lead.id}
+              tenantId={lead.tenant_id || user?.tenant_id}
+              assignedTo={lead.assigned_to}
+            />
           ),
         },
       ]}

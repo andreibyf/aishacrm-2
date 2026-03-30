@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import UniversalDetailPanel from '../shared/UniversalDetailPanel';
-import SessionCreditsPanel from '../scheduling/SessionCreditsPanel';
 import BookingWidget from '../scheduling/BookingWidget';
 import { Star, Phone, Mail, CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -218,20 +217,13 @@ export default function ContactDetailPanel({
             title: 'Session Booking',
             icon: <CalendarCheck className="w-4 h-4" />,
             content: (
-              <>
-                <SessionCreditsPanel
-                  entityId={contact.id}
-                  entityType="contact"
-                  email={contact.email}
-                  tenantId={contact.tenant_id || user?.tenant_id}
-                />
-                <BookingWidget
-                  contactName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
-                  contactEmail={contact.email}
-                  contactId={contact.id}
-                  tenantId={contact.tenant_id || user?.tenant_id}
-                />
-              </>
+              <BookingWidget
+                contactName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+                contactEmail={contact.email}
+                contactId={contact.id}
+                tenantId={contact.tenant_id || user?.tenant_id}
+                assignedTo={contact.assigned_to}
+              />
             ),
           },
         ]}
