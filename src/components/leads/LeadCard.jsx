@@ -111,7 +111,6 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
                 <DropdownMenuItem 
                   onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }} 
                   className="text-red-400 hover:bg-slate-700 focus:text-red-400"
-                  disabled={isConverted}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete
@@ -240,7 +239,6 @@ export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDe
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete(lead.id); }}
             className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-            disabled={isConverted}
           >
             <Trash2 className="w-4 h-4" />
           </Button>

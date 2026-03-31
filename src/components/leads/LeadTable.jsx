@@ -300,8 +300,7 @@ export default function LeadTable({
                                 e.stopPropagation();
                                 handleDelete(lead.id);
                               }}
-                              className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                              disabled={isConverted}
+                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
