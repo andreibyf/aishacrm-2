@@ -23,6 +23,13 @@ const EMAIL_DRAFT_PATTERNS = [
   /\bcompose\b.*\bemail\b/i,
   /\bfollow-?up email\b/i,
   /\breply email\b/i,
+  /\bsend\b.*\bemail\b/i,
+  /\bcreate\b.*\bemail\b/i,
+  /\bgenerate\b.*\bemail\b/i,
+  /\bemail\b.*\bproposal\b/i,
+  /\bproposal\b.*\bemail\b/i,
+  /\bemail\b.*\boutreach\b/i,
+  /\boutreach\b.*\bemail\b/i,
 ];
 
 const isEmailDraftIntent = (value = '') =>
@@ -326,14 +333,6 @@ export default function AishaEntityChatModal({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={openOffice}
-                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Watch in Office
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setShowTemplatePicker(true)}
                       className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-300 transition-colors border border-slate-600 hover:border-blue-500 px-2.5 py-1 rounded-full"
                     >
@@ -358,20 +357,12 @@ export default function AishaEntityChatModal({
             )
           ) : (
             <div className="space-y-4">
-              {/* Status + Watch in Office */}
-              <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+              {/* Status */}
+              <div className="flex items-center p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <div className="flex items-center gap-3">
                   {getStatusIcon(activeStatus)}
                   <span className="font-medium text-lg">{getStatusText(activeStatus)}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={openOffice}
-                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 border border-blue-800 hover:border-blue-600 bg-blue-950/40 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Watch in Office
-                </button>
               </div>
 
               {/* Result Display */}

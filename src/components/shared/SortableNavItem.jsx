@@ -66,8 +66,8 @@ export function SortableNavItem({ item, isActive, createPageUrl, onNavClick, isD
           data-testid={`nav-${item.href.toLowerCase()}`}
           className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-md transition-all duration-150 text-sm ${
             isActive
-              ? 'font-semibold bg-white/[0.07] border-l-[3px]'
-              : 'font-medium text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+              ? 'font-semibold bg-slate-200 dark:bg-white/[0.07] border-l-[3px]'
+              : 'font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.04] hover:text-slate-800 dark:hover:text-slate-200'
           }`}
           onClick={handleClick}
           style={
@@ -75,7 +75,6 @@ export function SortableNavItem({ item, isActive, createPageUrl, onNavClick, isD
               ? {
                   borderLeftColor: 'var(--primary-color)',
                   paddingLeft: 'calc(0.75rem - 3px)',
-                  color: '#f1f5f9',
                 }
               : {}
           }

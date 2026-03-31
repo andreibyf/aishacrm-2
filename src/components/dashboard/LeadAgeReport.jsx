@@ -15,25 +15,40 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useEmployeeScope } from '@/components/shared/EmployeeScopeContext';
 
 const AGE_BUCKETS = [
-  { label: '0-7 days', min: 0, max: 7, color: 'bg-green-900/30 text-green-400 border-green-700' },
+  {
+    label: '0-7 days',
+    min: 0,
+    max: 7,
+    color:
+      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-400 dark:border-green-700',
+  },
   {
     label: '8-14 days',
     min: 8,
     max: 14,
-    color: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
+    color:
+      'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-400 dark:border-yellow-700',
   },
   {
     label: '15-21 days',
     min: 15,
     max: 21,
-    color: 'bg-orange-900/30 text-orange-400 border-orange-700',
+    color:
+      'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-400 dark:border-orange-700',
   },
-  { label: '22-30 days', min: 22, max: 30, color: 'bg-red-900/30 text-red-400 border-red-700' },
+  {
+    label: '22-30 days',
+    min: 22,
+    max: 30,
+    color:
+      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-400 dark:border-red-700',
+  },
   {
     label: '30+ days',
     min: 31,
     max: Infinity,
-    color: 'bg-purple-900/30 text-purple-400 border-purple-700',
+    color:
+      'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-400 dark:border-purple-700',
   },
 ];
 
@@ -296,7 +311,9 @@ function LeadAgeReport(props) {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="text-2xl font-bold text-slate-200">{bucket.count}</span>
+                      <span className="text-2xl font-bold text-slate-800 dark:text-slate-200">
+                        {bucket.count}
+                      </span>
                       {bucket.count > 0 && bucket.min >= 15 && (
                         <AlertTriangle className="w-5 h-5 text-orange-400" />
                       )}

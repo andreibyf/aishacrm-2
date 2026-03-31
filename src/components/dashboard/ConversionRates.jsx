@@ -1,43 +1,39 @@
-import React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, Target, Percent } from "lucide-react";
-import { useEntityLabel } from "@/components/shared/entityLabelsHooks";
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowRight, Target, Percent } from 'lucide-react';
+import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 
 /**
  * ConversionRates Widget
  * Shows conversion funnel metrics using the formula:
  * conversion_rate = promoted / (active + promoted)
- * 
+ *
  * Uses brand colors aligned with AiSHA CRM logo (blue/cyan theme)
  * Uses pre-fetched stats from dashboard bundle - no extra API calls.
  */
 export default function ConversionRates({ stats = {} }) {
   const { singular: leadLabel, plural: leadsLabel } = useEntityLabel('leads');
-  const { singular: opportunityLabel, plural: opportunitiesLabel } = useEntityLabel('opportunities');
+  const { singular: opportunityLabel, plural: opportunitiesLabel } =
+    useEntityLabel('opportunities');
   // Calculate conversion rates using the correct formula:
   // conversion_rate = promoted / (active + promoted)
   const rates = React.useMemo(() => {
     const totalLeads = stats.totalLeads || 0;
     const openLeads = stats.openLeads || 0;
-    
+
     const totalOpportunities = stats.totalOpportunities || 0;
     const openOpportunities = stats.openOpportunities || 0;
     const wonOpportunities = stats.wonOpportunities || 0;
-    
+
     // Lead to Opportunity rate
-    const leadToOppRate = totalLeads > 0 
-      ? Math.round((totalOpportunities / totalLeads) * 100) 
-      : 0;
-    
+    const leadToOppRate = totalLeads > 0 ? Math.round((totalOpportunities / totalLeads) * 100) : 0;
+
     // Opportunity Win Rate
-    const oppWinRate = totalOpportunities > 0 
-      ? Math.round((wonOpportunities / totalOpportunities) * 100) 
-      : 0;
-    
+    const oppWinRate =
+      totalOpportunities > 0 ? Math.round((wonOpportunities / totalOpportunities) * 100) : 0;
+
     // Lead to Won: overall conversion
-    const leadToWonRate = totalLeads > 0 
-      ? Math.round((wonOpportunities / totalLeads) * 100) 
-      : 0;
+    const leadToWonRate = totalLeads > 0 ? Math.round((wonOpportunities / totalLeads) * 100) : 0;
 
     return {
       leadToOppRate,
@@ -61,9 +57,9 @@ export default function ConversionRates({ stats = {} }) {
       numerator: rates.totalOpportunities,
       denominator: rates.totalLeads,
       // Light blue (first step)
-      textColor: "text-blue-400",
-      bgColor: "bg-blue-500/20",
-      barColor: "bg-blue-500",
+      textColor: 'text-blue-600 dark:text-blue-400',
+      bgColor: 'bg-blue-100 dark:bg-blue-500/20',
+      barColor: 'bg-blue-500',
     },
     {
       label: `${opportunityLabel} → Won`,
@@ -72,35 +68,35 @@ export default function ConversionRates({ stats = {} }) {
       numerator: rates.wonOpportunities,
       denominator: rates.totalOpportunities,
       // Cyan (middle step)
-      textColor: "text-cyan-400",
-      bgColor: "bg-cyan-500/20",
-      barColor: "bg-cyan-500",
+      textColor: 'text-cyan-600 dark:text-cyan-400',
+      bgColor: 'bg-cyan-100 dark:bg-cyan-500/20',
+      barColor: 'bg-cyan-500',
     },
     {
       label: `${leadLabel} → Won`,
-      description: "Overall sales efficiency",
+      description: 'Overall sales efficiency',
       rate: rates.leadToWonRate,
       numerator: rates.wonOpportunities,
       denominator: rates.totalLeads,
       // Teal accent (final/highlight step) - brand primary gradient endpoint
-      textColor: "text-teal-400",
-      bgColor: "bg-teal-500/20",
-      barColor: "bg-gradient-to-r from-blue-500 to-cyan-400",
+      textColor: 'text-teal-600 dark:text-teal-400',
+      bgColor: 'bg-teal-100 dark:bg-teal-500/20',
+      barColor: 'bg-gradient-to-r from-blue-500 to-cyan-400',
       isHighlight: true,
     },
   ];
 
   const getRateOpacity = (rate) => {
-    if (rate >= 25) return "opacity-100";
-    if (rate >= 10) return "opacity-90";
-    if (rate > 0) return "opacity-75";
-    return "opacity-50";
+    if (rate >= 25) return 'opacity-100';
+    if (rate >= 10) return 'opacity-90';
+    if (rate > 0) return 'opacity-75';
+    return 'opacity-50';
   };
 
   return (
-    <Card className="bg-slate-800 border-slate-700 h-full flex flex-col">
+    <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-full flex flex-col">
       <CardHeader className="pb-3">
-        <CardTitle className="text-slate-100 flex items-center gap-2 text-lg">
+        <CardTitle className="text-slate-800 dark:text-slate-100 flex items-center gap-2 text-lg">
           <Percent className="w-5 h-5 text-cyan-400" />
           Conversion Rates
         </CardTitle>
@@ -112,13 +108,13 @@ export default function ConversionRates({ stats = {} }) {
             className={`p-3 rounded-lg transition-all ${
               step.isHighlight
                 ? 'bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-cyan-500/30'
-                : 'bg-slate-700/30 hover:bg-slate-700/50'
+                : 'bg-slate-100 dark:bg-slate-700/30 hover:bg-slate-200 dark:hover:bg-slate-700/50'
             }`}
           >
             {/* Header row */}
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-200">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                   {step.label}
                 </span>
               </div>
@@ -129,39 +125,41 @@ export default function ConversionRates({ stats = {} }) {
                 <span className={`text-sm ${step.textColor}`}>%</span>
               </div>
             </div>
-            
+
             {/* Description */}
-            <p className="text-xs text-slate-500 mb-2">{step.description}</p>
-            
+            <p className="text-xs text-slate-500 dark:text-slate-500 mb-2">{step.description}</p>
+
             {/* Ratio display */}
             <div className="flex items-center gap-2 text-sm mb-2">
-              <span className={`px-2.5 py-0.5 rounded font-semibold ${step.bgColor} ${step.textColor} border border-current/20`}>
+              <span
+                className={`px-2.5 py-0.5 rounded font-semibold ${step.bgColor} ${step.textColor} border border-current/20`}
+              >
                 {step.numerator.toLocaleString()}
               </span>
               <ArrowRight className="w-3 h-3 text-slate-500" />
-              <span className="text-slate-400">
+              <span className="text-slate-500 dark:text-slate-400">
                 of {step.denominator.toLocaleString()}
               </span>
             </div>
-            
+
             {/* Progress bar */}
-            <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-              <div 
+            <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
                 className={`h-full rounded-full transition-all duration-700 ease-out ${step.barColor}`}
                 style={{ width: `${Math.min(step.rate, 100)}%` }}
               />
             </div>
           </div>
         ))}
-        
+
         {/* Summary footer with brand gradient */}
-        <div className="pt-3 border-t border-slate-700/50 flex items-center justify-between text-xs">
+        <div className="pt-3 border-t border-slate-200 dark:border-slate-700/50 flex items-center justify-between text-xs">
           <span className="text-slate-500 flex items-center gap-1.5">
             <Target className="w-3.5 h-3.5 text-blue-400" />
             Pipeline Status
           </span>
-          <span className="text-slate-300 font-medium">
-            <span className="text-blue-400">{rates.openOpportunities}</span> active • 
+          <span className="text-slate-600 dark:text-slate-300 font-medium">
+            <span className="text-blue-400">{rates.openOpportunities}</span> active •
             <span className="text-cyan-400 ml-1">{rates.wonOpportunities}</span> won
           </span>
         </div>

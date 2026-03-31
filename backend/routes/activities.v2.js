@@ -2,8 +2,16 @@ import express from 'express';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { pushActivityToCalcom, removeActivityFromCalcom } from '../lib/calcomSyncService.js';
-import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../lib/googleCalendarService.js';
-import { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent } from '../lib/outlookCalendarService.js';
+import {
+  createGoogleEvent,
+  updateGoogleEvent,
+  deleteGoogleEvent,
+} from '../lib/googleCalendarService.js';
+import {
+  createOutlookEvent,
+  updateOutlookEvent,
+  deleteOutlookEvent,
+} from '../lib/outlookCalendarService.js';
 import { buildActivityAiContext } from '../lib/aiContextEnricher.js';
 import { generateScheduledAiEmailDraft as defaultGenerateScheduledAiEmailDraft } from '../services/scheduledAiEmailService.js';
 import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/teamVisibility.js';
@@ -13,6 +21,21 @@ import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Build a PostgREST OR filter string for ilike searches that safely handles
+ * special characters (commas, em dashes, parentheses, colons, etc.) by
+ * double-quoting each value per the PostgREST spec.
+ *
+ * @param {string} searchTerm - raw search string from user input
+ * @param {string[]} columns - column names to search across
+ * @returns {string} PostgREST OR filter string
+ */
+function buildIlikeOrFilter(searchTerm, columns) {
+  const escaped = searchTerm.replace(/"/g, '""'); // escape embedded double-quotes
+  const pattern = `%${escaped}%`;
+  return columns.map((col) => `${col}.ilike."${pattern}"`).join(',');
+}
 
 /**
  * Look up the name and email for a related entity (lead, contact, account, opportunity, bizdev_source)
@@ -27,7 +50,10 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
   // B2B CRM: Different entities have different columns
   const entityConfig = {
     lead: { table: 'leads', select: 'company, first_name, last_name, email' },
-    contact: { table: 'contacts', select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)' },
+    contact: {
+      table: 'contacts',
+      select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)',
+    },
     account: { table: 'accounts', select: 'name, email, phone' },
     opportunity: { table: 'opportunities', select: 'name' },
     bizdev_source: {
@@ -412,12 +438,8 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
       const searchQuery = req.query.q;
       if (searchQuery && searchQuery.trim()) {
         const searchTerm = searchQuery.trim();
-        const likePattern = `%${searchTerm}%`;
-        logger.debug('[Activities V2] Applying text search:', { searchTerm, likePattern });
-        // Search across subject, body (description), and related_name with case-insensitive ILIKE
-        q = q.or(
-          `subject.ilike.${likePattern},body.ilike.${likePattern},related_name.ilike.${likePattern}`,
-        );
+        logger.debug('[Activities V2] Applying text search:', { searchTerm });
+        q = q.or(buildIlikeOrFilter(searchTerm, ['subject', 'body', 'related_name']));
       }
 
       // Handle is_test_data filter
@@ -543,7 +565,7 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
                     if (field === 'description') {
                       dbField = 'body';
                     }
-                    orConditions.push(`${dbField}.ilike.${likePattern}`);
+                    orConditions.push(`${dbField}.ilike."${likePattern}"`);
                   }
                 }
               }
@@ -948,22 +970,18 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
       // Apply text search using PostgreSQL ILIKE
       if (q && q.trim()) {
         const searchTerm = q.trim();
-        const likePattern = `%${searchTerm}%`;
 
         // Build OR condition for specified fields (only valid activity columns)
-        const searchConditions = fields
-          .filter((f) => ['subject', 'body', 'related_name'].includes(f))
-          .map((f) => `${f}.ilike.${likePattern}`)
-          .join(',');
-
-        if (searchConditions) {
+        const validFields = fields.filter((f) => ['subject', 'body', 'related_name'].includes(f));
+        if (validFields.length > 0) {
+          const searchConditions = buildIlikeOrFilter(searchTerm, validFields);
           query = query.or(searchConditions);
+          logger.debug('[Activities V2 Search] Text search:', {
+            searchTerm,
+            fields,
+            searchConditions,
+          });
         }
-        logger.debug('[Activities V2 Search] Text search:', {
-          searchTerm,
-          fields,
-          searchConditions,
-        });
       }
 
       // Apply filters

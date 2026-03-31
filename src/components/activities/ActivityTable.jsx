@@ -166,7 +166,7 @@ export default function ActivityTable({
                             setIsFormOpen(true);
                           }}
                           aria-label="Edit"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                          className="h-8 w-8 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -185,7 +185,7 @@ export default function ActivityTable({
                             handleViewDetails(activity);
                           }}
                           aria-label="View"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                          className="h-8 w-8 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -204,7 +204,7 @@ export default function ActivityTable({
                             handleDelete(activity.id);
                           }}
                           aria-label="Delete"
-                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                          className="h-8 w-8 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/20"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
