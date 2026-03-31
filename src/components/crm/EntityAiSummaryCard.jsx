@@ -50,16 +50,6 @@ export default function EntityAiSummaryCard({
             >
               Task AiSHA
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBackOfficeClick}
-              className="bg-white dark:bg-indigo-900 border-indigo-200 dark:border-indigo-700 hover:bg-indigo-100 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-200 text-xs h-8"
-              title="Open AiSHA Office Viz"
-            >
-              <ExternalLink className="w-4 h-4 mr-1" />
-              Visit Office
-            </Button>
           </div>
         </div>
         <div className="space-y-4">
