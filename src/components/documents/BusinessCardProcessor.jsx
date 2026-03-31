@@ -1,5 +1,12 @@
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, UploadCloud, AlertCircle, CheckCircle, CreditCard, X } from 'lucide-react'; // Changed Contact to CreditCard, added X
@@ -22,12 +29,13 @@ const contactSchema = {
     city: { type: 'string' },
     state: { type: 'string' },
     zip: { type: 'string' },
-    country: { type: 'string' }
+    country: { type: 'string' },
   },
-  required: ['first_name', 'last_name']
+  required: ['first_name', 'last_name'],
 };
 
-export default function BusinessCardProcessor({ user, onCancel, onProcessingChange }) { // Added onCancel, onProcessingChange
+export default function BusinessCardProcessor({ user, onCancel, onProcessingChange }) {
+  // Added onCancel, onProcessingChange
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
@@ -52,15 +60,15 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
       setError('Please select a file first.');
       return;
     }
-    
+
     if (!user) {
-      setError("User not loaded. Cannot process.");
+      setError('User not loaded. Cannot process.');
       return;
     }
 
     const tenantId = user.role === 'superadmin' ? selectedTenantId : user.tenant_id;
     if (!tenantId) {
-      setError("Cannot determine tenant. Please ensure a tenant is selected or assigned.");
+      setError('Cannot determine tenant. Please ensure a tenant is selected or assigned.');
       return;
     }
 
@@ -70,28 +78,31 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
 
     try {
       const { file_url } = await UploadFile({ file });
-      
+
       const extractionResult = await ExtractDataFromUploadedFile({
         file_url,
         json_schema: contactSchema,
       });
 
-      if (extractionResult.status === 'success' && extractionResult.output) {
-        const extractedData = { 
-            ...extractionResult.output,
-            tenant_id: tenantId,
-            assigned_to: user.email,
-            processed_by_ai_doc: true,
-            ai_doc_source_type: 'business_card'
-        };
-        const newContact = await ContactEntity.create(extractedData);
-        setResult({
-          message: 'Successfully created contact!',
-          contact: newContact
-        });
-      } else {
-        throw new Error(extractionResult.details || 'Failed to extract data from the business card.');
+      if (!extractionResult || extractionResult.status !== 'success' || !extractionResult.output) {
+        throw new Error(
+          extractionResult?.error ||
+            extractionResult?.details ||
+            'Failed to extract data from the business card.',
+        );
       }
+      const extractedData = {
+        ...extractionResult.output,
+        tenant_id: tenantId,
+        assigned_to: user.email,
+        processed_by_ai_doc: true,
+        ai_doc_source_type: 'business_card',
+      };
+      const newContact = await ContactEntity.create(extractedData);
+      setResult({
+        message: 'Successfully created contact!',
+        contact: newContact,
+      });
     } catch (e) {
       setError(e.message || 'An unknown error occurred during processing.');
     } finally {
@@ -108,7 +119,11 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
             Business Card Scanner
           </span>
           {onCancel && (
-            <Button variant="ghost" onClick={onCancel} className="text-slate-400 hover:text-slate-200">
+            <Button
+              variant="ghost"
+              onClick={onCancel}
+              className="text-slate-400 hover:text-slate-200"
+            >
               <X className="w-5 h-5" />
             </Button>
           )}
@@ -117,9 +132,13 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
           Upload a business card image and extract contact information automatically.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-6"> {/* Added p-6 padding */}
+      <CardContent className="p-6">
+        {' '}
+        {/* Added p-6 padding */}
         <div className="space-y-2">
-          <label htmlFor="business-card-file" className="text-sm font-medium text-slate-200">Business Card Image</label>
+          <label htmlFor="business-card-file" className="text-sm font-medium text-slate-200">
+            Business Card Image
+          </label>
           <Input
             id="business-card-file"
             type="file"
@@ -129,36 +148,53 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
             className="bg-slate-700 border-slate-600 text-slate-200 file:bg-slate-600 file:text-slate-200 file:border-slate-500"
           />
         </div>
-
         {error && (
           <div className="flex items-center gap-2 p-3 bg-red-900/30 border border-red-700/50 rounded-lg">
             <AlertCircle className="w-5 h-5 text-red-400" />
             <p className="text-sm text-red-300">{error}</p>
           </div>
         )}
-
         {result && (
           <div className="flex items-start gap-3 p-3 bg-green-900/30 border border-green-700/50 rounded-lg">
             <CheckCircle className="w-5 h-5 text-green-400 mt-1" />
             <div>
               <p className="font-semibold text-green-300">{result.message}</p>
               <div className="text-sm text-slate-300 mt-1">
-                <p><strong>Name:</strong> {result.contact.first_name} {result.contact.last_name}</p>
-                <p><strong>Company:</strong> {result.contact.company}</p>
-                <p><strong>Email:</strong> {result.contact.email}</p>
-                <p><strong>Phone:</strong> {result.contact.phone}</p>
+                <p>
+                  <strong>Name:</strong> {result.contact.first_name} {result.contact.last_name}
+                </p>
+                <p>
+                  <strong>Company:</strong> {result.contact.company}
+                </p>
+                <p>
+                  <strong>Email:</strong> {result.contact.email}
+                </p>
+                <p>
+                  <strong>Phone:</strong> {result.contact.phone}
+                </p>
               </div>
             </div>
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex justify-end gap-2"> {/* Added flex utilities for button alignment */}
+      <CardFooter className="flex justify-end gap-2">
+        {' '}
+        {/* Added flex utilities for button alignment */}
         {onCancel && (
-          <Button variant="ghost" onClick={onCancel} disabled={isProcessing} className="text-slate-400 hover:text-slate-200">
+          <Button
+            variant="ghost"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="text-slate-400 hover:text-slate-200"
+          >
             Cancel
           </Button>
         )}
-        <Button onClick={handleProcess} disabled={isProcessing || !file} className="bg-blue-600 hover:bg-blue-700">
+        <Button
+          onClick={handleProcess}
+          disabled={isProcessing || !file}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
           {isProcessing ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

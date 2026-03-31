@@ -1,5 +1,5 @@
-import { isLocalDevMode } from "./mockData";
-import { getBackendUrl } from "./backendUrl";
+import { isLocalDevMode } from './mockData';
+import { getBackendUrl } from './backendUrl';
 
 // Create mock integration functions for local dev mode
 const createMockIntegration = (name) => () => {
@@ -9,7 +9,7 @@ const createMockIntegration = (name) => () => {
     );
     return Promise.resolve({
       success: false,
-      message: "Integration not available in local dev mode",
+      message: 'Integration not available in local dev mode',
     });
   }
   return null;
@@ -29,8 +29,8 @@ export const UploadFile = async ({ file, tenant_id }) => {
   let tenantId = tenant_id;
   if (!tenantId) {
     try {
-      const urlTenant = new URL(window.location.href).searchParams.get("tenant");
-      const storedTenant = localStorage.getItem("selected_tenant_id");
+      const urlTenant = new URL(window.location.href).searchParams.get('tenant');
+      const storedTenant = localStorage.getItem('selected_tenant_id');
       tenantId = urlTenant || storedTenant || null;
     } catch (err) {
       // ignore access errors in non-browser contexts
@@ -38,7 +38,7 @@ export const UploadFile = async ({ file, tenant_id }) => {
     }
   }
 
-  console.log("[UploadFile] Starting upload:", {
+  console.log('[UploadFile] Starting upload:', {
     fileName: file?.name,
     fileSize: file?.size,
     fileType: file?.type,
@@ -48,41 +48,41 @@ export const UploadFile = async ({ file, tenant_id }) => {
 
   try {
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append('file', file);
 
     // Build headers object - always pass an object, never undefined
     const headers = {};
     if (tenantId) {
-      headers["x-tenant-id"] = tenantId;
+      headers['x-tenant-id'] = tenantId;
     }
 
-    console.log("[UploadFile] Sending request to:", `${backendUrl}/api/storage/upload`);
+    console.log('[UploadFile] Sending request to:', `${backendUrl}/api/storage/upload`);
 
     const response = await fetch(`${backendUrl}/api/storage/upload`, {
-      method: "POST",
+      method: 'POST',
       credentials: 'include', // Include cookies for CORS
       // Don't set Content-Type for FormData; browser will set it with boundary
       headers,
       body: formData,
     });
 
-    console.log("[UploadFile] Response status:", response.status);
+    console.log('[UploadFile] Response status:', response.status);
 
     if (!response.ok) {
-      let errorMessage = "Upload failed";
+      let errorMessage = 'Upload failed';
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
-        console.error("[UploadFile] Error response:", errorData);
+        console.error('[UploadFile] Error response:', errorData);
       } catch (jsonErr) {
-        console.error("[UploadFile] Failed to parse error response:", jsonErr);
+        console.error('[UploadFile] Failed to parse error response:', jsonErr);
         errorMessage = `Upload failed with status ${response.status}`;
       }
       throw new Error(errorMessage);
     }
 
     const result = await response.json();
-    console.log("[UploadFile] Upload successful:", {
+    console.log('[UploadFile] Upload successful:', {
       file_url: result.data?.file_url,
       filename: result.data?.filename,
     });
@@ -93,8 +93,8 @@ export const UploadFile = async ({ file, tenant_id }) => {
       success: true,
     };
   } catch (error) {
-    console.error("[UploadFile] Error:", error);
-    console.error("[UploadFile] Error details:", {
+    console.error('[UploadFile] Error:', error);
+    console.error('[UploadFile] Error details:', {
       message: error.message,
       name: error.name,
       stack: error.stack,
@@ -114,16 +114,16 @@ export const CreateFileSignedUrl = async ({ file_uri }) => {
 
   try {
     const response = await fetch(`${backendUrl}/api/storage/signed-url`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ file_uri }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.message || "Failed to get signed URL");
+      throw new Error(errorData.message || 'Failed to get signed URL');
     }
 
     const result = await response.json();
@@ -133,20 +133,18 @@ export const CreateFileSignedUrl = async ({ file_uri }) => {
       success: true,
     };
   } catch (error) {
-    console.error("[CreateFileSignedUrl] Error:", error);
+    console.error('[CreateFileSignedUrl] Error:', error);
     throw error;
   }
 };
 
 // Mock Core integration object
 const mockCore = {
-  InvokeLLM: createMockIntegration("InvokeLLM"),
-  SendEmail: createMockIntegration("SendEmail"),
-  GenerateImage: createMockIntegration("GenerateImage"),
-  ExtractDataFromUploadedFile: createMockIntegration(
-    "ExtractDataFromUploadedFile",
-  ),
-  UploadPrivateFile: createMockIntegration("UploadPrivateFile"),
+  InvokeLLM: createMockIntegration('InvokeLLM'),
+  SendEmail: createMockIntegration('SendEmail'),
+  GenerateImage: createMockIntegration('GenerateImage'),
+  ExtractDataFromUploadedFile: createMockIntegration('ExtractDataFromUploadedFile'),
+  UploadPrivateFile: createMockIntegration('UploadPrivateFile'),
 };
 
 // Export mock Core integration - all functionality moved to backend
@@ -155,5 +153,29 @@ export const Core = mockCore;
 export const InvokeLLM = Core.InvokeLLM;
 export const SendEmail = Core.SendEmail;
 export const GenerateImage = Core.GenerateImage;
-export const ExtractDataFromUploadedFile = Core.ExtractDataFromUploadedFile;
-export const UploadPrivateFile = Core.UploadPrivateFile;
+/**
+ * ExtractDataFromUploadedFile - Extract structured data from an uploaded file using vision AI
+ * Calls the backend /api/documents/extract endpoint (gpt-4o vision)
+ * @param {Object} params
+ * @param {string} params.file_url - URL of the uploaded file
+ * @param {Object} [params.json_schema] - JSON schema describing fields to extract
+ */
+export const ExtractDataFromUploadedFile = async ({ file_url, json_schema } = {}) => {
+  const backendUrl = getBackendUrl();
+  try {
+    const response = await fetch(`${backendUrl}/api/documents/extract`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_url, json_schema }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { status: 'error', error: data.message || 'Extraction failed' };
+    }
+    return data; // { status: 'success', output: {...} }
+  } catch (error) {
+    console.error('[ExtractDataFromUploadedFile] Error:', error);
+    return { status: 'error', error: error.message };
+  }
+};
