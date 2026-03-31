@@ -6,13 +6,7 @@ import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
 import PhoneDisplay from '../shared/PhoneDisplay';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
-const statusBadgeColors = {
-  active: 'bg-green-900/20 text-green-300 border-green-700',
-  prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
-  customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
-  inactive: 'bg-slate-900/20 text-slate-300 border-slate-700',
-  default: 'bg-slate-900/20 text-slate-300 border-slate-700',
-};
+import { contactStatusColors as statusBadgeColors } from '@/utils/statusColors';
 
 /**
  * ContactTable - Table view for contacts with selection and actions

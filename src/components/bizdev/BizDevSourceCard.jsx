@@ -22,6 +22,7 @@ import {
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { BizDevSource, Employee } from '@/api/entities';
+import { bizdevStatusColors, licenseStatusColors, getStatusColor } from '@/utils/statusColors';
 
 export default function BizDevSourceCard({
   source,
@@ -136,37 +137,11 @@ export default function BizDevSourceCard({
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'bg-green-900/30 text-green-400 border-green-700';
-      case 'promoted':
-        return 'bg-blue-900/30 text-blue-400 border-blue-700';
-      case 'archived':
-        return 'bg-slate-700 text-slate-400 border-slate-600';
-      default:
-        return 'bg-slate-700 text-slate-300 border-slate-600';
-    }
-  };
+  const getStatusColorClass = (status) => getStatusColor(bizdevStatusColors, status);
 
-  const getLicenseStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'bg-green-900/30 text-green-400 border-green-700';
-      case 'suspended':
-      case 'revoked':
-        return 'bg-red-900/30 text-red-400 border-red-700';
-      case 'expired':
-        return 'bg-yellow-900/30 text-yellow-400 border-yellow-700';
-      case 'unknown':
-      case 'not required':
-        return 'bg-slate-700 text-slate-400 border-slate-600';
-      default:
-        return 'bg-slate-700 text-slate-300 border-slate-600';
-    }
-  };
+  const getLicenseStatusColor = (status) => getStatusColor(licenseStatusColors, status);
 
-  const statusColorClass = getStatusColor(source.status || 'Active');
+  const statusColorClass = getStatusColorClass(source.status || 'Active');
 
   const handleCardClick = (e) => {
     // Don't open detail panel if clicking checkbox, button, or link

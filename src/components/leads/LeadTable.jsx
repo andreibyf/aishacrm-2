@@ -6,14 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Edit, Eye, Globe, Trash2, UserCheck } from 'lucide-react';
 import AssignedToDisplay from '@/components/shared/AssignedToDisplay';
 
-const statusColors = {
-  new: 'bg-blue-900/20 text-blue-300 border-blue-700',
-  contacted: 'bg-indigo-900/20 text-indigo-300 border-indigo-700',
-  qualified: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
-  unqualified: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
-  converted: 'bg-green-900/20 text-green-300 border-green-700',
-  lost: 'bg-red-900/20 text-red-300 border-red-700',
-};
+import { leadStatusColors as statusColors } from '@/utils/statusColors';
 
 /**
  * LeadTable - Table view for leads with selection and actions

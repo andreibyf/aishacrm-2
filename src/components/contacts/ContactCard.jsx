@@ -7,13 +7,7 @@ import PhoneDisplay from "../shared/PhoneDisplay";
 import StatusHelper from "../shared/StatusHelper";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// Matching the stat card colors - semi-transparent backgrounds
-const statusColors = {
-  active: 'bg-green-900/20 text-green-300 border-green-700',
-  prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
-  customer: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
-  inactive: 'bg-slate-900/20 text-slate-300 border-slate-700'
-};
+import { contactStatusColors as statusColors } from '@/utils/statusColors';
 
 export default function ContactCard({ contact, accountId, accountName, assignedUserName, onEdit, onDelete, onViewDetails, onViewAccount, onClick, isSelected, onSelect, user }) {
   return (

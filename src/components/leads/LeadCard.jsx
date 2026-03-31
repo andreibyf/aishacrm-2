@@ -9,15 +9,7 @@ import PhoneDisplay from "../shared/PhoneDisplay";
 import StatusHelper from "../shared/StatusHelper";
 // Minted link deprecated for globe/Profile; use internal view instead
 
-// Matching the stat card colors - semi-transparent backgrounds
-const statusColors = {
-  new: 'bg-blue-900/20 text-blue-300 border-blue-700',
-  contacted: 'bg-indigo-900/20 text-indigo-300 border-indigo-700',
-  qualified: 'bg-emerald-900/20 text-emerald-300 border-emerald-700',
-  unqualified: 'bg-yellow-900/20 text-yellow-300 border-yellow-700',
-  converted: 'bg-green-900/20 text-green-300 border-green-700',
-  lost: 'bg-red-900/20 text-red-300 border-red-700'
-};
+import { leadStatusColors as statusColors } from '@/utils/statusColors';
 
 export default function LeadCard({ lead, accountName, onEdit, onDelete, onViewDetails, onClick, isSelected, onSelect, onConvert, user }) {
   const isConverted = lead.status === 'converted';
