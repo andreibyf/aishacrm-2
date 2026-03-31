@@ -538,19 +538,25 @@ jobs:
             run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms redpanda telemetry-sidecar office-viz
             # Cal.com scheduling stack — update if already running, skip if not yet started
             # Data is safe: calcom_db_data volume is never removed by this workflow
-            # Inject CALCOM_DB_PASSWORD for calcom-db (plain postgres — no Doppler CLI, reads from .env)
+            # Inject Cal.com secrets — calcom/calcom-db are plain images with no Doppler CLI; they read from .env
             if command -v doppler &>/dev/null && [ -n "$DOPPLER_TOKEN" ]; then
-              CALCOM_DB_PW=$(DOPPLER_TOKEN=$DOPPLER_TOKEN doppler secrets get CALCOM_DB_PASSWORD --plain --project aishacrm --config prd_prd 2>/dev/null || echo "")
-              if [ -n "$CALCOM_DB_PW" ]; then
-                if grep -q "^CALCOM_DB_PASSWORD=" .env 2>/dev/null; then
-                  sed -i "s|^CALCOM_DB_PASSWORD=.*|CALCOM_DB_PASSWORD=$CALCOM_DB_PW|" .env
+              inject_secret() {
+                local KEY=$1
+                local VAL=$(DOPPLER_TOKEN=$DOPPLER_TOKEN doppler secrets get "$KEY" --plain --project aishacrm --config prd_prd 2>/dev/null || echo "")
+                if [ -n "$VAL" ]; then
+                  if grep -q "^${KEY}=" .env 2>/dev/null; then
+                    sed -i "s|^${KEY}=.*|${KEY}=$VAL|" .env
+                  else
+                    echo "${KEY}=$VAL" >> .env
+                  fi
+                  phase "✓ ${KEY} injected"
                 else
-                  echo "CALCOM_DB_PASSWORD=$CALCOM_DB_PW" >> .env
+                  phase "WARNING: ${KEY} not found in Doppler"
                 fi
-                phase "✓ CALCOM_DB_PASSWORD injected for calcom-db postgres container"
-              else
-                phase "WARNING: CALCOM_DB_PASSWORD not found in Doppler — calcom-db may fail to start"
-              fi
+              }
+              inject_secret CALCOM_DB_PASSWORD
+              inject_secret CALCOM_NEXTAUTH_SECRET
+              inject_secret CALCOM_ENCRYPTION_KEY
             fi
             phase "Updating Cal.com scheduling stack (if running)"
             # Explicitly name only scheduling services to avoid --force-recreate touching main services
