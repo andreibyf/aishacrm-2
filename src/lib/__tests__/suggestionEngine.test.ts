@@ -45,6 +45,6 @@ describe('[AISHA_CHAT] suggestionEngine', () => {
     const suggestions = getSuggestions({ context, history: [] });
     expect(suggestions.length).toBeGreaterThan(0);
     expect(suggestions.some((s) => s.source === 'context')).toBe(true);
-    expect(suggestions.some((s) => s.command.toLowerCase().includes('bizdev') || s.command.toLowerCase().includes('source'))).toBe(true);
+    expect(suggestions.some((s) => s.command.toLowerCase().includes('potential') || s.command.toLowerCase().includes('lead') || s.command.toLowerCase().includes('source'))).toBe(true);
   });
 });

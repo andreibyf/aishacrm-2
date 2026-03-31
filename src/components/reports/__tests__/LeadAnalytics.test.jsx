@@ -47,7 +47,9 @@ describe('[REPORTS] LeadAnalytics', () => {
     });
 
     // Should show lead counts
-    expect(screen.getByText('2')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('2')).toBeInTheDocument();
+    });
     expect(screen.getByText('Conversion Rate')).toBeInTheDocument();
   });
 
