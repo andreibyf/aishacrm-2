@@ -845,12 +845,14 @@ export default function BizDevSourcesPage() {
         matchesAge
       );
     });
+    const activeCount   = base.filter((s) => s.status?.toLowerCase() === 'active').length;
+    const promotedCount = base.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase())).length;
+    const archivedCount = base.filter((s) => s.status?.toLowerCase() === 'archived').length;
     return {
-      total: base.length,
-      active: base.filter((s) => s.status?.toLowerCase() === 'active').length,
-      promoted: base.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase()))
-        .length,
-      archived: base.filter((s) => s.status?.toLowerCase() === 'archived').length,
+      total: activeCount + promotedCount + archivedCount,
+      active: activeCount,
+      promoted: promotedCount,
+      archived: archivedCount,
     };
   }, [
     sources,
