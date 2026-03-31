@@ -553,7 +553,8 @@ jobs:
               fi
             fi
             phase "Updating Cal.com scheduling stack (if running)"
-            docker compose -f docker-compose.prod.yml --profile scheduling up -d --force-recreate 2>/dev/null || true
+            # Explicitly name only scheduling services to avoid --force-recreate touching main services
+            docker compose -f docker-compose.prod.yml --profile scheduling up -d --force-recreate calcom-db calcom 2>/dev/null || true
             phase "Waiting for aisha-comms to become healthy"
             run_timed 4m sh -c '
               for i in $(seq 1 36); do
