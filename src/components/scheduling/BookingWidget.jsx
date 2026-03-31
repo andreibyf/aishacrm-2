@@ -1,33 +1,39 @@
 /**
  * BookingWidget.jsx
- * Embeds the Cal.com booking widget into contact/lead detail views.
+ * Shows booking history and embeds the Cal.com scheduling widget for a contact/lead.
  *
  * Props:
- *   contactName  — Prefill name
- *   contactEmail — Prefill email
- *   contactId    — CRM contact UUID (passed as metadata to Cal.com)
- *   leadId       — CRM lead UUID (passed as metadata to Cal.com)
- *   tenantId     — CRM tenant UUID; used to fetch Cal.com integration config
- *   creditsRemaining — optional override (falls back to self-fetched summary)
- *   onBuyCredits — callback when "Buy Package" is clicked
- *
- * Rendered when:
- *   - Cal.com integration is configured for this tenant (calLink resolves)
- *   - creditsRemaining > 0 OR allowNoCredits is true
+ *   contactName  — Pre-fill name on Cal.com booking form
+ *   contactEmail — Pre-fill email on Cal.com booking form (locks the attendee identity)
+ *   contactId    — CRM contact UUID
+ *   leadId       — CRM lead UUID
+ *   tenantId     — CRM tenant UUID
+ *   assignedTo   — Employee UUID; resolves that employee's personal booking link
  */
 
 import { useEffect, useState } from 'react';
-import Cal, { getCalApi } from '@calcom/embed-react';
-import { Button } from '@/components/ui/button';
-import { CalendarCheck, ShoppingCart, AlertCircle, Loader2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { CalendarCheck, Loader2, Copy, Check, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getBackendUrl } from '@/api/backendUrl';
+import { formatDate } from '@/utils/dateFormatting';
+
+const BACKEND_URL = getBackendUrl();
+
+const STATUS_COLORS = {
+  confirmed: 'default',
+  pending: 'secondary',
+  cancelled: 'destructive',
+  completed: 'outline',
+  no_show: 'destructive',
+};
 
 async function apiFetch(path, options = {}) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  return fetch(path, {
+  return fetch(`${BACKEND_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -38,21 +44,21 @@ async function apiFetch(path, options = {}) {
 }
 
 export default function BookingWidget({
-  contactName,
-  contactEmail,
   contactId,
   leadId,
   tenantId,
-  creditsRemaining: creditsRemainingProp,
-  onBuyCredits,
+  assignedTo, // employee UUID (lead.assigned_to / contact.assigned_to)
+  contactEmail, // pre-fill attendee email on Cal.com form
+  contactName,  // pre-fill attendee name on Cal.com form
 }) {
   const [calLink, setCalLink] = useState(null);
-  const [creditsRemaining, setCreditsRemaining] = useState(creditsRemainingProp ?? 0);
-  const [calReady, setCalReady] = useState(false);
-  const [calError, setCalError] = useState(false);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [shortLink, setShortLink] = useState(null);
 
-  // Fetch Cal.com integration config + credits summary for this entity
+  const calOrigin = import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002';
+
   useEffect(() => {
     if (!tenantId) {
       setLoading(false);
@@ -68,26 +74,65 @@ export default function BookingWidget({
             ? `lead_id=${leadId}`
             : null;
 
-        const [integRes, creditsRes] = await Promise.all([
-          apiFetch(`/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom`),
+        const requests = [
+          apiFetch(`/api/calcom-sync/resolve-link?tenant_id=${tenantId}`),
           entityParam
-            ? apiFetch(`/api/session-credits?tenant_id=${tenantId}&${entityParam}`)
+            ? apiFetch(`/api/session-credits/bookings?tenant_id=${tenantId}&${entityParam}`)
             : Promise.resolve(null),
-        ]);
+          // assignedTo is an employee UUID — fetch directly by ID
+          assignedTo
+            ? apiFetch(`/api/employees/${assignedTo}?tenant_id=${tenantId}`)
+            : Promise.resolve(null),
+        ];
 
-        const integJson = await integRes.json();
-        const integration = integJson.data?.[0] || null;
-        const link = integration?.config?.cal_link || null;
+        const [linkRes, bookingsRes, employeeRes] = await Promise.all(requests);
 
-        if (!cancelled) {
-          setCalLink(link);
-          if (creditsRes !== null) {
-            const creditsJson = await creditsRes.json();
-            setCreditsRemaining(creditsJson.summary?.total_remaining ?? 0);
+        const linkJson = await linkRes.json();
+        let link = linkRes.ok && linkJson.status === 'success' ? linkJson.data.cal_link : null;
+
+        // Prefer the assigned employee's personal booking link
+        if (employeeRes && employeeRes.ok) {
+          const empJson = await employeeRes.json();
+          const emp = empJson?.data?.employee || null;
+          const empLink = emp?.metadata?.calcom_cal_link || emp?.calcom_cal_link || null;
+          if (empLink) link = empLink;
+        }
+
+        if (cancelled) return;
+        setCalLink(link);
+        if (bookingsRes) {
+          const bookingsJson = await bookingsRes.json();
+          setBookings(bookingsJson.data || []);
+        }
+
+        // Generate a short booking link if we have a link and entity context
+        if (link) {
+          const params = new URLSearchParams();
+          if (contactEmail) params.set('email', contactEmail);
+          if (contactName) params.set('name', contactName);
+          if (contactId) params.set('metadata[crm_contact_id]', contactId);
+          if (leadId) params.set('metadata[crm_lead_id]', leadId);
+          if (tenantId) params.set('metadata[crm_tenant_id]', tenantId);
+          const calOriginBase = import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002';
+          const fullUrl = `${calOriginBase}/${link}${params.toString() ? '?' + params.toString() : ''}`;
+
+          try {
+            const slRes = await apiFetch('/api/scheduling/shortlink', {
+              method: 'POST',
+              body: JSON.stringify({ url: fullUrl }),
+            });
+            if (slRes.ok) {
+              const slJson = await slRes.json();
+              if (slJson.token) {
+                setShortLink(`${BACKEND_URL}/book/${slJson.token}`);
+              }
+            }
+          } catch {
+            // Short link generation is best-effort; fall back to full link
           }
         }
       } catch {
-        // leave defaults (null calLink, 0 credits)
+        // leave defaults
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -97,24 +142,15 @@ export default function BookingWidget({
     return () => {
       cancelled = true;
     };
-  }, [tenantId, contactId, leadId]);
+  }, [tenantId, contactId, leadId, assignedTo]);
 
-  useEffect(() => {
+  const handleCopyLink = () => {
     if (!calLink) return;
-
-    getCalApi()
-      .then((cal) => {
-        cal('ui', {
-          styles: { branding: { brandColor: '#7c3aed' } },
-          hideEventTypeDetails: false,
-          layout: 'month_view',
-        });
-        setCalReady(true);
-      })
-      .catch(() => {
-        setCalError(true);
-      });
-  }, [calLink]);
+    const linkToCopy = shortLink || fullLink;
+    navigator.clipboard.writeText(linkToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   if (loading) {
     return (
@@ -124,83 +160,85 @@ export default function BookingWidget({
     );
   }
 
-
-  // No Cal.com integration configured
   if (!calLink) {
     return (
       <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
         <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40" />
-        <p className="font-medium">Cal.com not configured</p>
-        <p className="mt-1">Go to Settings → Integrations → Cal.com to connect your account.</p>
+        <p className="font-medium">Booking not configured</p>
+        <p className="mt-1">Assign an employee with a booking calendar to enable this.</p>
       </div>
     );
   }
 
-  // No credits remaining
-  if (creditsRemaining <= 0) {
-    return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center space-y-3">
-        <AlertCircle className="h-8 w-8 mx-auto text-amber-500" />
-        <div>
-          <p className="font-medium text-amber-900">No session credits remaining</p>
-          <p className="text-sm text-amber-700 mt-1">
-            Purchase a session package to enable booking.
-          </p>
-        </div>
-        {onBuyCredits && (
-          <Button onClick={onBuyCredits} size="sm">
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            Buy Package
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  // Cal.com failed to load
-  if (calError) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-start gap-2">
-        <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-        <span>Failed to load Cal.com widget. Check your Cal.com integration settings.</span>
-      </div>
-    );
-  }
+  // Build pre-filled link.
+  // Cal.com passes ?metadata[key]=value through to the webhook payload unchanged,
+  // so we embed CRM entity IDs here — the webhook handler uses these to
+  // identify the lead/contact without relying on the attendee email.
+  const prefillParams = new URLSearchParams();
+  if (contactEmail) prefillParams.set('email', contactEmail);
+  if (contactName) prefillParams.set('name', contactName);
+  if (contactId) prefillParams.set('metadata[crm_contact_id]', contactId);
+  if (leadId) prefillParams.set('metadata[crm_lead_id]', leadId);
+  if (tenantId) prefillParams.set('metadata[crm_tenant_id]', tenantId);
+  const paramString = prefillParams.toString();
+  const fullLink = `${calOrigin}/${calLink}${paramString ? '?' + paramString : ''}`;
 
   return (
-    <div className="space-y-3">
-      {/* Credits badge */}
-      <div className="flex items-center gap-2 text-sm">
-        <CalendarCheck className="h-4 w-4 text-purple-600" />
-        <span className="text-muted-foreground">
-          <span className="font-semibold text-purple-700">{creditsRemaining}</span> session
-          {creditsRemaining !== 1 ? 's' : ''} available
+    <div className="space-y-4">
+      {/* Booking link row */}
+      <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2">
+        <span className="text-xs font-mono text-slate-400 truncate flex-1">
+          {shortLink || fullLink}
         </span>
+        <a
+          href={shortLink || fullLink}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 text-slate-400 hover:text-slate-200 transition-colors"
+          title="Open booking page"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </a>
+        <button
+          onClick={handleCopyLink}
+          className="shrink-0 text-slate-400 hover:text-slate-200 transition-colors"
+          title="Copy booking link"
+        >
+          {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+        </button>
       </div>
 
-      {/* Loading state */}
-      {!calReady && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading booking widget…
+      {/* Booking history */}
+      {bookings.length > 0 ? (
+        <div>
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-1 text-slate-300">
+            <CalendarCheck className="h-4 w-4" /> Booking History
+          </h4>
+          <div className="space-y-1.5">
+            {bookings.map((b) => (
+              <div
+                key={b.id}
+                className="rounded border border-slate-700 px-3 py-2 text-sm flex items-center justify-between"
+              >
+                <div className="text-slate-300">
+                  {formatDate(b.scheduled_start, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </div>
+                <Badge variant={STATUS_COLORS[b.status] || 'secondary'} className="capitalize">
+                  {b.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
         </div>
+      ) : (
+        <p className="text-xs text-slate-500 text-center py-2">No bookings yet</p>
       )}
-
-      {/* Cal.com embed */}
-      <Cal
-        calLink={calLink}
-        style={{ width: '100%', height: '600px', overflow: 'scroll' }}
-        config={{
-          layout: 'month_view',
-          name: contactName || '',
-          email: contactEmail || '',
-          metadata: JSON.stringify({
-            contact_id: contactId || null,
-            lead_id: leadId || null,
-            tenant_id: tenantId,
-          }),
-        }}
-      />
     </div>
   );
 }

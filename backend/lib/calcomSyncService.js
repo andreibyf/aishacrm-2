@@ -105,6 +105,44 @@ async function getTenantCalcomConfig(tenantId) {
 }
 
 /**
+ * Look up an employee's Cal.com config from their metadata JSONB.
+ * Falls back to null if the employee has no per-employee Cal.com fields set.
+ *
+ * Expected employees.metadata shape:
+ *   {
+ *     calcom_user_id:     <number>,  // Cal.com users.id for this employee
+ *     calcom_cal_link:    <string>,  // booking slug, e.g. "jane/30min"
+ *     calcom_event_type_id: <number> // Cal.com EventType id for blocker bookings
+ *   }
+ *
+ * @param {string} tenantId  Tenant UUID
+ * @param {string} assignedTo  Employee email (activities.assigned_to)
+ * @returns {{ calcomUserId, eventTypeId, calLink } | null}
+ */
+async function getEmployeeCalcomConfig(tenantId, assignedTo) {
+  if (!assignedTo) return null;
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('employees')
+    .select('metadata')
+    .eq('tenant_id', tenantId)
+    .ilike('email', assignedTo.trim())
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const meta = data.metadata || {};
+  const calcomUserId = meta.calcom_user_id || null;
+  const eventTypeId = meta.calcom_event_type_id || null;
+  const calLink = meta.calcom_cal_link || null;
+
+  if (!calcomUserId && !eventTypeId) return null;
+
+  return { calcomUserId, eventTypeId, calLink };
+}
+
+/**
  * Should this activity be synced to Cal.com?
  * Only sync activities that have an explicit date+time (not all-day tasks).
  */
@@ -133,19 +171,32 @@ export async function pushActivityToCalcom(tenantId, activity) {
   if (!db) return;
 
   try {
-    const calcom = await getTenantCalcomConfig(tenantId);
+    // Prefer per-employee Cal.com config (assigned_to email lookup), fall back to tenant default.
+    const employeeCalcom = await getEmployeeCalcomConfig(tenantId, activity.assigned_to);
+    const tenantCalcom = await getTenantCalcomConfig(tenantId);
+    const calcom = employeeCalcom
+      ? {
+          calcomUserId: employeeCalcom.calcomUserId ?? tenantCalcom?.calcomUserId,
+          eventTypeId: employeeCalcom.eventTypeId ?? tenantCalcom?.eventTypeId,
+          config: tenantCalcom?.config || {},
+        }
+      : tenantCalcom;
+
     if (!calcom) return;
 
     if (!calcom.eventTypeId || !calcom.calcomUserId) {
       logger.debug('[CalcomSync] Missing event_type_id or calcom_user_id — skipping push', {
         tenantId,
         activityId: activity.id,
+        assignedTo: activity.assigned_to || null,
       });
       return;
     }
 
-    // Build start/end timestamps (CRM stores due_date as YYYY-MM-DD, due_time as HH:MM in UTC)
-    const start = new Date(`${activity.due_date}T${activity.due_time}:00.000Z`);
+    // Build start/end timestamps (CRM stores due_date as YYYY-MM-DD, due_time as HH:MM in UTC).
+    // Supabase may return time columns as "HH:MM:SS" — take only the first 5 chars to normalize.
+    const dueTime = (activity.due_time || '').substring(0, 5);
+    const start = new Date(`${activity.due_date}T${dueTime}:00.000Z`);
     const durationMin = activity.duration_minutes || 60;
     const end = new Date(start.getTime() + durationMin * 60 * 1000);
 
@@ -212,11 +263,14 @@ export async function pushActivityToCalcom(tenantId, activity) {
     }
   } catch (err) {
     // Non-fatal — activity is already saved; log and continue
-    logger.error('[CalcomSync] pushActivityToCalcom error (non-fatal)', {
-      error: err.message,
-      activityId: activity?.id,
-      tenantId,
-    });
+    logger.error(
+      {
+        err: { message: err?.message, code: err?.code, detail: err?.detail, stack: err?.stack },
+        activityId: activity?.id,
+        tenantId,
+      },
+      '[CalcomSync] pushActivityToCalcom error (non-fatal)',
+    );
   }
 }
 

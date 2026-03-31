@@ -18,6 +18,9 @@ const PROMOTE_KEYS = [
   'navigation_permissions',
   'password_change_required',
   'password_expires_at',
+  'calcom_cal_link',
+  'calcom_user_id',
+  'calcom_event_type_id',
 ];
 
 export default function expandUserMetadata(user) {

@@ -76,6 +76,12 @@ playbookQueue.on('stalled', (job) => {
   );
 });
 
+// Prevent unhandled 'error' events (e.g. Redis connection failures) from
+// crashing the process. The Bull queue will reconnect automatically.
+playbookQueue.on('error', (err) => {
+  logger.error({ err: err.message }, '[PlaybookQueue] Queue error (Redis connection)');
+});
+
 logger.debug('[PlaybookQueue] Queue initialized');
 
 export default playbookQueue;

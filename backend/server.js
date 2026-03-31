@@ -244,6 +244,7 @@ import createSessionCreditsRoutes from './routes/session-credits.js';
 import calcomWebhookRouter from './routes/calcom-webhook.js';
 import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
 import createCalcomSyncRoutes from './routes/calcom-sync.js';
+import { shortlinkCreateRouter, shortlinkRedirectRouter } from './routes/booking-shortlink.js';
 import { stripeWebhookRouter } from './routes/stripe-webhook.js';
 import braidAuditRoutes from './routes/braidAudit.js';
 import braidChainRoutes from './routes/braidChain.js';
@@ -548,6 +549,10 @@ app.use('/api/session-credits', defaultLimiter, authenticateRequest, createSessi
 // Booking analytics — tenant-scoped reporting
 logger.debug('Mounting /api/analytics routes');
 app.use('/api/analytics', defaultLimiter, authenticateRequest, createBookingAnalyticsRoutes());
+// Booking short links — create (auth) + public redirect
+logger.debug('Mounting /api/scheduling/shortlink and /book routes');
+app.use('/api/scheduling/shortlink', defaultLimiter, authenticateRequest, shortlinkCreateRouter);
+app.use('/book', defaultLimiter, shortlinkRedirectRouter);
 // Cal.com bidirectional sync — admin-only, requires tenant auth
 logger.debug('Mounting /api/calcom-sync routes');
 app.use('/api/calcom-sync', defaultLimiter, authenticateRequest, createCalcomSyncRoutes());

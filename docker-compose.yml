@@ -252,7 +252,9 @@ services:
       - aishanet
 
   # Cal.com - Self-hosted booking & scheduling system
-  # Start with: docker compose --profile scheduling up -d
+  # ⚠️  MUST start via Doppler so ${CALCOM_NEXTAUTH_SECRET} and ${CALCOM_ENCRYPTION_KEY} are substituted:
+  #   doppler run -- docker compose --profile scheduling up -d
+  # Cal.com uses pre-built image (no Doppler CLI inside), so secrets must be in the host shell at compose-up time.
   # Access at http://localhost:3002 (or scheduling.aishacrm.com via reverse proxy)
 
   # Dedicated Postgres for Cal.com — isolated from the AiSHA Supabase database.
@@ -312,7 +314,7 @@ services:
     ports:
       - "3002:3000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -227,7 +227,7 @@ export default function Employees() {
   return (
     <div className="p-4 lg:p-6 bg-slate-900 min-h-screen text-slate-100">
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-slate-200">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-100">{editingEmployee ? 'Edit Employee' : 'Add New Employee'}</DialogTitle>
             <DialogDescription className="text-slate-400">

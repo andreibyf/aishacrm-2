@@ -13,6 +13,7 @@ import { fullBidirectionalSync } from '../lib/calcomSyncService.js';
 import { importGoogleEvents } from '../lib/googleCalendarService.js';
 import { importOutlookEvents } from '../lib/outlookCalendarService.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getCalcomDb } from '../lib/calcomDb.js';
 import logger from '../lib/logger.js';
 
 export default function createCalcomSyncRoutes() {
@@ -83,6 +84,147 @@ export default function createCalcomSyncRoutes() {
       });
     } catch (err) {
       logger.error('[CalcomSync] Trigger error:', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // GET /api/calcom-sync/resolve-link?tenant_id=<uuid>
+  // Derives the cal_link (username/event-slug) from the tenant's stored calcom_user_id + event_type_id.
+  // Falls back to cal_link if already stored in config.
+  router.get('/resolve-link', async (req, res) => {
+    try {
+      const { tenant_id, error } = resolveTenantId(req);
+      if (error) return res.status(400).json({ status: 'error', message: error });
+
+      const supabase = getSupabaseClient();
+      const { data: integration } = await supabase
+        .from('tenant_integrations')
+        .select('config')
+        .eq('tenant_id', tenant_id)
+        .eq('integration_type', 'calcom')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!integration) {
+        return res
+          .status(404)
+          .json({ status: 'error', message: 'No active Cal.com integration found' });
+      }
+
+      const config = integration.config || {};
+
+      // Already stored — return it directly
+      if (config.cal_link) {
+        return res.json({ status: 'success', data: { cal_link: config.cal_link } });
+      }
+
+      const userId = config.calcom_user_id;
+      const eventTypeId = config.event_type_id;
+
+      if (!userId) {
+        return res
+          .status(404)
+          .json({ status: 'error', message: 'calcom_user_id not configured in integration' });
+      }
+
+      const db = getCalcomDb();
+      if (!db) {
+        return res.status(503).json({ status: 'error', message: 'Cal.com database not available' });
+      }
+
+      const userResult = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [
+        userId,
+      ]);
+      if (!userResult.rows.length) {
+        return res
+          .status(404)
+          .json({ status: 'error', message: `Cal.com user ${userId} not found` });
+      }
+      const username = userResult.rows[0].username;
+
+      let slug = null;
+      if (eventTypeId) {
+        const etResult = await db.query('SELECT slug FROM "EventType" WHERE id = $1 LIMIT 1', [
+          eventTypeId,
+        ]);
+        if (etResult.rows.length) slug = etResult.rows[0].slug;
+      }
+
+      const cal_link = slug ? `${username}/${slug}` : username;
+
+      // Persist it back so future calls are instant
+      await supabase
+        .from('tenant_integrations')
+        .update({ config: { ...config, cal_link } })
+        .eq('tenant_id', tenant_id)
+        .eq('integration_type', 'calcom');
+
+      res.json({ status: 'success', data: { cal_link } });
+    } catch (err) {
+      logger.error('[CalcomSync] Resolve link error:', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // GET /api/calcom-sync/lookup-user?username=<username>
+  // Resolve a Cal.com username to numeric user ID + available event types.
+  // The username is extracted from the cal link slug (e.g. "jane/30min" → "jane").
+  router.get('/lookup-user', async (req, res) => {
+    try {
+      const raw = req.query.username || '';
+      // Accept either "username" or "username/event-slug" formats
+      const username = raw.split('/')[0].trim();
+      if (!username) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'username query param is required' });
+      }
+
+      const db = getCalcomDb();
+      if (!db) {
+        return res
+          .status(503)
+          .json({ status: 'error', message: 'Cal.com database not configured' });
+      }
+
+      const userResult = await db.query(
+        'SELECT id, name, email, username FROM users WHERE username = $1 LIMIT 1',
+        [username],
+      );
+
+      if (!userResult.rows.length) {
+        return res.status(404).json({
+          status: 'error',
+          message: `No Cal.com user found with username "${username}"`,
+        });
+      }
+
+      const user = userResult.rows[0];
+
+      const etResult = await db.query(
+        `SELECT id, title, slug, length FROM "EventType"
+         WHERE "userId" = $1 AND hidden = false
+         ORDER BY id`,
+        [user.id],
+      );
+
+      res.json({
+        status: 'success',
+        data: {
+          user_id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.username,
+          event_types: etResult.rows.map((et) => ({
+            id: et.id,
+            title: et.title,
+            slug: et.slug,
+            length: et.length,
+          })),
+        },
+      });
+    } catch (err) {
+      logger.error('[CalcomSync] Lookup user error:', err);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
