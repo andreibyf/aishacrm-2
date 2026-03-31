@@ -318,6 +318,7 @@ services:
       - NEXTAUTH_URL=http://localhost:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_NEXTAUTH_URL:-https://scheduling.aishacrm.com}
+      - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
       - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
