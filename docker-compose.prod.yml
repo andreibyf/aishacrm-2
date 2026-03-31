@@ -274,6 +274,69 @@ services:
       retries: 3
       start_period: 10s
 
+  # Dedicated Postgres for Cal.com — isolated from Supabase (no RLS conflicts)
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-calcom-db
+    restart: unless-stopped
+    profiles: [scheduling]
+    networks:
+      - aishanet
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - calcom_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cal.com — self-hosted scheduling (requires CALCOM_* secrets in Doppler prd_prd)
+  # Start with: doppler run -- docker compose -f docker-compose.prod.yml --profile scheduling up -d
+  calcom:
+    image: calcom/cal.com:latest
+    container_name: aishacrm-calcom
+    restart: unless-stopped
+    profiles: [scheduling]
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet
+    environment:
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_NEXTAUTH_URL:-https://scheduling.aishacrm.com}
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+    ports:
+      - "127.0.0.1:3002:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   redis_memory_data:
     driver: local
@@ -284,6 +347,8 @@ volumes:
   redpanda_data:
     driver: local
   aisha_telemetry:
+    driver: local
+  calcom_db_data:
     driver: local
 
 networks:
