@@ -1,15 +1,15 @@
 /**
  * SuggestionQueue - Phase 3 Autonomous Operations Review UI
- * 
+ *
  * Displays AI-generated suggestions for human review and approval.
  * Supports approve/reject/defer actions with confidence indicators.
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
   AlertTriangle,
   Lightbulb,
   TrendingUp,
@@ -24,37 +24,38 @@ import {
   Mail,
   Reply,
   Users,
+  Eye,
 } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { toast } from "sonner";
-import { getBackendUrl } from "@/api/backendUrl";
-import { supabase } from "@/lib/supabase";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
+import { supabase } from '@/lib/supabase';
 
 // Helper to get auth headers for authenticated API requests
 async function getAuthHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (session?.access_token) {
       headers.Authorization = `Bearer ${session.access_token}`;
     }
@@ -105,10 +106,8 @@ function formatRelativeTime(dateString) {
  */
 function ConfidenceIndicator({ confidence }) {
   const percentage = Math.round(confidence * 100);
-  const colorClass = 
-    percentage >= 80 ? 'bg-green-500' :
-    percentage >= 60 ? 'bg-yellow-500' :
-    'bg-red-500';
+  const colorClass =
+    percentage >= 80 ? 'bg-green-500' : percentage >= 60 ? 'bg-yellow-500' : 'bg-red-500';
 
   return (
     <TooltipProvider>
@@ -116,7 +115,7 @@ function ConfidenceIndicator({ confidence }) {
         <TooltipTrigger asChild>
           <div className="flex items-center gap-1">
             <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-              <div 
+              <div
                 className={`h-full ${colorClass} transition-all`}
                 style={{ width: `${percentage}%` }}
               />
@@ -145,9 +144,7 @@ function parseBodyPrompt(bodyPrompt) {
   let beforeThread = threadMatch
     ? bodyPrompt.slice(0, bodyPrompt.indexOf(threadMatch[0]))
     : bodyPrompt;
-  const context = threadMatch
-    ? bodyPrompt.slice(bodyPrompt.indexOf(threadMatch[0])).trim()
-    : '';
+  const context = threadMatch ? bodyPrompt.slice(bodyPrompt.indexOf(threadMatch[0])).trim() : '';
 
   // Extract and strip "Related CRM record: {...}" JSON blob — stops at blank line
   // so that sections appended after the JSON (e.g. "Recent notes") are preserved.
@@ -245,7 +242,9 @@ function EmailPreview({ action }) {
         </div>
         <div className="flex gap-2 px-3 py-2">
           <span className="text-slate-400 w-16 shrink-0">Subject</span>
-          <span className="font-medium truncate text-slate-100">{args.subject || '(no subject)'}</span>
+          <span className="font-medium truncate text-slate-100">
+            {args.subject || '(no subject)'}
+          </span>
         </div>
       </div>
 
@@ -257,11 +256,13 @@ function EmailPreview({ action }) {
             <span className="text-sm text-slate-200">{instruction}</span>
             {entityLabel && (
               <span className="ml-2 inline-flex items-center gap-1 text-xs text-slate-400">
-                <User className="w-3 h-3" />{entityLabel}
+                <User className="w-3 h-3" />
+                {entityLabel}
               </span>
             )}
             <p className="text-xs text-slate-500 mt-1">
-              AI will generate the full email body when approved. Add a richer instruction in your C.A.R.E. playbook for better results.
+              AI will generate the full email body when approved. Add a richer instruction in your
+              C.A.R.E. playbook for better results.
             </p>
           </div>
         </div>
@@ -275,7 +276,10 @@ function EmailPreview({ action }) {
             className="flex items-center justify-between w-full px-3 py-2 text-xs font-medium text-slate-400 hover:bg-slate-700/50 transition-colors"
             onClick={() => setShowContext((v) => !v)}
           >
-            <span>Thread History ({historyEntries.length} message{historyEntries.length !== 1 ? 's' : ''})</span>
+            <span>
+              Thread History ({historyEntries.length} message
+              {historyEntries.length !== 1 ? 's' : ''})
+            </span>
             {showContext ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           {showContext && (
@@ -291,7 +295,12 @@ function EmailPreview({ action }) {
                     </Badge>
                     <span className="text-slate-400 truncate">{entry.sender}</span>
                     <span className="text-slate-500 ml-auto shrink-0">
-                      {new Date(entry.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(entry.date).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </span>
                   </div>
                   <p className="text-slate-400 line-clamp-2">{entry.body}</p>
@@ -308,11 +317,151 @@ function EmailPreview({ action }) {
           <Users className="w-3 h-3" />
           <span>Thread: {comms.thread_id.slice(0, 8)}...</span>
           {participants.length > 0 && (
-            <span>• {participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
+            <span>
+              • {participants.length} participant{participants.length !== 1 ? 's' : ''}
+            </span>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Modal dialog that shows the AI-generated email body for review before approving.
+ */
+function EmailDraftPreviewModal({
+  suggestion,
+  tenantId,
+  backendUrl,
+  onApprove,
+  onReject,
+  onClose,
+}) {
+  const [body, setBody] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isActing, setIsActing] = useState(false);
+  const args = suggestion?.action?.tool_args || {};
+
+  useEffect(() => {
+    if (!suggestion) return;
+    setIsLoading(true);
+    setBody(null);
+    getAuthHeaders().then((headers) =>
+      fetch(`${backendUrl}/api/ai/suggestions/${suggestion.id}/preview`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ tenant_id: tenantId }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.status === 'success') {
+            setBody(data.data?.body || '(no body generated)');
+          } else {
+            setBody(null);
+            toast.error(data.message || 'Failed to generate preview');
+          }
+        })
+        .catch(() => {
+          setBody(null);
+          toast.error('Failed to generate preview');
+        })
+        .finally(() => setIsLoading(false)),
+    );
+  }, [suggestion, backendUrl, tenantId]);
+
+  const handleApprove = async () => {
+    setIsActing(true);
+    await onApprove(suggestion.id);
+    onClose();
+  };
+
+  const handleReject = async () => {
+    setIsActing(true);
+    await onReject(suggestion.id);
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-blue-500" />
+            Email Draft Preview
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+          {/* Email meta */}
+          <div className="border border-border rounded-lg divide-y text-sm">
+            <div className="flex gap-2 px-3 py-2">
+              <span className="text-muted-foreground w-16 shrink-0">To</span>
+              <span className="truncate">{args.to || '—'}</span>
+            </div>
+            <div className="flex gap-2 px-3 py-2">
+              <span className="text-muted-foreground w-16 shrink-0">Subject</span>
+              <span className="font-medium truncate">{args.subject || '(no subject)'}</span>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="border border-border rounded-lg p-3 text-sm">
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-4">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Generating draft…</span>
+              </div>
+            ) : body ? (
+              <pre className="whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
+            ) : (
+              <p className="text-muted-foreground italic">Preview unavailable</p>
+            )}
+          </div>
+
+          {/* Instruction note */}
+          {args.body_prompt && (
+            <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-500/10 px-3 py-2 flex items-start gap-2">
+              <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">AI instruction: </span>
+                {args.body_prompt.slice(0, 200)}
+                {args.body_prompt.length > 200 ? '…' : ''}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 pt-4 border-t border-border">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isActing}>
+            Close
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleReject}
+            disabled={isActing || isLoading}
+          >
+            <XCircle className="w-4 h-4 mr-1" />
+            Reject
+          </Button>
+          <Button
+            size="sm"
+            className="bg-green-600 hover:bg-green-700"
+            onClick={handleApprove}
+            disabled={isActing || isLoading}
+          >
+            {isActing ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-1" />
+            ) : (
+              <CheckCircle className="w-4 h-4 mr-1" />
+            )}
+            Approve & Send
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -324,6 +473,7 @@ function SuggestionCard({
   onApprove,
   onReject,
   onDefer,
+  onPreview,
   isProcessing,
   isHighlighted = false,
   defaultExpanded = false,
@@ -425,6 +575,17 @@ function SuggestionCard({
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-700">
+            {suggestion.action?.tool_name === 'send_email' && onPreview && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onPreview(suggestion)}
+                disabled={isProcessing}
+              >
+                <Eye className="w-4 h-4 mr-1" />
+                Preview Draft
+              </Button>
+            )}
             <Button
               size="sm"
               variant="default"
@@ -477,6 +638,7 @@ export default function SuggestionQueue({
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
+  const [previewSuggestion, setPreviewSuggestion] = useState(null);
 
   const backendUrl = getBackendUrl();
 
@@ -704,7 +866,12 @@ export default function SuggestionQueue({
         <Card className="border-red-500/30 bg-red-500/10">
           <CardContent className="py-4">
             <p className="text-sm text-red-400">{error}</p>
-            <Button variant="outline" size="sm" className="mt-2 border-slate-600 text-slate-300" onClick={fetchSuggestions}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 border-slate-600 text-slate-300"
+              onClick={fetchSuggestions}
+            >
               Try Again
             </Button>
           </CardContent>
@@ -751,12 +918,25 @@ export default function SuggestionQueue({
             onApprove={handleApprove}
             onReject={handleReject}
             onDefer={handleDefer}
+            onPreview={setPreviewSuggestion}
             isProcessing={isProcessing}
             isHighlighted={Boolean(focusId && suggestion.id === focusId)}
             defaultExpanded={Boolean(focusId && suggestion.id === focusId)}
           />
         ))}
       </div>
+
+      {/* Email draft preview modal */}
+      {previewSuggestion && (
+        <EmailDraftPreviewModal
+          suggestion={previewSuggestion}
+          tenantId={tenantId}
+          backendUrl={backendUrl}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onClose={() => setPreviewSuggestion(null)}
+        />
+      )}
     </div>
   );
 }

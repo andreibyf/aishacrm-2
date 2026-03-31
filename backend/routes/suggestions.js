@@ -16,6 +16,7 @@ import { triggerForTenant } from '../lib/aiTriggersWorker.js';
 import { executeBraidTool } from '../lib/braidIntegration-v2.js';
 import { executeCareSendEmailAction } from '../lib/care/carePlaybookExecutor.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { runTask as runAiBrainTask } from '../lib/aiBrain.js';
 import logger from '../lib/logger.js';
 
 export default function createSuggestionsRoutes(pgPool) {
@@ -649,8 +650,8 @@ export default function createSuggestionsRoutes(pgPool) {
 
       const config = {
         ...toolArgs,
-        require_approval: false,   // already approved by user
-        use_ai_generation: true,   // generate body from body_prompt
+        require_approval: false, // already approved by user
+        use_ai_generation: true, // generate body from body_prompt
       };
       const base = { action: 'send_email' };
 
@@ -668,12 +669,7 @@ export default function createSuggestionsRoutes(pgPool) {
     }
 
     // Default: execute via Braid tool registry
-    let braidResult = await executeBraidTool(
-      toolName,
-      toolArgs,
-      tenantRecord,
-      userEmail,
-    );
+    let braidResult = await executeBraidTool(toolName, toolArgs, tenantRecord, userEmail);
 
     if (braidResult?.tag === 'Err') {
       return { success: false, result: { error: braidResult.error } };
@@ -769,12 +765,7 @@ export default function createSuggestionsRoutes(pgPool) {
       let applySuccess = false;
 
       try {
-        const dispatched = await applySuggestionAction(
-          action,
-          suggestion,
-          tenantRecord,
-          userEmail,
-        );
+        const dispatched = await applySuggestionAction(action, suggestion, tenantRecord, userEmail);
         applyResult = dispatched.result;
         applySuccess = dispatched.success;
       } catch (toolError) {
@@ -824,6 +815,86 @@ export default function createSuggestionsRoutes(pgPool) {
       }
     } catch (error) {
       logger.error('[Suggestions] Error applying suggestion:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  /**
+   * Generate a preview of an email draft without sending it.
+   * Returns the AI-generated email body so the user can review before approving.
+   */
+  router.post('/:id/preview', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.body;
+
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const resolved = await resolveCanonicalTenant(tenant_id);
+      if (!resolved?.found || !resolved?.uuid) {
+        return res.status(404).json({ status: 'error', message: 'Tenant not found' });
+      }
+
+      const fetchResult = await pgPool.query(
+        `SELECT * FROM ai_suggestions WHERE id = $1 AND tenant_id = $2 AND status IN ('pending', 'approved')`,
+        [id, resolved.uuid],
+      );
+
+      if (fetchResult.rows.length === 0) {
+        return res.status(404).json({ status: 'error', message: 'Suggestion not found' });
+      }
+
+      const suggestion = fetchResult.rows[0];
+      const toolArgs = suggestion.action?.tool_args || {};
+      const { to, subject, body_prompt } = toolArgs;
+
+      if (!body_prompt) {
+        return res.json({
+          status: 'success',
+          data: { to, subject, body: toolArgs.body || '' },
+          message: 'No prompt — returning stored body',
+        });
+      }
+
+      // Generate email body via AI (same path as apply, but without sending)
+      const SYSTEM_USER_ID = process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
+      let emailBody = '';
+      try {
+        const { buildStyleDirective } = await import(
+          '../lib/communications/contracts/emailStyleGuardrailsContract.js'
+        );
+        const styleDirective = buildStyleDirective(
+          { tone: 'friendly', length_tier: 'standard' },
+          { recipient_name: to },
+        );
+        const styledPrompt = `${styleDirective}\n\n${body_prompt}`;
+        const result = await runAiBrainTask({
+          tenantId: resolved.uuid,
+          userId: SYSTEM_USER_ID,
+          taskType: 'email_generation',
+          mode: 'generate_content',
+          context: {
+            prompt: styledPrompt,
+            entity_type: suggestion.record_type,
+            entity_id: suggestion.record_id,
+          },
+        });
+        emailBody = result?.content || result?.summary || '';
+      } catch (aiErr) {
+        logger.warn({ err: aiErr }, '[Suggestions] Preview AI generation failed');
+        return res.status(500).json({ status: 'error', message: 'Failed to generate preview' });
+      }
+
+      logger.debug(`[Suggestions] Preview generated for suggestion ${id}`);
+
+      res.json({
+        status: 'success',
+        data: { to, subject, body: emailBody },
+      });
+    } catch (error) {
+      logger.error('[Suggestions] Error generating preview:', error);
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
