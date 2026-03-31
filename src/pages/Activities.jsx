@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Account, Contact, Lead, Opportunity } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -57,10 +57,20 @@ export default function ActivitiesPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
+  );
   const [selectedActivities, setSelectedActivities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Auto-switch to card view on mobile screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);

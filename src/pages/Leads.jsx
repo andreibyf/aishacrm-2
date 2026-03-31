@@ -54,7 +54,9 @@ export default function LeadsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
+  );
   const [isImportOpen, setIsImportOpen] = useState(false);
   // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
@@ -63,6 +65,14 @@ export default function LeadsPage() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+
+  // Auto-switch to card view on mobile screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const { startProgress, updateProgress, completeProgress } = useProgress();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data including test data

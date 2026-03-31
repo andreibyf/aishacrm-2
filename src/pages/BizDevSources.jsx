@@ -101,9 +101,57 @@ export default function BizDevSourcesPage() {
   const [batchFilter, setBatchFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [updatedFilter, setUpdatedFilter] = useState('all');
+  const [ageFilter, setAgeFilter] = useState('all');
   const [sortField, setSortField] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [selectedTags, setSelectedTags] = useState([]);
+
+  // Aging buckets matching documentation (0-7 fresh, 7-14 moderate, 15-21 warning, 21-30 urgent, 30+ stale)
+  const ageBuckets = useMemo(
+    () => [
+      { label: 'All Ages', value: 'all' },
+      { label: '0-7 days', min: 0, max: 7, value: '0-7', color: 'text-green-400', emoji: '🟢' },
+      { label: '8-14 days', min: 8, max: 14, value: '8-14', color: 'text-yellow-400', emoji: '🟡' },
+      {
+        label: '15-21 days',
+        min: 15,
+        max: 21,
+        value: '15-21',
+        color: 'text-amber-400',
+        emoji: '⚠️',
+      },
+      {
+        label: '22-30 days',
+        min: 22,
+        max: 30,
+        value: '22-30',
+        color: 'text-orange-400',
+        emoji: '🟠',
+      },
+      { label: '30+ days', min: 31, max: 99999, value: '30+', color: 'text-red-400', emoji: '🔴' },
+    ],
+    [],
+  );
+
+  /** Calculate the age in days of a BizDev Source from its created_at date */
+  const calculateSourceAge = useCallback((source) => {
+    const dateValue = source?.created_at || source?.created_date;
+    if (!dateValue) return -1;
+    const created = new Date(dateValue);
+    if (Number.isNaN(created.getTime())) return -1;
+    const diffMs = Date.now() - created.getTime();
+    if (diffMs < 0) return -1;
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  }, []);
+
+  /** Return the matching age bucket for a source */
+  const getSourceAgeBucket = useCallback(
+    (source) => {
+      const age = calculateSourceAge(source);
+      return ageBuckets.find((b) => b.value !== 'all' && age >= 0 && age >= b.min && age <= b.max);
+    },
+    [ageBuckets, calculateSourceAge],
+  );
 
   const sortOptions = useMemo(
     () => [
@@ -635,6 +683,14 @@ export default function BizDevSourcesPage() {
     // Updated filter (client-side)
     const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
 
+    // Age filter (based on created_at)
+    let matchesAge = true;
+    if (ageFilter !== 'all') {
+      const age = calculateSourceAge(source);
+      const bucket = ageBuckets.find((b) => b.value === ageFilter);
+      matchesAge = bucket && age >= 0 && age >= bucket.min && age <= bucket.max;
+    }
+
     return (
       matchesSearch &&
       matchesStatus &&
@@ -644,7 +700,8 @@ export default function BizDevSourcesPage() {
       matchesTags &&
       matchesAssignedTo &&
       matchesEmployee &&
-      matchesUpdated
+      matchesUpdated &&
+      matchesAge
     );
   });
 
@@ -736,6 +793,7 @@ export default function BizDevSourcesPage() {
     sortDirection,
     selectedEmployeeId,
     updatedFilter,
+    ageFilter,
   ]);
 
   const stats = useMemo(() => {
@@ -769,6 +827,12 @@ export default function BizDevSourcesPage() {
           ? !source.assigned_to
           : source.assigned_to === selectedEmployeeId);
       const matchesUpdated = matchesUpdatedFilter(source.updated_at, updatedFilter);
+      let matchesAge = true;
+      if (ageFilter !== 'all') {
+        const age = calculateSourceAge(source);
+        const bucket = ageBuckets.find((b) => b.value === ageFilter);
+        matchesAge = bucket && age >= 0 && age >= bucket.min && age <= bucket.max;
+      }
       return (
         matchesSearch &&
         matchesLicenseStatus &&
@@ -777,7 +841,8 @@ export default function BizDevSourcesPage() {
         matchesTags &&
         matchesAssignedTo &&
         matchesEmployee &&
-        matchesUpdated
+        matchesUpdated &&
+        matchesAge
       );
     });
     return {
@@ -797,6 +862,9 @@ export default function BizDevSourcesPage() {
     assignedToFilter,
     selectedEmployeeId,
     updatedFilter,
+    ageFilter,
+    ageBuckets,
+    calculateSourceAge,
   ]);
 
   if (loading && sources.length === 0) {
@@ -810,41 +878,40 @@ export default function BizDevSourcesPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 flex items-center justify-center rounded-full bg-blue-900/30 border border-blue-700/50">
-              <Building2 className="w-7 h-7 text-blue-400" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full bg-blue-900/30 border border-blue-700/50">
+              <Building2 className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-100">{bizdevLabel}</h1>
-              <p className="text-slate-400">
+              <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">{bizdevLabel}</h1>
+              <p className="text-sm sm:text-base text-slate-400">
                 Manage and track your {bizdevLabel.toLowerCase()}
                 {sources.length > 0 && (
                   <span className="ml-2 text-slate-500">
-                    • Showing {filteredSources.length.toLocaleString()} of{' '}
-                    {sources.length.toLocaleString()} total
+                    • {filteredSources.length.toLocaleString()} of {sources.length.toLocaleString()}
                   </span>
                 )}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <RefreshButton onRefresh={handleRefresh} />
             <Button
               variant="outline"
               onClick={() => setShowArchiveIndex(true)}
               className="border-slate-700 text-slate-200 hover:bg-slate-700"
             >
-              <Archive className="w-4 h-4 mr-2" />
-              View Archives
+              <Archive className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">View Archives</span>
             </Button>
             <Button
               variant="outline"
               onClick={() => setShowImportDialog(true)}
               className="border-slate-700 text-slate-200 hover:bg-slate-700"
             >
-              <Upload className="w-4 h-4 mr-2" />
-              Import
+              <Upload className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Import</span>
             </Button>
             <CsvExportButton
               data={filteredSources}
@@ -852,14 +919,14 @@ export default function BizDevSourcesPage() {
               entityName={bizdevSourceLabel}
             />
             <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add {bizdevSourceLabel}
+              <Plus className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add {bizdevSourceLabel}</span>
             </Button>
           </div>
         </div>
 
         {/* Stats Cards - Clickable for filtering */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <div
             className={`bg-slate-800 border-slate-700 border rounded-lg p-4 cursor-pointer hover:scale-105 transition-all ${
               statusFilter === 'all'
@@ -941,23 +1008,8 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
-                placeholder="Search sources..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setSearchTerm(searchInput);
-                    setCurrentPage(1);
-                  }
-                }}
-                className="pl-10 bg-slate-700 border-slate-600 text-slate-100"
-              />
-            </div>
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <Select
               value={assignedToFilter}
               onValueChange={(value) => {
@@ -1087,13 +1139,35 @@ export default function BizDevSourcesPage() {
                 <SelectItem value="stale">30+ days ago</SelectItem>
               </SelectContent>
             </Select>
+            <Select
+              value={ageFilter}
+              onValueChange={(value) => {
+                setAgeFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-36 bg-slate-700 border-slate-600 text-slate-100 shrink-0">
+                <SelectValue placeholder="Age..." />
+              </SelectTrigger>
+              <SelectContent>
+                {ageBuckets.map((bucket) => (
+                  <SelectItem key={bucket.value} value={bucket.value}>
+                    <span className={bucket.color || ''}>
+                      {bucket.emoji ? `${bucket.emoji} ` : ''}
+                      {bucket.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {(searchTerm ||
               licenseStatusFilter !== 'all' ||
               assignedToFilter !== 'all' ||
               batchFilter !== 'all' ||
               sourceFilter !== 'all' ||
               selectedTags.length > 0 ||
-              updatedFilter !== 'all') && (
+              updatedFilter !== 'all' ||
+              ageFilter !== 'all') && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -1106,6 +1180,7 @@ export default function BizDevSourcesPage() {
                   setSourceFilter('all');
                   setSelectedTags([]);
                   setUpdatedFilter('all');
+                  setAgeFilter('all');
                   setCurrentPage(1);
                 }}
                 className="text-slate-400 hover:text-slate-200 whitespace-nowrap"
@@ -1117,31 +1192,33 @@ export default function BizDevSourcesPage() {
           </div>
         </div>
 
-        {filteredSources.length > 0 && (
+        {(filteredSources.length > 0 || sources.length > 0) && (
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                {/* Select All Checkbox */}
-                <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    ref={(el) => {
-                      if (el) {
-                        el.indeterminate = isSomeSelected;
-                      }
-                    }}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-400">
-                    {isAllSelected
-                      ? 'Deselect All'
-                      : isSomeSelected
-                        ? `${selectedSources.length} Selected`
-                        : 'Select All'}
-                  </span>
-                </div>
+                {/* Select All Checkbox — only when results exist */}
+                {filteredSources.length > 0 && (
+                  <div className="flex items-center gap-2 pr-4 border-r border-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate = isSomeSelected;
+                        }
+                      }}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-400">
+                      {isAllSelected
+                        ? 'Deselect All'
+                        : isSomeSelected
+                          ? `${selectedSources.length} Selected`
+                          : 'Select All'}
+                    </span>
+                  </div>
+                )}
 
                 {selectedSources.length > 0 && (
                   <>
@@ -1184,6 +1261,22 @@ export default function BizDevSourcesPage() {
                     </Button>
                   </>
                 )}
+              </div>
+              {/* Search — right side of toolbar row */}
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search sources..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setSearchTerm(searchInput);
+                      setCurrentPage(1);
+                    }
+                  }}
+                  className="pl-9 bg-slate-700 border-slate-600 text-slate-100"
+                />
               </div>
             </div>
           </div>

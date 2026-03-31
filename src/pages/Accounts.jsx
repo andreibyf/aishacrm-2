@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -48,10 +48,20 @@ export default function AccountsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
+  );
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Auto-switch to card view on mobile screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [selectedTags, setSelectedTags] = useState([]);
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);

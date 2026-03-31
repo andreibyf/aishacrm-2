@@ -219,151 +219,197 @@ export default function BizDevSourceCard({
       onClick={handleCardClick}
     >
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-4">
-          {onSelect && (
-            <div onClick={(e) => e.stopPropagation()} className="pt-1 pr-2">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  onSelect(source.id);
-                }}
-                className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
-              />
-            </div>
-          )}
-
-          {/* Left side - Entity info (adapts to B2B/B2C) */}
-          <div className="flex-1 space-y-1">
-            <div className="flex items-start gap-3">
-              <div
-                className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}
-              >
-                {isB2C ? (
-                  <User
-                    className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`}
-                  />
-                ) : (
-                  <Building2
-                    className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`}
-                  />
-                )}
-                {hasActivity && (
-                  <div
-                    className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800"
-                    title="Has activity"
-                  />
-                )}
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+          {/* Top row on mobile: checkbox + entity info + action buttons */}
+          <div className="flex items-start gap-2 w-full sm:w-auto sm:flex-1">
+            {onSelect && (
+              <div onClick={(e) => e.stopPropagation()} className="pt-1 pr-1 flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onSelect(source.id);
+                  }}
+                  className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
+                />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3
-                  className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}
+            )}
+
+            {/* Left side - Entity info (adapts to B2B/B2C) */}
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-10 h-10 rounded-lg ${hasActivity ? 'bg-green-900/30 border-green-700/50' : isB2C ? 'bg-purple-900/30 border-purple-700/50' : 'bg-blue-900/30 border-blue-700/50'} border flex items-center justify-center flex-shrink-0 relative`}
                 >
-                  {displayName}
-                  {isPromoted && source.account_name && (
-                    <span className="ml-2 text-sm font-normal text-blue-400">
-                      → {source.account_name}
-                    </span>
+                  {isB2C ? (
+                    <User
+                      className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-purple-400'}`}
+                    />
+                  ) : (
+                    <Building2
+                      className={`w-5 h-5 ${hasActivity ? 'text-green-400' : 'text-blue-400'}`}
+                    />
                   )}
-                </h3>
-                {/* Secondary name - show company for B2C or contact for B2B */}
-                {secondaryName && (
-                  <p className="text-sm text-slate-300 flex items-center gap-1">
-                    {isB2C ? (
-                      <>
-                        <Building2 className="w-3 h-3 text-slate-400" />
-                        {secondaryName}
-                      </>
-                    ) : (
-                      <>
-                        <User className="w-3 h-3 text-slate-400" />
-                        {secondaryName}
-                      </>
+                  {hasActivity && (
+                    <div
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-slate-800"
+                      title="Has activity"
+                    />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3
+                    className={`text-lg font-semibold ${isPromoted ? 'text-slate-400 line-through' : 'text-slate-100'}`}
+                  >
+                    {displayName}
+                    {isPromoted && source.account_name && (
+                      <span className="ml-2 text-sm font-normal text-blue-400">
+                        → {source.account_name}
+                      </span>
                     )}
-                  </p>
-                )}
-                {/* DBA name if different from display name */}
-                {source.dba_name &&
-                  source.dba_name !== displayName &&
-                  source.dba_name !== secondaryName && (
-                    <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
+                  </h3>
+                  {/* Secondary name - show company for B2C or contact for B2B */}
+                  {secondaryName && (
+                    <p className="text-sm text-slate-300 flex items-center gap-1">
+                      {isB2C ? (
+                        <>
+                          <Building2 className="w-3 h-3 text-slate-400" />
+                          {secondaryName}
+                        </>
+                      ) : (
+                        <>
+                          <User className="w-3 h-3 text-slate-400" />
+                          {secondaryName}
+                        </>
+                      )}
+                    </p>
                   )}
+                  {/* DBA name if different from display name */}
+                  {source.dba_name &&
+                    source.dba_name !== displayName &&
+                    source.dba_name !== secondaryName && (
+                      <p className="text-sm text-slate-400">DBA: {source.dba_name}</p>
+                    )}
+                </div>
+              </div>
+
+              {/* Key Contact Info Row - Phone, Email, Address */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 ml-0 sm:ml-12 text-sm">
+                {phone && (
+                  <a
+                    href={`tel:${phone}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{phone}</span>
+                  </a>
+                )}
+                {email && (
+                  <a
+                    href={`mailto:${email}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors truncate max-w-[200px]"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="truncate">{email}</span>
+                  </a>
+                )}
+                {addressShort && (
+                  <span className="flex items-center gap-1 text-slate-400">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>{addressShort}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Badges Row */}
+              <div className="flex items-center gap-2 flex-wrap ml-0 sm:ml-12">
+                {/* Activity indicators */}
+                {leadIdsArray && leadIdsArray.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="bg-green-100 text-green-800 border-green-300 font-semibold"
+                  >
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Contacted
+                  </Badge>
+                )}
+                {source.priority && source.priority !== 'medium' && (
+                  <Badge
+                    variant="outline"
+                    className={
+                      source.priority === 'high'
+                        ? 'bg-red-900/30 text-red-400 border-red-700'
+                        : 'bg-slate-700 text-slate-400 border-slate-600'
+                    }
+                  >
+                    {source.priority.charAt(0).toUpperCase() + source.priority.slice(1)} Priority
+                  </Badge>
+                )}
+                {source.license_status && source.license_status !== 'Not Required' && (
+                  <Badge variant="outline" className={getLicenseStatusColor(source.license_status)}>
+                    {source.license_status}
+                  </Badge>
+                )}
+                {source.industry && (
+                  <Badge
+                    variant="outline"
+                    className="bg-slate-700/50 text-slate-400 border-slate-600 text-xs"
+                  >
+                    {source.industry}
+                  </Badge>
+                )}
               </div>
             </div>
 
-            {/* Key Contact Info Row - Phone, Email, Address */}
-            <div className="flex flex-wrap items-center gap-3 ml-12 text-sm">
-              {phone && (
-                <a
-                  href={`tel:${phone}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors"
+            {/* Action buttons - visible inline on mobile, side column on desktop */}
+            <div className="flex sm:hidden items-center gap-1 flex-shrink-0 ml-auto">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onClick) onClick(source);
+                }}
+                className="text-slate-400 hover:text-blue-400 hover:bg-slate-700 h-8 w-8"
+                title="View details"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              {onEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(source);
+                  }}
+                  className="text-slate-400 hover:text-blue-400 hover:bg-slate-700 h-8 w-8"
                 >
-                  <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{phone}</span>
-                </a>
+                  <Pencil className="w-4 h-4" />
+                </Button>
               )}
-              {email && (
-                <a
-                  href={`mailto:${email}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 text-slate-300 hover:text-blue-400 transition-colors truncate max-w-[200px]"
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(source);
+                  }}
+                  className="text-slate-400 hover:text-red-400 hover:bg-slate-700 h-8 w-8"
                 >
-                  <Mail className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="truncate">{email}</span>
-                </a>
-              )}
-              {addressShort && (
-                <span className="flex items-center gap-1 text-slate-400">
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>{addressShort}</span>
-                </span>
-              )}
-            </div>
-
-            {/* Badges Row */}
-            <div className="flex items-center gap-2 flex-wrap ml-12">
-              {/* Activity indicators */}
-              {leadIdsArray && leadIdsArray.length > 0 && (
-                <Badge
-                  variant="outline"
-                  className="bg-green-100 text-green-800 border-green-300 font-semibold"
-                >
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Contacted
-                </Badge>
-              )}
-              {source.priority && source.priority !== 'medium' && (
-                <Badge
-                  variant="outline"
-                  className={
-                    source.priority === 'high'
-                      ? 'bg-red-900/30 text-red-400 border-red-700'
-                      : 'bg-slate-700 text-slate-400 border-slate-600'
-                  }
-                >
-                  {source.priority.charAt(0).toUpperCase() + source.priority.slice(1)} Priority
-                </Badge>
-              )}
-              {source.license_status && source.license_status !== 'Not Required' && (
-                <Badge variant="outline" className={getLicenseStatusColor(source.license_status)}>
-                  {source.license_status}
-                </Badge>
-              )}
-              {source.industry && (
-                <Badge
-                  variant="outline"
-                  className="bg-slate-700/50 text-slate-400 border-slate-600 text-xs"
-                >
-                  {source.industry}
-                </Badge>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               )}
             </div>
           </div>
+          {/* end mobile top row */}
 
           {/* Right side - Notes area */}
-          <div className="flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[160px] max-h-[280px] flex flex-col">
+          <div className="w-full sm:w-auto sm:flex-1 bg-slate-700/30 border border-slate-600 rounded-lg p-3 min-h-[80px] sm:min-h-[160px] max-h-[280px] flex flex-col">
             {editingNotes ? (
               <div className="space-y-2 flex-1 flex flex-col">
                 <Textarea
@@ -432,7 +478,8 @@ export default function BizDevSourceCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          {/* Desktop action buttons - hidden on mobile (shown inline above) */}
+          <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
             {/* Globe icon for web profile */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -564,53 +611,70 @@ export default function BizDevSourceCard({
           </div>
         )}
 
-        <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className={statusColorClass}>
-              {source.status || 'Active'}
-            </Badge>
-            <span className="text-slate-600 mx-1">·</span>
-            <span
-              className={`flex items-center gap-1 text-xs ${assignedName ? 'text-slate-300' : 'text-slate-500 italic'}`}
-            >
-              <User className="w-3 h-3 text-slate-400" />
-              {assignedName ||
-                (source.assigned_to ? (
-                  <span>
-                    Updating<span className="animate-ellipsis"></span>
-                  </span>
-                ) : (
-                  'Unassigned'
-                ))}
-            </span>
-            {source.updated_at && (
-              <>
-                <span className="text-slate-600 mx-1">·</span>
-                <span
-                  className="flex items-center gap-1 text-xs text-slate-500"
-                  title={new Date(source.updated_at).toLocaleString()}
-                >
-                  <Clock className="w-3 h-3 text-slate-500" />
-                  {new Date(source.updated_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+        <div className="flex items-center gap-4 pt-2 mt-1 border-t border-slate-700/60 text-xs text-slate-500 whitespace-nowrap flex-wrap">
+          <Badge variant="outline" className={statusColorClass}>
+            {source.status || 'Active'}
+          </Badge>
+          <span
+            className={`flex items-center gap-1.5 ${assignedName ? 'text-slate-300' : 'text-slate-500 italic'}`}
+          >
+            <User className="w-3 h-3 text-slate-400 flex-shrink-0" />
+            {assignedName ||
+              (source.assigned_to ? (
+                <span>
+                  Updating<span className="animate-ellipsis"></span>
                 </span>
-              </>
-            )}
-            {source.batch_id && (
-              <>
-                <span className="text-slate-600 mx-1">·</span>
-                <span className="text-xs text-slate-500">Batch: {source.batch_id}</span>
-              </>
-            )}
-          </div>
-          {sourceName && (
-            <span className="text-xs text-slate-500 truncate max-w-[150px] ml-2" title={sourceName}>
-              <span className="text-slate-600 mr-2">·</span>Source: {sourceName}
+              ) : (
+                'Unassigned'
+              ))}
+          </span>
+          {source.updated_at && (
+            <span
+              className="flex items-center gap-1"
+              title={new Date(source.updated_at).toLocaleString()}
+            >
+              <Clock className="w-3 h-3 flex-shrink-0" />
+              {new Date(source.updated_at).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}
             </span>
           )}
+          {source.batch_id && <span>Batch {source.batch_id}</span>}
+          {source.created_at &&
+            (() => {
+              const created = new Date(source.created_at);
+              if (Number.isNaN(created.getTime())) return null;
+              const ageDays = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
+              let textColor, emoji;
+              if (ageDays <= 7) {
+                textColor = 'text-green-400';
+                emoji = '🟢';
+              } else if (ageDays <= 14) {
+                textColor = 'text-yellow-400';
+                emoji = '🟡';
+              } else if (ageDays <= 21) {
+                textColor = 'text-amber-400';
+                emoji = '⚠️';
+              } else if (ageDays <= 30) {
+                textColor = 'text-orange-400';
+                emoji = '🟠';
+              } else {
+                textColor = 'text-red-400';
+                emoji = '🔴';
+              }
+              return (
+                <span
+                  className={`flex items-center gap-1 ${textColor}`}
+                  title={`Created ${ageDays} day${ageDays !== 1 ? 's' : ''} ago`}
+                >
+                  <span>{emoji}</span>
+                  <span>{ageDays}d</span>
+                </span>
+              );
+            })()}
+          {sourceName && <span className="text-slate-400">{sourceName}</span>}
         </div>
       </CardContent>
     </Card>

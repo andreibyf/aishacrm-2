@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Contact, Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
@@ -51,10 +51,20 @@ export default function ContactsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
+  );
   const [selectedContacts, setSelectedContacts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Auto-switch to card view on mobile screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [selectedTags, setSelectedTags] = useState([]);
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);
@@ -425,8 +435,7 @@ export default function ContactsPage() {
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
               <span className="text-blue-200">
-                All {contacts.length} {contactsLabel.toLowerCase()} on this page are
-                selected.
+                All {contacts.length} {contactsLabel.toLowerCase()} on this page are selected.
               </span>
               <Button
                 variant="link"

@@ -1,5 +1,5 @@
 import { logDev } from '@/utils/devLogger';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Opportunity } from '@/api/entities';
 import { useApiManager } from '../components/shared/ApiManager';
 import OpportunityCard from '../components/opportunities/OpportunityCard';
@@ -51,10 +51,20 @@ export default function OpportunitiesPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
-  const [viewMode, setViewMode] = useState('table');
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'table',
+  );
   const [selectedOpportunities, setSelectedOpportunities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+
+  // Auto-switch to card view on mobile screens
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const handler = (e) => setViewMode(e.matches ? 'grid' : 'table');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
