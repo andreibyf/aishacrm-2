@@ -536,6 +536,10 @@ jobs:
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
             phase "Recreating main production services"
             run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms redpanda telemetry-sidecar office-viz
+            # Cal.com scheduling stack — update if already running, skip if not yet started
+            # Data is safe: calcom_db_data volume is never removed by this workflow
+            phase "Updating Cal.com scheduling stack (if running)"
+            docker compose -f docker-compose.prod.yml --profile scheduling up -d --force-recreate 2>/dev/null || true
             phase "Waiting for aisha-comms to become healthy"
             run_timed 4m sh -c '
               for i in $(seq 1 36); do
