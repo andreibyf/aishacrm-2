@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Building2,
+  Loader2,
   Mail,
   Phone,
   MapPin,
@@ -34,6 +35,8 @@ export default function BizDevSourceCard({
   onUpdate,
   tenantId,
   businessModel = 'b2b',
+  isDeleting = false,
+  isUpdating = false,
 }) {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState(source.notes || '');
@@ -188,11 +191,19 @@ export default function BizDevSourceCard({
 
   return (
     <Card
-      className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${
+      className={`relative hover:shadow-lg transition-all duration-200 cursor-pointer ${
         isPromoted ? 'bg-slate-900/50 border-slate-600 opacity-70' : 'bg-slate-800 border-slate-700'
       } ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
       onClick={handleCardClick}
     >
+      {(isDeleting || isUpdating) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-slate-900/70 rounded-lg z-10 pointer-events-none">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>{isDeleting ? 'Deleting…' : 'Updating…'}</span>
+          </div>
+        </div>
+      )}
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           {/* Top row on mobile: checkbox + entity info + action buttons */}

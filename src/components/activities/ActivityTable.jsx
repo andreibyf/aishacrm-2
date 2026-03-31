@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Edit, Eye, Trash2 } from 'lucide-react';
+import { Edit, Eye, Loader2, Trash2 } from 'lucide-react';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
 const statusColors = {
@@ -55,6 +55,8 @@ export default function ActivityTable({
   activityLabel,
   formatDisplayDate,
   getRelatedEntityLink,
+  deletingId = null,
+  updatingId = null,
 }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -88,7 +90,7 @@ export default function ActivityTable({
             {activities.map((activity) => (
               <TableRow
                 key={activity.id}
-                className="hover:bg-slate-700/30 transition-colors border-b border-slate-800"
+                className={`hover:bg-slate-700/30 transition-colors border-b border-slate-800 ${deletingId === activity.id || updatingId === activity.id ? 'opacity-50 pointer-events-none' : ''}`}
               >
                 <TableCell className="text-center p-3">
                   <Checkbox
@@ -154,6 +156,12 @@ export default function ActivityTable({
                   />
                 </TableCell>
                 <TableCell className="p-3">
+                  {(deletingId === activity.id || updatingId === activity.id) ? (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{deletingId === activity.id ? 'Deleting…' : 'Updating…'}</span>
+                    </div>
+                  ) : (
                   <div className="flex items-center gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -214,6 +222,7 @@ export default function ActivityTable({
                       </TooltipContent>
                     </Tooltip>
                   </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

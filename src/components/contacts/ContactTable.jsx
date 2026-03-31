@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
+import { Edit, Eye, Globe, Loader2, Trash2 } from 'lucide-react';
 import PhoneDisplay from '../shared/PhoneDisplay';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
@@ -27,6 +27,8 @@ export default function ContactTable({
   handleDelete,
   handleViewAccount,
   user,
+  deletingId = null,
+  updatingId = null,
 }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -61,7 +63,7 @@ export default function ContactTable({
               const account = accountMap.get(contact.account_id);
 
               return (
-                <tr key={contact.id} className="hover:bg-slate-700/30 transition-colors">
+                <tr key={contact.id} className={`hover:bg-slate-700/30 transition-colors ${deletingId === contact.id || updatingId === contact.id ? 'opacity-50 pointer-events-none' : ''}`}>
                   <td className="px-4 py-3">
                     <Checkbox
                       checked={selectedContacts.has(contact.id) || selectAllMode}
@@ -137,6 +139,12 @@ export default function ContactTable({
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
+                    {(deletingId === contact.id || updatingId === contact.id) ? (
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>{deletingId === contact.id ? 'Deleting…' : 'Updating…'}</span>
+                      </div>
+                    ) : (
                     <div className="flex items-center justify-end gap-2">
                       <TooltipProvider>
                         <Tooltip>
@@ -202,6 +210,7 @@ export default function ContactTable({
                         </Tooltip>
                       </TooltipProvider>
                     </div>
+                    )}
                   </td>
                 </tr>
               );

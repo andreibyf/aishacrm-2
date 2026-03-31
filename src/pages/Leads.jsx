@@ -76,6 +76,8 @@ export default function LeadsPage() {
   const { startProgress, updateProgress, completeProgress } = useProgress();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data including test data
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Define age buckets matching dashboard
   const ageBuckets = useMemo(
@@ -278,6 +280,8 @@ export default function LeadsPage() {
   }, [leads]);
 
   const handleSave = async (result) => {
+    const editingId = editingLead?.id || null;
+    if (editingId) setUpdatingId(editingId);
     try {
       // Reset to page 1 to show the newly created/updated lead
       setCurrentPage(1);
@@ -308,6 +312,8 @@ export default function LeadsPage() {
         stack: error?.stack,
         result,
       });
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -320,7 +326,7 @@ export default function LeadsPage() {
       cancelText: 'Cancel',
     });
     if (!confirmed) return;
-
+    setDeletingId(id);
     try {
       await Lead.delete(id);
 
@@ -340,6 +346,8 @@ export default function LeadsPage() {
       toast.error('Failed to delete lead');
       await loadLeads(currentPage, pageSize);
       await loadTotalStats();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -819,6 +827,8 @@ export default function LeadsPage() {
               handleConvert={handleConvert}
               handleDelete={handleDelete}
               leadLabel={leadLabel}
+              deletingId={deletingId}
+              updatingId={updatingId}
             />
 
             <Pagination

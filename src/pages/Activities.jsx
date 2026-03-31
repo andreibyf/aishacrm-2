@@ -84,6 +84,8 @@ export default function ActivitiesPage() {
   const [viewingRelatedEntity, setViewingRelatedEntity] = useState(null);
   const [relatedEntityType, setRelatedEntityType] = useState(null);
   const [isRelatedDetailOpen, setIsRelatedDetailOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Sort options
   const sortOptions = useMemo(
@@ -174,6 +176,8 @@ export default function ActivitiesPage() {
       setCurrentPage(1);
     }
     const wasEditing = !!editingActivity;
+    const editingId = editingActivity?.id || null;
+    if (wasEditing && editingId) setUpdatingId(editingId);
     try {
       clearCache('');
       await loadActivities(1, pageSize);
@@ -185,6 +189,8 @@ export default function ActivitiesPage() {
       setIsFormOpen(false);
       setEditingActivity(null);
       toast.error('Failed to refresh activity list');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -198,6 +204,7 @@ export default function ActivitiesPage() {
     });
     if (!confirmed) return;
 
+    setDeletingId(id);
     try {
       await Activity.delete(id);
       setActivities((prev) => prev.filter((a) => a.id !== id));
@@ -212,6 +219,8 @@ export default function ActivitiesPage() {
       console.error('Failed to delete activity:', error);
       toast.error('Failed to delete activity');
       await loadActivities(currentPage, pageSize);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -745,6 +754,8 @@ export default function ActivitiesPage() {
               activityLabel={activityLabel}
               formatDisplayDate={formatDisplayDate}
               getRelatedEntityLink={getRelatedEntityLink}
+              deletingId={deletingId}
+              updatingId={updatingId}
             />
             <Pagination
               currentPage={currentPage}

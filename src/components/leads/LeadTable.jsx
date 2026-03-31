@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Trash2, UserCheck } from 'lucide-react';
+import { Edit, Eye, Globe, Loader2, Trash2, UserCheck } from 'lucide-react';
 import AssignedToDisplay from '@/components/shared/AssignedToDisplay';
 
 import { leadStatusColors as statusColors } from '@/utils/statusColors';
@@ -41,6 +41,8 @@ export default function LeadTable({
   handleConvert,
   handleDelete,
   leadLabel,
+  deletingId = null,
+  updatingId = null,
 }) {
   return (
     <TooltipProvider>
@@ -88,7 +90,7 @@ export default function LeadTable({
                   <tr
                     key={lead.id}
                     data-testid={`lead-row-${lead.email}`}
-                    className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''}`}
+                    className={`hover:bg-slate-700/30 transition-colors ${isConverted ? 'opacity-70' : ''} ${deletingId === lead.id || updatingId === lead.id ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <td className="px-4 py-3">
                       <Checkbox
@@ -213,6 +215,12 @@ export default function LeadTable({
                         : <span className="text-slate-600">—</span>}
                     </td>
                     <td className="px-4 py-3">
+                      {(deletingId === lead.id || updatingId === lead.id) ? (
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>{deletingId === lead.id ? 'Deleting…' : 'Updating…'}</span>
+                        </div>
+                      ) : (
                       <div className="flex items-center gap-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -310,6 +318,7 @@ export default function LeadTable({
                           </TooltipContent>
                         </Tooltip>
                       </div>
+                      )}
                     </td>
                   </tr>
                 );

@@ -72,6 +72,8 @@ export default function OpportunitiesPage() {
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Sort options
   const sortOptions = useMemo(
@@ -166,6 +168,8 @@ export default function OpportunitiesPage() {
 
   const handleSave = async () => {
     const wasCreating = !editingOpportunity;
+    const editingId = editingOpportunity?.id || null;
+    if (!wasCreating && editingId) setUpdatingId(editingId);
     try {
       if (wasCreating) setCurrentPage(1);
       clearCacheByKey('Opportunity');
@@ -179,6 +183,8 @@ export default function OpportunitiesPage() {
       console.error('[Opportunities] Error in handleSave:', error);
       setIsFormOpen(false);
       setEditingOpportunity(null);
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -192,6 +198,7 @@ export default function OpportunitiesPage() {
     });
     if (!confirmed) return;
 
+    setDeletingId(id);
     try {
       await Opportunity.delete(id);
       setOpportunities((prev) => prev.filter((o) => o.id !== id));
@@ -205,6 +212,8 @@ export default function OpportunitiesPage() {
       console.error('Failed to delete opportunity:', error);
       toast.error('Failed to delete opportunity');
       await loadOpportunities(currentPage, pageSize);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -687,6 +696,8 @@ export default function OpportunitiesPage() {
               handleDelete={handleDelete}
               opportunityLabel={opportunityLabel}
               getCardLabel={getCardLabel}
+              deletingId={deletingId}
+              updatingId={updatingId}
             />
             <Pagination
               currentPage={currentPage}

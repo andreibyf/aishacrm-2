@@ -75,6 +75,8 @@ export default function ContactsPage() {
   // Account detail panel (opened from company links)
   const [viewingAccount, setViewingAccount] = useState(null);
   const [isAccountDetailOpen, setIsAccountDetailOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Sort options
   const sortOptions = useMemo(
@@ -185,14 +187,19 @@ export default function ContactsPage() {
   };
 
   const handleUpdate = async (result) => {
-    logger.info('Contact updated by form', 'ContactsPage', {
-      contactId: result?.id,
-      contactName: `${result?.first_name} ${result?.last_name}`,
-    });
-    setIsFormOpen(false);
-    setEditingContact(null);
-    clearCacheByKey('Contact');
-    await Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]);
+    if (result?.id) setUpdatingId(result.id);
+    try {
+      logger.info('Contact updated by form', 'ContactsPage', {
+        contactId: result?.id,
+        contactName: `${result?.first_name} ${result?.last_name}`,
+      });
+      setIsFormOpen(false);
+      setEditingContact(null);
+      clearCacheByKey('Contact');
+      await Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]);
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -204,7 +211,7 @@ export default function ContactsPage() {
       cancelText: 'Cancel',
     });
     if (!confirmed) return;
-
+    setDeletingId(id);
     try {
       await Contact.delete(id);
       setContacts((prev) => prev.filter((c) => c.id !== id));
@@ -217,6 +224,8 @@ export default function ContactsPage() {
       toast.error('Failed to delete contact');
       loadContacts();
       loadTotalStats();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -491,6 +500,8 @@ export default function ContactsPage() {
           handleDelete={handleDelete}
           handleViewAccount={handleViewAccount}
           user={user}
+          deletingId={deletingId}
+          updatingId={updatingId}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

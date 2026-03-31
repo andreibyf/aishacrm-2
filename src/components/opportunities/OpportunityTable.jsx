@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Edit, Eye, Trash2 } from 'lucide-react';
+import { Edit, Eye, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
@@ -61,6 +61,8 @@ export default function OpportunityTable({
   handleDelete,
   opportunityLabel,
   getCardLabel,
+  deletingId = null,
+  updatingId = null,
 }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -102,7 +104,7 @@ export default function OpportunityTable({
             {opportunities.map((opp) => (
               <TableRow
                 key={opp.id}
-                className="hover:bg-slate-700/30 transition-colors border-b border-slate-800"
+                className={`hover:bg-slate-700/30 transition-colors border-b border-slate-800 ${deletingId === opp.id || updatingId === opp.id ? 'opacity-50 pointer-events-none' : ''}`}
               >
                 <TableCell className="text-center p-3">
                   <Checkbox
@@ -164,6 +166,12 @@ export default function OpportunityTable({
                   />
                 </TableCell>
                 <TableCell className="p-3 text-center">
+                  {(deletingId === opp.id || updatingId === opp.id) ? (
+                    <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{deletingId === opp.id ? 'Deleting…' : 'Updating…'}</span>
+                    </div>
+                  ) : (
                   <div className="flex items-center justify-center gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -221,6 +229,7 @@ export default function OpportunityTable({
                       </TooltipContent>
                     </Tooltip>
                   </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

@@ -175,6 +175,8 @@ export default function BizDevSourcesPage() {
   const { ConfirmDialog: BulkConfirmDialog, confirm } = useConfirmDialog();
   const [bizdevSchema, setBizdevSchema] = useState(null);
   const [businessModel, setBusinessModel] = useState('b2b');
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   const { selectedTenantId } = useTenant();
   const { selectedEmployeeId, visibleEmployees } = useEmployeeScope();
@@ -341,6 +343,7 @@ export default function BizDevSourcesPage() {
 
   // Updated to unified form contract: form now persists record directly and passes result
   const handleFormSubmit = async (result) => {
+    if (editingSource && result?.id) setUpdatingId(result.id);
     try {
       // Optimistically update sources list (both creates and edits)
       if (result?.id) {
@@ -354,6 +357,7 @@ export default function BizDevSourcesPage() {
     } catch (error) {
       if (logError) logError(handleApiError('BizDev Source Form (post-submit)', error));
     } finally {
+      setUpdatingId(null);
       setShowForm(false);
       setEditingSource(null);
       // Invalidate cache but don't wait for reload - UI already updated optimistically
@@ -608,6 +612,7 @@ export default function BizDevSourcesPage() {
   };
 
   const executeDelete = async (source) => {
+    setDeletingId(source.id);
     try {
       await BizDevSource.delete(source.id);
 
@@ -625,6 +630,8 @@ export default function BizDevSourcesPage() {
       toast.error(`Failed to delete ${bizdevSourceLabel.toLowerCase()}`);
       // Reload on error to ensure consistency
       handleRefresh();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -1321,6 +1328,8 @@ export default function BizDevSourcesPage() {
                   onEdit={handleEdit}
                   onDelete={handleDeleteSingle}
                   onUpdate={handleUpdate}
+                  isDeleting={deletingId === source.id}
+                  isUpdating={updatingId === source.id}
                 />
               ))}
             </div>

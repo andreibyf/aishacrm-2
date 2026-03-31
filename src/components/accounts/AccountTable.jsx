@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
+import { Edit, Eye, Globe, Loader2, Trash2 } from 'lucide-react';
 import { formatIndustry } from '@/utils/industryUtils';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
 
@@ -31,6 +31,8 @@ export default function AccountTable({
   handleEdit,
   handleDelete,
   accountLabel,
+  deletingId = null,
+  updatingId = null,
 }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
@@ -60,7 +62,7 @@ export default function AccountTable({
           </thead>
           <tbody className="divide-y divide-slate-700">
             {accounts.map((account) => (
-              <tr key={account.id} className="hover:bg-slate-700/30 transition-colors">
+              <tr key={account.id} className={`hover:bg-slate-700/30 transition-colors ${deletingId === account.id || updatingId === account.id ? 'opacity-50 pointer-events-none' : ''}`}>
                 <td className="px-4 py-3">
                   <Checkbox
                     checked={selectedAccounts.has(account.id) || selectAllMode}
@@ -108,6 +110,12 @@ export default function AccountTable({
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
+                  {(deletingId === account.id || updatingId === account.id) ? (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>{deletingId === account.id ? 'Deleting…' : 'Updating…'}</span>
+                    </div>
+                  ) : (
                   <div className="flex items-center gap-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -165,6 +173,7 @@ export default function AccountTable({
                       <TooltipContent><p>Delete account</p></TooltipContent>
                     </Tooltip>
                   </div>
+                  )}
                 </td>
               </tr>
             ))}

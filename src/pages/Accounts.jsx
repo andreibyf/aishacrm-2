@@ -67,6 +67,8 @@ export default function AccountsPage() {
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Sort options
   const sortOptions = useMemo(
@@ -149,6 +151,8 @@ export default function AccountsPage() {
 
   const handleSave = async () => {
     const wasEditing = !!editingAccount;
+    const editingId = editingAccount?.id || null;
+    if (wasEditing && editingId) setUpdatingId(editingId);
     try {
       clearCacheByKey('Account');
       await Promise.all([loadAccounts(), loadTotalStats()]);
@@ -160,6 +164,8 @@ export default function AccountsPage() {
       toast.error('Failed to refresh account list');
       setIsFormOpen(false);
       setEditingAccount(null);
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -172,7 +178,7 @@ export default function AccountsPage() {
       cancelText: 'Cancel',
     });
     if (!confirmed) return;
-
+    setDeletingId(id);
     try {
       await Account.delete(id);
       setAccounts((prev) => prev.filter((a) => a.id !== id));
@@ -187,6 +193,8 @@ export default function AccountsPage() {
       toast.error(errorMsg);
       await loadAccounts();
       await loadTotalStats();
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -581,6 +589,8 @@ export default function AccountsPage() {
                 handleEdit={handleEdit}
                 handleDelete={handleDelete}
                 accountLabel={accountLabel}
+                deletingId={deletingId}
+                updatingId={updatingId}
               />
               <Pagination
                 currentPage={currentPage}
