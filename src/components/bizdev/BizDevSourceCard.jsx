@@ -624,19 +624,19 @@ export default function BizDevSourceCard({
               const ageDays = Math.floor((Date.now() - created.getTime()) / (1000 * 60 * 60 * 24));
               let textColor, emoji;
               if (ageDays <= 7) {
-                textColor = 'text-green-400';
+                textColor = 'text-green-700 dark:text-green-400';
                 emoji = '🟢';
               } else if (ageDays <= 14) {
-                textColor = 'text-yellow-400';
+                textColor = 'text-yellow-700 dark:text-yellow-400';
                 emoji = '🟡';
               } else if (ageDays <= 21) {
-                textColor = 'text-amber-400';
+                textColor = 'text-amber-700 dark:text-amber-400';
                 emoji = '⚠️';
               } else if (ageDays <= 30) {
-                textColor = 'text-orange-400';
+                textColor = 'text-orange-700 dark:text-orange-400';
                 emoji = '🟠';
               } else {
-                textColor = 'text-red-400';
+                textColor = 'text-red-700 dark:text-red-400';
                 emoji = '🔴';
               }
               return (
