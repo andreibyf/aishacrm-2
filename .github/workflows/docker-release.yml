@@ -538,6 +538,20 @@ jobs:
             run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms redpanda telemetry-sidecar office-viz
             # Cal.com scheduling stack — update if already running, skip if not yet started
             # Data is safe: calcom_db_data volume is never removed by this workflow
+            # Inject CALCOM_DB_PASSWORD for calcom-db (plain postgres — no Doppler CLI, reads from .env)
+            if command -v doppler &>/dev/null && [ -n "$DOPPLER_TOKEN" ]; then
+              CALCOM_DB_PW=$(DOPPLER_TOKEN=$DOPPLER_TOKEN doppler secrets get CALCOM_DB_PASSWORD --plain --project aishacrm --config prd_prd 2>/dev/null || echo "")
+              if [ -n "$CALCOM_DB_PW" ]; then
+                if grep -q "^CALCOM_DB_PASSWORD=" .env 2>/dev/null; then
+                  sed -i "s|^CALCOM_DB_PASSWORD=.*|CALCOM_DB_PASSWORD=$CALCOM_DB_PW|" .env
+                else
+                  echo "CALCOM_DB_PASSWORD=$CALCOM_DB_PW" >> .env
+                fi
+                phase "✓ CALCOM_DB_PASSWORD injected for calcom-db postgres container"
+              else
+                phase "WARNING: CALCOM_DB_PASSWORD not found in Doppler — calcom-db may fail to start"
+              fi
+            fi
             phase "Updating Cal.com scheduling stack (if running)"
             docker compose -f docker-compose.prod.yml --profile scheduling up -d --force-recreate 2>/dev/null || true
             phase "Waiting for aisha-comms to become healthy"
