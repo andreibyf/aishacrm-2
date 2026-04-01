@@ -235,7 +235,7 @@ export default function SessionCreditsPanel({ entityId, entityType, email, tenan
                     </span>
                     <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                       <Clock className="h-3 w-3" />
-                      Expires {format(new Date(credit.expiry_date), 'MMM d, yyyy')}
+                      Expires {formatDate(credit.expiry_date)}
                       {expired && (
                         <Badge variant="destructive" className="ml-1 text-xs">
                           Expired

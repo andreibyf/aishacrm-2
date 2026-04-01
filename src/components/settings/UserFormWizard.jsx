@@ -398,7 +398,7 @@ export default function UserFormWizard({
           });
         } else {
           let reason = `HTTP ${res.status}`;
-          try { const body = await res.json(); reason = body?.error || reason; } catch (_) {}
+          try { const body = await res.json(); reason = body?.error || reason; } catch (_) { /* ignore parse error */ }
           failed.push(reason);
         }
       } catch (err) {

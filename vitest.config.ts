@@ -1,5 +1,5 @@
 /// <reference types="node" />
-/* eslint-env node */
+/* global process */
 
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";

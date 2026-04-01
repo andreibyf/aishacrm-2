@@ -1,15 +1,18 @@
 import { execSync } from 'child_process';
 
-function run(cmd) {
-  execSync(cmd, { stdio: 'inherit' });
+function run(cmd, { allowFailure = false } = {}) {
+  try {
+    execSync(cmd, { stdio: 'inherit' });
+  } catch (err) {
+    if (!allowFailure) throw err;
+    console.warn(`⚠ Command exited non-zero (allowed): ${cmd}`);
+  }
 }
 
 console.log('Running improvement agent...');
 
-// placeholder for AI-driven improvement step
-// in practice this can call Cursor CLI, OpenAI API, or a local agent
-
-run('npm run lint:fix');
+// lint:fix may exit non-zero for unfixable warnings — allow it
+run('npm run lint:fix', { allowFailure: true });
 
 run('npm run validate');
 
