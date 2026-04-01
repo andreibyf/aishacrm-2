@@ -838,8 +838,8 @@ export default function createSuggestionsRoutes(pgPool) {
       }
 
       const fetchResult = await pgPool.query(
-        `SELECT * FROM ai_suggestions WHERE id = $1 AND tenant_id = $2 AND status IN ('pending', 'approved')`,
-        [id, resolved.uuid],
+        `SELECT * FROM ai_suggestions WHERE id = $1 AND tenant_id = $2 AND status IN ($3,$4)`,
+        [id, resolved.uuid, 'pending', 'approved'],
       );
 
       if (fetchResult.rows.length === 0) {

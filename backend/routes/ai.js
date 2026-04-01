@@ -5470,7 +5470,8 @@ ${conversationSummary}`;
     res.set('X-Deprecated', 'Use POST /api/ai/chat-draft-email instead');
 
     try {
-      const { recipientEmail, recipientName, context, prompt, entityType, entityId, userPrompt } = req.body;
+      const { recipientEmail, recipientName, context, prompt, entityType, entityId, userPrompt } =
+        req.body;
       const effectivePrompt = prompt || userPrompt;
 
       if (!effectivePrompt) {
@@ -5485,18 +5486,16 @@ ${conversationSummary}`;
 
       // Modern path: if entityType + entityId are provided, route through CARE pipeline
       if (entityType && entityId && tenantId) {
-        const result = await generateChatDrivenEmailDraft(
-          {
-            tenantId,
-            entityType,
-            entityId,
-            prompt: effectivePrompt,
-            subject: null,
-            conversationId: null,
-            requireApproval: false,
-            user,
-          },
-        );
+        const result = await generateChatDrivenEmailDraft({
+          tenantId,
+          entityType,
+          entityId,
+          prompt: effectivePrompt,
+          subject: null,
+          conversationId: null,
+          requireApproval: false,
+          user,
+        });
 
         return res.json({
           status: 'success',
@@ -5520,6 +5519,24 @@ ${conversationSummary}`;
       const apiKey = await resolveLLMApiKey(llmConfig.provider, tenantId);
       const client = createProviderClient(llmConfig.provider, apiKey);
 
+      // Pick a random opener to force variety
+      const openerPool = [
+        'thanks for your interest — ',
+        '', // blank = jump straight to the point
+        'quick note — ',
+        'just a heads-up — ',
+        'following up on ',
+        'wanted to circle back about ',
+        'great chatting with you — ',
+        'hope your week is going well — ',
+        'thanks for getting back to me — ',
+        'appreciate you taking the time — ',
+      ];
+      const selectedOpener = openerPool[Math.floor(Math.random() * openerPool.length)];
+      const openerInstruction = selectedOpener
+        ? `For THIS email, after the greeting ("Hi [Name],"), continue with: "${selectedOpener}" then the purpose.`
+        : 'For THIS email, jump straight into the purpose after the greeting.';
+
       const systemPrompt = `You are a professional business email writer. Generate a polished email based on the user's instructions. 
 Return ONLY the email content (subject line followed by body), no additional commentary.
 Format:
@@ -5529,12 +5546,8 @@ Subject: [subject line here]
 
 CRITICAL STYLE RULES:
 - Write like a real human, NOT like an AI. Every email must sound like it was personally written.
-- NEVER open with "I hope this message finds you well" or any variation — this is the #1 giveaway of AI-generated email.
-- Open naturally, the way a real person would:
-  - "Hi [Name], thanks for expressing interest in ..."
-  - "Hi [Name], how are you? Hope your week is going well."
-  - "Hi [Name], just following up on our conversation about ..."
-  - Or jump straight to the reason for the email.
+- ABSOLUTELY NEVER open with "I hope this message finds you well" or "I hope this email finds you well" or "I trust this message finds you well" or ANY variation of "finds you well". This is the #1 dead giveaway of AI-generated text.
+- ${openerInstruction}
 - Vary your openers — never reuse the same one.
 - Avoid robotic phrases: "Please don't hesitate to", "Feel free to reach out", "I wanted to take a moment to", "moving forward", "synergy", "leverage".
 - Keep emails concise but complete.

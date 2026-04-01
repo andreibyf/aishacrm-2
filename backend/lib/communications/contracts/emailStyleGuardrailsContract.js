@@ -56,6 +56,12 @@ export const LENGTH_LIMITS = Object.freeze({
 
 const ROBOTIC_PATTERNS = [
   { pattern: /\bI hope this (?:email |message )?finds you well\b/i, label: 'Cliché opener' },
+  { pattern: /\bI trust this (?:email |message )?finds you\b/i, label: 'Cliché opener' },
+  {
+    pattern: /\bI hope (?:you are|you're) (?:doing |having a )?(?:well|great|good)\b/i,
+    label: 'Cliché opener',
+  },
+  { pattern: /\bfinds you (?:well|in good)\b/i, label: 'Cliché opener' },
   { pattern: /\bAs an AI\b/i, label: 'AI self-reference' },
   { pattern: /\bAs a language model\b/i, label: 'AI self-reference' },
   { pattern: /\bI'm an AI\b/i, label: 'AI self-reference' },
@@ -70,7 +76,6 @@ const ROBOTIC_PATTERNS = [
   { pattern: /\bCircle back\b/i, label: 'Corporate buzzword' },
   { pattern: /\bLet's unpack\b/i, label: 'Corporate buzzword' },
   { pattern: /\bPer my last email\b/i, label: 'Passive-aggressive cliché' },
-  { pattern: /\bI trust this (?:email |message )?finds you\b/i, label: 'Cliché opener' },
   { pattern: /\bThank you for your patience\b/i, label: 'Robotic placeholder' },
   { pattern: /\bAt the end of the day\b/i, label: 'Filler cliché' },
   { pattern: /\bMoving forward\b/i, label: 'Corporate filler' },
@@ -144,11 +149,17 @@ export function validateGuardrailsConfig(config) {
     errors.push('max_emoji_count must be a non-negative integer');
   }
 
-  if (config.require_recipient_name !== undefined && typeof config.require_recipient_name !== 'boolean') {
+  if (
+    config.require_recipient_name !== undefined &&
+    typeof config.require_recipient_name !== 'boolean'
+  ) {
     errors.push('require_recipient_name must be a boolean');
   }
 
-  if (config.check_robotic_patterns !== undefined && typeof config.check_robotic_patterns !== 'boolean') {
+  if (
+    config.check_robotic_patterns !== undefined &&
+    typeof config.check_robotic_patterns !== 'boolean'
+  ) {
     errors.push('check_robotic_patterns must be a boolean');
   }
 
@@ -276,7 +287,11 @@ export function evaluateDraft(draftBody, guardrails, context = {}) {
   // --- Tone alignment checks ---
   if (config.tone === EMAIL_TONE.FORMAL) {
     // Formal emails shouldn't have contractions
-    if (/\b(?:I'm|you're|we're|they're|it's|don't|can't|won't|isn't|aren't|hasn't|haven't|wouldn't|couldn't|shouldn't)\b/i.test(body)) {
+    if (
+      /\b(?:I'm|you're|we're|they're|it's|don't|can't|won't|isn't|aren't|hasn't|haven't|wouldn't|couldn't|shouldn't)\b/i.test(
+        body,
+      )
+    ) {
       violations.push({
         severity: GUARDRAIL_SEVERITY.INFO,
         rule: 'tone_formal_contractions',
@@ -332,22 +347,36 @@ export function buildStyleDirective(guardrails, context = {}) {
       'Use a formal, professional tone. Avoid contractions. Use complete sentences.',
     [EMAIL_TONE.FRIENDLY]:
       'Use a warm, professional tone. Contractions are fine. Be approachable but not overly casual.',
-    [EMAIL_TONE.CASUAL]:
-      'Use a relaxed, conversational tone. Keep it natural and direct.',
+    [EMAIL_TONE.CASUAL]: 'Use a relaxed, conversational tone. Keep it natural and direct.',
   };
+
+  // Pick a random opener style to force variety across drafts
+  const recipientLabel = context.recipient_name || '[Name]';
+  const openerPool = [
+    `Hi ${recipientLabel}, thanks for your interest — `,
+    `Hi ${recipientLabel}, `,
+    `Hello ${recipientLabel}, `,
+    `Hey ${recipientLabel}, `,
+    `Good to connect, ${recipientLabel} — `,
+    `Hi ${recipientLabel}, quick note — `,
+    `Hi ${recipientLabel}, just a heads-up — `,
+    `Hi ${recipientLabel}, following up on `,
+    `Hi ${recipientLabel}, wanted to circle back about `,
+    `Hi ${recipientLabel}, great chatting with you — `,
+    `${recipientLabel}, `,
+    `Hi ${recipientLabel}, hope your week is going well — `,
+    `Hi ${recipientLabel}, thanks for getting back to me — `,
+    `Hi ${recipientLabel}, appreciate you taking the time — `,
+  ];
+  const selectedOpener = openerPool[Math.floor(Math.random() * openerPool.length)];
 
   const lines = [
     '--- EMAIL STYLE GUIDELINES ---',
     `Tone: ${toneDescriptions[config.tone]}`,
     `Length: Keep the email under ${maxWords} words (${config.length_tier} tier).`,
     'Write like a real human — not like an AI or a corporate template.',
-    'NEVER start with "I hope this message finds you well" or "I hope this email finds you well" or any variation. These are dead giveaways of AI-generated text.',
-    'Instead, open naturally the way a real person would:',
-    '  - "Hi [Name], thanks for expressing interest in ..."',
-    '  - "Hi [Name], how are you? Hope your week is going well."',
-    '  - "Hi [Name], just following up on our conversation about ..."',
-    '  - "Hi [Name], I wanted to reach out about ..."',
-    '  - Jump straight to the reason for the email.',
+    'ABSOLUTELY NEVER start with "I hope this message finds you well" or "I hope this email finds you well" or "I trust this message finds you well" or ANY variation of "finds you well". This is the #1 dead giveaway of AI-generated text and MUST be avoided.',
+    `For THIS email, start your opening line with: "${selectedOpener}" and then continue naturally into the purpose of the email.`,
     'Vary your openers — do not reuse the same one across emails.',
     'Avoid these robotic/AI phrases: "I hope this finds you well", "Please don\'t hesitate to", "Feel free to reach out", "I wanted to take a moment to", "I\'m writing to inform you that", "moving forward", "synergy", "leverage", "circle back", "per my last email", "please be advised".',
     'End with a clear, specific next step — not a generic closing like "Looking forward to hearing from you."',
