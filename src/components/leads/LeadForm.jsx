@@ -473,7 +473,18 @@ export default function LeadForm({
         response: error?.response,
         stack: error?.stack,
       });
-      toast.error(`Failed to save lead: ${error.message || 'An unexpected error occurred.'}`);
+      const msg = error?.message || '';
+      if (
+        msg.toLowerCase().includes('not found') ||
+        msg.toLowerCase().includes('no longer exists')
+      ) {
+        toast.error(
+          'This lead no longer exists. It may have been deleted. Please close the form and refresh.',
+        );
+        if (typeof onCancel === 'function') onCancel();
+      } else {
+        toast.error(`Failed to save lead: ${msg || 'An unexpected error occurred.'}`);
+      }
     } finally {
       setIsSubmitting(false);
     }

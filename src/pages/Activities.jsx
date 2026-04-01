@@ -171,23 +171,20 @@ export default function ActivitiesPage() {
   // --- Local handlers ---
 
   const handleSave = async (saved) => {
-    if (saved?.subject) {
-      setSearchTerm(saved.subject);
-      setCurrentPage(1);
-    }
     const wasEditing = !!editingActivity;
     const editingId = editingActivity?.id || null;
+
+    // Close form immediately — don't make user wait for background reload
+    setIsFormOpen(false);
+    setEditingActivity(null);
+
     if (wasEditing && editingId) setUpdatingId(editingId);
     try {
       clearCache('');
-      await loadActivities(1, pageSize);
-      setIsFormOpen(false);
-      setEditingActivity(null);
+      await loadActivities(currentPage, pageSize);
       toast.success(wasEditing ? 'Activity updated successfully' : 'Activity created successfully');
     } catch (error) {
       console.error('[Activities] Error in handleSave:', error);
-      setIsFormOpen(false);
-      setEditingActivity(null);
       toast.error('Failed to refresh activity list');
     } finally {
       setUpdatingId(null);

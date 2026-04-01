@@ -169,6 +169,11 @@ export default function OpportunitiesPage() {
   const handleSave = async () => {
     const wasCreating = !editingOpportunity;
     const editingId = editingOpportunity?.id || null;
+
+    // Close form immediately — don't make user wait for background reload
+    setIsFormOpen(false);
+    setEditingOpportunity(null);
+
     if (!wasCreating && editingId) setUpdatingId(editingId);
     try {
       if (wasCreating) setCurrentPage(1);
@@ -177,12 +182,8 @@ export default function OpportunitiesPage() {
         loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
         loadTotalStats(),
       ]);
-      setIsFormOpen(false);
-      setEditingOpportunity(null);
     } catch (error) {
       console.error('[Opportunities] Error in handleSave:', error);
-      setIsFormOpen(false);
-      setEditingOpportunity(null);
     } finally {
       setUpdatingId(null);
     }

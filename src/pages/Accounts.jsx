@@ -152,18 +152,19 @@ export default function AccountsPage() {
   const handleSave = async () => {
     const wasEditing = !!editingAccount;
     const editingId = editingAccount?.id || null;
+
+    // Close form immediately — don't make user wait for background reload
+    setIsFormOpen(false);
+    setEditingAccount(null);
+
     if (wasEditing && editingId) setUpdatingId(editingId);
     try {
       clearCacheByKey('Account');
       await Promise.all([loadAccounts(), loadTotalStats()]);
-      setIsFormOpen(false);
-      setEditingAccount(null);
       toast.success(wasEditing ? 'Account updated successfully' : 'Account created successfully');
     } catch (error) {
       console.error('[Accounts] Error in handleSave:', error);
       toast.error('Failed to refresh account list');
-      setIsFormOpen(false);
-      setEditingAccount(null);
     } finally {
       setUpdatingId(null);
     }

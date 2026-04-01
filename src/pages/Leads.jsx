@@ -280,37 +280,48 @@ export default function LeadsPage() {
   }, [leads]);
 
   const handleSave = async (result) => {
-    const editingId = editingLead?.id || null;
-    if (editingId) setUpdatingId(editingId);
-    try {
-      // Reset to page 1 to show the newly created/updated lead
-      setCurrentPage(1);
+    const savedId = editingLead?.id || result?.id || null;
 
-      // Clear cache and reload BEFORE closing the dialog
-      // Also refresh accounts in case a new account was created during lead save
+    // Close form immediately — don't make user wait for background reload
+    setIsFormOpen(false);
+    setEditingLead(null);
+
+    // Optimistic update: patch the lead in-place so the list shows new data instantly,
+    // even before the background reload completes (and regardless of current page)
+    if (savedId && result) {
+      const empName = result.assigned_to
+        ? employeesMap[result.assigned_to] || usersMap[result.assigned_to] || null
+        : null;
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === savedId
+            ? {
+                ...l,
+                ...result,
+                assigned_to_name: empName || result.assigned_to_name || l.assigned_to_name,
+              }
+            : l,
+        ),
+      );
+    }
+
+    // Background reload — show "Updating..." on the row while this runs
+    if (savedId) setUpdatingId(savedId);
+    try {
       clearCache('Lead');
       clearCacheByKey('Lead');
-
-      // Brief delay to ensure backend cache invalidation has propagated
+      // Brief delay so backend cache invalidation propagates
       await new Promise((r) => setTimeout(r, 150));
-
-      // Reload leads, stats, and accounts
       await Promise.all([
-        loadLeads(1, pageSize), // Always load page 1 to show the lead
+        loadLeads(currentPage, pageSize), // Stay on current page
         loadTotalStats(),
         refreshAccounts(),
       ]);
-
-      // Now close the dialog after data is fresh
-      setIsFormOpen(false);
-      setEditingLead(null);
-      console.log('[Leads.handleSave] Data reloaded successfully');
     } catch (error) {
       console.error('[Leads.handleSave] Failed to reload data after save:', {
         error,
         message: error?.message,
         stack: error?.stack,
-        result,
       });
     } finally {
       setUpdatingId(null);

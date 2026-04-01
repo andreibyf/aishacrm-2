@@ -173,16 +173,15 @@ export default function ContactsPage() {
       contactName: `${result?.first_name} ${result?.last_name}`,
       tenantId: tenantIdentifier,
     });
+    // Close form immediately
+    setIsFormOpen(false);
+    setEditingContact(null);
     try {
       setCurrentPage(1);
       clearCacheByKey('Contact');
       await Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]);
-      setIsFormOpen(false);
-      setEditingContact(null);
     } catch (error) {
       console.error('[Contacts] Error in handleCreate:', error);
-      setIsFormOpen(false);
-      setEditingContact(null);
     }
   };
 
