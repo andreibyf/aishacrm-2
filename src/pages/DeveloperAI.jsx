@@ -160,7 +160,8 @@ export default function DeveloperAI() {
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-slate-100">Developer AI</h1>
           <p className="text-slate-400 mt-1">
-            AI assistant for codebase analysis, debugging, and system operations with command approval workflow.
+            AI assistant for codebase analysis, debugging, and system operations with command
+            approval workflow.
           </p>
         </div>
       </div>
@@ -169,12 +170,17 @@ export default function DeveloperAI() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg, idx) => (
-            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-3xl rounded-lg p-4 ${
-                msg.role === 'user' 
-                  ? 'bg-cyan-600 text-white' 
-                  : 'bg-slate-700/50 text-slate-100 border border-slate-600/50'
-              }`}>
+            <div
+              key={idx}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-3xl rounded-lg p-4 ${
+                  msg.role === 'user'
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-700/50 text-slate-100 border border-slate-600/50'
+                }`}
+              >
                 <div className="whitespace-pre-wrap">{msg.content}</div>
               </div>
             </div>
@@ -184,12 +190,8 @@ export default function DeveloperAI() {
               <div className="max-w-3xl rounded-lg p-4 bg-slate-700/50 text-slate-100 border border-slate-600/50">
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-5 h-5 animate-spin text-cyan-400" />
-                  {currentProgress && (
-                    <span className="text-slate-300">{currentProgress}</span>
-                  )}
-                  {!currentProgress && (
-                    <span className="text-slate-400">Thinking...</span>
-                  )}
+                  {currentProgress && <span className="text-slate-300">{currentProgress}</span>}
+                  {!currentProgress && <span className="text-slate-400">Thinking...</span>}
                 </div>
               </div>
             </div>
@@ -205,6 +207,7 @@ export default function DeveloperAI() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about code, request file reads, search the codebase..."
+              aria-label="Developer AI prompt"
               className="flex-1 bg-slate-700/50 text-slate-100 px-4 py-2 rounded-lg border border-slate-600/50 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               disabled={isLoading}
             />

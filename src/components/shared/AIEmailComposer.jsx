@@ -201,7 +201,8 @@ export default function AIEmailComposer({
               AI Email Composer
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Draft an email to <span className="font-medium text-slate-300">{recipientName}</span> ({recipientEmail}).
+              Draft an email to <span className="font-medium text-slate-300">{recipientName}</span>{' '}
+              ({recipientEmail}).
             </DialogDescription>
           </DialogHeader>
 
@@ -215,8 +216,16 @@ export default function AIEmailComposer({
                 onChange={(e) => setPrompt(e.target.value)}
                 className="flex-grow bg-slate-700 border-slate-600 text-slate-200 focus:border-purple-500"
               />
-              <Button onClick={handleGenerateDraft} disabled={generating || !prompt.trim()} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
-                {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              <Button
+                onClick={handleGenerateDraft}
+                disabled={generating || !prompt.trim()}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {generating ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                )}
                 Generate Draft
               </Button>
             </div>
@@ -226,7 +235,15 @@ export default function AIEmailComposer({
               <div className="flex justify-between items-center">
                 <h4 className="font-semibold text-slate-200">Generated Draft</h4>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { setInitialTemplateData(null); setShowTemplateManager(true); }} className="h-8 bg-slate-700 hover:bg-slate-600 border-slate-600">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setInitialTemplateData(null);
+                      setShowTemplateManager(true);
+                    }}
+                    className="h-8 bg-slate-700 hover:bg-slate-600 border-slate-600"
+                  >
                     <FolderOpen className="w-4 h-4 mr-2" /> Templates
                   </Button>
                 </div>
@@ -236,61 +253,125 @@ export default function AIEmailComposer({
                   <SelectValue placeholder="Load a template..." />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {templates.map(t => <SelectItem key={t.id} value={t.id} className="hover:bg-slate-700">{t.name}</SelectItem>)}
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id} className="hover:bg-slate-700">
+                      {t.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input
                 placeholder="Email Subject"
                 value={draft.subject}
-                onChange={(e) => setDraft(d => ({ ...d, subject: e.target.value }))}
+                onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))}
                 className="bg-slate-700 border-slate-600"
               />
               <Textarea
                 placeholder="AI will generate the email body here..."
                 value={draft.body}
-                onChange={(e) => setDraft(d => ({ ...d, body: e.target.value }))}
+                onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
                 className="flex-grow bg-slate-700 border-slate-600"
               />
               <div className="flex items-center space-x-2">
-                <Switch id="include-signature" checked={includeSignature} onCheckedChange={setIncludeSignature} />
-                <Label htmlFor="include-signature" className="text-sm">Include Signature</Label>
+                <Switch
+                  id="include-signature"
+                  checked={includeSignature}
+                  onCheckedChange={setIncludeSignature}
+                />
+                <Label htmlFor="include-signature" className="text-sm">
+                  Include Signature
+                </Label>
               </div>
-              <Button onClick={handleSaveAsTemplate} disabled={!draft.body} variant="outline" className="w-full bg-slate-700 hover:bg-slate-600 border-slate-600">
+              <Button
+                onClick={handleSaveAsTemplate}
+                disabled={!draft.body}
+                variant="outline"
+                className="w-full bg-slate-700 hover:bg-slate-600 border-slate-600"
+              >
                 <Save className="w-4 h-4 mr-2" />
                 Save as Template
               </Button>
             </div>
           </div>
-          
+
           {/* Attachments Section */}
           <div className="space-y-2 pt-4 border-t border-slate-700">
             <Label>Attachments</Label>
             <div className="flex flex-wrap gap-2">
-              {attachments.map((file, i) => <Badge key={i} variant="secondary" className="bg-slate-600 text-slate-200">{file.name}</Badge>)}
-              {crmAttachments.map(doc => <Badge key={doc.id} variant="secondary" className="bg-blue-900/50 text-blue-300">{doc.title}</Badge>)}
+              {attachments.map((file, i) => (
+                <Badge key={i} variant="secondary" className="bg-slate-600 text-slate-200">
+                  {file.name}
+                </Badge>
+              ))}
+              {crmAttachments.map((doc) => (
+                <Badge key={doc.id} variant="secondary" className="bg-blue-900/50 text-blue-300">
+                  {doc.title}
+                </Badge>
+              ))}
             </div>
             <div className="flex gap-2">
-              <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple className="hidden" />
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current.click()} className="bg-slate-700 hover:bg-slate-600 border-slate-600">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                multiple
+                className="hidden"
+                aria-label="Upload attachment"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current.click()}
+                className="bg-slate-700 hover:bg-slate-600 border-slate-600"
+              >
                 <Paperclip className="w-4 h-4 mr-2" /> Attach from Computer
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowDocPicker(true)} className="bg-slate-700 hover:bg-slate-600 border-slate-600">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDocPicker(true)}
+                className="bg-slate-700 hover:bg-slate-600 border-slate-600"
+              >
                 <FileText className="w-4 h-4 mr-2" /> Attach from CRM
               </Button>
             </div>
           </div>
 
           <DialogFooter className="pt-4">
-            <Button variant="outline" onClick={() => setIsOpen(false)} className="bg-slate-700 hover:bg-slate-600 border-slate-600">Cancel</Button>
-            <Button onClick={handleSendEmail} disabled={sending || (!draft.subject && !draft.body)} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            <Button
+              variant="outline"
+              onClick={() => setIsOpen(false)}
+              className="bg-slate-700 hover:bg-slate-600 border-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={sending || (!draft.subject && !draft.body)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {sending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
               Send Email
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <DocumentPicker open={showDocPicker} onOpenChange={setShowDocPicker} onSelect={setCrmAttachments} selectedDocs={crmAttachments} />
-      <EmailTemplateManager open={showTemplateManager} onOpenChange={setShowTemplateManager} onTemplatesUpdate={loadTemplates} initialData={initialTemplateData} />
+      <DocumentPicker
+        open={showDocPicker}
+        onOpenChange={setShowDocPicker}
+        onSelect={setCrmAttachments}
+        selectedDocs={crmAttachments}
+      />
+      <EmailTemplateManager
+        open={showTemplateManager}
+        onOpenChange={setShowTemplateManager}
+        onTemplatesUpdate={loadTemplates}
+        initialData={initialTemplateData}
+      />
     </>
   );
 }

@@ -187,6 +187,7 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
         <input
           type="text"
           placeholder="Search conversations..."
+          aria-label="Search conversations"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full px-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 outline-none focus:border-slate-600 focus:ring-1 focus:ring-slate-600 transition-colors"
@@ -252,6 +253,7 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
+                        aria-label="Edit conversation title"
                         className="w-full px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-slate-200 mb-2 outline-none focus:border-blue-500"
                         placeholder="Conversation title..."
                         autoFocus

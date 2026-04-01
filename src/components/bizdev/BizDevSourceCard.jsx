@@ -217,6 +217,7 @@ export default function BizDevSourceCard({
                     e.stopPropagation();
                     onSelect(source.id);
                   }}
+                  aria-label={`Select ${source.company_name || source.contact_person || 'source'}`}
                   className="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500"
                 />
               </div>

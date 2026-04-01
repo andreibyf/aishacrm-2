@@ -2131,6 +2131,13 @@ function Layout({ children, currentPageName }) {
         backgroundColor: 'var(--app-bg, #0f172a)',
       }}
     >
+      {/* Skip-to-main-content link for keyboard/screen reader accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-slate-800 focus:text-white focus:rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
+      >
+        Skip to main content
+      </a>
       {/* Ensure global portal targets exist for any dialog libraries */}
       <PortalRootManager />
       {/* NEW: Root-level modal host for stable portals */}
@@ -2294,7 +2301,7 @@ function Layout({ children, currentPageName }) {
           </div>
         </header>
 
-        <main className="flex-1 min-h-screen bg-slate-900">
+        <main id="main-content" className="flex-1 min-h-screen bg-slate-900">
           <div className="p-4 sm:p-6">
             <RouteGuard user={user} pageName={currentPageName}>
               {children}

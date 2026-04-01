@@ -629,6 +629,7 @@ export default function TestRunner({ testSuites }) {
                       max={32}
                       value={config.workers}
                       disabled={running}
+                      aria-label="Workers"
                       onChange={(e) =>
                         setConfig((c) => ({
                           ...c,
@@ -646,6 +647,7 @@ export default function TestRunner({ testSuites }) {
                       max={1000}
                       value={config.rate}
                       disabled={running}
+                      aria-label="Rate per second"
                       onChange={(e) =>
                         setConfig((c) => ({ ...c, rate: Math.max(0, Number(e.target.value) || 0) }))
                       }
@@ -660,6 +662,7 @@ export default function TestRunner({ testSuites }) {
                       max={60000}
                       value={config.delayMs}
                       disabled={running}
+                      aria-label="Delay in milliseconds"
                       onChange={(e) =>
                         setConfig((c) => ({
                           ...c,
@@ -689,6 +692,7 @@ export default function TestRunner({ testSuites }) {
                   <input
                     type="text"
                     placeholder="Profile name"
+                    aria-label="Profile name"
                     className="bg-slate-700 border border-slate-600 text-slate-100 text-xs h-8 px-2 rounded w-36"
                     value={profileNameInput}
                     onChange={(e) => setProfileNameInput(e.target.value)}

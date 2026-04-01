@@ -1066,3 +1066,81 @@ main .space-y-6 {
 .theme-light [class*='text-pink-'] {
   font-weight: 600;
 }
+
+/* ---------- WCAG AA CONTRAST FIX (Issue #199) ---------- */
+/* text-slate-500 (#64748b) on bg-slate-800 (#1e293b) = ~3.5:1 — FAILS AA (needs 4.5:1)
+   text-slate-400 (#94a3b8) on bg-slate-800 (#1e293b) = ~5.6:1 — PASSES AA
+   text-slate-400 (#94a3b8) on bg-slate-700 (#334155) = ~2.8:1 — FAILS AA
+   text-slate-300 (#cbd5e1) on bg-slate-700 (#334155) = ~5.5:1 — PASSES AA
+   Fix: Bump text-slate-500 → slate-400 color on dark backgrounds in dark theme.
+   Bump text-slate-400 → slate-300 color when nested inside bg-slate-700. */
+
+/* 1. In dark mode, lift text-slate-500 to slate-400 brightness on dark containers */
+.theme-dark .bg-slate-900 .text-slate-500,
+.theme-dark .bg-slate-800 .text-slate-500,
+.theme-dark .bg-slate-900 [class*='text-slate-500'],
+.theme-dark .bg-slate-800 [class*='text-slate-500'] {
+  color: #94a3b8 !important; /* slate-400 — 5.6:1 on slate-800, 6.8:1 on slate-900 */
+}
+
+/* 2. On mid-tone dark backgrounds (slate-700), slate-400 also fails — bump to slate-300 */
+.theme-dark .bg-slate-700 .text-slate-500,
+.theme-dark .bg-slate-700 [class*='text-slate-500'],
+.theme-dark .bg-slate-700 .text-slate-400,
+.theme-dark .bg-slate-700 [class*='text-slate-400'] {
+  color: #cbd5e1 !important; /* slate-300 — 5.5:1 on slate-700 */
+}
+
+/* 3. Placeholder text contrast fix — same logic */
+.theme-dark .bg-slate-800 .placeholder-slate-500::placeholder,
+.theme-dark .bg-slate-900 .placeholder-slate-500::placeholder,
+.theme-dark .bg-slate-800 [class*='placeholder-slate-500']::placeholder,
+.theme-dark .bg-slate-900 [class*='placeholder-slate-500']::placeholder,
+.theme-dark .bg-slate-800 [class*='placeholder:text-slate-500']::placeholder,
+.theme-dark .bg-slate-900 [class*='placeholder:text-slate-500']::placeholder {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+/* 4. Direct elements (not nested) that carry both bg + text on the same element */
+.theme-dark .text-slate-500.bg-slate-800,
+.theme-dark .text-slate-500.bg-slate-900,
+.theme-dark [class*='text-slate-500'].bg-slate-800,
+.theme-dark [class*='text-slate-500'].bg-slate-900 {
+  color: #94a3b8 !important;
+}
+.theme-dark .text-slate-500.bg-slate-700,
+.theme-dark .text-slate-400.bg-slate-700,
+.theme-dark [class*='text-slate-500'].bg-slate-700,
+.theme-dark [class*='text-slate-400'].bg-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+/* 5. Top-level elements directly under main (which has bg-slate-900) */
+.theme-dark main .text-slate-500,
+.theme-dark main [class*='text-slate-500'] {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+/* ---------- CHECKBOX VISIBILITY FIX ---------- */
+/* Radix/shadcn checkboxes (button[role="checkbox"]) are too faint in light theme.
+   Boost border width and ensure strong contrast on white backgrounds. */
+.theme-light button[role="checkbox"] {
+  border: 2px solid #64748b !important; /* slate-500 — strong on white */
+  box-shadow: 0 0 0 1px rgba(100, 116, 139, 0.15) !important;
+}
+.theme-light button[role="checkbox"][data-state="checked"] {
+  background-color: #1e40af !important; /* blue-800 */
+  border-color: #1e40af !important;
+}
+.theme-light button[role="checkbox"]:hover {
+  border-color: #1e40af !important; /* blue-800 on hover */
+}
+
+/* Native checkboxes (BizDevSourceCard, etc.) */
+.theme-light input[type="checkbox"] {
+  border: 2px solid #64748b !important; /* slate-500 */
+  accent-color: #1e40af !important; /* blue-800 */
+}
+.theme-light input[type="checkbox"]:hover {
+  border-color: #1e40af !important;
+}
