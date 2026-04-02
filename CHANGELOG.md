@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.12.0] - 2026-04-01
+
+### Fixed
+
+- **npm audit vulnerabilities:** Resolved picomatch (high severity) and yaml (moderate severity) dependency vulnerabilities via `npm audit fix`
+- **WCAG AA accessibility (#197, #198, #199):** Added skip-to-main-content link in Layout.jsx; added `aria-label` attributes to 10 unlabeled form inputs across 6 components (AIEmailComposer, BizDevSourceCard, ConversationSidebar, DeveloperAI, TestRunner); added CSS-level contrast overrides for dark theme to meet WCAG AA 4.5:1 ratio
+- **Checkbox visibility in light theme:** Added CSS overrides for both Radix UI and native checkboxes to improve visibility with proper borders and backgrounds in light mode
+- **AI email draft "Preview unavailable" bug:** Fixed Supabase PostgREST SQL wrapper IN clause in suggestions preview endpoint — changed literal `IN ('pending', 'approved')` to parameterized `IN ($3,$4)` to prevent silent query failure
+- **AI email draft preview showing raw XML markup:** Added post-processing to strip `<function_calls>` / `<invoke>` XML tool-calling markup from AI responses, extracting clean email body text
+- **AI email preview using email as salutation:** Preview endpoint now resolves the lead/contact name from the database instead of using the raw email address for the recipient_name in the style directive
+- **AI Brain Anthropic provider support:** Fixed `aiBrain.js` to route Anthropic-configured tenants through the multi-provider `generateChatCompletion` client instead of sending Anthropic API keys to the OpenAI endpoint (caused 401 errors)
+- **Email draft "Unable to resolve recipient email" error:** Replaced generic error message across 5 email draft services (chat, template, task, notes, scheduled) with entity-specific friendly messages like "This lead (Mark Sleuth) has no email address. Please add one before drafting an email." Added shared `buildMissingEmailMessage()` helper in `aiEmailDraftingSupport.js`
+- **Frontend error message propagation:** Updated `AishaEntityChatModal.jsx` to display the backend's actual error message in toast notifications instead of generic "Failed to start task"
+
+### Changed
+
+- **AI email opener randomization:** Replaced static "I hope this message finds you well" pattern with a pool of 14 natural, varied openers in `emailStyleGuardrailsContract.js`. Updated both chat-driven and legacy email draft paths. Added 3 additional robotic pattern detections
+
+---
+
 ## [5.10.0] - 2026-03-12
 
 ### Added

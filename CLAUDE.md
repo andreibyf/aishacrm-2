@@ -530,6 +530,7 @@ Larger rewrites only if **required** for:
 5. Add/update tests
 6. Run regression tests: `docker exec aishacrm-backend npm test`
 7. Document changes in wave report (if applicable)
+8. **Update `CHANGELOG.md`** before committing — every session's changes must be recorded
 
 **If in doubt, DO NOTHING and ask.**
 

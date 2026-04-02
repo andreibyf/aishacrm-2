@@ -452,6 +452,66 @@ export async function executeCareSendEmailAction(
   if (use_ai_generation && body_prompt) {
     // If approval is required, create a pending suggestion instead
     if (require_approval !== false) {
+      // Resolve entity name + sender BEFORE insert so record_name and recipient_name
+      // are available in the suggestion card and email preview immediately.
+      let recipientName = to;
+      let senderName = config.sender_name || null;
+      let entityDisplayName = null;
+      if (entityType && entityId) {
+        try {
+          const entityTable =
+            entityType === 'bizdev_source'
+              ? 'bizdev_sources'
+              : entityType === 'opportunity'
+                ? 'opportunities'
+                : `${entityType}s`;
+          const { data: entRec } = await supabase
+            .from(entityTable)
+            .select('first_name, last_name, name, assigned_to, assigned_to_name')
+            .eq('id', entityId)
+            .eq('tenant_id', tenantId)
+            .single();
+          if (entRec) {
+            const resolvedName = entRec.first_name
+              ? `${entRec.first_name}${entRec.last_name ? ' ' + entRec.last_name : ''}`
+              : entRec.name || null;
+            entityDisplayName = resolvedName;
+            recipientName = resolvedName || to;
+            // Sender: prefer assigned_to_name, then employee lookup, then admin fallback
+            if (!senderName) {
+              if (entRec.assigned_to_name) {
+                senderName = entRec.assigned_to_name;
+              } else if (entRec.assigned_to) {
+                const { data: emp } = await supabase
+                  .from('employees')
+                  .select('first_name, last_name')
+                  .eq('id', entRec.assigned_to)
+                  .eq('tenant_id', tenantId)
+                  .single();
+                if (emp?.first_name) {
+                  senderName = `${emp.first_name}${emp.last_name ? ' ' + emp.last_name : ''}`;
+                }
+              }
+              // Fallback: tenant admin when record is unassigned
+              if (!senderName) {
+                const { data: adminUser } = await supabase
+                  .from('users')
+                  .select('first_name, last_name')
+                  .eq('tenant_id', tenantId)
+                  .in('role', ['admin', 'superadmin'])
+                  .limit(1)
+                  .maybeSingle();
+                if (adminUser?.first_name) {
+                  senderName = `${adminUser.first_name}${adminUser.last_name ? ' ' + adminUser.last_name : ''}`;
+                }
+              }
+            }
+          }
+        } catch (_) {
+          /* non-critical */
+        }
+      }
+
       // Insert into ai_suggestions for human review
       const { data: suggestion } = await supabase
         .from('ai_suggestions')
@@ -460,6 +520,7 @@ export async function executeCareSendEmailAction(
           trigger_id: 'playbook_email',
           record_type: entityType,
           record_id: entityId,
+          record_name: entityDisplayName || config.record_name || null,
           status: 'pending',
           action: {
             tool_name: 'send_email',
@@ -467,6 +528,8 @@ export async function executeCareSendEmailAction(
               subject,
               body_prompt,
               to,
+              recipient_name: recipientName,
+              sender_name: senderName,
               source: 'care_playbook',
               requires_approval: true,
               ...(Object.keys(emailMetadata).length > 0 ? { email: emailMetadata } : {}),
@@ -481,6 +544,72 @@ export async function executeCareSendEmailAction(
         .select('id')
         .single();
 
+      // Fire-and-forget: pre-generate the email body and cache in Redis
+      // recipientName and senderName already resolved above — reuse them.
+      const isValidUuid = (v) =>
+        typeof v === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+      if (suggestion?.id && isValidUuid(tenantId)) {
+        // Explicitly capture all closed-over values to prevent GC/mutation issues in async IIFE
+        const _tenantId = tenantId;
+        const _entityType = entityType;
+        const _entityId = entityId;
+        const _body_prompt = body_prompt;
+        const _recipientName = recipientName;
+        const _senderName = senderName;
+        const _suggestionId = suggestion.id;
+        (async () => {
+          try {
+            const { default: cacheManager } = await import('../cacheManager.js');
+            const SYSTEM_USER_ID =
+              process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
+
+            const { buildStyleDirective } = await import(
+              '../communications/contracts/emailStyleGuardrailsContract.js'
+            );
+            const styleDirective = buildStyleDirective(
+              { tone: 'friendly', length_tier: 'standard' },
+              { recipient_name: _recipientName, sender_name: _senderName },
+            );
+            const styledPrompt = `${styleDirective}\n\n${_body_prompt}`;
+            const result = await runAiBrainTask({
+              tenantId: _tenantId,
+              userId: SYSTEM_USER_ID,
+              taskType: 'email_generation',
+              mode: 'generate_content',
+              context: { prompt: styledPrompt, entity_type: _entityType, entity_id: _entityId },
+            });
+            const rawBody = result?.summary || result?.content || '';
+            if (rawBody) {
+              const { cleanAiEmailResponse } = await import(
+                '../communications/cleanAiEmailResponse.js'
+              );
+              const cleaned = cleanAiEmailResponse(rawBody, subject);
+              const cacheKey = `tenant:${_tenantId}:suggestion_preview:${_suggestionId}`;
+              await cacheManager.set(
+                cacheKey,
+                {
+                  body: cleaned.body,
+                  subject: cleaned.subject,
+                  recipientName: _recipientName,
+                  senderName: _senderName,
+                },
+                3600,
+              );
+              logger.info(
+                { suggestionId: _suggestionId },
+                '[PlaybookExecutor] Pre-generated email cached',
+              );
+            }
+          } catch (preGenErr) {
+            logger.warn(
+              { err: preGenErr },
+              '[PlaybookExecutor] Pre-generation failed (non-blocking)',
+            );
+          }
+        })();
+      }
+
       return {
         ...base,
         status: 'pending_approval',
@@ -492,11 +621,59 @@ export async function executeCareSendEmailAction(
     // No approval needed — generate now
     try {
       const SYSTEM_USER_ID = process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
+
+      // Resolve recipient name and assigned employee for style
+      let recipientName = to;
+      let senderName = null;
+      if (entityType && entityId) {
+        try {
+          const entityTable =
+            entityType === 'bizdev_source'
+              ? 'bizdev_sources'
+              : entityType === 'opportunity'
+                ? 'opportunities'
+                : `${entityType}s`;
+          const { data: entityRec } = await supabase
+            .from(entityTable)
+            .select('first_name, last_name, name, assigned_to, assigned_to_name')
+            .eq('id', entityId)
+            .eq('tenant_id', tenantId)
+            .single();
+          if (entityRec) {
+            recipientName = entityRec.first_name
+              ? `${entityRec.first_name}${entityRec.last_name ? ' ' + entityRec.last_name : ''}`
+              : entityRec.name || to;
+            // Prefer denormalized assigned_to_name; fall back to employees lookup
+            if (entityRec.assigned_to_name) {
+              senderName = entityRec.assigned_to_name;
+            } else if (entityRec.assigned_to) {
+              const { data: emp } = await supabase
+                .from('employees')
+                .select('first_name, last_name')
+                .eq('id', entityRec.assigned_to)
+                .eq('tenant_id', tenantId)
+                .single();
+              if (emp?.first_name) {
+                senderName = `${emp.first_name}${emp.last_name ? ' ' + emp.last_name : ''}`;
+              }
+            }
+          }
+        } catch (_) {
+          /* non-critical */
+        }
+      }
+      // Fallback: use caller-provided sender name (e.g. from the logged-in user)
+      if (!senderName && config.sender_name) {
+        senderName = config.sender_name;
+      }
+
       // Inject email style guidelines into the prompt
-      const { buildStyleDirective } = await import('../communications/contracts/emailStyleGuardrailsContract.js');
+      const { buildStyleDirective } = await import(
+        '../communications/contracts/emailStyleGuardrailsContract.js'
+      );
       const styleDirective = buildStyleDirective(
         { tone: 'friendly', length_tier: 'standard' },
-        { recipient_name: to },
+        { recipient_name: recipientName, sender_name: senderName },
       );
       const styledPrompt = `${styleDirective}\n\n${body_prompt}`;
       const result = await runAiBrainTask({

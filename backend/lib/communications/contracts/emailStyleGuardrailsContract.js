@@ -350,37 +350,67 @@ export function buildStyleDirective(guardrails, context = {}) {
     [EMAIL_TONE.CASUAL]: 'Use a relaxed, conversational tone. Keep it natural and direct.',
   };
 
-  // Pick a random opener style to force variety across drafts
-  const recipientLabel = context.recipient_name || '[Name]';
+  // Resolve a human-readable first name from whatever we have
+  let recipientLabel = context.recipient_name || '';
+  // If the "name" looks like an email address, extract a human name from the local part
+  if (!recipientLabel || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipientLabel)) {
+    const local = (recipientLabel || '').split('@')[0] || '';
+    // Turn "john.smith" or "john_smith" into "John"
+    const parts = local.split(/[._-]+/).filter(Boolean);
+    recipientLabel =
+      parts.length > 0
+        ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase()
+        : 'there';
+  }
   const openerPool = [
-    `Hi ${recipientLabel}, thanks for your interest — `,
-    `Hi ${recipientLabel}, `,
-    `Hello ${recipientLabel}, `,
-    `Hey ${recipientLabel}, `,
-    `Good to connect, ${recipientLabel} — `,
-    `Hi ${recipientLabel}, quick note — `,
-    `Hi ${recipientLabel}, just a heads-up — `,
-    `Hi ${recipientLabel}, following up on `,
-    `Hi ${recipientLabel}, wanted to circle back about `,
-    `Hi ${recipientLabel}, great chatting with you — `,
-    `${recipientLabel}, `,
-    `Hi ${recipientLabel}, hope your week is going well — `,
-    `Hi ${recipientLabel}, thanks for getting back to me — `,
-    `Hi ${recipientLabel}, appreciate you taking the time — `,
+    `Hi ${recipientLabel},`,
+    `Hello ${recipientLabel},`,
+    `Hey ${recipientLabel},`,
+    `Good to connect, ${recipientLabel}.`,
+    `Hi ${recipientLabel}, quick note:`,
+    `Hi ${recipientLabel}, just a heads-up:`,
+    `${recipientLabel},`,
+    `Hi ${recipientLabel}, thanks for getting back to me.`,
+    `Hi ${recipientLabel}, appreciate you taking the time.`,
   ];
   const selectedOpener = openerPool[Math.floor(Math.random() * openerPool.length)];
 
   const lines = [
     '--- EMAIL STYLE GUIDELINES ---',
+    'You are drafting this email on behalf of the user (their executive assistant). Write as if you ARE the user — first person, their voice, their authority. Do not refer to yourself as an AI or assistant.',
     `Tone: ${toneDescriptions[config.tone]}`,
     `Length: Keep the email under ${maxWords} words (${config.length_tier} tier).`,
     'Write like a real human — not like an AI or a corporate template.',
     'ABSOLUTELY NEVER start with "I hope this message finds you well" or "I hope this email finds you well" or "I trust this message finds you well" or ANY variation of "finds you well". This is the #1 dead giveaway of AI-generated text and MUST be avoided.',
-    `For THIS email, start your opening line with: "${selectedOpener}" and then continue naturally into the purpose of the email.`,
+    '',
+    '** OUTPUT RULES **',
+    'Return ONLY the email body text — no XML, no tool calls, no narration, no commentary. Just the email content that would appear in the message body.',
+    '',
+    '** FORMAT RULES **',
+    `The salutation MUST be on its own line, like a letter. Start the email with "${selectedOpener}" on line 1, then a blank line, then the body.`,
     'Vary your openers — do not reuse the same one across emails.',
+    '',
+    '** DATE/TIME RULES **',
+    'NEVER invent or suggest specific dates, days of the week, or times unless the user explicitly mentioned them in the prompt. Instead say things like "at your convenience", "when you have a moment", or "sometime soon". If the user said "next Tuesday" in their prompt, you may use it. If they did not, do NOT fabricate one.',
+    '',
+    '** SIGN-OFF RULES **',
+  ];
+
+  if (context.sender_name) {
+    lines.push(
+      `End the email with a sign-off line followed by the sender's name on the next line: e.g. "Best,\n${context.sender_name}". ALWAYS include the sender's name "${context.sender_name}" after the sign-off. Do NOT use "[Your name]" or omit the name.`,
+    );
+  } else {
+    lines.push(
+      'End the email with a brief sign-off like "Best regards" without a name. Do NOT write "[Your name]".',
+    );
+  }
+
+  lines.push(
+    '',
     'Avoid these robotic/AI phrases: "I hope this finds you well", "Please don\'t hesitate to", "Feel free to reach out", "I wanted to take a moment to", "I\'m writing to inform you that", "moving forward", "synergy", "leverage", "circle back", "per my last email", "please be advised".',
     'End with a clear, specific next step — not a generic closing like "Looking forward to hearing from you."',
-  ];
+  );
 
   if (config.require_recipient_name && context.recipient_name) {
     lines.push(`Address the recipient by name: ${context.recipient_name}.`);

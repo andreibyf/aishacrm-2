@@ -13,6 +13,7 @@
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import {
   buildServiceError,
+  buildMissingEmailMessage,
   cleanString,
   normalizeEmailEntityType,
   loadRelatedEntityContext,
@@ -133,7 +134,7 @@ export async function generateNotesDrivenEmailDraft(
     throw buildServiceError(
       400,
       'notes_email_missing_recipient',
-      'Unable to resolve recipient email for this record',
+      buildMissingEmailMessage(normalizedEntityType, entity),
     );
   }
 
