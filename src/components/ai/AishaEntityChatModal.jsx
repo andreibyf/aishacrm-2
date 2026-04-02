@@ -157,7 +157,7 @@ export default function AishaEntityChatModal({
       startPolling(data.task_id);
     } catch (error) {
       console.error('Task creation error:', error);
-      toast.error('Failed to start task');
+      toast.error(error.message || 'Failed to start task');
       setIsLoading(false);
     }
   };

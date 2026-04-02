@@ -23,6 +23,63 @@ export default function createSuggestionsRoutes(pgPool) {
   const router = express.Router();
 
   /**
+   * Batch-resolve human-readable names for suggestion records.
+   * Groups by record_type, queries the appropriate table via Supabase client API.
+   * Returns { record_id: name }.
+   */
+  async function resolveRecordNames(suggestions, tenantId) {
+    const nameMap = {};
+    const byType = {};
+    for (const s of suggestions) {
+      if (!s.record_type || !s.record_id) continue;
+      (byType[s.record_type] = byType[s.record_type] || []).push(s.record_id);
+    }
+
+    const TABLE_CONFIG = {
+      contact: { table: 'contacts', select: 'id, first_name, last_name, name' },
+      lead: { table: 'leads', select: 'id, first_name, last_name, name' },
+      account: { table: 'accounts', select: 'id, name' },
+      opportunity: { table: 'opportunities', select: 'id, name, subject' },
+      bizdev_source: { table: 'bizdev_sources', select: 'id, name' },
+      activity: { table: 'activities', select: 'id, name, subject' },
+    };
+
+    const supabase = getSupabaseClient();
+
+    for (const [type, ids] of Object.entries(byType)) {
+      const config = TABLE_CONFIG[type];
+      if (!config) continue;
+      const uniqueIds = [...new Set(ids)];
+      try {
+        const { data, error } = await supabase
+          .from(config.table)
+          .select(config.select)
+          .eq('tenant_id', tenantId)
+          .in('id', uniqueIds);
+
+        if (error) {
+          logger.debug({ err: error, type }, '[Suggestions] Could not resolve names for type');
+          continue;
+        }
+
+        for (const row of data || []) {
+          let resolvedName = '';
+          if (row.first_name || row.last_name) {
+            resolvedName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+          }
+          if (!resolvedName) {
+            resolvedName = row.name || row.subject || '';
+          }
+          if (resolvedName) nameMap[row.id] = resolvedName;
+        }
+      } catch (e) {
+        logger.debug({ err: e, type }, '[Suggestions] Could not resolve names for type');
+      }
+    }
+    return nameMap;
+  }
+
+  /**
    * @openapi
    * /api/ai/suggestions:
    *   get:
@@ -112,6 +169,15 @@ export default function createSuggestionsRoutes(pgPool) {
 
       const result = await pgPool.query(query, params);
 
+      // Enrich suggestions with human-readable record names
+      const suggestions = result.rows;
+      const nameMap = await resolveRecordNames(suggestions, resolved.uuid);
+      for (const s of suggestions) {
+        if (s.record_type && s.record_id && nameMap[s.record_id]) {
+          s.record_name = nameMap[s.record_id];
+        }
+      }
+
       // Get total count for pagination
       let countQuery = `SELECT COUNT(*) as total FROM ai_suggestions WHERE tenant_id = $1`;
       const countParams = [resolved.uuid];
@@ -125,7 +191,7 @@ export default function createSuggestionsRoutes(pgPool) {
       res.json({
         status: 'success',
         data: {
-          suggestions: result.rows,
+          suggestions,
           total,
           limit: parseInt(limit, 10),
           offset: parseInt(offset, 10),
@@ -639,7 +705,7 @@ export default function createSuggestionsRoutes(pgPool) {
    *
    * Returns { success: boolean, result: any }
    */
-  async function applySuggestionAction(action, suggestion, tenantRecord, userEmail) {
+  async function applySuggestionAction(action, suggestion, tenantRecord, userEmail, editedBody) {
     const toolName = action.tool_name;
     const toolArgs = action.tool_args || {};
 
@@ -651,7 +717,10 @@ export default function createSuggestionsRoutes(pgPool) {
       const config = {
         ...toolArgs,
         require_approval: false, // already approved by user
-        use_ai_generation: true, // generate body from body_prompt
+        // If user edited the body, use it directly; otherwise AI-generate
+        ...(editedBody
+          ? { body: editedBody, use_ai_generation: false }
+          : { use_ai_generation: true }),
       };
       const base = { action: 'send_email' };
 
@@ -711,7 +780,7 @@ export default function createSuggestionsRoutes(pgPool) {
   router.post('/:id/apply', async (req, res) => {
     try {
       const { id } = req.params;
-      const { tenant_id } = req.body;
+      const { tenant_id, edited_body } = req.body;
       const _userId = req.user?.id || null;
       const userEmail = req.user?.email || 'system';
 
@@ -765,7 +834,13 @@ export default function createSuggestionsRoutes(pgPool) {
       let applySuccess = false;
 
       try {
-        const dispatched = await applySuggestionAction(action, suggestion, tenantRecord, userEmail);
+        const dispatched = await applySuggestionAction(
+          action,
+          suggestion,
+          tenantRecord,
+          userEmail,
+          edited_body,
+        );
         applyResult = dispatched.result;
         applySuccess = dispatched.success;
       } catch (toolError) {
@@ -858,16 +933,103 @@ export default function createSuggestionsRoutes(pgPool) {
         });
       }
 
+      // Check Redis cache for pre-generated body
+      try {
+        const { default: cacheManager } = await import('../lib/cacheManager.js');
+        const cacheKey = `tenant:${resolved.uuid}:suggestion_preview:${suggestion.id}`;
+        const cached = await cacheManager.get(cacheKey);
+        if (cached?.body) {
+          logger.info({ suggestionId: suggestion.id }, '[Suggestions] Using pre-cached email body');
+          return res.json({
+            status: 'success',
+            data: {
+              to,
+              subject: cached.subject || subject,
+              body: cached.body,
+            },
+            message: 'Pre-generated email preview',
+          });
+        }
+      } catch (cacheErr) {
+        logger.debug({ err: cacheErr }, '[Suggestions] Cache lookup failed, generating on-demand');
+      }
+
       // Generate email body via AI (same path as apply, but without sending)
       const SYSTEM_USER_ID = process.env.SYSTEM_USER_ID || '00000000-0000-0000-0000-000000000000';
       let emailBody = '';
+      let aiSubject = null;
       try {
+        // Resolve recipient name and assigned employee from entity record
+        let recipientName = to;
+        let senderName = null;
+        if (suggestion.record_type && suggestion.record_id) {
+          try {
+            const entityTableMap = {
+              contact: 'contacts',
+              lead: 'leads',
+              account: 'accounts',
+              opportunity: 'opportunities',
+              bizdev_source: 'bizdev_sources',
+              activity: 'activities',
+            };
+            const entityTable = entityTableMap[suggestion.record_type];
+            const nameResult = await pgPool.query(
+              `SELECT first_name, last_name, name, assigned_to, assigned_to_name FROM ${entityTable} WHERE id = $1 AND tenant_id = $2`,
+              [suggestion.record_id, resolved.uuid],
+            );
+            if (nameResult.rows.length > 0) {
+              const rec = nameResult.rows[0];
+              recipientName = rec.first_name
+                ? `${rec.first_name}${rec.last_name ? ' ' + rec.last_name : ''}`
+                : rec.name || to;
+
+              // Prefer denormalized assigned_to_name; fall back to employees lookup
+              if (rec.assigned_to_name) {
+                senderName = rec.assigned_to_name;
+              } else if (rec.assigned_to) {
+                try {
+                  const empResult = await pgPool.query(
+                    `SELECT first_name, last_name FROM employees WHERE id = $1 AND tenant_id = $2`,
+                    [rec.assigned_to, resolved.uuid],
+                  );
+                  if (empResult.rows.length > 0) {
+                    const emp = empResult.rows[0];
+                    senderName = emp.first_name
+                      ? `${emp.first_name}${emp.last_name ? ' ' + emp.last_name : ''}`
+                      : null;
+                  }
+                } catch (empErr) {
+                  logger.debug(
+                    { err: empErr },
+                    '[Suggestions] Could not resolve assigned employee',
+                  );
+                }
+              }
+            }
+          } catch (nameErr) {
+            logger.debug(
+              { err: nameErr },
+              '[Suggestions] Could not resolve recipient name, using email',
+            );
+          }
+        }
+
+        // Fallback sender name from the authenticated user
+        if (!senderName && req.user) {
+          const u = req.user;
+          const fn = u.first_name || u.user_metadata?.first_name;
+          if (fn) {
+            const ln = u.last_name || u.user_metadata?.last_name;
+            senderName = `${fn}${ln ? ' ' + ln : ''}`;
+          }
+        }
+
         const { buildStyleDirective } = await import(
           '../lib/communications/contracts/emailStyleGuardrailsContract.js'
         );
         const styleDirective = buildStyleDirective(
           { tone: 'friendly', length_tier: 'standard' },
-          { recipient_name: to },
+          { recipient_name: recipientName, sender_name: senderName },
         );
         const styledPrompt = `${styleDirective}\n\n${body_prompt}`;
         const result = await runAiBrainTask({
@@ -881,7 +1043,15 @@ export default function createSuggestionsRoutes(pgPool) {
             entity_id: suggestion.record_id,
           },
         });
-        emailBody = result?.content || result?.summary || '';
+        const rawBody = result?.summary || result?.content || '';
+
+        // Clean AI response: extract body from tool-call XML, strip narration
+        const { cleanAiEmailResponse } = await import(
+          '../lib/communications/cleanAiEmailResponse.js'
+        );
+        const cleaned = cleanAiEmailResponse(rawBody, subject);
+        emailBody = cleaned.body;
+        aiSubject = cleaned.subject;
       } catch (aiErr) {
         logger.warn({ err: aiErr }, '[Suggestions] Preview AI generation failed');
         return res.status(500).json({ status: 'error', message: 'Failed to generate preview' });
@@ -891,7 +1061,7 @@ export default function createSuggestionsRoutes(pgPool) {
 
       res.json({
         status: 'success',
-        data: { to, subject, body: emailBody },
+        data: { to, subject: aiSubject || subject, body: emailBody },
       });
     } catch (error) {
       logger.error('[Suggestions] Error generating preview:', error);

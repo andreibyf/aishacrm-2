@@ -1173,6 +1173,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         phone,
         permissions,
         redirect_url,
+        employee_role,
         // Granular permission columns (perm_* on users table)
         perm_notes_anywhere,
         perm_all_records,
@@ -1265,18 +1266,70 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const isGlobalUser = role === 'superadmin' && !normalizedTenantId;
       let createdUser = null;
 
-      if (isGlobalUser || (role === 'admin' && normalizedTenantId)) {
-        // Insert into users table using Supabase
+      // All users created via this endpoint always land in public.users + auth.users.
+      // Employee records are a separate concern — created via the Employee form and
+      // linked to a user via the employee linking flow (linked_user_id).
+      if (isGlobalUser) {
+        // Superadmin with no tenant - validate that tenant_id is truly absent
+        if (normalizedTenantId) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Superadmin users cannot have a tenant_id',
+          });
+        }
         const { data: insertedUser, error: insertError } = await supabase
           .from('users')
           .insert({
             email: normalizedEmail,
             first_name,
             last_name,
-            role,
+            role: 'superadmin',
+            tenant_id: null,
+            metadata,
+            perm_notes_anywhere: perm_notes_anywhere ?? true,
+            perm_all_records: perm_all_records ?? true,
+            perm_reports: perm_reports ?? true,
+            perm_employees: perm_employees ?? true,
+            perm_settings: perm_settings ?? true,
+          })
+          .select(
+            'id, email, first_name, last_name, role, tenant_id, metadata, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings',
+          )
+          .single();
+        if (insertError) {
+          logger.error(
+            { error: toSafeErrorMeta(insertError) },
+            '[POST /api/users/invite] Superadmin insert error',
+          );
+          return res.status(500).json({
+            status: 'error',
+            success: false,
+            message: insertError.message || 'Failed to create user record',
+          });
+        }
+        createdUser = insertedUser;
+      } else {
+        // Admin, manager, director, employee, or plain user — all go into public.users.
+        // tenant_id is required for all non-superadmin users.
+        if (!normalizedTenantId) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'tenant_id is required for non-superadmin users',
+            success: false,
+          });
+        }
+        const resolvedRole = role || 'employee';
+        const resolvedEmployeeRole = employee_role || 'employee';
+        const { data: insertedUser, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            email: normalizedEmail,
+            first_name,
+            last_name,
+            role: resolvedRole,
             tenant_id: normalizedTenantId,
             metadata,
-            // Granular permission columns
+            employee_role: resolvedEmployeeRole,
             perm_notes_anywhere: perm_notes_anywhere ?? true,
             perm_all_records: perm_all_records ?? false,
             perm_reports: perm_reports ?? false,
@@ -1284,10 +1337,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             perm_settings: perm_settings ?? false,
           })
           .select(
-            'id, email, first_name, last_name, role, tenant_id, metadata, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings',
+            'id, email, first_name, last_name, role, tenant_id, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings',
           )
           .single();
-
         if (insertError) {
           logger.error(
             { error: toSafeErrorMeta(insertError) },
@@ -1300,34 +1352,6 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           });
         }
         createdUser = insertedUser;
-      } else {
-        // Insert into employees table for non-admin roles using Supabase
-        const { data: insertedEmployee, error: insertError } = await supabase
-          .from('employees')
-          .insert({
-            email: normalizedEmail,
-            first_name,
-            last_name,
-            role: role || 'employee',
-            tenant_id: normalizedTenantId,
-            metadata,
-            status: 'active',
-          })
-          .select('id, email, first_name, last_name, role, tenant_id, metadata')
-          .single();
-
-        if (insertError) {
-          logger.error(
-            { error: toSafeErrorMeta(insertError) },
-            '[POST /api/users/invite] Employees insert error',
-          );
-          return res.status(500).json({
-            status: 'error',
-            success: false,
-            message: insertError.message || 'Failed to create employee record',
-          });
-        }
-        createdUser = insertedEmployee;
       }
 
       logger.debug(
@@ -1721,7 +1745,9 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           },
         });
       } else {
-        // Create manager/employee in employees table (tenant-assigned user)
+        // All non-superadmin, non-admin users go into public.users.
+        // Employee records are a separate concern — created via the Employee form
+        // and linked via the employee linking flow (linked_user_id).
         if (!normalizedTenantId) {
           return res.status(400).json({
             status: 'error',
@@ -1729,29 +1755,17 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
           });
         }
 
-        // NOTE: Global email uniqueness already checked above
-        // Also check for same email in same tenant (defensive redundancy)
-        // BYPASS ADAPTER: Use direct Supabase to avoid wildcard bug
-        const { getSupabaseClient } = await import('../lib/supabase-db.js');
-        const supabase = getSupabaseClient();
-        const { data: existingEmployee } = await supabase
-          .from('employees')
-          .select('id')
-          .eq('email', normalizedEmail)
-          .eq('tenant_id', normalizedTenantId);
+        const resolvedRole = role || 'employee';
+        const resolvedEmployeeRole = otherFields.employee_role || 'employee';
 
-        if (existingEmployee && existingEmployee.length > 0) {
-          return res.status(409).json({
-            status: 'error',
-            message: 'Employee already exists for this tenant',
-          });
-        }
+        // Strip employee_role from combinedMetadata since it's a proper column
+        delete combinedMetadata.employee_role;
 
         // Create Supabase Auth user - send invitation email
         const authMetadata = {
           first_name,
           last_name,
-          role: role || 'employee',
+          role: resolvedRole,
           tenant_id: normalizedTenantId,
           display_name: `${first_name} ${last_name || ''}`.trim(),
         };
@@ -1775,23 +1789,23 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         authUserId = authUser?.id;
 
         const result = await pgPool.query(
-          `INSERT INTO employees (tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at)
+          `INSERT INTO users (email, first_name, last_name, role, tenant_id, employee_role, metadata, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-           RETURNING id, tenant_id, email, first_name, last_name, role, status, metadata, created_at, updated_at`,
+           RETURNING id, email, first_name, last_name, role, tenant_id, employee_role, metadata, created_at, updated_at`,
           [
-            normalizedTenantId,
             normalizedEmail,
             first_name,
             last_name,
-            role || 'employee',
-            status || 'active',
+            resolvedRole,
+            normalizedTenantId,
+            resolvedEmployeeRole,
             combinedMetadata,
           ],
         );
 
         const user = expandUserMetadata(result.rows[0]);
 
-        // Create audit log for employee creation
+        // Create audit log for user creation
         try {
           const { getSupabaseClient } = await import('../lib/supabase-db.js');
           const supabase = getSupabaseClient();
@@ -1804,21 +1818,21 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
             changes: {
               email: user.email,
               role: user.role,
+              employee_role: resolvedEmployeeRole,
               first_name: user.first_name,
               last_name: user.last_name,
               tenant_id: normalizedTenantId,
-              status: user.status,
             },
             ip_address: getClientIP(req),
             user_agent: req.headers['user-agent'],
           });
         } catch (auditError) {
-          logger.warn('[AUDIT] Failed to log employee creation:', auditError.message);
+          logger.warn('[AUDIT] Failed to log user creation:', auditError.message);
         }
 
         res.json({
           status: 'success',
-          message: 'Employee created. Invitation email queued.',
+          message: 'User created. Invitation email queued.',
           data: {
             user,
             auth: {

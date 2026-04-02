@@ -339,6 +339,7 @@ function EmailDraftPreviewModal({
   onClose,
 }) {
   const [body, setBody] = useState(null);
+  const [previewSubject, setPreviewSubject] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const args = suggestion?.action?.tool_args || {};
@@ -347,6 +348,7 @@ function EmailDraftPreviewModal({
     if (!suggestion) return;
     setIsLoading(true);
     setBody(null);
+    setPreviewSubject(null);
     getAuthHeaders().then((headers) =>
       fetch(`${backendUrl}/api/ai/suggestions/${suggestion.id}/preview`, {
         method: 'POST',
@@ -358,6 +360,7 @@ function EmailDraftPreviewModal({
         .then((data) => {
           if (data.status === 'success') {
             setBody(data.data?.body || '(no body generated)');
+            if (data.data?.subject) setPreviewSubject(data.data.subject);
           } else {
             setBody(null);
             toast.error(data.message || 'Failed to generate preview');
@@ -373,7 +376,7 @@ function EmailDraftPreviewModal({
 
   const handleApprove = async () => {
     setIsActing(true);
-    await onApprove(suggestion.id);
+    await onApprove(suggestion.id, body);
     onClose();
   };
 
@@ -402,35 +405,52 @@ function EmailDraftPreviewModal({
             </div>
             <div className="flex gap-2 px-3 py-2">
               <span className="text-muted-foreground w-16 shrink-0">Subject</span>
-              <span className="font-medium truncate">{args.subject || '(no subject)'}</span>
+              <span className="font-medium truncate">
+                {previewSubject || args.subject || '(no subject)'}
+              </span>
             </div>
           </div>
 
-          {/* Body */}
-          <div className="border border-border rounded-lg p-3 text-sm">
+          {/* Body — editable */}
+          <div className="border border-border rounded-lg text-sm">
             {isLoading ? (
-              <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <div className="flex items-center gap-2 text-muted-foreground py-4 px-3">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Generating draft…</span>
               </div>
-            ) : body ? (
-              <pre className="whitespace-pre-wrap font-sans leading-relaxed">{body}</pre>
+            ) : body !== null && body !== undefined ? (
+              <textarea
+                className="w-full min-h-[200px] bg-transparent text-foreground p-3 resize-y focus:outline-none focus:ring-1 focus:ring-ring rounded-lg font-sans text-sm leading-relaxed"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                aria-label="Email body"
+              />
             ) : (
-              <p className="text-muted-foreground italic">Preview unavailable</p>
+              <p className="text-muted-foreground italic p-3">Preview unavailable</p>
             )}
           </div>
 
           {/* Instruction note */}
-          {args.body_prompt && (
-            <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-500/10 px-3 py-2 flex items-start gap-2">
-              <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">AI instruction: </span>
-                {args.body_prompt.slice(0, 200)}
-                {args.body_prompt.length > 200 ? '…' : ''}
-              </p>
-            </div>
-          )}
+          {args.body_prompt &&
+            (() => {
+              // Strip CRM context JSON from display
+              const cleanInstruction = args.body_prompt
+                .replace(/\s*Related CRM record:[\s\S]*$/i, '')
+                .replace(/\s*Context:\s*\{[\s\S]*$/i, '')
+                .replace(/\s*\{"type":[\s\S]*$/i, '')
+                .trim();
+              if (!cleanInstruction) return null;
+              return (
+                <div className="rounded-lg border border-dashed border-yellow-500/50 bg-yellow-500/10 px-3 py-2 flex items-start gap-2">
+                  <Lightbulb className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">AI instruction: </span>
+                    {cleanInstruction.slice(0, 200)}
+                    {cleanInstruction.length > 200 ? '…' : ''}
+                  </p>
+                </div>
+              );
+            })()}
         </div>
 
         <DialogFooter className="gap-2 pt-4 border-t border-border">
@@ -506,6 +526,11 @@ function SuggestionCard({
                   {suggestion.record_name ||
                     `${suggestion.record_type} ${suggestion.record_id?.slice(0, 8)}`}
                 </CardTitle>
+                {suggestion.record_id && (
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {suggestion.record_type} {suggestion.record_id.slice(0, 8)}
+                  </span>
+                )}
                 <CardDescription className="text-xs text-slate-400">
                   {config.label} • {formatRelativeTime(suggestion.created_at)}
                 </CardDescription>
@@ -694,7 +719,7 @@ export default function SuggestionQueue({
    * Approve a suggestion, then apply (execute) it via the Safe Apply Engine.
    */
   const handleApprove = useCallback(
-    async (suggestionId) => {
+    async (suggestionId, editedBody) => {
       try {
         setIsProcessing(true);
         const headers = await getAuthHeaders();
@@ -712,12 +737,15 @@ export default function SuggestionQueue({
           throw new Error(errorData.error || 'Failed to approve suggestion');
         }
 
-        // Step 2: Execute via Safe Apply Engine
+        // Step 2: Execute via Safe Apply Engine (pass edited body if provided)
+        const applyPayload = { tenant_id: tenantId };
+        if (editedBody) applyPayload.edited_body = editedBody;
+
         const applyRes = await fetch(`${backendUrl}/api/ai/suggestions/${suggestionId}/apply`, {
           method: 'POST',
           headers,
           credentials: 'include',
-          body: JSON.stringify({ tenant_id: tenantId }),
+          body: JSON.stringify(applyPayload),
         });
 
         if (!applyRes.ok) {

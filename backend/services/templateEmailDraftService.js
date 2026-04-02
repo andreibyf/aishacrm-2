@@ -11,6 +11,7 @@
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import {
   buildServiceError,
+  buildMissingEmailMessage,
   cleanString,
   normalizeEmailEntityType,
   loadRelatedEntityContext,
@@ -175,7 +176,7 @@ export async function generateTemplateDrivenEmailDraft(
     throw buildServiceError(
       400,
       'template_email_missing_recipient',
-      'Unable to resolve recipient email for this record',
+      buildMissingEmailMessage(normalizedEntityType, entity),
     );
   }
 
@@ -245,7 +246,9 @@ export async function generateTemplateDrivenEmailDraft(
   supabase
     .rpc('increment_email_template_usage', { template_id: templateId })
     .then(() => {})
-    .catch((err) => logger.warn({ err, templateId }, '[templateEmailDraft] Failed to increment usage count'));
+    .catch((err) =>
+      logger.warn({ err, templateId }, '[templateEmailDraft] Failed to increment usage count'),
+    );
 
   // 9. Create notification
   await createAiEmailDraftNotification(supabase, {

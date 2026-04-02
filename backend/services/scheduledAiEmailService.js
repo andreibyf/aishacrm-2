@@ -2,6 +2,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { executeCareSendEmailAction } from '../lib/care/carePlaybookExecutor.js';
 import {
   buildServiceError,
+  buildMissingEmailMessage,
   asObject,
   cleanString,
   loadRelatedEntityContext,
@@ -70,7 +71,7 @@ export async function generateScheduledAiEmailDraft(
     throw buildServiceError(
       400,
       'scheduled_ai_email_missing_recipient',
-      'Unable to resolve recipient email for scheduled_ai_email activity',
+      buildMissingEmailMessage(activity.related_to || 'record', entity || activity),
     );
   }
 

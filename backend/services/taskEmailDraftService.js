@@ -12,6 +12,7 @@
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import {
   buildServiceError,
+  buildMissingEmailMessage,
   cleanString,
   normalizeEmailEntityType,
   loadRelatedEntityContext,
@@ -114,7 +115,7 @@ export async function generateTaskEmailDraft(
     throw buildServiceError(
       400,
       'task_email_missing_recipient',
-      'Unable to resolve recipient email from this task or its related record',
+      buildMissingEmailMessage(entityType || 'task', entity || activity),
     );
   }
 
@@ -130,7 +131,9 @@ export async function generateTaskEmailDraft(
 
   const requestedAt = new Date().toISOString();
   const resolvedSubject =
-    cleanString(subject) || cleanString(activity.subject) || `Follow up from ${user?.first_name || 'AiSHA'}`;
+    cleanString(subject) ||
+    cleanString(activity.subject) ||
+    `Follow up from ${user?.first_name || 'AiSHA'}`;
 
   const sourceRecord = {
     id: activityId,
