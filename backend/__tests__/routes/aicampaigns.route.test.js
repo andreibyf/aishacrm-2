@@ -78,20 +78,14 @@ describe('AI Campaigns Routes', { skip: !SHOULD_RUN }, () => {
   });
 
   test('POST /api/aicampaigns creates new campaign', async () => {
-    const baseData = TestFactory.activity({ tenant_id: TENANT_ID });
-    // Remove activity-specific fields and add campaign fields
-    delete baseData.subject;
-    delete baseData.type;
-    delete baseData.due_date;
-    delete baseData.status;
-
     const newCampaignData = {
-      ...baseData,
+      tenant_id: TENANT_ID,
       name: `Campaign ${Date.now()}`,
-      type: 'email',
+      campaign_type: 'email',
       status: 'draft',
-      subject: 'Automated Test',
-      content: 'Created by automated test',
+      description: 'Automated Test Campaign',
+      content: { subject: 'Test', body: 'Created by automated test' },
+      is_test_data: true,
     };
 
     const result = await createCampaign(newCampaignData);

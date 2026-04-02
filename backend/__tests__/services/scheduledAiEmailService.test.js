@@ -357,7 +357,7 @@ test('generateScheduledAiEmailDraft resolves opportunity recipients from linked 
     {
       table: 'opportunities',
       action: 'select',
-      columns: 'id, name, contact_id, lead_id, assigned_to, assigned_to_team',
+      columns: 'id, name, contact_id, lead_id, assigned_to, assigned_to_name, assigned_to_team',
     },
   ]);
   assert.equal(supabase.calls.executeSendEmailAction[0][4].to, 'buyer@example.com');
