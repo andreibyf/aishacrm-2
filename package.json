@@ -139,7 +139,7 @@
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/ui": "4.0.8",
     "autoprefixer": "^10.4.20",
-    "baseline-browser-mapping": "^2.10.0",
+    "baseline-browser-mapping": "^2.10.13",
     "dotenv": "^17.2.3",
     "eslint": "^9.19.0",
     "eslint-config-prettier": "^10.1.8",
