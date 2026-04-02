@@ -175,6 +175,13 @@ export async function runTask(params) {
     let completion;
 
     if (llmConfig.provider === 'anthropic') {
+      // TODO: Add tool calling support for Anthropic provider
+      // Currently, the multi-provider client's generateChatCompletion()
+      // doesn't support passing tools to Anthropic. This means read_only
+      // and propose_actions modes will fall back to text responses only.
+      // To fix: enhance callAnthropic() in llmClient.js to accept tools parameter,
+      // convert schemas to Anthropic format, and parse tool_use blocks from response.
+
       // Use multi-provider generateChatCompletion for Anthropic
       const result = await generateChatCompletion({
         provider: 'anthropic',

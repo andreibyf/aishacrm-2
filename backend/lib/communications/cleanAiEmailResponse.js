@@ -39,8 +39,11 @@ export function cleanAiEmailResponse(raw, fallbackSubject = null) {
     if (bodyMatch?.[1]) {
       body = bodyMatch[1].trim();
     } else {
-      // No body parameter — strip all XML tags and keep text
+      // No body parameter — strip all XML tags, then sanitize script/style tags
       body = body.replace(/<\/?[^>]+>/g, '').trim();
+      // Extra sanitization: remove any remaining script/style fragments
+      body = body.replace(/<script[\s\S]*?<\/script>/gi, '');
+      body = body.replace(/<style[\s\S]*?<\/style>/gi, '');
     }
   }
 

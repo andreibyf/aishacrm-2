@@ -418,7 +418,7 @@ function EmailDraftPreviewModal({
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Generating draft…</span>
               </div>
-            ) : body ? (
+            ) : body !== null && body !== undefined ? (
               <textarea
                 className="w-full min-h-[200px] bg-transparent text-foreground p-3 resize-y focus:outline-none focus:ring-1 focus:ring-ring rounded-lg font-sans text-sm leading-relaxed"
                 value={body}

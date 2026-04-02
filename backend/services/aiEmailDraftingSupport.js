@@ -58,13 +58,14 @@ export function buildEntityTableName(entityType) {
 }
 
 function buildEntitySelectColumns(entityType) {
-  if (entityType === 'account') return 'id, name, email, assigned_to, assigned_to_team';
+  if (entityType === 'account')
+    return 'id, name, email, assigned_to, assigned_to_name, assigned_to_team';
   if (entityType === 'opportunity')
-    return 'id, name, contact_id, lead_id, assigned_to, assigned_to_team';
-  // contacts table has no 'company' column — company comes from joined accounts
+    return 'id, name, contact_id, lead_id, assigned_to, assigned_to_name, assigned_to_team';
+  // contacts table has no 'company' column \u2014 company comes from joined accounts
   if (entityType === 'contact')
-    return 'id, first_name, last_name, email, assigned_to, assigned_to_team, accounts!contacts_account_id_fkey(name)';
-  return 'id, first_name, last_name, company, email, assigned_to, assigned_to_team';
+    return 'id, first_name, last_name, email, assigned_to, assigned_to_name, assigned_to_team, accounts!contacts_account_id_fkey(name)';
+  return 'id, first_name, last_name, company, email, assigned_to, assigned_to_name, assigned_to_team';
 }
 
 async function loadEntityEmailById(supabase, tenantId, entityType, entityId) {

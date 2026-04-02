@@ -352,15 +352,18 @@ export function buildStyleDirective(guardrails, context = {}) {
 
   // Resolve a human-readable first name from whatever we have
   let recipientLabel = context.recipient_name || '';
-  // If the "name" looks like an email address, extract a human name from the local part
-  if (!recipientLabel || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipientLabel)) {
+  // If the "name" looks like an email address, extract full human name from local part
+  if (!recipientLabel || /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(recipientLabel)) {
     const local = (recipientLabel || '').split('@')[0] || '';
-    // Turn "john.smith" or "john_smith" into "John"
+    // Turn "john.smith" or "john_smith" into "John Smith" (all tokens)
     const parts = local.split(/[._-]+/).filter(Boolean);
-    recipientLabel =
-      parts.length > 0
-        ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase()
-        : 'there';
+    if (parts.length > 0) {
+      recipientLabel = parts
+        .map((token) => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase())
+        .join(' ');
+    } else {
+      recipientLabel = 'there';
+    }
   }
   const openerPool = [
     `Hi ${recipientLabel},`,

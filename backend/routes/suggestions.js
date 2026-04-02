@@ -27,7 +27,7 @@ export default function createSuggestionsRoutes(pgPool) {
    * Groups by record_type, queries the appropriate table via Supabase client API.
    * Returns { record_id: name }.
    */
-  async function resolveRecordNames(suggestions) {
+  async function resolveRecordNames(suggestions, tenantId) {
     const nameMap = {};
     const byType = {};
     for (const s of suggestions) {
@@ -54,6 +54,7 @@ export default function createSuggestionsRoutes(pgPool) {
         const { data, error } = await supabase
           .from(config.table)
           .select(config.select)
+          .eq('tenant_id', tenantId)
           .in('id', uniqueIds);
 
         if (error) {
@@ -170,7 +171,7 @@ export default function createSuggestionsRoutes(pgPool) {
 
       // Enrich suggestions with human-readable record names
       const suggestions = result.rows;
-      const nameMap = await resolveRecordNames(suggestions);
+      const nameMap = await resolveRecordNames(suggestions, resolved.uuid);
       for (const s of suggestions) {
         if (s.record_type && s.record_id && nameMap[s.record_id]) {
           s.record_name = nameMap[s.record_id];
@@ -963,12 +964,15 @@ export default function createSuggestionsRoutes(pgPool) {
         let senderName = null;
         if (suggestion.record_type && suggestion.record_id) {
           try {
-            const entityTable =
-              suggestion.record_type === 'bizdev_source'
-                ? 'bizdev_sources'
-                : suggestion.record_type === 'opportunity'
-                  ? 'opportunities'
-                  : `${suggestion.record_type}s`;
+            const entityTableMap = {
+              contact: 'contacts',
+              lead: 'leads',
+              account: 'accounts',
+              opportunity: 'opportunities',
+              bizdev_source: 'bizdev_sources',
+              activity: 'activities',
+            };
+            const entityTable = entityTableMap[suggestion.record_type];
             const nameResult = await pgPool.query(
               `SELECT first_name, last_name, name, assigned_to, assigned_to_name FROM ${entityTable} WHERE id = $1 AND tenant_id = $2`,
               [suggestion.record_id, resolved.uuid],

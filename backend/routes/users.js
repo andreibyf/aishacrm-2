@@ -1270,9 +1270,12 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Employee records are a separate concern — created via the Employee form and
       // linked to a user via the employee linking flow (linked_user_id).
       if (isGlobalUser) {
-        // Superadmin with no tenant
-        if (!normalizedTenantId === false) {
-          // Should not happen — superadmin must not have a tenant — but guard anyway
+        // Superadmin with no tenant - validate that tenant_id is truly absent
+        if (normalizedTenantId) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Superadmin users cannot have a tenant_id',
+          });
         }
         const { data: insertedUser, error: insertError } = await supabase
           .from('users')

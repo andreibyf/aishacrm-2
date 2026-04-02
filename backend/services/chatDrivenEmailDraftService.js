@@ -37,10 +37,11 @@ function deriveSubjectFromPrompt(prompt) {
     .trim();
 
   // Try to extract intent via action verbs first (highest quality subjects)
+  // Regexes simplified to avoid ReDoS: no nested quantifiers, bounded repetitions
   const actionPatterns = [
-    /(?:discuss|propose|schedule|invite|confirm|follow.?up|introduce|request)\s+(.{3,60}?)(?:\s+for\s+(?:one|some|his|her|their|my)\b.*)?(?:\.|$)/i,
-    /(?:ask)\s+(?:\w+\s+)?(?:if|whether|about)\s+(.{5,60}?)(?:\.|$)/i,
-    /(?:interested\s+in|attending|invitation\s+to)\s+(.{3,50}?)(?:\s+for\s+(?:one|some|his|her|their|my)\b.*)?(?:\.|$)/i,
+    /(?:discuss|propose|schedule|invite|confirm|follow.?up|introduce|request)\s+([^.,;]{3,60})(?:\s+for\s+(?:one|some|his|her|their|my)\b)?(?:\.|$)/i,
+    /(?:ask)\s+(?:\w+\s+)?(?:if|whether|about)\s+([^.,;]{5,60})(?:\.|$)/i,
+    /(?:interested\s+in|attending|invitation\s+to)\s+([^.,;]{3,50})(?:\s+for\s+(?:one|some|his|her|their|my)\b)?(?:\.|$)/i,
   ];
 
   for (const pattern of actionPatterns) {
@@ -59,7 +60,7 @@ function deriveSubjectFromPrompt(prompt) {
 
   // Second pass: broad topic extraction (about/regarding/re:)
   const topicMatch = stripped.match(
-    /(?:about|regarding|re:)\s+(.{5,60}?)(?:\.|$|over\s|via\s|through\s|by\s+(?:email|phone))/i,
+    /(?:about|regarding|re:)\s+([^.,;]{5,60})(?:\.|$|over\s|via\s|through\s|by\s+(?:email|phone))/i,
   );
   if (topicMatch?.[1]) {
     const raw = topicMatch[1]
@@ -144,9 +145,11 @@ export async function generateChatDrivenEmailDraft(
       : entity.name || null
     : null;
 
-  // Resolve sign-off: assigned employee first, then logged-in user as fallback
+  // Resolve sign-off: prefer assigned_to_name, fall back to employee lookup, then logged-in user
   let resolvedSenderName = null;
-  if (entity?.assigned_to) {
+  if (entity?.assigned_to_name) {
+    resolvedSenderName = entity.assigned_to_name;
+  } else if (entity?.assigned_to) {
     try {
       const { data: assignedEmp } = await supabase
         .from('employees')
