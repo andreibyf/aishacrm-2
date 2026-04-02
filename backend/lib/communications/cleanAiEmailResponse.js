@@ -39,12 +39,23 @@ export function cleanAiEmailResponse(raw, fallbackSubject = null) {
     if (bodyMatch?.[1]) {
       body = bodyMatch[1].trim();
     } else {
-      // No body parameter — strip all XML tags, then sanitize script/style tags
+      // No body parameter — strip all XML tags
       body = body.replace(/<\/?[^>]+>/g, '').trim();
-      // Extra sanitization: remove any remaining script/style fragments
-      body = body.replace(/<script[\s\S]*?<\/script>/gi, '');
-      body = body.replace(/<style[\s\S]*?<\/style>/gi, '');
     }
+  }
+
+  // ── 1b. Sanitize dangerous HTML tags from extracted content ──────
+  // Remove script/style tags with comprehensive patterns that handle:
+  // - Attributes: <script src="...">
+  // - Whitespace: </script > or < script >
+  // - Case variations: <SCRIPT>
+  // Apply multiple passes to catch nested or malformed tags
+  for (let i = 0; i < 3; i++) {
+    body = body.replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '');
+    body = body.replace(/<\s*style[^>]*>[\s\S]*?<\s*\/\s*style\s*>/gi, '');
+    // Also remove standalone opening tags (in case closing tag is malformed)
+    body = body.replace(/<\s*script[^>]*>/gi, '');
+    body = body.replace(/<\s*style[^>]*>/gi, '');
   }
 
   // ── 2. Strip leading AI narration before the greeting ────────────
