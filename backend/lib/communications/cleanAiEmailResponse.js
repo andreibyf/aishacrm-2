@@ -39,34 +39,16 @@ export function cleanAiEmailResponse(raw, fallbackSubject = null) {
     if (bodyMatch?.[1]) {
       body = bodyMatch[1].trim();
     } else {
-      // No body parameter — strip all XML tags
-      body = body.replace(/<\/?[^>]+>/g, '').trim();
+      // No body parameter — remove all angle brackets to strip XML markup
+      body = body.replace(/[<>]/g, '').trim();
     }
   }
 
-  // ── 1b. Strip ALL HTML tags completely ───────────────────────────
-  // Email body should be plain text. Remove all HTML to prevent injection.
-  // This is more secure than trying to sanitize specific tags with regex.
-  // Use a fixed-point loop to handle nested/malformed tags and avoid
-  // incomplete multi-character sanitization issues.
-
-  // First, remove any literal angle brackets so that tag fragments
-  // like "<script" cannot remain.
+  // ── 1b. Strip ALL HTML/XML markup completely ─────────────────────
+  // Email body should be plain text. Remove ALL angle bracket characters
+  // rather than attempting regex-based tag matching (which is incomplete
+  // and can be bypassed with malformed or encoded tags).
   body = body.replace(/[<>]/g, '');
-
-  // Then repeatedly strip any remaining tag-like constructs until
-  // the string stops changing.
-  // This guards against patterns that could re-form after a replacement.
-  while (true) {
-    const before = body;
-    // Remove any HTML/XML-style tags (opening, closing, self-closing)
-    body = body.replace(/<[^>]*>/g, '');
-    // Remove any remaining < or > characters that might be part of incomplete tags
-    body = body.replace(/[<>]/g, '');
-    if (body === before) {
-      break;
-    }
-  }
 
   // ── 2. Strip leading AI narration before the greeting ────────────
   const greetingIdx = body.search(
