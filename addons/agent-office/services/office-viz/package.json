@@ -6,6 +6,6 @@
   "dependencies": {
     "express": "^5.2.1",
     "kafkajs": "^2.2.4",
-    "amqplib": "^0.10.4"
+    "amqplib": "^1.0.3"
   }
 }
