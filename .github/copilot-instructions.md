@@ -15,14 +15,15 @@
 ```
 React (4000) → Express (4001) → Supabase PostgreSQL (RLS)
                     ↓
-           Braid SDK (60+ AI tools)
+           Braid SDK (126 AI tools)
 ```
 
 **Key patterns:**
+
 - **Multi-tenancy**: Always use `req.tenant.id` (UUID), never `tenant_id_text`
 - **Frontend API**: Route ALL calls through [src/api/fallbackFunctions.js](../src/api/fallbackFunctions.js) (circuit breaker + failover)
 - **AI Engine**: [backend/lib/aiEngine/](../backend/lib/aiEngine/) → OpenAI/Anthropic/Groq with automatic failover
-- **Braid tools**: [braid-llm-kit/examples/assistant/*.braid](../braid-llm-kit/examples/assistant/) — type-safe AI-database operations
+- **Braid tools**: [braid-llm-kit/examples/assistant/\*.braid](../braid-llm-kit/examples/assistant/) — type-safe AI-database operations
 
 ## Database Rules
 
@@ -35,15 +36,16 @@ const { data } = await supabase.from('accounts').select('*').eq('tenant_id', req
 ```
 
 **Timestamp columns vary by table** — verify in [backend/migrations/](../backend/migrations/):
+
 - Standard tables: `created_at`, `updated_at`
 - Conversations: `created_date`, `updated_date` (messages have NO `updated_date`)
 
 ## Routes: V1 vs V2
 
 | V1 `/api/accounts` | V2 `/api/v2/accounts` |
-|---|---|
-| Nested metadata | Flattened fields |
-| Legacy only | **New features here** |
+| ------------------ | --------------------- |
+| Nested metadata    | Flattened fields      |
+| Legacy only        | **New features here** |
 
 ## Development Commands
 
@@ -57,6 +59,7 @@ doppler run -- node backend/run-sql.js           # Run SQL with secrets
 ```
 
 **Required DEV containers (AiSHA AI):**
+
 - Core: `aishacrm-backend` (4001), `aishacrm-frontend` (4000), `aishacrm-redis-memory` (6379), `aishacrm-redis-cache` (6380)
 - Braid MCP: `braid-mcp-server`, `braid-mcp-1`, `braid-mcp-2`
 - Agent Office / Office Viz: `aisha-redpanda`, `aisha-telemetry-sidecar`, `aisha-office-viz` (4010)
@@ -65,19 +68,19 @@ doppler run -- node backend/run-sql.js           # Run SQL with secrets
 
 ## Common Pitfalls
 
-| Error | Fix |
-|-------|-----|
+| Error                                | Fix                                                   |
+| ------------------------------------ | ----------------------------------------------------- |
 | `invalid input syntax for type uuid` | Use `tenant.id` (UUID), not `tenant.tenant_id` (slug) |
-| Stale UI data | Call `clearCacheByKey("Entity")` after mutations |
-| 500 on timestamp | Check migration for `created_at` vs `created_date` |
+| Stale UI data                        | Call `clearCacheByKey("Entity")` after mutations      |
+| 500 on timestamp                     | Check migration for `created_at` vs `created_date`    |
 
 ## Key Files
 
-| Purpose | Location |
-|---------|----------|
-| API failover | [src/api/fallbackFunctions.js](../src/api/fallbackFunctions.js) |
+| Purpose           | Location                                                                        |
+| ----------------- | ------------------------------------------------------------------------------- |
+| API failover      | [src/api/fallbackFunctions.js](../src/api/fallbackFunctions.js)                 |
 | Tenant middleware | [backend/middleware/validateTenant.js](../backend/middleware/validateTenant.js) |
-| AI tools (Braid) | [braid-llm-kit/examples/assistant/](../braid-llm-kit/examples/assistant/) |
-| Work queue | [orchestra/PLAN.md](../orchestra/PLAN.md) |
+| AI tools (Braid)  | [braid-llm-kit/examples/assistant/](../braid-llm-kit/examples/assistant/)       |
+| Work queue        | [orchestra/PLAN.md](../orchestra/PLAN.md)                                       |
 
 See [CLAUDE.md](../CLAUDE.md) for extended documentation.

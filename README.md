@@ -2,7 +2,7 @@
 
 **AI-SHA CRM: AI Super Hi-performing Assistant** — Executive AI Assistant powered by Braid SDK.
 
-Built with React + Vite frontend and Node.js backend, featuring 60+ AI-native tools for full CRM lifecycle management.
+Built with React + Vite frontend and Node.js backend, featuring 126 AI-native tools across 24 Braid modules for full CRM lifecycle management.
 
 > **Version 3.0.x** | December 2025
 
@@ -122,7 +122,7 @@ fn createLead(tenant: String, first_name: String, last_name: String, email: Stri
 | **Effect Declarations**        | `!net`, `!fs`, `!clock` make side effects explicit            |
 | **Result Types**               | `Result<T, E>` forces explicit error handling                 |
 | **Whitelist Enforcement**      | Tools can only access pre-approved endpoints                  |
-| **60+ Production Tools**       | CRM, calendar, notes, telephony, workflows, navigation        |
+| **126 Production Tools**       | CRM, calendar, notes, telephony, workflows, navigation        |
 
 #### Dual Execution Modes
 
@@ -162,15 +162,15 @@ See `braid-llm-kit/README.md` for complete Braid documentation.
 
 ### 🏗️ Architecture
 
-| Component      | Technology                                      |
-| -------------- | ----------------------------------------------- |
-| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui         |
-| **Backend**    | Node.js + Express, 210+ API endpoints           |
-| **Database**   | PostgreSQL 15+ on Supabase, 50+ tables with RLS |
-| **AI Tools**   | Braid DSL (`.braid` files in `braid-llm-kit/`)  |
-| **Secrets**    | Doppler for production, `.env` for local        |
-| **Caching**    | Redis (memory + cache layers)                   |
-| **Containers** | Docker Compose with health checks               |
+| Component      | Technology                                     |
+| -------------- | ---------------------------------------------- |
+| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui        |
+| **Backend**    | Node.js + Express, 210+ API endpoints          |
+| **Database**   | PostgreSQL 17+ on Supabase, 88 tables with RLS |
+| **AI Tools**   | Braid DSL (`.braid` files in `braid-llm-kit/`) |
+| **Secrets**    | Doppler for production, `.env` for local       |
+| **Caching**    | Redis (memory + cache layers)                  |
+| **Containers** | Docker Compose with health checks              |
 
 ---
 

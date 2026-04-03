@@ -99,7 +99,7 @@ graph TB
 - **UUID Primary Keys:** All tables use `gen_random_uuid()`
 - **JSONB Metadata:** Flexible schema via `metadata` columns
 - **Audit Logging:** Comprehensive change tracking
-- **RLS Enabled:** 50+ tables with row-level security
+- **RLS Enabled:** 88 tables with row-level security
 
 ---
 
@@ -336,7 +336,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### 3.1 Core Tables
 
-Aisha CRM has **50+ tables** organized into functional groups:
+Aisha CRM has **88 tables** organized into functional groups:
 
 > **⚠️ Schema Gotcha — contacts.company:** The `contacts` table has **NO `company` column**. Company is derived by joining `accounts` via `account_id`. Always use `accounts!contacts_account_id_fkey(name)` in Supabase queries. See [DATABASE_SCHEMA_REFERENCE.md](./DATABASE_SCHEMA_REFERENCE.md) for details.
 

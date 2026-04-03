@@ -733,7 +733,7 @@ const systemPrompt = getBraidSystemPrompt({
 
 // Example output:
 `You are AiSHA, the AI Executive Assistant for Example Corp.
-You have access to 60+ tools for managing:
+You have access to 126 tools for managing:
 - Leads (called "Prospects" in this tenant)
 - Accounts (called "Clients")
 - ...

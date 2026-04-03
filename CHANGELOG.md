@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased] - 2026-04-02
+
+### Added
+
+- **Doppler MCP server:** Created `doppler-mcp/` — a Python FastMCP server that exposes 9 read-only Doppler API tools (`doppler_list_projects`, `doppler_get_project`, `doppler_list_configs`, `doppler_get_config`, `doppler_list_secrets`, `doppler_get_secret`, `doppler_get_secrets`, `doppler_download_secrets`, `doppler_list_activity_logs`). Supports both service tokens and personal tokens; secret values are hidden by default for safety. Connects via stdio transport. Includes `pyproject.toml` and `README.md` with Cowork/Claude connection instructions.
+- **DATABASE_REFERENCE.md:** Created `docs/reference/DATABASE_REFERENCE.md` — a live reference document with all 88 prod tables, full column lists, RLS policy summary, prod/dev diffs, and instructions for keeping it up-to-date. Replaces the need to re-query Supabase for schema info each session.
+
+### Changed
+
+- **CLAUDE.md / AGENTS.md:** Corrected Braid tool count from "60+" to 126 tools across 24 files (verified by counting `fn` definitions in all `.braid` files)
+- **CLAUDE.md / AGENTS.md:** Corrected database table count from "50+" to 88 tables (prod); corrected PostgreSQL version from "15+" to "17+"
+- **README.md:** Updated Braid tool count (126), table count (88), and Postgres version (17+) in both prose and architecture table
+- **docs/architecture/BRAID_ARCHITECTURE.md:** Updated "60+ tools" reference to 126
+- **.github/copilot-instructions.md:** Updated "60+ AI tools" to 126
+- **docs/developer-docs/DATABASE_GUIDE.md:** Updated "50+ tables" references (×2) to 88
+- **docs/architecture/SYSTEM_OVERVIEW.md:** Updated "50+ tables, PostgreSQL 15+" to "88 tables (prod), PostgreSQL 17+"
+- **CLAUDE.md:** Added Reference Documents section (check-first workflow) and mandatory CHANGELOG rules
+
+---
+
 ## [5.12.0] - 2026-04-01
 
 ### Fixed

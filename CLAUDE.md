@@ -12,37 +12,67 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Architecture
 
-| Component      | Technology                                              |
-| -------------- | ------------------------------------------------------- |
-| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui                 |
-| **Backend**    | Node.js 22 + Express, 210+ API endpoints                |
-| **Database**   | PostgreSQL 15+ on Supabase, 50+ tables with RLS         |
-| **AI Tools**   | Braid DSL (60+ tools in `braid-llm-kit/`)               |
-| **AI Engine**  | Multi-provider failover: OpenAI, Anthropic, Groq, Local |
-| **Secrets**    | Doppler for production, `.env` for local                |
-| **Caching**    | Redis (memory layer + cache layer)                      |
-| **Containers** | Docker Compose with health checks                       |
+| Component      | Technology                                                |
+| -------------- | --------------------------------------------------------- |
+| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui                   |
+| **Backend**    | Node.js 22 + Express, 210+ API endpoints                  |
+| **Database**   | PostgreSQL 17+ on Supabase, 88 tables with RLS            |
+| **AI Tools**   | Braid DSL (126 tools across 24 files in `braid-llm-kit/`) |
+| **AI Engine**  | Multi-provider failover: OpenAI, Anthropic, Groq, Local   |
+| **Secrets**    | Doppler for production, `.env` for local                  |
+| **Caching**    | Redis (memory layer + cache layer)                        |
+| **Containers** | Docker Compose with health checks                         |
 
 ---
 
 ## 📚 Documentation
 
-| Document                                                                                                   | Description                                                 |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md)                                           | **⭐ START HERE** - Operations guide, testing, migrations   |
-| [Intel-iGPU-Local-AI-Development-Guide.md](./docs/developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny with Intel GPU                  |
-| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                                                          | End-user guide for CRM operations                           |
-| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                           |
-| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                                 |
-| [CARE_SETUP_GUIDE.md](./docs/user-guides/CARE_SETUP_GUIDE.md)                                              | **C.A.R.E.** configuration (UI-driven via Workflow Builder) |
-| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, architecture                             |
-| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)                                               | Database schema, migrations, **trigger patterns**           |
-| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)                                                 | Security, RLS, authentication                               |
-| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                        |
+| Document                                                                                                   | Description                                                             |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md)                                           | **⭐ START HERE** - Operations guide, testing, migrations               |
+| [Intel-iGPU-Local-AI-Development-Guide.md](./docs/developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny with Intel GPU                              |
+| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                                                          | End-user guide for CRM operations                                       |
+| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                                       |
+| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                                             |
+| [CARE_SETUP_GUIDE.md](./docs/user-guides/CARE_SETUP_GUIDE.md)                                              | **C.A.R.E.** configuration (UI-driven via Workflow Builder)             |
+| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, architecture                                         |
+| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)                                               | Database schema, migrations, **trigger patterns**                       |
+| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)                                                 | Security, RLS, authentication                                           |
+| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                                    |
+| [DATABASE_REFERENCE.md](./docs/reference/DATABASE_REFERENCE.md)                                            | **⭐ LIVE REFERENCE** — All tables, columns, RLS policies (prod vs dev) |
 
 **⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
 
 Legacy documentation is archived in `docs/archive/`.
+
+---
+
+## 📋 Reference Documents (Check First)
+
+Before running any Supabase queries or making schema-related decisions, **always check the reference documents first**:
+
+| Reference           | Location                               | What to check                                 |
+| ------------------- | -------------------------------------- | --------------------------------------------- |
+| **Database schema** | `docs/reference/DATABASE_REFERENCE.md` | Tables, columns, RLS policies, prod/dev diffs |
+
+**Rules for reference documents:**
+
+1. **Read before querying** — If the answer is in a reference doc, use it. Only hit the DB if the info is missing or you suspect it's stale.
+2. **Update after changes** — Any migration, new table, column add/drop, or RLS policy change must be reflected in the reference doc in the same session.
+3. **Annotate diffs** — When prod and dev diverge, document it in the reference doc's diff table.
+
+---
+
+## 📝 CHANGELOG Rules (Mandatory)
+
+**Every session that modifies code or config must update `CHANGELOG.md` before the work is committed.**
+
+Rules:
+
+- Add an entry under `## [Unreleased]` or create a new versioned section if releasing
+- Format: `### Added / Changed / Fixed / Removed / Security`
+- Be specific: include file names, what changed, and why
+- Do NOT skip this step even for "small" changes
 
 ---
 

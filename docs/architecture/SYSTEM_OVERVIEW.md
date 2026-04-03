@@ -91,7 +91,7 @@ PEP query   → POST /api/pep/compile (English → Braid IR)
 
 ## Data Layer
 
-- **Primary DB:** Supabase PostgreSQL 15+, 50+ tables, full RLS.
+- **Primary DB:** Supabase PostgreSQL 17+, 88 tables (prod), full RLS.
 - **Redis Memory** (port 6379): Ephemeral — presence, sessions, real-time state. Managed by `memoryClient.js`.
 - **Redis Cache** (port 6380): Persistent — stats, aggregations, response caches. Managed by `cacheManager.js`.
 - **Secrets:** Doppler (production), `.env` files (local), `.env.local` with `DOPPLER_TOKEN` (Docker).
@@ -102,20 +102,20 @@ AishaCRM uses a **user-centric permissions model** with team-based access contro
 
 ### Key Tables
 
-| Table | Purpose |
-|-------|--------|
-| `users` | Authentication, permissions (`perm_*`), navigation (`nav_permissions`) |
-| `employees` | HR data, `reports_to` hierarchy |
-| `teams` | Team groupings |
-| `team_members` | User-team assignments with `access_level` |
+| Table          | Purpose                                                                |
+| -------------- | ---------------------------------------------------------------------- |
+| `users`        | Authentication, permissions (`perm_*`), navigation (`nav_permissions`) |
+| `employees`    | HR data, `reports_to` hierarchy                                        |
+| `teams`        | Team groupings                                                         |
+| `team_members` | User-team assignments with `access_level`                              |
 
 ### Access Levels
 
-| Level | Meaning |
-|-------|---------|
-| `view_own` | See/edit only records assigned directly to user |
-| `view_team` | See all team records, edit only own |
-| `manage_team` | Full R/W on all team records |
+| Level         | Meaning                                         |
+| ------------- | ----------------------------------------------- |
+| `view_own`    | See/edit only records assigned directly to user |
+| `view_team`   | See all team records, edit only own             |
+| `manage_team` | Full R/W on all team records                    |
 
 ### Org-Wide Permissions (on `users` table)
 
