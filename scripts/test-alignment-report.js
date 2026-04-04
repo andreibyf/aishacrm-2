@@ -67,6 +67,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     format: 'console',
+    output: null,
     onlyGaps: false,
     onlyOrphaned: false,
     onlyOutdated: false,
@@ -80,6 +81,9 @@ function parseArgs() {
     switch (arg) {
       case '--format':
         options.format = args[++i];
+        break;
+      case '--output':
+        options.output = args[++i];
         break;
       case '--only-gaps':
         options.onlyGaps = true;
@@ -120,6 +124,7 @@ Usage: node scripts/test-alignment-report.js [options]
 
 Options:
   --format <type>       Output format: console, json, markdown (default: console)
+  --output <path>       Write report to file instead of stdout
   --only-gaps           Show only coverage gaps
   --only-orphaned       Show only orphaned tests
   --only-outdated       Show only outdated tests
@@ -131,7 +136,9 @@ Options:
 Examples:
   node scripts/test-alignment-report.js
   node scripts/test-alignment-report.js --format json > report.json
+  node scripts/test-alignment-report.js --format json --output report.json
   node scripts/test-alignment-report.js --format markdown > TEST_ALIGNMENT.md
+  node scripts/test-alignment-report.js --format markdown --output TEST_ALIGNMENT.md
   node scripts/test-alignment-report.js --only-gaps --min-priority high
   node scripts/test-alignment-report.js --ci
   `);
@@ -1064,17 +1071,25 @@ async function main() {
     const results = await analyze(options);
     
     // Generate output based on format
+    let output;
     switch (options.format) {
       case 'json':
-        console.log(generateJsonReport(results));
+        output = generateJsonReport(results);
         break;
       case 'markdown':
-        console.log(generateMarkdownReport(results));
+        output = generateMarkdownReport(results);
         break;
       case 'console':
       default:
-        generateConsoleReport(results, options);
+        output = generateConsoleReport(results, options);
         break;
+    }
+
+    if (options.output) {
+      const outputPath = path.resolve(ROOT_DIR, options.output);
+      await fs.writeFile(outputPath, output ?? '', 'utf8');
+    } else if (typeof output === 'string') {
+      console.log(output);
     }
     
     // CI mode: exit with error if critical issues found
@@ -1101,7 +1116,9 @@ async function main() {
 }
 
 // Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isDirectExecution =
+  typeof process.argv[1] === 'string' && path.resolve(process.argv[1]) === __filename;
+if (isDirectExecution) {
   main();
 }
 

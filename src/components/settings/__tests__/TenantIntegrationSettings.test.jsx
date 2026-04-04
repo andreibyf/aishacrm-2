@@ -39,4 +39,38 @@ describe('TenantIntegrationSettings communications provider helpers', () => {
     expect(result.config.inbound.host).toBe('imap.zoho.com');
     expect(result.config.outbound.from_address).toBe('aisha@aishacrm.com');
   });
+
+  it('applies Cal.com defaults with auto-provision enabled', () => {
+    const result = applyIntegrationTypeDefaults(
+      {
+        integration_type: 'other',
+        integration_name: '',
+        is_active: true,
+        config: {},
+        api_credentials: {},
+      },
+      'calcom',
+    );
+
+    expect(result.integration_type).toBe('calcom');
+    expect(result.integration_name).toBe('Cal.com Booking');
+    expect(result.config.auto_provision).toBe(true);
+  });
+
+  it('preserves explicit Cal.com auto-provision false', () => {
+    const result = applyIntegrationTypeDefaults(
+      {
+        integration_type: 'other',
+        integration_name: 'Custom',
+        is_active: true,
+        config: { auto_provision: false },
+        api_credentials: {},
+      },
+      'calcom',
+    );
+
+    expect(result.integration_type).toBe('calcom');
+    expect(result.integration_name).toBe('Custom');
+    expect(result.config.auto_provision).toBe(false);
+  });
 });

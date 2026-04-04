@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { BACKEND_URL } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,17 +42,21 @@ import {
   CheckCircle2,
   AlertCircle,
   Globe,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { formatDateTime } from '@/utils/dateFormatting';
 
 async function apiFetch(path, options = {}) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  return fetch(path, {
+  const url = path.startsWith('http') ? path : `${BACKEND_URL}${path}`;
+  return fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -104,9 +109,19 @@ export default function CalendarSync({ tenantId }) {
   const [calendars, setCalendars] = useState([]);
   const [primaryCalendarId, setPrimaryCalendarId] = useState(null);
   const [calcomIntegration, setCalcomIntegration] = useState(null);
+  const [syncInfo, setSyncInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
+
+  const getTenantIntegrationRecord = (payload) => {
+    if (Array.isArray(payload?.data?.tenantintegrations))
+      return payload.data.tenantintegrations[0] || null;
+    if (Array.isArray(payload?.data)) return payload.data[0] || null;
+    if (Array.isArray(payload)) return payload[0] || null;
+    return null;
+  };
 
   const fetchCalendars = useCallback(async () => {
     if (!tenantId) return;
@@ -117,12 +132,21 @@ export default function CalendarSync({ tenantId }) {
         `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom`,
       );
       const json = await res.json();
-      const integration = json.data?.[0] || null;
+      const integration = getTenantIntegrationRecord(json);
       setCalcomIntegration(integration);
 
       if (!integration) {
+        setSyncInfo(null);
         setLoading(false);
         return;
+      }
+
+      const statusRes = await apiFetch(`/api/calcom-sync/status?tenant_id=${tenantId}`);
+      const statusJson = await statusRes.json().catch(() => ({}));
+      if (statusRes.ok && statusJson.status === 'success') {
+        setSyncInfo(statusJson.data || null);
+      } else {
+        setSyncInfo(null);
       }
 
       // Fetch connected calendars via Cal.com API (proxied through backend)
@@ -225,6 +249,32 @@ export default function CalendarSync({ tenantId }) {
     }
   }
 
+  async function handleImportPersonalCalendar() {
+    setImporting(true);
+    try {
+      const res = await apiFetch(`/api/calcom-sync/import-personal-calendar?tenant_id=${tenantId}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.status !== 'success') {
+        throw new Error(json.message || `Server returned ${res.status}`);
+      }
+
+      const totalImported = json.data?.total_imported || 0;
+      const totalErrors = json.data?.total_errors || 0;
+      if (totalErrors > 0) {
+        toast.warning(
+          `Calendar import completed with ${totalErrors} error(s). Imported ${totalImported} event(s).`,
+        );
+      } else {
+        toast.success(`Imported ${totalImported} event(s) from connected personal calendars.`);
+      }
+      await fetchCalendars();
+    } catch (err) {
+      toast.error(err.message || 'Failed to import personal calendar events');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -261,6 +311,19 @@ export default function CalendarSync({ tenantId }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportPersonalCalendar}
+            disabled={importing || syncing}
+          >
+            {importing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Import Personal Calendar
+          </Button>
           <Button variant="outline" size="sm" onClick={handleRefreshSync} disabled={syncing}>
             {syncing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -271,6 +334,72 @@ export default function CalendarSync({ tenantId }) {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Sync Health</CardTitle>
+          <CardDescription>
+            Current Cal.com connectivity and the last known bidirectional sync state for this
+            tenant.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <SyncStatusBadge
+              status={
+                syncInfo?.sync_status === 'pending'
+                  ? 'syncing'
+                  : syncInfo?.sync_status === 'connected'
+                    ? 'connected'
+                    : 'error'
+              }
+            />
+            {syncInfo?.bidirectional_sync_enabled ? (
+              <Badge className="bg-green-500/10 text-green-400 border-green-500/30">
+                Bidirectional sync enabled
+              </Badge>
+            ) : (
+              <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                Bidirectional sync incomplete
+              </Badge>
+            )}
+            {syncInfo?.calcom_db_available === false && (
+              <Badge className="bg-red-500/10 text-red-400 border-red-500/30">
+                Cal.com DB unavailable
+              </Badge>
+            )}
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2 text-muted-foreground">
+            <div>
+              Booking link:{' '}
+              <span className="text-foreground">
+                {syncInfo?.cal_link || calcomIntegration?.config?.cal_link || 'Not set'}
+              </span>
+            </div>
+            <div>
+              Event type ID:{' '}
+              <span className="text-foreground">{syncInfo?.event_type_id || 'Not set'}</span>
+            </div>
+            <div>
+              Scheduler user ID:{' '}
+              <span className="text-foreground">{syncInfo?.calcom_user_id || 'Not set'}</span>
+            </div>
+            <div>
+              Last sync:{' '}
+              <span className="text-foreground">
+                {syncInfo?.last_sync ? formatDateTime(syncInfo.last_sync) : 'Never'}
+              </span>
+            </div>
+          </div>
+
+          {syncInfo?.error_message && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-red-300">
+              {syncInfo.error_message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Connected calendar list */}
       {calendars.length === 0 ? (

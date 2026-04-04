@@ -14,12 +14,33 @@ import { importGoogleEvents } from '../lib/googleCalendarService.js';
 import { importOutlookEvents } from '../lib/outlookCalendarService.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { getCalcomDb } from '../lib/calcomDb.js';
+import { validateCalcomLink } from '../lib/calcomLinkValidation.js';
 import logger from '../lib/logger.js';
+
+async function updateCalcomIntegrationStatus(tenantId, updates) {
+  const supabase = getSupabaseClient();
+  const nextUpdates = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('tenant_integrations')
+    .update(nextUpdates)
+    .eq('tenant_id', tenantId)
+    .eq('integration_type', 'calcom');
+
+  if (error) {
+    logger.warn('[CalcomSync] Could not persist integration sync status', {
+      tenantId,
+      error: error.message,
+    });
+  }
+}
 
 export default function createCalcomSyncRoutes() {
   const router = express.Router();
   router.use(validateTenantAccess);
-  router.use(requireAdminRole);
 
   function resolveTenantId(req) {
     const id = req.tenant?.id || req.query?.tenant_id || req.body?.tenant_id;
@@ -28,7 +49,7 @@ export default function createCalcomSyncRoutes() {
   }
 
   // GET /api/calcom-sync/status
-  router.get('/status', async (req, res) => {
+  router.get('/status', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -36,7 +57,9 @@ export default function createCalcomSyncRoutes() {
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from('tenant_integrations')
-        .select('id, is_active, config, updated_at')
+        .select(
+          'id, is_active, config, api_credentials, sync_status, error_message, last_sync, updated_at',
+        )
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom')
         .maybeSingle();
@@ -52,8 +75,15 @@ export default function createCalcomSyncRoutes() {
         status: 'success',
         data: {
           connected: data.is_active,
+          sync_status: data.sync_status || 'pending',
+          error_message: data.error_message || null,
+          last_sync: data.last_sync || null,
           cal_link: data.config?.cal_link || null,
+          calcom_user_id: data.config?.calcom_user_id || null,
           event_type_id: data.config?.event_type_id || null,
+          auto_provision: data.config?.auto_provision !== false,
+          webhook_configured: !!data.api_credentials?.webhook_secret,
+          calcom_db_available: !!getCalcomDb(),
           // CRM→Cal.com push only works when event_type_id is configured
           bidirectional_sync_enabled: !!(data.is_active && data.config?.event_type_id),
           last_updated: data.updated_at,
@@ -66,13 +96,20 @@ export default function createCalcomSyncRoutes() {
   });
 
   // POST /api/calcom-sync/trigger
-  router.post('/trigger', async (req, res) => {
+  router.post('/trigger', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
 
       logger.info('[CalcomSync] Full sync triggered', { tenant_id });
       const result = await fullBidirectionalSync(tenant_id);
+
+      const hasErrors = (result.errors || []).length > 0;
+      await updateCalcomIntegrationStatus(tenant_id, {
+        sync_status: hasErrors ? 'error' : 'connected',
+        error_message: hasErrors ? result.errors.slice(0, 5).join(' | ') : null,
+        last_sync: hasErrors ? undefined : new Date().toISOString(),
+      });
 
       res.json({
         status: 'success',
@@ -115,7 +152,14 @@ export default function createCalcomSyncRoutes() {
 
       // Already stored — return it directly
       if (config.cal_link) {
-        return res.json({ status: 'success', data: { cal_link: config.cal_link } });
+        const validation = await validateCalcomLink(getCalcomDb(), config.cal_link);
+        if (validation.valid) {
+          return res.json({ status: 'success', data: { cal_link: validation.calLink } });
+        }
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cal.com booking page not configured or no longer exists',
+        });
       }
 
       const userId = config.calcom_user_id;
@@ -151,17 +195,59 @@ export default function createCalcomSyncRoutes() {
       }
 
       const cal_link = slug ? `${username}/${slug}` : username;
+      const validation = await validateCalcomLink(db, cal_link);
+
+      if (!validation.valid) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Cal.com booking page not configured or no longer exists',
+        });
+      }
 
       // Persist it back so future calls are instant
       await supabase
         .from('tenant_integrations')
-        .update({ config: { ...config, cal_link } })
+        .update({ config: { ...config, cal_link: validation.calLink } })
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom');
 
-      res.json({ status: 'success', data: { cal_link } });
+      res.json({ status: 'success', data: { cal_link: validation.calLink } });
     } catch (err) {
       logger.error('[CalcomSync] Resolve link error:', err);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // GET /api/calcom-sync/validate-link?cal_link=<username/event-slug>
+  router.get('/validate-link', async (req, res) => {
+    try {
+      const raw = req.query.cal_link || '';
+      const db = getCalcomDb();
+      if (!db) {
+        return res.status(503).json({ status: 'error', message: 'Cal.com database not available' });
+      }
+
+      const validation = await validateCalcomLink(db, raw);
+      if (!validation.valid) {
+        return res.status(404).json({
+          status: 'error',
+          valid: false,
+          reason: validation.reason,
+          message: 'Cal.com booking page not configured or no longer exists',
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        valid: true,
+        data: {
+          cal_link: validation.calLink,
+          username: validation.username,
+          slug: validation.slug,
+        },
+      });
+    } catch (err) {
+      logger.error('[CalcomSync] Validate link error:', err);
       res.status(500).json({ status: 'error', message: err.message });
     }
   });
@@ -169,7 +255,7 @@ export default function createCalcomSyncRoutes() {
   // GET /api/calcom-sync/lookup-user?username=<username>
   // Resolve a Cal.com username to numeric user ID + available event types.
   // The username is extracted from the cal link slug (e.g. "jane/30min" → "jane").
-  router.get('/lookup-user', async (req, res) => {
+  router.get('/lookup-user', requireAdminRole, async (req, res) => {
     try {
       const raw = req.query.username || '';
       // Accept either "username" or "username/event-slug" formats
@@ -232,7 +318,7 @@ export default function createCalcomSyncRoutes() {
   // GET /api/calcom-sync/import-personal-calendar
   // Pull events from connected Google/Outlook calendars and create CRM activities.
   // Optional query param: ?since=<ISO8601> (defaults to 30 days ago)
-  router.get('/import-personal-calendar', async (req, res) => {
+  router.get('/import-personal-calendar', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -254,6 +340,13 @@ export default function createCalcomSyncRoutes() {
         tenant_id,
         google: googleResult,
         outlook: outlookResult,
+      });
+
+      const totalErrors = (googleResult.errors || 0) + (outlookResult.errors || 0);
+      await updateCalcomIntegrationStatus(tenant_id, {
+        sync_status: totalErrors > 0 ? 'error' : 'connected',
+        error_message: totalErrors > 0 ? 'One or more personal calendar imports failed' : null,
+        last_sync: totalErrors > 0 ? undefined : new Date().toISOString(),
       });
 
       res.json({

@@ -143,6 +143,8 @@ services:
       - CRM_BACKEND_URL=http://backend:3001
       # Cal.com direct DB connection (calcom-db container, scheduling profile)
       - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      # Internal URL Cal.com uses to call back into AiSHA backend (Docker-to-Docker)
+      - CALCOM_WEBHOOK_BACKEND_URL=http://backend:3001
       # Supabase credentials (fallback if Doppler fails - from .env)
       - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}

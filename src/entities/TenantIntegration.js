@@ -33,6 +33,7 @@ export const TenantIntegrationSchema = {
         'whatsapp_business',
         'slack',
         'pabbly',
+        'calcom',
         'other',
       ],
       description: 'Type of integration',

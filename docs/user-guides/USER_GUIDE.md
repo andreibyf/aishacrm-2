@@ -657,7 +657,7 @@ The AI understands:
 
 ## 3.3 Calendar Management
 
-Aisha CRM includes an integrated calendar for managing meetings, tasks, and events.
+Aisha CRM includes an integrated calendar for managing meetings, tasks, and events. Client booking links use Cal.com so scheduled meetings also flow into the CRM calendar.
 
 ### Calendar Views
 
@@ -724,7 +724,16 @@ graph TD
 
 > **💡 TIP**
 >
-> Enable calendar sync with Google Calendar or Outlook for unified scheduling.
+> Use the booking widget when you need a client-specific link. The CRM requires a client email before it can generate a shareable booking URL.
+
+### Booking Links
+
+Booking links are tied to the employee who owns the record:
+
+- Assigned contacts and leads use that employee's personal Cal.com link first.
+- If the record is unassigned, the widget falls back to the signed-in user's employee booking profile when available.
+- When a booking is created, AiSHA records it in Activities and keeps the company calendar visible to the tenant.
+- Calendar blocks created in the CRM also reduce availability in Cal.com for the assigned employee.
 
 ### Event Types
 

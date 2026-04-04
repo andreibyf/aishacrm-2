@@ -65,6 +65,8 @@ const SYNC_ACTIVITY_TYPES = new Set([
   'consultation',
 ]);
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -123,12 +125,17 @@ async function getEmployeeCalcomConfig(tenantId, assignedTo) {
   if (!assignedTo) return null;
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('employees')
-    .select('metadata')
-    .eq('tenant_id', tenantId)
-    .ilike('email', assignedTo.trim())
-    .maybeSingle();
+  let query = supabase.from('employees').select('metadata').eq('tenant_id', tenantId);
+
+  if (typeof assignedTo === 'string' && UUID_REGEX.test(assignedTo.trim())) {
+    query = query.eq('id', assignedTo.trim());
+  } else if (typeof assignedTo === 'string' && assignedTo.includes('@')) {
+    query = query.ilike('email', assignedTo.trim());
+  } else {
+    return null;
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) return null;
 
@@ -165,10 +172,10 @@ function isSyncableActivity(activity) {
  * - Non-fatal: logs errors but never throws. Activity CRUD should not be blocked.
  */
 export async function pushActivityToCalcom(tenantId, activity) {
-  if (!isSyncableActivity(activity)) return;
+  if (!isSyncableActivity(activity)) return false;
 
   const db = getCalcomDb();
-  if (!db) return;
+  if (!db) return false;
 
   try {
     // Prefer per-employee Cal.com config (assigned_to email lookup), fall back to tenant default.
@@ -182,7 +189,7 @@ export async function pushActivityToCalcom(tenantId, activity) {
         }
       : tenantCalcom;
 
-    if (!calcom) return;
+    if (!calcom) return false;
 
     if (!calcom.eventTypeId || !calcom.calcomUserId) {
       logger.debug('[CalcomSync] Missing event_type_id or calcom_user_id — skipping push', {
@@ -190,7 +197,7 @@ export async function pushActivityToCalcom(tenantId, activity) {
         activityId: activity.id,
         assignedTo: activity.assigned_to || null,
       });
-      return;
+      return false;
     }
 
     // Build start/end timestamps (CRM stores due_date as YYYY-MM-DD, due_time as HH:MM in UTC).
@@ -211,10 +218,11 @@ export async function pushActivityToCalcom(tenantId, activity) {
       );
       if (result.rowCount > 0) {
         logger.debug('[CalcomSync] Rescheduled Cal.com block', { uid: existingBlockUid });
+        return true;
       } else {
         logger.warn('[CalcomSync] Reschedule found no matching booking', { uid: existingBlockUid });
+        return false;
       }
-      return;
     }
 
     // Create a new Cal.com blocker booking
@@ -234,7 +242,7 @@ export async function pushActivityToCalcom(tenantId, activity) {
     const bookingId = rows[0]?.id;
     if (!bookingId) {
       logger.warn('[CalcomSync] Booking INSERT returned no id', { activityId: activity.id });
-      return;
+      return false;
     }
 
     // Insert the required attendee row
@@ -258,8 +266,10 @@ export async function pushActivityToCalcom(tenantId, activity) {
         error: metaErr.message,
         activityId: activity.id,
       });
+      return false;
     } else {
       logger.info('[CalcomSync] Created Cal.com block booking', { uid, activityId: activity.id });
+      return true;
     }
   } catch (err) {
     // Non-fatal — activity is already saved; log and continue
@@ -271,6 +281,7 @@ export async function pushActivityToCalcom(tenantId, activity) {
       },
       '[CalcomSync] pushActivityToCalcom error (non-fatal)',
     );
+    return false;
   }
 }
 
@@ -402,8 +413,12 @@ export async function fullBidirectionalSync(tenantId) {
       for (const activity of activities || []) {
         if (!activity.metadata?.calcom_block_uid) {
           try {
-            await pushActivityToCalcom(tenantId, activity);
-            pushed++;
+            const pushSucceeded = await pushActivityToCalcom(tenantId, activity);
+            if (pushSucceeded) {
+              pushed++;
+            } else {
+              allErrors.push(`Activity ${activity.id}: push did not complete`);
+            }
           } catch (err) {
             allErrors.push(`Activity ${activity.id}: ${err.message}`);
           }
