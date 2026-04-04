@@ -58,7 +58,9 @@ export default function createCalcomSyncRoutes() {
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from('tenant_integrations')
-        .select('id, is_active, config, api_credentials, sync_status, error_message, last_sync, updated_at')
+        .select(
+          'id, is_active, config, api_credentials, sync_status, error_message, last_sync, updated_at',
+        )
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom')
         .maybeSingle();
