@@ -551,6 +551,14 @@ const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSet
                       </span>
                     </div>
                   </SelectItem>
+                  <SelectItem value="director">
+                    <div className="flex flex-col">
+                      <span className="font-semibold">Director</span>
+                      <span className="text-xs text-slate-400">
+                        Owner / leadership level access
+                      </span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500 mt-1">

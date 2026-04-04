@@ -59,8 +59,7 @@ const EMPLOYEE_ROLE_LABELS = {
   leadership: 'Leadership', // Legacy support
 };
 
-const getEmployeeRoleLabel = (role) =>
-  role ? EMPLOYEE_ROLE_LABELS[role] || 'User' : 'User';
+const getEmployeeRoleLabel = (role) => (role ? EMPLOYEE_ROLE_LABELS[role] || 'User' : 'User');
 
 const STEPS = [
   { key: 'identity', label: 'Identity', icon: User },
@@ -80,34 +79,159 @@ const ACCESS_LEVELS = [
 // These should match the navItems in Layout.jsx
 const NAV_MODULES = [
   // Primary navigation
-  { key: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Home dashboard with overview stats' },
-  { key: 'Contacts', label: 'Contacts', icon: Contact, description: 'Customer contacts management' },
-  { key: 'Accounts', label: 'Accounts', icon: Building2, description: 'Company and organization accounts' },
+  {
+    key: 'Dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    description: 'Home dashboard with overview stats',
+  },
+  {
+    key: 'Contacts',
+    label: 'Contacts',
+    icon: Contact,
+    description: 'Customer contacts management',
+  },
+  {
+    key: 'Accounts',
+    label: 'Accounts',
+    icon: Building2,
+    description: 'Company and organization accounts',
+  },
   { key: 'Leads', label: 'Leads', icon: Target, description: 'Sales leads and prospects' },
-  { key: 'Opportunities', label: 'Opportunities', icon: Briefcase, description: 'Sales pipeline and deals' },
-  { key: 'Activities', label: 'Activities', icon: Activity, description: 'Calls, meetings, tasks, and notes' },
-  { key: 'Communications', label: 'Communications', icon: Mail, description: 'Inbox and email thread management' },
-  { key: 'Calendar', label: 'Calendar', icon: Calendar, description: 'Scheduled events and reminders' },
-  { key: 'ConstructionProjects', label: 'Project Management', icon: Briefcase, description: 'Project and construction management' },
-  { key: 'Workers', label: 'Workers', icon: Users, description: 'Contractors and temp labor management' },
-  { key: 'BizDevSources', label: 'Potential Leads', icon: FileText, description: 'Business development lead sources' },
-  { key: 'CashFlow', label: 'Cash Flow', icon: BarChart3, description: 'Financial cash flow tracking' },
-  { key: 'DocumentProcessing', label: 'Document Processing', icon: FileText, description: 'AI document processing' },
-  { key: 'DocumentManagement', label: 'Document Management', icon: FileText, description: 'File storage and management' },
-  { key: 'AICampaigns', label: 'AI Campaigns', icon: Target, description: 'AI-powered marketing campaigns' },
-  { key: 'AISuggestions', label: 'AI Suggestions', icon: Sparkles, description: 'Review and approve AI-generated email drafts' },
-  { key: 'Employees', label: 'Employees', icon: Users, description: 'Employee directory and management' },
-  { key: 'Reports', label: 'Reports', icon: BarChart3, description: 'Analytics and reporting dashboards' },
-  { key: 'Integrations', label: 'Integrations', icon: Settings, description: 'Third-party integrations' },
-  { key: 'Workflows', label: 'Workflows', icon: Workflow, description: 'Automation and workflow builder' },
-  { key: 'PaymentPortal', label: 'Payment Portal', icon: BarChart3, description: 'Payment processing portal' },
+  {
+    key: 'Opportunities',
+    label: 'Opportunities',
+    icon: Briefcase,
+    description: 'Sales pipeline and deals',
+  },
+  {
+    key: 'Activities',
+    label: 'Activities',
+    icon: Activity,
+    description: 'Calls, meetings, tasks, and notes',
+  },
+  {
+    key: 'Communications',
+    label: 'Communications',
+    icon: Mail,
+    description: 'Inbox and email thread management',
+  },
+  {
+    key: 'Calendar',
+    label: 'Calendar',
+    icon: Calendar,
+    description: 'Scheduled events and reminders',
+  },
+  {
+    key: 'ConstructionProjects',
+    label: 'Project Management',
+    icon: Briefcase,
+    description: 'Project and construction management',
+  },
+  {
+    key: 'Workers',
+    label: 'Workers',
+    icon: Users,
+    description: 'Contractors and temp labor management',
+  },
+  {
+    key: 'BizDevSources',
+    label: 'Potential Leads',
+    icon: FileText,
+    description: 'Business development lead sources',
+  },
+  {
+    key: 'CashFlow',
+    label: 'Cash Flow',
+    icon: BarChart3,
+    description: 'Financial cash flow tracking',
+  },
+  {
+    key: 'DocumentProcessing',
+    label: 'Document Processing',
+    icon: FileText,
+    description: 'AI document processing',
+  },
+  {
+    key: 'DocumentManagement',
+    label: 'Document Management',
+    icon: FileText,
+    description: 'File storage and management',
+  },
+  {
+    key: 'AICampaigns',
+    label: 'AI Campaigns',
+    icon: Target,
+    description: 'AI-powered marketing campaigns',
+  },
+  {
+    key: 'AISuggestions',
+    label: 'AI Suggestions',
+    icon: Sparkles,
+    description: 'Review and approve AI-generated email drafts',
+  },
+  {
+    key: 'Employees',
+    label: 'Employees',
+    icon: Users,
+    description: 'Employee directory and management',
+  },
+  {
+    key: 'Reports',
+    label: 'Reports',
+    icon: BarChart3,
+    description: 'Analytics and reporting dashboards',
+  },
+  {
+    key: 'Integrations',
+    label: 'Integrations',
+    icon: Settings,
+    description: 'Third-party integrations',
+  },
+  {
+    key: 'Workflows',
+    label: 'Workflows',
+    icon: Workflow,
+    description: 'Automation and workflow builder',
+  },
+  {
+    key: 'PaymentPortal',
+    label: 'Payment Portal',
+    icon: BarChart3,
+    description: 'Payment processing portal',
+  },
   { key: 'Utilities', label: 'Utilities', icon: Settings, description: 'System utilities' },
-  { key: 'ClientOnboarding', label: 'Client Onboarding', icon: Users, description: 'New client onboarding' },
+  {
+    key: 'ClientOnboarding',
+    label: 'Client Onboarding',
+    icon: Users,
+    description: 'New client onboarding',
+  },
   // Secondary navigation
-  { key: 'Documentation', label: 'Documentation', icon: FileText, description: 'Help and documentation' },
-  { key: 'DeveloperAI', label: 'Developer AI', icon: Settings, description: 'Developer tools and AI' },
-  { key: 'ClientRequirements', label: 'Client Requirements', icon: FileText, description: 'Client requirement tracking' },
-  { key: 'Settings', label: 'Settings', icon: Settings, description: 'System configuration and preferences' },
+  {
+    key: 'Documentation',
+    label: 'Documentation',
+    icon: FileText,
+    description: 'Help and documentation',
+  },
+  {
+    key: 'DeveloperAI',
+    label: 'Developer AI',
+    icon: Settings,
+    description: 'Developer tools and AI',
+  },
+  {
+    key: 'ClientRequirements',
+    label: 'Client Requirements',
+    icon: FileText,
+    description: 'Client requirement tracking',
+  },
+  {
+    key: 'Settings',
+    label: 'Settings',
+    icon: Settings,
+    description: 'System configuration and preferences',
+  },
 ];
 
 // Default nav permissions - most things enabled by default
@@ -148,7 +272,7 @@ const DEFAULT_NAV_PERMISSIONS = {
 
 /**
  * UserFormWizard - 5-step wizard for creating/editing users
- * 
+ *
  * Props:
  *   open: boolean - whether dialog is open
  *   user: object|null - existing user to edit, or null for create mode
@@ -174,7 +298,7 @@ export default function UserFormWizard({
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [deletingTeams, setDeletingTeams] = useState(false);
-  
+
   // Determine if this is create or edit mode
   const isEdit = mode === 'edit' || (mode === undefined && !!user?.id);
   const isCreate = !isEdit;
@@ -185,22 +309,23 @@ export default function UserFormWizard({
     full_name: '',
     email: '',
     tenant_id: currentUser?.tenant_id || null,
+    platform_role: 'user',
     employee_role: 'employee',
     is_active: true,
-    
+
     // Teams: { [teamId]: { selected: bool, access_level: string } }
     teams: {},
-    
+
     // Org-wide permissions
     perm_notes_anywhere: true,
     perm_all_records: false,
     perm_reports: false,
     perm_employees: false,
     perm_settings: false,
-    
+
     // Navigation permissions
     nav_permissions: { ...DEFAULT_NAV_PERMISSIONS },
-    
+
     // Password (required for create, optional for edit)
     password: '',
   });
@@ -208,7 +333,7 @@ export default function UserFormWizard({
   // Initialize form when dialog opens or user prop changes
   useEffect(() => {
     if (!open) return;
-    
+
     if (isEdit && user) {
       // Edit mode - populate from existing user
       const teamsObj = {};
@@ -232,6 +357,7 @@ export default function UserFormWizard({
         full_name: user.display_name || user.full_name || '',
         email: user.email || '',
         tenant_id: user.tenant_id || null,
+        platform_role: user.role || 'user',
         employee_role: user.employee_role || 'employee',
         is_active: user.is_active !== false,
         teams: teamsObj,
@@ -269,7 +395,7 @@ export default function UserFormWizard({
     setForm((prev) => {
       const newNavPerms = { ...prev.nav_permissions };
       let changed = false;
-      
+
       // If they have perm_reports, force-enable Reports nav
       if (prev.perm_reports && !newNavPerms.Reports) {
         newNavPerms.Reports = true;
@@ -285,7 +411,7 @@ export default function UserFormWizard({
         newNavPerms.Settings = true;
         changed = true;
       }
-      
+
       return changed ? { ...prev, nav_permissions: newNavPerms } : prev;
     });
   }, [form.perm_reports, form.perm_employees, form.perm_settings]);
@@ -366,9 +492,7 @@ export default function UserFormWizard({
 
   // Delete selected teams permanently
   const handleDeleteSelectedTeams = async () => {
-    const selectedIds = availableTeams
-      .filter((t) => form.teams[t.id]?.selected)
-      .map((t) => t.id);
+    const selectedIds = availableTeams.filter((t) => form.teams[t.id]?.selected).map((t) => t.id);
     if (selectedIds.length === 0) return;
 
     const names = availableTeams
@@ -376,7 +500,12 @@ export default function UserFormWizard({
       .map((t) => t.name)
       .join(', ');
 
-    if (!window.confirm(`Permanently delete ${selectedIds.length} team(s)?\n\n${names}\n\nThis cannot be undone.`)) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${selectedIds.length} team(s)?\n\n${names}\n\nThis cannot be undone.`,
+      )
+    )
+      return;
 
     setDeletingTeams(true);
     let deleted = 0;
@@ -384,10 +513,13 @@ export default function UserFormWizard({
     const tenantId = form.tenant_id || user?.tenant_id || currentUser?.tenant_id;
     for (const id of selectedIds) {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
+        const res = await fetch(
+          `${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`,
+          {
+            method: 'DELETE',
+            credentials: 'include',
+          },
+        );
         if (res.ok) {
           deleted++;
           // Remove from form state
@@ -398,7 +530,12 @@ export default function UserFormWizard({
           });
         } else {
           let reason = `HTTP ${res.status}`;
-          try { const body = await res.json(); reason = body?.error || reason; } catch (_) { /* ignore parse error */ }
+          try {
+            const body = await res.json();
+            reason = body?.error || reason;
+          } catch (_) {
+            /* ignore parse error */
+          }
           failed.push(reason);
         }
       } catch (err) {
@@ -408,7 +545,8 @@ export default function UserFormWizard({
     }
     setDeletingTeams(false);
     if (deleted > 0) toast.success(`Deleted ${deleted} team(s)`);
-    if (failed.length > 0) toast.error(`${failed.length} team(s) could not be deleted: ${failed.join('; ')}`);
+    if (failed.length > 0)
+      toast.error(`${failed.length} team(s) could not be deleted: ${failed.join('; ')}`);
     // Refresh available teams via parent — signal via a custom event
     window.dispatchEvent(new CustomEvent('aisha:teams-changed'));
   };
@@ -416,14 +554,15 @@ export default function UserFormWizard({
   // Generate plain English summary
   const generateSummary = () => {
     const parts = [];
-    
+
     // Teams
     if (selectedTeams.length === 0) {
       parts.push('has no team assignments');
     } else if (selectedTeams.length === 1) {
       const team = selectedTeams[0];
       const access = form.teams[team.id]?.access_level || 'view_own';
-      const accessLabel = ACCESS_LEVELS.find((a) => a.key === access)?.label.toLowerCase() || access;
+      const accessLabel =
+        ACCESS_LEVELS.find((a) => a.key === access)?.label.toLowerCase() || access;
       parts.push(`is on the ${team.name} team and can ${accessLabel}`);
     } else {
       parts.push(`is on ${selectedTeams.length} teams`);
@@ -467,6 +606,7 @@ export default function UserFormWizard({
           full_name: form.full_name.trim(),
           password: form.password,
           tenant_id: form.tenant_id,
+          role: form.platform_role || 'user',
           employee_role: form.employee_role,
           is_active: form.is_active,
           perm_notes_anywhere: form.perm_notes_anywhere,
@@ -491,7 +631,7 @@ export default function UserFormWizard({
         }
 
         const result = await res.json();
-        
+
         // Sync team memberships if we have a user_id
         if (result.user?.id && teamMemberships.length > 0) {
           await fetch(`${BACKEND_URL}/api/v2/teams/sync-user-memberships`, {
@@ -512,6 +652,7 @@ export default function UserFormWizard({
         const saveData = {
           full_name: form.full_name,
           tenant_id: form.tenant_id,
+          platform_role: form.platform_role || 'user',
           employee_role: form.employee_role,
           is_active: form.is_active,
           perm_notes_anywhere: form.perm_notes_anywhere,
@@ -598,7 +739,7 @@ export default function UserFormWizard({
               <div>
                 <h3 className="text-lg font-semibold mb-1">Basic Information</h3>
                 <p className="text-sm text-slate-400">
-                  {isCreate ? 'Enter the new user\'s details' : 'Update user identity details'}
+                  {isCreate ? "Enter the new user's details" : 'Update user identity details'}
                 </p>
               </div>
 
@@ -617,15 +758,15 @@ export default function UserFormWizard({
                     placeholder="user@company.com"
                     className={`bg-slate-900 border-slate-600 ${isEdit ? 'text-slate-400' : 'text-slate-200'}`}
                   />
-                  {isEdit && (
-                    <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>
-                  )}
+                  {isEdit && <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>}
                 </div>
 
                 {/* System IDs - edit mode only */}
                 {isEdit && user?.id && (
                   <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-2">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">System Identifiers</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                      System Identifiers
+                    </p>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-400">User ID:</span>
                       <div className="flex items-center gap-2">
@@ -707,10 +848,14 @@ export default function UserFormWizard({
                 {/* Client/Tenant - superadmin only */}
                 {currentUser?.role === 'superadmin' && (
                   <div>
-                    <Label htmlFor="tenant_id" className="text-slate-200">Client</Label>
+                    <Label htmlFor="tenant_id" className="text-slate-200">
+                      Client
+                    </Label>
                     <Select
                       value={form.tenant_id || 'no-client'}
-                      onValueChange={(v) => setForm((prev) => ({ ...prev, tenant_id: v === 'no-client' ? null : v }))}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, tenant_id: v === 'no-client' ? null : v }))
+                      }
                     >
                       <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-200">
                         <SelectValue placeholder="Select client" />
@@ -727,26 +872,74 @@ export default function UserFormWizard({
                   </div>
                 )}
 
-                {/* CRM Role */}
-                <div>
-                  <Label htmlFor="employee_role" className="text-slate-200">CRM Role</Label>
-                  <Select
-                    value={form.employee_role}
-                    onValueChange={(v) => setForm((prev) => ({ ...prev, employee_role: v }))}
-                  >
-                    <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                      <SelectItem value="employee">User</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="director">Director</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Controls default data visibility scope
-                  </p>
-                </div>
+                {/* Platform Role — superadmin only */}
+                {currentUser?.role === 'superadmin' && (
+                  <div>
+                    <Label htmlFor="platform_role" className="text-slate-200">
+                      Platform Role
+                    </Label>
+                    <Select
+                      value={form.platform_role || 'user'}
+                      onValueChange={(v) => setForm((prev) => ({ ...prev, platform_role: v }))}
+                    >
+                      <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectItem value="user">
+                          <div className="flex flex-col">
+                            <span className="font-semibold">User</span>
+                            <span className="text-xs text-slate-400">Standard CRM access</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="admin">
+                          <div className="flex flex-col">
+                            <span className="font-semibold">Tenant Admin</span>
+                            <span className="text-xs text-slate-400">
+                              Can manage users and settings for their tenant
+                            </span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="superadmin">
+                          <div className="flex flex-col">
+                            <span className="font-semibold">Super Admin</span>
+                            <span className="text-xs text-slate-400">
+                              Full system access across all tenants
+                            </span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Controls system-level access. Tenant Admin can manage their own tenant only.
+                    </p>
+                  </div>
+                )}
+
+                {/* CRM Role — hidden for superadmin/admin platform roles */}
+                {(!form.platform_role || form.platform_role === 'user') && (
+                  <div>
+                    <Label htmlFor="employee_role" className="text-slate-200">
+                      CRM Role
+                    </Label>
+                    <Select
+                      value={form.employee_role}
+                      onValueChange={(v) => setForm((prev) => ({ ...prev, employee_role: v }))}
+                    >
+                      <SelectTrigger className="bg-slate-900 border-slate-600 text-slate-200">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                        <SelectItem value="employee">User</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="director">Director</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Controls default data visibility scope
+                    </p>
+                  </div>
+                )}
 
                 {/* Account Active */}
                 <div className="flex items-center gap-3">
@@ -755,7 +948,9 @@ export default function UserFormWizard({
                     checked={form.is_active}
                     onCheckedChange={(v) => setForm((prev) => ({ ...prev, is_active: v }))}
                   />
-                  <Label htmlFor="is_active" className="text-slate-200">Account Active</Label>
+                  <Label htmlFor="is_active" className="text-slate-200">
+                    Account Active
+                  </Label>
                 </div>
               </div>
             </div>
@@ -766,16 +961,16 @@ export default function UserFormWizard({
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold mb-1">Team Assignments</h3>
-                <p className="text-sm text-slate-400">
-                  Select teams and set access level for each
-                </p>
+                <p className="text-sm text-slate-400">Select teams and set access level for each</p>
               </div>
 
               {availableTeams.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
                   <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No teams available</p>
-                  <p className="text-sm">Create teams in Team Management first, or skip this step</p>
+                  <p className="text-sm">
+                    Create teams in Team Management first, or skip this step
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -784,7 +979,10 @@ export default function UserFormWizard({
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="wizard-select-all-teams"
-                        checked={availableTeams.length > 0 && availableTeams.every((t) => form.teams[t.id]?.selected)}
+                        checked={
+                          availableTeams.length > 0 &&
+                          availableTeams.every((t) => form.teams[t.id]?.selected)
+                        }
                         onCheckedChange={(checked) => {
                           setForm((prev) => {
                             const updated = { ...prev.teams };
@@ -799,8 +997,12 @@ export default function UserFormWizard({
                         }}
                         className="border-slate-500"
                       />
-                      <label htmlFor="wizard-select-all-teams" className="text-xs text-slate-400 cursor-pointer select-none">
-                        {availableTeams.every((t) => form.teams[t.id]?.selected) && availableTeams.length > 0
+                      <label
+                        htmlFor="wizard-select-all-teams"
+                        className="text-xs text-slate-400 cursor-pointer select-none"
+                      >
+                        {availableTeams.every((t) => form.teams[t.id]?.selected) &&
+                        availableTeams.length > 0
                           ? `All ${availableTeams.length} selected`
                           : `Select all`}
                       </label>
@@ -818,7 +1020,8 @@ export default function UserFormWizard({
                         ) : (
                           <Trash2 className="w-3 h-3 mr-1" />
                         )}
-                        Delete {availableTeams.filter((t) => form.teams[t.id]?.selected).length} team(s)
+                        Delete {availableTeams.filter((t) => form.teams[t.id]?.selected).length}{' '}
+                        team(s)
                       </Button>
                     )}
                   </div>
@@ -866,9 +1069,11 @@ export default function UserFormWizard({
                                   onClick={() => setTeamAccess(team.id, level.key)}
                                   className={`
                                     flex items-center gap-3 p-3 rounded-md cursor-pointer transition-all
-                                    ${accessLevel === level.key 
-                                      ? 'bg-blue-600/20 border border-blue-500' 
-                                      : 'bg-slate-800 border border-slate-700 hover:border-slate-600'}
+                                    ${
+                                      accessLevel === level.key
+                                        ? 'bg-blue-600/20 border border-blue-500'
+                                        : 'bg-slate-800 border border-slate-700 hover:border-slate-600'
+                                    }
                                   `}
                                 >
                                   <div
@@ -882,7 +1087,9 @@ export default function UserFormWizard({
                                     )}
                                   </div>
                                   <div>
-                                    <div className="text-sm font-medium text-slate-200">{level.label}</div>
+                                    <div className="text-sm font-medium text-slate-200">
+                                      {level.label}
+                                    </div>
                                     <div className="text-xs text-slate-400">{level.desc}</div>
                                   </div>
                                 </div>
@@ -962,14 +1169,13 @@ export default function UserFormWizard({
                 {NAV_MODULES.map((module) => {
                   const Icon = module.icon;
                   const isEnabled = form.nav_permissions[module.key];
-                  
+
                   // "Auto" just means this was force-enabled by an org-wide permission —
                   // user can still manually toggle it off if they choose
-                  const autoForced = (
+                  const autoForced =
                     (module.key === 'Reports' && form.perm_reports) ||
                     (module.key === 'Employees' && form.perm_employees) ||
-                    (module.key === 'Settings' && form.perm_settings)
-                  );
+                    (module.key === 'Settings' && form.perm_settings);
 
                   return (
                     <div
@@ -977,21 +1183,30 @@ export default function UserFormWizard({
                       onClick={() => toggleNavPerm(module.key)}
                       className={`
                         flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer
-                        ${isEnabled 
-                          ? 'bg-blue-500/10 border-blue-500' 
-                          : 'bg-slate-900 border-slate-700 hover:border-slate-600'}
+                        ${
+                          isEnabled
+                            ? 'bg-blue-500/10 border-blue-500'
+                            : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+                        }
                       `}
                     >
-                      <div className={`p-2 rounded-md ${isEnabled ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'}`}>
+                      <div
+                        className={`p-2 rounded-md ${isEnabled ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'}`}
+                      >
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${isEnabled ? 'text-slate-200' : 'text-slate-400'}`}>
+                          <span
+                            className={`text-sm font-medium ${isEnabled ? 'text-slate-200' : 'text-slate-400'}`}
+                          >
                             {module.label}
                           </span>
                           {autoForced && (
-                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-green-500/10 text-green-400 border-green-500/30"
+                            >
                               Auto
                             </Badge>
                           )}
@@ -1011,8 +1226,15 @@ export default function UserFormWizard({
                 <div className="flex items-center gap-2 text-sm text-slate-400">
                   <Sparkles className="w-4 h-4 text-blue-400" />
                   <span>
-                    Modules marked <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30 mx-1">Auto</Badge> 
-                    were enabled based on organization-wide permissions. You can still toggle them off.
+                    Modules marked{' '}
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-green-500/10 text-green-400 border-green-500/30 mx-1"
+                    >
+                      Auto
+                    </Badge>
+                    were enabled based on organization-wide permissions. You can still toggle them
+                    off.
                   </span>
                 </div>
               </div>
@@ -1047,10 +1269,24 @@ export default function UserFormWizard({
                 <SummarySection title="Identity">
                   <SummaryItem label="Name" value={form.full_name} />
                   <SummaryItem label="Email" value={form.email} />
-                  <SummaryItem
-                    label="CRM Role"
-                    value={getEmployeeRoleLabel(form.employee_role)}
-                  />
+                  {currentUser?.role === 'superadmin' && (
+                    <SummaryItem
+                      label="Platform Role"
+                      value={
+                        form.platform_role === 'superadmin'
+                          ? 'Super Admin'
+                          : form.platform_role === 'admin'
+                            ? 'Tenant Admin'
+                            : 'User'
+                      }
+                    />
+                  )}
+                  {(!form.platform_role || form.platform_role === 'user') && (
+                    <SummaryItem
+                      label="CRM Role"
+                      value={getEmployeeRoleLabel(form.employee_role)}
+                    />
+                  )}
                   <SummaryItem label="Status" value={form.is_active ? 'Active' : 'Inactive'} />
                 </SummarySection>
 
@@ -1062,19 +1298,30 @@ export default function UserFormWizard({
                       <SummaryItem
                         key={team.id}
                         label={team.name}
-                        value={ACCESS_LEVELS.find((a) => a.key === form.teams[team.id]?.access_level)?.label || 'View own'}
+                        value={
+                          ACCESS_LEVELS.find((a) => a.key === form.teams[team.id]?.access_level)
+                            ?.label || 'View own'
+                        }
                       />
                     ))
                   )}
                 </SummarySection>
 
                 <SummarySection title="Organization Powers">
-                  {!form.perm_notes_anywhere && !form.perm_all_records && !form.perm_reports && !form.perm_employees && !form.perm_settings ? (
+                  {!form.perm_notes_anywhere &&
+                  !form.perm_all_records &&
+                  !form.perm_reports &&
+                  !form.perm_employees &&
+                  !form.perm_settings ? (
                     <p className="text-sm text-slate-500 italic">None — standard user access</p>
                   ) : (
                     <>
-                      {form.perm_notes_anywhere && <SummaryItem label="Add notes anywhere" value="Yes" />}
-                      {form.perm_all_records && <SummaryItem label="View all records" value="Yes" />}
+                      {form.perm_notes_anywhere && (
+                        <SummaryItem label="Add notes anywhere" value="Yes" />
+                      )}
+                      {form.perm_all_records && (
+                        <SummaryItem label="View all records" value="Yes" />
+                      )}
                       {form.perm_reports && <SummaryItem label="Reports & analytics" value="Yes" />}
                       {form.perm_employees && <SummaryItem label="Manage employees" value="Yes" />}
                       {form.perm_settings && <SummaryItem label="System settings" value="Yes" />}
@@ -1085,7 +1332,11 @@ export default function UserFormWizard({
                 <SummarySection title="Navigation Modules">
                   <div className="flex flex-wrap gap-2">
                     {enabledNavModules.map((m) => (
-                      <Badge key={m.key} variant="outline" className="text-xs bg-slate-800 text-slate-300 border-slate-600">
+                      <Badge
+                        key={m.key}
+                        variant="outline"
+                        className="text-xs bg-slate-800 text-slate-300 border-slate-600"
+                      >
                         {m.label}
                       </Badge>
                     ))}
@@ -1094,8 +1345,6 @@ export default function UserFormWizard({
                     )}
                   </div>
                 </SummarySection>
-
-
               </div>
             </div>
           )}
@@ -1105,7 +1354,7 @@ export default function UserFormWizard({
         <div className="flex justify-between pt-4 border-t border-slate-700">
           <Button
             variant="outline"
-            onClick={() => step === 0 ? onCancel() : setStep((s) => s - 1)}
+            onClick={() => (step === 0 ? onCancel() : setStep((s) => s - 1))}
             className="border-slate-600 text-slate-300 hover:bg-slate-700"
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
@@ -1153,15 +1402,15 @@ function PermissionCard({ icon, title, description, checked, onChange }) {
       onClick={onChange}
       className={`
         flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all
-        ${checked 
-          ? 'bg-blue-500/10 border-blue-500' 
-          : 'bg-slate-900 border-slate-700 hover:border-slate-600'}
+        ${
+          checked
+            ? 'bg-blue-500/10 border-blue-500'
+            : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+        }
       `}
     >
       <div className="flex items-center gap-3">
-        <div className={checked ? 'text-blue-400' : 'text-slate-500'}>
-          {icon}
-        </div>
+        <div className={checked ? 'text-blue-400' : 'text-slate-500'}>{icon}</div>
         <div>
           <div className="font-medium text-slate-200">{title}</div>
           <div className="text-sm text-slate-400">{description}</div>
