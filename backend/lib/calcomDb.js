@@ -2,7 +2,7 @@
  * calcomDb.js
  *
  * Lazy pg Pool for the local Cal.com PostgreSQL container (calcom-db).
- * The pool is optional — if CALCOM_DB_URL is not set the helper returns null
+ * The pool is optional - if CALCOM_DB_URL / CALCOM_DATABASE_URL are not set the helper returns null
  * so calcomSyncService can degrade gracefully when Cal.com is not running.
  *
  * Connection string expected:
@@ -17,12 +17,12 @@ let _pool = null;
 
 /**
  * Return the shared pg Pool, creating it on first call.
- * Returns null when CALCOM_DB_URL is not configured.
+ * Returns null when neither CALCOM_DB_URL nor CALCOM_DATABASE_URL is configured.
  */
 export function getCalcomDb() {
   if (_pool) return _pool;
 
-  const url = process.env.CALCOM_DB_URL;
+  const url = process.env.CALCOM_DB_URL || process.env.CALCOM_DATABASE_URL;
   if (!url) return null;
 
   _pool = new Pool({
