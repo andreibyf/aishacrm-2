@@ -9,7 +9,7 @@ on:
       - 'src/**/*.test.{js,jsx,ts,tsx}'
       - 'backend/__tests__/**'
       - 'tests/**'
-      - 'scripts/test-alignment-report.cjs'
+      - 'scripts/test-alignment-report.js'
 
 permissions:
   contents: read
@@ -33,13 +33,13 @@ jobs:
       - name: Run test alignment report (JSON)
         id: report_json
         run: |
-          node scripts/test-alignment-report.cjs --format json > test-alignment.json
+          node scripts/test-alignment-report.js --format json --output test-alignment.json
           cat test-alignment.json
         continue-on-error: true
 
       - name: Run test alignment report (Markdown)
         run: |
-          node scripts/test-alignment-report.cjs --format markdown > test-alignment.md
+          node scripts/test-alignment-report.js --format markdown --output test-alignment.md
 
       - name: Upload reports
         uses: actions/upload-artifact@v4
