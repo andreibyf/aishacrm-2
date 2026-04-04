@@ -1,5 +1,5 @@
 import express from 'express';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { validateTenantScopedId } from '../lib/validation.js';
 import logger from '../lib/logger.js';
 import { supabase } from '../services/supabaseClient.js';
@@ -67,7 +67,11 @@ function resolveBackendBaseUrl(req) {
 }
 
 async function getTenantName(supabaseClient, tenantId) {
-  const { data } = await supabaseClient.from('tenant').select('name').eq('id', tenantId).maybeSingle();
+  const { data } = await supabaseClient
+    .from('tenant')
+    .select('name')
+    .eq('id', tenantId)
+    .maybeSingle();
   return data?.name || `Tenant ${tenantId.slice(0, 8)}`;
 }
 
@@ -129,7 +133,10 @@ async function findDefaultProvisionUser(db) {
   const preferredById = await findCalcomUserById(db, process.env.CALCOM_PROVISION_USER_ID);
   if (preferredById) return preferredById;
 
-  const preferredByUsername = await findCalcomUserByUsername(db, process.env.CALCOM_PROVISION_USERNAME);
+  const preferredByUsername = await findCalcomUserByUsername(
+    db,
+    process.env.CALCOM_PROVISION_USERNAME,
+  );
   if (preferredByUsername) return preferredByUsername;
 
   const result = await db.query(
@@ -323,17 +330,16 @@ async function ensureCalcomWebhook(db, { userId, subscriberUrl, webhookSecret })
 
 async function ensureCalcomApiKey(db, { tenantId, userId, providedApiKey }) {
   const apiKey = (providedApiKey || '').trim() || `cal_auto_${randomBytes(24).toString('hex')}`;
-  const hashedKey = createHash('sha256').update(apiKey).digest('hex');
 
   await db.query(
     `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")
-     VALUES ($1, $2, $3, $4)
+     VALUES ($1, $2, $3, encode(digest($4, 'sha256'), 'hex'))
      ON CONFLICT ("hashedKey") DO NOTHING`,
     [
       `aisha-auto-${tenantId.slice(0, 8)}-${Date.now().toString(36)}`,
       userId,
       `AiSHA auto-provisioned key for tenant ${tenantId}`,
-      hashedKey,
+      apiKey,
     ],
   );
 
@@ -453,10 +459,16 @@ export default function createTenantIntegrationRoutes({
   // GET /api/tenantintegrations - List tenant integrations with filters
   router.get('/', async (req, res) => {
     try {
-      if (hasMultipleValues(req.query?.integration_type) || hasMultipleValues(req.query?.is_active)) {
+      if (
+        hasMultipleValues(req.query?.integration_type) ||
+        hasMultipleValues(req.query?.is_active)
+      ) {
         return res
           .status(400)
-          .json({ status: 'error', message: 'integration_type and is_active must be single values' });
+          .json({
+            status: 'error',
+            message: 'integration_type and is_active must be single values',
+          });
       }
 
       const integration_type = asSingleString(req.query?.integration_type, 'integration_type');
@@ -530,7 +542,10 @@ export default function createTenantIntegrationRoutes({
       if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
         return res
           .status(400)
-          .json({ status: 'error', message: 'integration_type and integration_name must be single values' });
+          .json({
+            status: 'error',
+            message: 'integration_type and integration_name must be single values',
+          });
       }
 
       const { tenant_id, error: tenantError } = resolveTenantId(req);
@@ -563,7 +578,8 @@ export default function createTenantIntegrationRoutes({
       let nextMetadata = metadata || {};
 
       const shouldAutoProvisionCalcom =
-        integration_type === 'calcom' && (nextConfig.auto_provision === undefined || nextConfig.auto_provision === true);
+        integration_type === 'calcom' &&
+        (nextConfig.auto_provision === undefined || nextConfig.auto_provision === true);
 
       if (shouldAutoProvisionCalcom) {
         const provisioned = await autoProvisionCalcom({
@@ -626,7 +642,10 @@ export default function createTenantIntegrationRoutes({
       if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
         return res
           .status(400)
-          .json({ status: 'error', message: 'integration_type and integration_name must be single values' });
+          .json({
+            status: 'error',
+            message: 'integration_type and integration_name must be single values',
+          });
       }
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
