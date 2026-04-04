@@ -17,6 +17,26 @@ jobs:
       pull-requests: write
 
     steps:
-    - uses: actions/labeler@v4
+    - name: Checkout base branch
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ github.event.pull_request.base.ref }}
+
+    - name: Check labeler config exists
+      id: labeler_config
+      run: |
+        if [ -f .github/labeler.yml ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Apply labels
+      if: steps.labeler_config.outputs.exists == 'true'
+      uses: actions/labeler@v4
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
+
+    - name: Skip labeling (no config)
+      if: steps.labeler_config.outputs.exists != 'true'
+      run: echo "No .github/labeler.yml found on base branch; skipping labeler."
