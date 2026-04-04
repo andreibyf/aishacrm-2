@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { BACKEND_URL } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,8 +52,10 @@ async function apiFetch(path, options = {}) {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  return fetch(path, {
+  const url = path.startsWith('http') ? path : `${BACKEND_URL}${path}`;
+  return fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -112,7 +115,8 @@ export default function CalendarSync({ tenantId }) {
   const [removeTarget, setRemoveTarget] = useState(null);
 
   const getTenantIntegrationRecord = (payload) => {
-    if (Array.isArray(payload?.data?.tenantintegrations)) return payload.data.tenantintegrations[0] || null;
+    if (Array.isArray(payload?.data?.tenantintegrations))
+      return payload.data.tenantintegrations[0] || null;
     if (Array.isArray(payload?.data)) return payload.data[0] || null;
     if (Array.isArray(payload)) return payload[0] || null;
     return null;
@@ -306,7 +310,12 @@ export default function CalendarSync({ tenantId }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleImportPersonalCalendar} disabled={importing || syncing}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportPersonalCalendar}
+            disabled={importing || syncing}
+          >
             {importing ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
@@ -329,34 +338,57 @@ export default function CalendarSync({ tenantId }) {
         <CardHeader>
           <CardTitle className="text-sm font-medium">Sync Health</CardTitle>
           <CardDescription>
-            Current Cal.com connectivity and the last known bidirectional sync state for this tenant.
+            Current Cal.com connectivity and the last known bidirectional sync state for this
+            tenant.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <SyncStatusBadge status={syncInfo?.sync_status === 'pending' ? 'syncing' : syncInfo?.sync_status === 'connected' ? 'connected' : 'error'} />
+            <SyncStatusBadge
+              status={
+                syncInfo?.sync_status === 'pending'
+                  ? 'syncing'
+                  : syncInfo?.sync_status === 'connected'
+                    ? 'connected'
+                    : 'error'
+              }
+            />
             {syncInfo?.bidirectional_sync_enabled ? (
-              <Badge className="bg-green-500/10 text-green-400 border-green-500/30">Bidirectional sync enabled</Badge>
+              <Badge className="bg-green-500/10 text-green-400 border-green-500/30">
+                Bidirectional sync enabled
+              </Badge>
             ) : (
-              <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">Bidirectional sync incomplete</Badge>
+              <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                Bidirectional sync incomplete
+              </Badge>
             )}
             {syncInfo?.calcom_db_available === false && (
-              <Badge className="bg-red-500/10 text-red-400 border-red-500/30">Cal.com DB unavailable</Badge>
+              <Badge className="bg-red-500/10 text-red-400 border-red-500/30">
+                Cal.com DB unavailable
+              </Badge>
             )}
           </div>
 
           <div className="grid gap-2 md:grid-cols-2 text-muted-foreground">
             <div>
-              Booking link: <span className="text-foreground">{syncInfo?.cal_link || calcomIntegration?.config?.cal_link || 'Not set'}</span>
+              Booking link:{' '}
+              <span className="text-foreground">
+                {syncInfo?.cal_link || calcomIntegration?.config?.cal_link || 'Not set'}
+              </span>
             </div>
             <div>
-              Event type ID: <span className="text-foreground">{syncInfo?.event_type_id || 'Not set'}</span>
+              Event type ID:{' '}
+              <span className="text-foreground">{syncInfo?.event_type_id || 'Not set'}</span>
             </div>
             <div>
-              Scheduler user ID: <span className="text-foreground">{syncInfo?.calcom_user_id || 'Not set'}</span>
+              Scheduler user ID:{' '}
+              <span className="text-foreground">{syncInfo?.calcom_user_id || 'Not set'}</span>
             </div>
             <div>
-              Last sync: <span className="text-foreground">{syncInfo?.last_sync ? new Date(syncInfo.last_sync).toLocaleString() : 'Never'}</span>
+              Last sync:{' '}
+              <span className="text-foreground">
+                {syncInfo?.last_sync ? new Date(syncInfo.last_sync).toLocaleString() : 'Never'}
+              </span>
             </div>
           </div>
 
