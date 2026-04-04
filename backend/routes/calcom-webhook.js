@@ -17,8 +17,16 @@ import express from 'express';
 import crypto from 'crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
-import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from '../lib/googleCalendarService.js';
-import { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent } from '../lib/outlookCalendarService.js';
+import {
+  createGoogleEvent,
+  updateGoogleEvent,
+  deleteGoogleEvent,
+} from '../lib/googleCalendarService.js';
+import {
+  createOutlookEvent,
+  updateOutlookEvent,
+  deleteOutlookEvent,
+} from '../lib/outlookCalendarService.js';
 
 const router = express.Router();
 
@@ -127,7 +135,11 @@ async function resolveEntityByEmail(supabase, tenant_id, email) {
   };
 }
 
-async function resolveAssignedEmployeeForBooking(supabase, tenant_id, { contact_id, lead_id, eventTypeId }) {
+async function resolveAssignedEmployeeForBooking(
+  supabase,
+  tenant_id,
+  { contact_id, lead_id, eventTypeId },
+) {
   if (contact_id) {
     const { data } = await supabase
       .from('contacts')
@@ -151,16 +163,15 @@ async function resolveAssignedEmployeeForBooking(supabase, tenant_id, { contact_
   }
 
   if (eventTypeId) {
+    // Filter in Postgres instead of loading all employees into memory
     const { data } = await supabase
       .from('employees')
-      .select('id, metadata')
-      .eq('tenant_id', tenant_id);
+      .select('id')
+      .eq('tenant_id', tenant_id)
+      .eq('metadata->>calcom_event_type_id', String(eventTypeId))
+      .maybeSingle();
 
-    const matchedEmployee = (data || []).find(
-      (employee) => Number(employee?.metadata?.calcom_event_type_id) === Number(eventTypeId),
-    );
-
-    if (matchedEmployee?.id) return matchedEmployee.id;
+    if (data?.id) return data.id;
   }
 
   return null;
@@ -196,15 +207,10 @@ async function findActiveCredit(supabase, tenant_id, contact_id, lead_id) {
 // Helper: create an activity record for the booking
 // ---------------------------------------------------------------------------
 
-async function createBookingActivity(supabase, {
-  tenant_id,
-  contact_id,
-  lead_id,
-  booking,
-  attendeeName,
-  attendeeEmail,
-  assigned_to,
-}) {
+async function createBookingActivity(
+  supabase,
+  { tenant_id, contact_id, lead_id, booking, attendeeName, attendeeEmail, assigned_to },
+) {
   const { calcom_booking_id, calcom_event_type_id, scheduled_start, scheduled_end } = booking;
 
   const durationMinutes = Math.round((new Date(scheduled_end) - new Date(scheduled_start)) / 60000);
@@ -245,7 +251,12 @@ async function createBookingActivity(supabase, {
     .single();
 
   if (error) {
-    logger.error('[CalcomWebhook] Could not create activity', { error: error.message, code: error.code, details: error.details, hint: error.hint });
+    logger.error('[CalcomWebhook] Could not create activity', {
+      error: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return null;
   }
   return data?.id || null;
@@ -539,17 +550,17 @@ router.post('/calcom', express.raw({ type: 'application/json' }), async (req, re
         });
         {
           const { error: upsertErr } = await supabase.from('booking_sessions').upsert(
-          [
-            {
-              tenant_id,
-              calcom_booking_id: payload.uid,
-              calcom_event_type_id: payload.eventTypeId || null,
-              scheduled_start: payload.startTime,
-              scheduled_end: payload.endTime,
-              status: 'pending',
-            },
-          ],
-          { onConflict: 'tenant_id,calcom_booking_id' },
+            [
+              {
+                tenant_id,
+                calcom_booking_id: payload.uid,
+                calcom_event_type_id: payload.eventTypeId || null,
+                scheduled_start: payload.startTime,
+                scheduled_end: payload.endTime,
+                status: 'pending',
+              },
+            ],
+            { onConflict: 'tenant_id,calcom_booking_id' },
           );
 
           if (upsertErr) {

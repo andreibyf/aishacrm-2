@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { formatDateTime } from '@/utils/dateFormatting';
 
 async function apiFetch(path, options = {}) {
   const {
@@ -387,7 +388,7 @@ export default function CalendarSync({ tenantId }) {
             <div>
               Last sync:{' '}
               <span className="text-foreground">
-                {syncInfo?.last_sync ? new Date(syncInfo.last_sync).toLocaleString() : 'Never'}
+                {syncInfo?.last_sync ? formatDateTime(syncInfo.last_sync) : 'Never'}
               </span>
             </div>
           </div>
