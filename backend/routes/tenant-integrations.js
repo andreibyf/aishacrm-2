@@ -19,11 +19,41 @@ const CALCOM_WEBHOOK_EVENTS = [
 ];
 
 function slugify(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
+  const input = String(value || '').toLowerCase();
+  let output = '';
+  let lastWasDash = false;
+
+  for (let i = 0; i < input.length && output.length < 40; i += 1) {
+    const ch = input[i];
+    const code = ch.charCodeAt(0);
+    const isDigit = code >= 48 && code <= 57;
+    const isLowerAlpha = code >= 97 && code <= 122;
+
+    if (isDigit || isLowerAlpha) {
+      output += ch;
+      lastWasDash = false;
+      continue;
+    }
+
+    if (output.length > 0 && !lastWasDash) {
+      output += '-';
+      lastWasDash = true;
+    }
+  }
+
+  return output.endsWith('-') ? output.slice(0, -1) : output;
+}
+
+function hasMultipleValues(value) {
+  return Array.isArray(value);
+}
+
+function asSingleString(value, fieldName) {
+  if (value === undefined || value === null) return null;
+  if (hasMultipleValues(value)) {
+    throw new Error(`${fieldName} must be a single value`);
+  }
+  return String(value);
 }
 
 function resolveBackendBaseUrl(req) {
@@ -387,7 +417,14 @@ async function autoProvisionCalcom({
  */
 function resolveTenantId(req) {
   const fromMiddleware = req.tenant?.id;
-  const fromRequest = req.query?.tenant_id || req.body?.tenant_id;
+  const queryTenantId = req.query?.tenant_id;
+  const bodyTenantId = req.body?.tenant_id;
+
+  if (hasMultipleValues(queryTenantId) || hasMultipleValues(bodyTenantId)) {
+    return { error: 'tenant_id must be a single value' };
+  }
+
+  const fromRequest = queryTenantId || bodyTenantId;
 
   // If middleware resolved a tenant, use it (authoritative)
   if (fromMiddleware) {
@@ -416,7 +453,14 @@ export default function createTenantIntegrationRoutes({
   // GET /api/tenantintegrations - List tenant integrations with filters
   router.get('/', async (req, res) => {
     try {
-      const { integration_type, is_active } = req.query;
+      if (hasMultipleValues(req.query?.integration_type) || hasMultipleValues(req.query?.is_active)) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'integration_type and is_active must be single values' });
+      }
+
+      const integration_type = asSingleString(req.query?.integration_type, 'integration_type');
+      const is_active = asSingleString(req.query?.is_active, 'is_active');
       const { tenant_id, error: tenantError } = resolveTenantId(req);
       if (tenantError) {
         return res.status(400).json({ status: 'error', message: tenantError });
@@ -482,6 +526,12 @@ export default function createTenantIntegrationRoutes({
     try {
       const { integration_type, integration_name, is_active, api_credentials, config, metadata } =
         req.body;
+
+      if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'integration_type and integration_name must be single values' });
+      }
 
       const { tenant_id, error: tenantError } = resolveTenantId(req);
       if (tenantError) {
@@ -572,6 +622,12 @@ export default function createTenantIntegrationRoutes({
         last_sync,
         error_message,
       } = req.body;
+
+      if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
+        return res
+          .status(400)
+          .json({ status: 'error', message: 'integration_type and integration_name must be single values' });
+      }
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;
 
