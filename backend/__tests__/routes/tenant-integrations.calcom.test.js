@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
+// eslint-disable-next-line no-restricted-imports
 import pg from 'pg';
 
 const tenantId = '11111111-1111-1111-1111-111111111111';
@@ -132,9 +133,9 @@ test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_l
   const writes = [];
   const FakePool = createFakePool(queryLog, [
     [
-      (sql, params) => sql.includes('FROM users WHERE id = $1'),
-      async (_sql, params) => {
-        if (Number(params[0]) === 77) {
+      (sql, _params) => sql.includes('FROM users WHERE id = $1'),
+      async (_sql, _params) => {
+        if (Number(_params[0]) === 77) {
           return {
             rows: [
               {
@@ -152,26 +153,40 @@ test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_l
     [(sql) => sql.includes('FROM users WHERE username = $1 LIMIT 1'), async () => ({ rows: [] })],
     [
       (sql) => sql.includes('INSERT INTO users (username, name, email, uuid)'),
-      async (_sql, params) => ({ rows: [{ id: 501, username: params[0], email: params[2], name: params[1] }] }),
+      async (_sql, params) => ({
+        rows: [{ id: 501, username: params[0], email: params[2], name: params[1] }],
+      }),
     ],
     [(sql) => sql.includes('SELECT id, "timeZone" FROM "Schedule"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('INSERT INTO "Schedule"'), async () => ({ rows: [{ id: 901 }] })],
     [(sql) => sql.includes('SELECT id FROM "Availability"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('INSERT INTO "Availability"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('UPDATE users'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2'), async () => ({ rows: [] })],
+    [
+      (sql) => sql.includes('SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2'),
+      async () => ({ rows: [] }),
+    ],
     [
       (sql, params) =>
-        sql.includes('SELECT id, slug, title, length, "userId" FROM "EventType" WHERE id = $1 LIMIT 1') &&
-        Number(params[0]) === 999,
+        sql.includes(
+          'SELECT id, slug, title, length, "userId" FROM "EventType" WHERE id = $1 LIMIT 1',
+        ) && Number(params[0]) === 999,
       async () => ({
         rows: [{ id: 999, slug: 'wrong-user-event', title: 'Wrong', length: 30, userId: 12 }],
       }),
     ],
-    [(sql) => sql.includes('SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2'), async () => ({ rows: [] })],
+    [
+      (sql) =>
+        sql.includes(
+          'SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2',
+        ),
+      async () => ({ rows: [] }),
+    ],
     [
       (sql) => sql.includes('INSERT INTO "EventType"'),
-      async (_sql, params) => ({ rows: [{ id: 701, slug: params[1], title: params[0], length: params[2] }] }),
+      async (_sql, params) => ({
+        rows: [{ id: 701, slug: params[1], title: params[0], length: params[2] }],
+      }),
     ],
     [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
@@ -227,28 +242,57 @@ test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_l
 
 test('PUT /api/tenantintegrations/:id preserves calcom_user_id and replaces cross-user event_type_id', async () => {
   const writes = [];
-  const FakePool = createFakePool([], [
+  const FakePool = createFakePool(
+    [],
     [
-      (sql, params) => sql.includes('FROM users WHERE id = $1 LIMIT 1') && params[0] === 77,
-      async () => ({ rows: [{ id: 77, username: 'shared-user', email: 'shared@example.com', name: 'Shared User' }] }),
+      [
+        (sql, params) => sql.includes('FROM users WHERE id = $1 LIMIT 1') && params[0] === 77,
+        async () => ({
+          rows: [
+            { id: 77, username: 'shared-user', email: 'shared@example.com', name: 'Shared User' },
+          ],
+        }),
+      ],
+      [
+        (sql, params) =>
+          sql.includes(
+            'SELECT id, slug, title, length, "userId" FROM "EventType" WHERE id = $1 LIMIT 1',
+          ) && params[0] === 999,
+        async () => ({
+          rows: [{ id: 999, slug: 'wrong-user-event', title: 'Wrong', length: 30, userId: 12 }],
+        }),
+      ],
+      [
+        (sql) => sql.includes('SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2'),
+        async () => ({ rows: [] }),
+      ],
+      [
+        (sql) =>
+          sql.includes(
+            'SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2',
+          ),
+        async () => ({ rows: [] }),
+      ],
+      [
+        (sql) => sql.includes('INSERT INTO "EventType"'),
+        async (_sql, params) => ({
+          rows: [{ id: 333, slug: params[1], title: params[0], length: params[2] }],
+        }),
+      ],
+      [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
+      [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
+      [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],
+      [(sql) => sql.includes('UPDATE users'), async () => ({ rows: [] })],
+      [
+        (sql) => sql.includes('SELECT id, "timeZone" FROM "Schedule"'),
+        async () => ({ rows: [{ id: 55, timeZone: 'America/New_York' }] }),
+      ],
+      [
+        (sql) => sql.includes('SELECT id FROM "Availability"'),
+        async () => ({ rows: [{ id: 88 }] }),
+      ],
     ],
-    [
-      (sql, params) => sql.includes('SELECT id, slug, title, length, "userId" FROM "EventType" WHERE id = $1 LIMIT 1') && params[0] === 999,
-      async () => ({ rows: [{ id: 999, slug: 'wrong-user-event', title: 'Wrong', length: 30, userId: 12 }] }),
-    ],
-    [(sql) => sql.includes('SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2'), async () => ({ rows: [] })],
-    [
-      (sql) => sql.includes('INSERT INTO "EventType"'),
-      async (_sql, params) => ({ rows: [{ id: 333, slug: params[1], title: params[0], length: params[2] }] }),
-    ],
-    [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('UPDATE users'), async () => ({ rows: [] })],
-    [(sql) => sql.includes('SELECT id, "timeZone" FROM "Schedule"'), async () => ({ rows: [{ id: 55, timeZone: 'America/New_York' }] })],
-    [(sql) => sql.includes('SELECT id FROM "Availability"'), async () => ({ rows: [{ id: 88 }] })],
-  ]);
+  );
 
   const existingIntegration = {
     integration_type: 'calcom',

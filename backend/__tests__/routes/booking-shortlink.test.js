@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
+// eslint-disable-next-line no-restricted-imports
 import pg from 'pg';
 
 async function createServer() {
@@ -29,7 +30,8 @@ test('booking shortlink persists in calcom-db and redirects to the Cal.com URL',
     max: 1,
   });
 
-  const url = 'https://app.cal.com/aishacrm-superadmin/dev-playground-b62b76?email=client%40example.com';
+  const url =
+    'https://app.cal.com/aishacrm-superadmin/dev-playground-b62b76?email=client%40example.com';
 
   try {
     const address = server.address();
@@ -53,7 +55,11 @@ test('booking shortlink persists in calcom-db and redirects to the Cal.com URL',
     );
 
     assert.equal(stored.rowCount, 1, 'shortlink row should persist in calcom-db');
-    assert.equal(stored.rows[0].destination_url, url, 'destination URL should be stored in calcom-db');
+    assert.equal(
+      stored.rows[0].destination_url,
+      url,
+      'destination URL should be stored in calcom-db',
+    );
 
     const redirectRes = await fetch(`http://127.0.0.1:${address.port}/book/${createJson.token}`, {
       redirect: 'manual',
@@ -62,7 +68,9 @@ test('booking shortlink persists in calcom-db and redirects to the Cal.com URL',
     assert.equal(redirectRes.status, 302);
     assert.equal(redirectRes.headers.get('location'), url);
   } finally {
-    await pool.query('DELETE FROM aisha_booking_shortlinks WHERE destination_url = $1', [url]).catch(() => {});
+    await pool
+      .query('DELETE FROM aisha_booking_shortlinks WHERE destination_url = $1', [url])
+      .catch(() => {});
     await pool.end().catch(() => {});
     server.close();
   }
