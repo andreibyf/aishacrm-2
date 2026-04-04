@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+// eslint-disable-next-line no-restricted-imports
 import pg from 'pg';
 
 function loadModuleWithPool(FakePool) {
@@ -67,4 +68,3 @@ test('getCalcomDb falls back to CALCOM_DATABASE_URL', async () => {
     else process.env.CALCOM_DATABASE_URL = originalDatabaseUrl;
   }
 });
-
