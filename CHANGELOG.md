@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Calendar Sync settings fetch reliability:** Updated `backend/routes/tenant-integrations.js` GET list route to send explicit no-store/no-cache headers, and hardened `src/components/settings/CalendarSync.jsx` to force no-store fetches and safely skip empty `304 Not Modified` bodies. This prevents JSON parse failures and false error toasts when opening Calendar Sync.
 - **Test Alignment CI stability:** Updated `.github/workflows/test-alignment-report.yml` to use `scripts/test-alignment-report.js` and added `--output` file writing support in `scripts/test-alignment-report.js`, removing shell redirection that failed in non-TTY GitHub Actions environments (`stdout is not a tty`).
 - **Test Alignment issue publishing stability:** Capped and safely truncated the generated issue body in `.github/workflows/test-alignment-report.yml` so very large markdown reports no longer fail with `Validation Failed: body is too long (maximum is 65536 characters)`.
 - **Labeler CI stability:** Added `.github/labeler.yml` so the Labeler workflow no longer fails with a missing configuration-file error on pull requests.

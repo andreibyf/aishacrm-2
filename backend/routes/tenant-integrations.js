@@ -459,16 +459,20 @@ export default function createTenantIntegrationRoutes({
   // GET /api/tenantintegrations - List tenant integrations with filters
   router.get('/', async (req, res) => {
     try {
+      // This endpoint feeds Settings pages that expect fresh JSON on every load.
+      // Explicit no-store avoids conditional 304 responses with empty bodies.
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+
       if (
         hasMultipleValues(req.query?.integration_type) ||
         hasMultipleValues(req.query?.is_active)
       ) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'integration_type and is_active must be single values',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'integration_type and is_active must be single values',
+        });
       }
 
       const integration_type = asSingleString(req.query?.integration_type, 'integration_type');
@@ -540,12 +544,10 @@ export default function createTenantIntegrationRoutes({
         req.body;
 
       if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'integration_type and integration_name must be single values',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'integration_type and integration_name must be single values',
+        });
       }
 
       const { tenant_id, error: tenantError } = resolveTenantId(req);
@@ -640,12 +642,10 @@ export default function createTenantIntegrationRoutes({
       } = req.body;
 
       if (hasMultipleValues(integration_type) || hasMultipleValues(integration_name)) {
-        return res
-          .status(400)
-          .json({
-            status: 'error',
-            message: 'integration_type and integration_name must be single values',
-          });
+        return res.status(400).json({
+          status: 'error',
+          message: 'integration_type and integration_name must be single values',
+        });
       }
 
       if (!validateTenantScopedId(id, tenant_id, res)) return;

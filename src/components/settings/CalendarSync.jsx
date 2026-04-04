@@ -56,6 +56,7 @@ async function apiFetch(path, options = {}) {
   const url = path.startsWith('http') ? path : `${BACKEND_URL}${path}`;
   return fetch(url, {
     ...options,
+    cache: 'no-store',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -131,7 +132,8 @@ export default function CalendarSync({ tenantId }) {
       const res = await apiFetch(
         `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom`,
       );
-      const json = await res.json();
+      if (res.status === 304) return;
+      const json = await res.json().catch(() => ({}));
       const integration = getTenantIntegrationRecord(json);
       setCalcomIntegration(integration);
 
