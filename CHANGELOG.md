@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Test Alignment CI stability:** Updated `.github/workflows/test-alignment-report.yml` to use `scripts/test-alignment-report.js` and added `--output` file writing support in `scripts/test-alignment-report.js`, removing shell redirection that failed in non-TTY GitHub Actions environments (`stdout is not a tty`).
+- **Test Alignment issue publishing stability:** Capped and safely truncated the generated issue body in `.github/workflows/test-alignment-report.yml` so very large markdown reports no longer fail with `Validation Failed: body is too long (maximum is 65536 characters)`.
 - **Labeler CI stability:** Added `.github/labeler.yml` so the Labeler workflow no longer fails with a missing configuration-file error on pull requests.
 - **AI Campaign create stability:** Fixed `POST /api/aicampaigns` parameter alignment and payload normalization so optional UUID fields no longer receive `[]`-style values through the Supabase SQL adapter path. This resolves the longstanding backend regression `invalid input syntax for type uuid: "[]"` in `aicampaigns.route.test.js`.
 - **Cal.com API key provisioning hardening:** Updated `backend/routes/tenant-integrations.js` to compute Cal.com-compatible SHA-256 API key digests inside Postgres (`encode(digest(...))`) instead of Node `createHash(...)`, preserving interoperability while removing the JS password-hash sink flagged by CodeQL.
