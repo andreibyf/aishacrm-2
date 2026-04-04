@@ -87,6 +87,19 @@ export function createCommunicationsProviderTemplate(mailboxAddress = '') {
 }
 
 export function applyIntegrationTypeDefaults(formData, nextType) {
+  if (nextType === 'calcom') {
+    return {
+      ...formData,
+      integration_type: nextType,
+      integration_name: formData.integration_name || 'Cal.com Booking',
+      config: {
+        ...(formData.config || {}),
+        auto_provision:
+          formData.config?.auto_provision === undefined ? true : formData.config.auto_provision,
+      },
+    };
+  }
+
   if (nextType !== 'communications_provider') {
     return {
       ...formData,
@@ -301,12 +314,16 @@ export default function TenantIntegrationSettings() {
         return;
       }
 
+      // When editing, use the integration's own tenant_id to avoid mismatch
+      // if the TenantSwitcher context drifted since the list loaded.
+      const saveTenantId = editingIntegration?.tenant_id || effectiveTenantId;
+
       const data = {
         ...integrationData,
-        tenant_id: effectiveTenantId,
+        tenant_id: saveTenantId,
       };
 
-      console.log('Saving integration with tenant_id:', effectiveTenantId);
+      console.log('Saving integration with tenant_id:', saveTenantId);
 
       if (editingIntegration) {
         await TenantIntegration.update(editingIntegration.id, data);
@@ -441,7 +458,7 @@ export default function TenantIntegrationSettings() {
                 Add Integration
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingIntegration ? 'Edit Integration' : 'Add New Integration'}
@@ -599,6 +616,9 @@ function IntegrationForm({ integration, onSave, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const autoProvisionCalcom =
+      formData.integration_type === 'calcom' && formData.config?.auto_provision !== false;
+
     if (!formData.integration_name.trim()) {
       toast.error('Integration name is required');
       return;
@@ -607,15 +627,23 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('OpenAI API Key is required for this integration type.');
       return;
     }
-    if (formData.integration_type === 'calcom' && !formData.api_credentials.api_key) {
+    if (
+      formData.integration_type === 'calcom' &&
+      !autoProvisionCalcom &&
+      !formData.api_credentials.api_key
+    ) {
       toast.error('Cal.com API Key is required.');
       return;
     }
-    if (formData.integration_type === 'calcom' && !formData.api_credentials.webhook_secret) {
+    if (
+      formData.integration_type === 'calcom' &&
+      !autoProvisionCalcom &&
+      !formData.api_credentials.webhook_secret
+    ) {
       toast.error('Cal.com Webhook Secret is required.');
       return;
     }
-    if (formData.integration_type === 'calcom' && !formData.config.cal_link) {
+    if (formData.integration_type === 'calcom' && !autoProvisionCalcom && !formData.config.cal_link) {
       toast.error('Cal.com booking link (cal_link) is required.');
       return;
     }
@@ -1644,11 +1672,28 @@ function IntegrationForm({ integration, onSave, onCancel }) {
           <CardContent className="space-y-4 pt-4">
             <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
               <AlertDescription className="text-sm">
-                Connect your self-hosted scheduling instance. The API Key and Webhook Secret are
-                used to authenticate booking events. The cal_link (e.g.{' '}
-                <code>your-username/30min</code>) is embedded in contact and lead panels.
+                Connect your self-hosted scheduling instance. Enable auto-provision to let AiSHA
+                create or resolve scheduler user IDs, event types, webhook secrets, and booking
+                links for this tenant.
               </AlertDescription>
             </Alert>
+
+            <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 p-3">
+              <div>
+                <Label htmlFor="calcom_auto_provision" className="text-sm font-medium">
+                  Auto-provision Cal.com integration
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Recommended. Saves the integration with generated scheduler IDs, event type, API
+                  key hash, and webhook registration.
+                </p>
+              </div>
+              <Switch
+                id="calcom_auto_provision"
+                checked={formData.config?.auto_provision !== false}
+                onCheckedChange={(checked) => handleConfigChange('auto_provision', checked)}
+              />
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="calcom_api_key" className="flex items-center gap-2">
@@ -1662,10 +1707,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 onChange={(e) => handleCredentialChange('api_key', e.target.value)}
                 placeholder="cal_live_xxxxxxxxxxxxxxxx"
                 className="font-mono"
-                required
+                required={formData.config?.auto_provision === false}
               />
               <p className="text-xs text-muted-foreground">
-                Create an API key in your scheduling system → Settings → Security → API Keys.
+                Optional with auto-provision on. If left blank, AiSHA generates one and stores the
+                hashed key in Cal.com.
               </p>
             </div>
 
@@ -1681,10 +1727,10 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 onChange={(e) => handleCredentialChange('webhook_secret', e.target.value)}
                 placeholder="whsec_xxxxxxxxxxxxxxxx"
                 className="font-mono"
-                required
+                required={formData.config?.auto_provision === false}
               />
               <p className="text-xs text-muted-foreground">
-                Set in your scheduling system → Settings → Webhooks → create webhook pointing to{' '}
+                Optional with auto-provision on. Webhooks are auto-registered to{' '}
                 <code className="text-xs">{getBackendUrl()}/api/webhooks/calcom</code>.
               </p>
             </div>
@@ -1697,10 +1743,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 onChange={(e) => handleConfigChange('cal_link', e.target.value)}
                 placeholder="username/30min-consultation"
                 className="font-mono"
-                required
+                required={formData.config?.auto_provision === false}
               />
               <p className="text-xs text-muted-foreground">
-                The slug shown in your booking URL, e.g.{' '}
+                Optional with auto-provision on. If provided, AiSHA uses it as a preferred username
+                and event slug. e.g.{' '}
                 <code className="text-xs">your-domain.com/username/30min</code>.
               </p>
             </div>

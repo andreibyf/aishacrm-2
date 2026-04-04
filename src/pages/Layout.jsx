@@ -2227,7 +2227,7 @@ function Layout({ children, currentPageName }) {
         />
       </aside>
 
-      <div className="lg:pl-64 min-w-0 overflow-x-hidden">
+      <div className="lg:pl-64 min-w-0 overflow-x-clip">
         <header
           data-testid="app-header"
           className="sticky top-0 z-40 flex min-h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-3 py-2 shadow-sm sm:px-6 lg:px-8"

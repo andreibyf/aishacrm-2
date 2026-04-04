@@ -1,12 +1,384 @@
 import express from 'express';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { validateTenantScopedId } from '../lib/validation.js';
 import logger from '../lib/logger.js';
 import { supabase } from '../services/supabaseClient.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
+import { getCalcomDb } from '../lib/calcomDb.js';
 import {
   isCommunicationsProviderIntegration,
   validateCommunicationsProviderConfig,
 } from '../lib/communicationsConfig.js';
+
+const CALCOM_WEBHOOK_EVENTS = [
+  'BOOKING_CREATED',
+  'BOOKING_CANCELLED',
+  'BOOKING_RESCHEDULED',
+  'BOOKING_REJECTED',
+  'BOOKING_REQUESTED',
+];
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
+function resolveBackendBaseUrl(req) {
+  // Explicit override for Cal.com → AiSHA webhook callbacks (Docker-internal or production)
+  const calcomUrl = process.env.CALCOM_WEBHOOK_BACKEND_URL;
+  if (calcomUrl) return String(calcomUrl).replace(/\/$/, '');
+  const envUrl = process.env.BACKEND_PUBLIC_URL || process.env.BACKEND_URL;
+  if (envUrl) return String(envUrl).replace(/\/$/, '');
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  return `${protocol}://${req.get('host')}`.replace(/\/$/, '');
+}
+
+async function getTenantName(supabaseClient, tenantId) {
+  const { data } = await supabaseClient.from('tenant').select('name').eq('id', tenantId).maybeSingle();
+  return data?.name || `Tenant ${tenantId.slice(0, 8)}`;
+}
+
+async function findCalcomUserById(db, userId) {
+  if (!userId) return null;
+  const parsedId = Number(userId);
+  if (!Number.isFinite(parsedId)) return null;
+  const result = await db.query(
+    'SELECT id, username, email, name FROM users WHERE id = $1 LIMIT 1',
+    [parsedId],
+  );
+  return result.rows[0] || null;
+}
+
+async function findCalcomUserByUsername(db, username) {
+  const slug = slugify(username);
+  if (!slug) return null;
+  const result = await db.query(
+    'SELECT id, username, email, name FROM users WHERE username = $1 LIMIT 1',
+    [slug],
+  );
+  return result.rows[0] || null;
+}
+
+async function createCalcomUser(db, { tenantId, tenantName, baseUsername }) {
+  const normalizedBase = slugify(baseUsername) || `tenant-${tenantId.slice(0, 8)}`;
+
+  for (let i = 1; i <= 50; i++) {
+    const candidate =
+      i === 1 ? normalizedBase : `${normalizedBase}-${i === 2 ? tenantId.slice(0, 6) : i - 1}`;
+    const email = `${candidate}-${tenantId.slice(0, 8)}@aishacrm.local`;
+    try {
+      const inserted = await db.query(
+        `INSERT INTO users (username, name, email, uuid)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, username, email, name`,
+        [candidate, tenantName, email, randomUUID()],
+      );
+      await ensureCalcomUserBootstrap(db, { userId: inserted.rows[0].id });
+      return inserted.rows[0];
+    } catch (err) {
+      if (err?.code !== '23505') throw err;
+    }
+  }
+
+  const userResult = await db.query(
+    'SELECT id, username, email, name FROM users WHERE username LIKE $1 ORDER BY id DESC LIMIT 1',
+    [`${normalizedBase}%`],
+  );
+  if (userResult.rows.length > 0) {
+    await ensureCalcomUserBootstrap(db, { userId: userResult.rows[0].id });
+    return userResult.rows[0];
+  }
+
+  throw new Error('Could not provision a unique Cal.com username');
+}
+
+async function findDefaultProvisionUser(db) {
+  const preferredById = await findCalcomUserById(db, process.env.CALCOM_PROVISION_USER_ID);
+  if (preferredById) return preferredById;
+
+  const preferredByUsername = await findCalcomUserByUsername(db, process.env.CALCOM_PROVISION_USERNAME);
+  if (preferredByUsername) return preferredByUsername;
+
+  const result = await db.query(
+    `SELECT id, username, email, name
+     FROM users
+     WHERE "completedOnboarding" = true
+     ORDER BY CASE WHEN role = 'ADMIN' THEN 0 ELSE 1 END, id ASC
+     LIMIT 1`,
+  );
+  return result.rows[0] || null;
+}
+
+async function ensureCalcomUserBootstrap(db, { userId }) {
+  // Ensure user can be surfaced on public booking pages.
+  await db.query(
+    `UPDATE users
+     SET "completedOnboarding" = true,
+         "emailVerified" = COALESCE("emailVerified", NOW()),
+         locale = COALESCE(locale, 'en'),
+         "timeZone" = COALESCE("timeZone", 'America/New_York'),
+         "weekStart" = COALESCE("weekStart", 'Sunday'),
+         "allowSEOIndexing" = COALESCE("allowSEOIndexing", true),
+         "allowDynamicBooking" = COALESCE("allowDynamicBooking", true),
+         metadata = COALESCE(metadata, '{}'::jsonb)
+     WHERE id = $1`,
+    [userId],
+  );
+
+  const scheduleResult = await db.query(
+    'SELECT id, "timeZone" FROM "Schedule" WHERE "userId" = $1 ORDER BY id ASC LIMIT 1',
+    [userId],
+  );
+
+  let scheduleId = scheduleResult.rows[0]?.id || null;
+
+  if (!scheduleId) {
+    const createdSchedule = await db.query(
+      `INSERT INTO "Schedule" ("userId", name, "timeZone")
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [userId, 'Working hours', 'America/New_York'],
+    );
+    scheduleId = createdSchedule.rows[0].id;
+  }
+
+  await db.query(
+    `UPDATE users
+     SET "defaultScheduleId" = COALESCE("defaultScheduleId", $2)
+     WHERE id = $1`,
+    [userId, scheduleId],
+  );
+
+  const availabilityResult = await db.query(
+    'SELECT id FROM "Availability" WHERE "scheduleId" = $1 LIMIT 1',
+    [scheduleId],
+  );
+
+  if (availabilityResult.rows.length === 0) {
+    await db.query(
+      `INSERT INTO "Availability" ("scheduleId", days, "startTime", "endTime")
+       VALUES ($1, $2, $3, $4)`,
+      [scheduleId, [1, 2, 3, 4, 5], '09:00:00', '17:00:00'],
+    );
+  }
+}
+
+async function ensureCalcomUser(db, { tenantId, tenantName, requestedUserId, requestedUsername }) {
+  const requestedUserById = await findCalcomUserById(db, requestedUserId);
+  if (requestedUserById) {
+    await ensureCalcomUserBootstrap(db, { userId: requestedUserById.id });
+    return requestedUserById;
+  }
+
+  const requestedUser = await findCalcomUserByUsername(db, requestedUsername);
+  if (requestedUser) {
+    await ensureCalcomUserBootstrap(db, { userId: requestedUser.id });
+    return requestedUser;
+  }
+
+  if (requestedUsername) {
+    return createCalcomUser(db, {
+      tenantId,
+      tenantName,
+      baseUsername: requestedUsername,
+    });
+  }
+
+  const defaultProvisionUser = await findDefaultProvisionUser(db);
+  if (defaultProvisionUser) {
+    await ensureCalcomUserBootstrap(db, { userId: defaultProvisionUser.id });
+    return defaultProvisionUser;
+  }
+
+  return createCalcomUser(db, {
+    tenantId,
+    tenantName,
+    baseUsername: `${slugify(tenantName) || 'tenant'}-${tenantId.slice(0, 6)}`,
+  });
+}
+
+async function ensureCalcomEventType(db, { userId, requestedSlug, requestedEventTypeId }) {
+  if (requestedEventTypeId) {
+    const existing = await db.query(
+      'SELECT id, slug, title, length, "userId" FROM "EventType" WHERE id = $1 LIMIT 1',
+      [Number(requestedEventTypeId)],
+    );
+    if (existing.rows.length > 0 && existing.rows[0].userId === userId) {
+      await db.query(
+        `UPDATE "EventType"
+         SET hidden = false,
+             locations = COALESCE(locations, '[{"type":"phone"}]'::jsonb)
+         WHERE id = $1 AND "userId" = $2`,
+        [existing.rows[0].id, userId],
+      );
+      return existing.rows[0];
+    }
+
+    if (existing.rows.length > 0) {
+      logger.warn('[CalcomProvision] Ignoring requested event type from different user', {
+        requestedEventTypeId,
+        requestedUserId: existing.rows[0].userId,
+        targetUserId: userId,
+      });
+    }
+  }
+
+  const slug = requestedSlug || null;
+  const baseSlug = slug || `meeting-${Date.now().toString(36).slice(-4)}`;
+
+  // Keep slug uniqueness scoped to userId when multiple tenants share one Cal.com user.
+  let uniqueSlug = baseSlug;
+  for (let i = 1; i <= 50; i++) {
+    const check = await db.query(
+      'SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2 LIMIT 1',
+      [userId, uniqueSlug],
+    );
+    if (check.rows.length === 0) break;
+    uniqueSlug = `${baseSlug}-${i}`.slice(0, 64);
+  }
+
+  const existingBySlug = await db.query(
+    'SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2 LIMIT 1',
+    [userId, uniqueSlug],
+  );
+  if (existingBySlug.rows.length > 0) {
+    await db.query(
+      `UPDATE "EventType"
+       SET hidden = false,
+           locations = COALESCE(locations, '[{"type":"phone"}]'::jsonb)
+       WHERE id = $1`,
+      [existingBySlug.rows[0].id],
+    );
+    return existingBySlug.rows[0];
+  }
+
+  const inserted = await db.query(
+    `INSERT INTO "EventType" (title, slug, length, "userId", locations)
+     VALUES ($1, $2, $3, $4, $5::jsonb)
+     RETURNING id, slug, title, length`,
+    ['30 min meeting', uniqueSlug, 30, userId, '[{"type":"phone"}]'],
+  );
+  return inserted.rows[0];
+}
+
+async function ensureCalcomWebhook(db, { userId, subscriberUrl, webhookSecret }) {
+  const existing = await db.query(
+    'SELECT id FROM "Webhook" WHERE "userId" = $1 AND "subscriberUrl" = $2 LIMIT 1',
+    [userId, subscriberUrl],
+  );
+
+  if (existing.rows.length > 0) {
+    await db.query(
+      `UPDATE "Webhook"
+       SET active = true,
+           secret = $1,
+           "eventTriggers" = $2::"WebhookTriggerEvents"[]
+       WHERE id = $3`,
+      [webhookSecret, CALCOM_WEBHOOK_EVENTS, existing.rows[0].id],
+    );
+    return existing.rows[0].id;
+  }
+
+  const webhookId = randomUUID();
+  await db.query(
+    `INSERT INTO "Webhook" (id, "userId", "subscriberUrl", active, "eventTriggers", secret)
+     VALUES ($1, $2, $3, true, $4::"WebhookTriggerEvents"[], $5)`,
+    [webhookId, userId, subscriberUrl, CALCOM_WEBHOOK_EVENTS, webhookSecret],
+  );
+  return webhookId;
+}
+
+async function ensureCalcomApiKey(db, { tenantId, userId, providedApiKey }) {
+  const apiKey = (providedApiKey || '').trim() || `cal_auto_${randomBytes(24).toString('hex')}`;
+  const hashedKey = createHash('sha256').update(apiKey).digest('hex');
+
+  await db.query(
+    `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT ("hashedKey") DO NOTHING`,
+    [
+      `aisha-auto-${tenantId.slice(0, 8)}-${Date.now().toString(36)}`,
+      userId,
+      `AiSHA auto-provisioned key for tenant ${tenantId}`,
+      hashedKey,
+    ],
+  );
+
+  return apiKey;
+}
+
+async function autoProvisionCalcom({
+  supabaseClient,
+  tenantId,
+  req,
+  integrationName,
+  config,
+  apiCredentials,
+  metadata,
+}) {
+  const db = getCalcomDb();
+  if (!db) {
+    throw new Error('Cal.com database is not configured. Start scheduling services first.');
+  }
+
+  const tenantName = await getTenantName(supabaseClient, tenantId);
+  const existingLink = String(config?.cal_link || '').trim();
+  const [requestedUsernameRaw, requestedSlugRaw] = existingLink.split('/');
+  const requestedUsername = slugify(requestedUsernameRaw);
+  const requestedSlug =
+    slugify(requestedSlugRaw) || `${slugify(tenantName) || 'tenant'}-${tenantId.slice(0, 6)}`;
+
+  const user = await ensureCalcomUser(db, {
+    tenantId,
+    tenantName: integrationName || tenantName,
+    requestedUserId: config?.calcom_user_id,
+    requestedUsername,
+  });
+
+  const eventType = await ensureCalcomEventType(db, {
+    userId: user.id,
+    requestedSlug,
+    requestedEventTypeId: config?.event_type_id,
+  });
+
+  const apiKey = await ensureCalcomApiKey(db, {
+    tenantId,
+    userId: user.id,
+    providedApiKey: apiCredentials?.api_key,
+  });
+
+  const webhookSecret =
+    (apiCredentials?.webhook_secret || '').trim() || `whsec_${randomBytes(24).toString('hex')}`;
+  const subscriberUrl = `${resolveBackendBaseUrl(req)}/api/webhooks/calcom`;
+  await ensureCalcomWebhook(db, {
+    userId: user.id,
+    subscriberUrl,
+    webhookSecret,
+  });
+
+  return {
+    config: {
+      ...(config || {}),
+      auto_provision: true,
+      calcom_user_id: user.id,
+      event_type_id: eventType.id,
+      cal_link: `${user.username}/${eventType.slug}`,
+    },
+    api_credentials: {
+      ...(apiCredentials || {}),
+      api_key: apiKey,
+      webhook_secret: webhookSecret,
+    },
+    metadata: {
+      ...(metadata || {}),
+      auto_provisioned_at: new Date().toISOString(),
+      auto_provisioned_by: 'tenant-integrations-route',
+    },
+  };
+}
 
 /**
  * Resolve the effective tenant_id from authenticated context.
@@ -136,6 +508,28 @@ export default function createTenantIntegrationRoutes({
         }
       }
 
+      let nextConfig = config || {};
+      let nextApiCredentials = api_credentials || {};
+      let nextMetadata = metadata || {};
+
+      const shouldAutoProvisionCalcom =
+        integration_type === 'calcom' && (nextConfig.auto_provision === undefined || nextConfig.auto_provision === true);
+
+      if (shouldAutoProvisionCalcom) {
+        const provisioned = await autoProvisionCalcom({
+          supabaseClient,
+          tenantId: tenant_id,
+          req,
+          integrationName: integration_name,
+          config: nextConfig,
+          apiCredentials: nextApiCredentials,
+          metadata: nextMetadata,
+        });
+        nextConfig = provisioned.config;
+        nextApiCredentials = provisioned.api_credentials;
+        nextMetadata = provisioned.metadata;
+      }
+
       const { data, error } = await supabaseClient
         .from('tenant_integrations')
         .insert({
@@ -143,9 +537,9 @@ export default function createTenantIntegrationRoutes({
           integration_type,
           integration_name: integration_name || null,
           is_active: is_active !== undefined ? is_active : true,
-          api_credentials: api_credentials || {},
-          config: config || {},
-          metadata: metadata || {},
+          api_credentials: nextApiCredentials,
+          config: nextConfig,
+          metadata: nextMetadata,
         })
         .select()
         .single();
@@ -224,6 +618,48 @@ export default function createTenantIntegrationRoutes({
 
       const effectiveIntegrationType =
         integration_type || existingIntegration?.integration_type || null;
+
+      const existingConfig = existingIntegration?.config || {};
+      const existingApiCredentials = existingIntegration?.api_credentials || {};
+      const existingMetadata = existingIntegration?.metadata || {};
+
+      let nextConfig = config !== undefined ? { ...existingConfig, ...config } : existingConfig;
+      let nextApiCredentials =
+        api_credentials !== undefined
+          ? { ...existingApiCredentials, ...api_credentials }
+          : existingApiCredentials;
+      let nextMetadata =
+        metadata !== undefined ? { ...existingMetadata, ...metadata } : existingMetadata;
+
+      const shouldAutoProvisionCalcom =
+        effectiveIntegrationType === 'calcom' &&
+        (nextConfig.auto_provision === true ||
+          !nextConfig.calcom_user_id ||
+          !nextConfig.event_type_id ||
+          !nextApiCredentials.webhook_secret ||
+          !nextApiCredentials.api_key);
+
+      if (shouldAutoProvisionCalcom) {
+        const provisioned = await autoProvisionCalcom({
+          supabaseClient,
+          tenantId: tenant_id,
+          req,
+          integrationName: integration_name || existingIntegration?.integration_name,
+          config: nextConfig,
+          apiCredentials: nextApiCredentials,
+          metadata: nextMetadata,
+        });
+        nextConfig = provisioned.config;
+        nextApiCredentials = provisioned.api_credentials;
+        nextMetadata = provisioned.metadata;
+      }
+
+      if (config !== undefined || shouldAutoProvisionCalcom) updateData.config = nextConfig;
+      if (api_credentials !== undefined || shouldAutoProvisionCalcom) {
+        updateData.api_credentials = nextApiCredentials;
+      }
+      if (metadata !== undefined || shouldAutoProvisionCalcom) updateData.metadata = nextMetadata;
+
       if (isCommunicationsProviderIntegration(effectiveIntegrationType)) {
         const validation = validateCommunicationsProviderConfig({
           tenant_id,

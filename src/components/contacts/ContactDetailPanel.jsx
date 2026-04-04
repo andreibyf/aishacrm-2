@@ -223,6 +223,8 @@ export default function ContactDetailPanel({
                 contactId={contact.id}
                 tenantId={contact.tenant_id || user?.tenant_id}
                 assignedTo={contact.assigned_to}
+                fallbackLinkedUserId={user?.id || user?.user_id}
+                fallbackUserEmail={user?.email}
               />
             ),
           },

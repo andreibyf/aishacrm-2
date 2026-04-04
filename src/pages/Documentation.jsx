@@ -2634,13 +2634,14 @@ Activities color-coded by:
 - Convert times for team members
 - Display in 12hr or 24hr format
 
-## Calendar Sync (Coming Soon)
+## Calendar Booking Integration
 
-### External Calendar Integration
-- **Google Calendar** - Two-way sync
-- **Outlook Calendar** - Two-way sync
-- **Apple Calendar** - One-way export
-- **iCal Feed** - Subscribe to CRM calendar
+### Cal.com Scheduling
+- **Client booking links** - Send a per-contact or per-lead booking page
+- **Assigned-owner routing** - Uses the assigned employee's booking profile first
+- **Fallback handling** - Uses the signed-in user's employee booking profile when unassigned
+- **CRM visibility** - Bookings create CRM activities and booking records automatically
+- **Availability blocking** - CRM calendar blocks reduce open slots in Cal.com
 
 ## Best Practices
 

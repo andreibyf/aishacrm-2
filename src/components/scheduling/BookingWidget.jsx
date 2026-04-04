@@ -5,10 +5,12 @@
  * Props:
  *   contactName  — Pre-fill name on Cal.com booking form
  *   contactEmail — Pre-fill email on Cal.com booking form (locks the attendee identity)
- *   contactId    — CRM contact UUID
- *   leadId       — CRM lead UUID
- *   tenantId     — CRM tenant UUID
- *   assignedTo   — Employee UUID; resolves that employee's personal booking link
+ *   contactId    - CRM contact UUID
+ *   leadId       - CRM lead UUID
+ *   tenantId     - CRM tenant UUID
+ *   assignedTo   - Employee UUID; resolves that employee's personal booking link
+ *   fallbackLinkedUserId - Current CRM user ID; used when the record is unassigned
+ *   fallbackUserEmail - Current CRM user email fallback when no linked_user_id is available
  */
 
 import { useEffect, useState } from 'react';
@@ -50,12 +52,15 @@ export default function BookingWidget({
   assignedTo, // employee UUID (lead.assigned_to / contact.assigned_to)
   contactEmail, // pre-fill attendee email on Cal.com form
   contactName,  // pre-fill attendee name on Cal.com form
+  fallbackLinkedUserId,
+  fallbackUserEmail,
 }) {
   const [calLink, setCalLink] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [shortLink, setShortLink] = useState(null);
+  const [bookingUnavailable, setBookingUnavailable] = useState(false);
 
   const calOrigin = import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002';
 
@@ -68,6 +73,8 @@ export default function BookingWidget({
 
     async function load() {
       try {
+        setShortLink(null);
+        setBookingUnavailable(false);
         const entityParam = contactId
           ? `contact_id=${contactId}`
           : leadId
@@ -83,9 +90,16 @@ export default function BookingWidget({
           assignedTo
             ? apiFetch(`/api/employees/${assignedTo}?tenant_id=${tenantId}`)
             : Promise.resolve(null),
+          !assignedTo && fallbackLinkedUserId
+            ? apiFetch(
+                `/api/employees?tenant_id=${tenantId}&linked_user_id=${encodeURIComponent(fallbackLinkedUserId)}`,
+              )
+            : !assignedTo && fallbackUserEmail
+              ? apiFetch(`/api/employees?email=${encodeURIComponent(fallbackUserEmail)}`)
+              : Promise.resolve(null),
         ];
 
-        const [linkRes, bookingsRes, employeeRes] = await Promise.all(requests);
+        const [linkRes, bookingsRes, employeeRes, fallbackEmployeeRes] = await Promise.all(requests);
 
         const linkJson = await linkRes.json();
         let link = linkRes.ok && linkJson.status === 'success' ? linkJson.data.cal_link : null;
@@ -98,23 +112,44 @@ export default function BookingWidget({
           if (empLink) link = empLink;
         }
 
+        if (!assignedTo && fallbackEmployeeRes && fallbackEmployeeRes.ok) {
+          const fallbackJson = await fallbackEmployeeRes.json();
+          const fallbackEmployee = Array.isArray(fallbackJson?.data)
+            ? fallbackJson.data[0] || null
+            : Array.isArray(fallbackJson)
+              ? fallbackJson[0] || null
+              : null;
+          const fallbackLink =
+            fallbackEmployee?.metadata?.calcom_cal_link || fallbackEmployee?.calcom_cal_link || null;
+          if (fallbackLink) link = fallbackLink;
+        }
+
+        if (link) {
+          const validationRes = await apiFetch(
+            `/api/calcom-sync/validate-link?cal_link=${encodeURIComponent(link)}`,
+          );
+          const validationJson = await validationRes.json().catch(() => ({}));
+          if (!validationRes.ok || validationJson.valid !== true) {
+            link = null;
+          }
+        }
+
         if (cancelled) return;
         setCalLink(link);
+        setBookingUnavailable(!link);
         if (bookingsRes) {
           const bookingsJson = await bookingsRes.json();
           setBookings(bookingsJson.data || []);
         }
 
-        // Generate a short booking link if we have a link and entity context
-        if (link) {
+        if (link && contactEmail) {
           const params = new URLSearchParams();
           if (contactEmail) params.set('email', contactEmail);
           if (contactName) params.set('name', contactName);
           if (contactId) params.set('metadata[crm_contact_id]', contactId);
           if (leadId) params.set('metadata[crm_lead_id]', leadId);
           if (tenantId) params.set('metadata[crm_tenant_id]', tenantId);
-          const calOriginBase = import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002';
-          const fullUrl = `${calOriginBase}/${link}${params.toString() ? '?' + params.toString() : ''}`;
+          const fullUrl = `${calOrigin}/${link}${params.toString() ? '?' + params.toString() : ''}`;
 
           try {
             const slRes = await apiFetch('/api/scheduling/shortlink', {
@@ -128,11 +163,12 @@ export default function BookingWidget({
               }
             }
           } catch {
-            // Short link generation is best-effort; fall back to full link
+            // Short link generation is best-effort; fall back to the full Cal.com link
           }
         }
+
       } catch {
-        // leave defaults
+        setBookingUnavailable(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -142,12 +178,11 @@ export default function BookingWidget({
     return () => {
       cancelled = true;
     };
-  }, [tenantId, contactId, leadId, assignedTo]);
+  }, [tenantId, contactId, leadId, assignedTo, fallbackLinkedUserId, fallbackUserEmail, contactEmail, contactName]);
 
   const handleCopyLink = () => {
     if (!calLink) return;
-    const linkToCopy = shortLink || fullLink;
-    navigator.clipboard.writeText(linkToCopy);
+    navigator.clipboard.writeText(shortLink || fullLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -165,7 +200,53 @@ export default function BookingWidget({
       <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
         <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40" />
         <p className="font-medium">Booking not configured</p>
-        <p className="mt-1">Assign an employee with a booking calendar to enable this.</p>
+        <p className="mt-1">
+          {bookingUnavailable
+            ? 'The saved Cal.com booking page is missing or invalid.'
+            : 'Assign an employee with a booking calendar to enable this.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (!contactEmail) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40" />
+          <p className="font-medium">Client email required</p>
+          <p className="mt-1">Add an email address before sending a booking link.</p>
+        </div>
+        {bookings.length > 0 ? (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-1 text-slate-300">
+              <CalendarCheck className="h-4 w-4" /> Booking History
+            </h4>
+            <div className="space-y-1.5">
+              {bookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="rounded border border-slate-700 px-3 py-2 text-sm flex items-center justify-between"
+                >
+                  <div className="text-slate-300">
+                    {formatDate(b.scheduled_start, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                  <Badge variant={STATUS_COLORS[b.status] || 'secondary'} className="capitalize">
+                    {b.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 text-center py-2">No bookings yet</p>
+        )}
       </div>
     );
   }

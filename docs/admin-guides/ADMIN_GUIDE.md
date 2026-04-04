@@ -1269,6 +1269,46 @@ Invoke-RestMethod -Uri "http://localhost:4001/api/tenants/tenant-uuid" `
   -Body $settings
 ```
 
+### Cal.com Scheduling Integration
+
+Use the Cal.com integration when a tenant needs client booking links that also keep the CRM calendar authoritative.
+
+#### Superadmin Setup
+
+1. Open **Settings → Tenant Integrations**.
+2. Create or edit the tenant integration with type `calcom`.
+3. Leave **Auto-provision** enabled unless you need to manage Cal.com user/event IDs manually.
+4. Confirm the integration has:
+   - `api_key`
+   - `webhook_secret`
+   - `cal_link` when auto-provision is off
+   - `event_type_id` for CRM → Cal.com blocker sync
+   - `base_url` if the tenant uses a self-hosted Cal.com instance
+5. Use **Calendar Sync** to verify status, run sync, or import personal calendar events.
+
+#### Per-Employee Setup
+
+Each employee can store their own booking details in the employee profile:
+
+- `calcom_cal_link` - the personal booking slug used for that employee's client link
+- `calcom_user_id` - Cal.com numeric user ID used for blocker bookings
+- `calcom_event_type_id` - optional employee-specific event type for blocker sync
+
+When an activity is assigned to that employee, the booking widget uses that employee's booking link first. If the record is unassigned, the widget falls back to the signed-in user when that user has an employee booking profile.
+
+#### Sync Behavior
+
+- CRM activities with a time block create Cal.com blocker bookings to prevent double-booking.
+- Cal.com webhooks create CRM `activities` and `booking_sessions` records for incoming bookings.
+- Client booking links require an email address before they can be shared.
+- Bookings appear on the company CRM calendar for visibility even when the link is sent from an individual employee's booking page.
+
+#### Operational Checks
+
+- If the tenant shows `calcom_db_available = false`, start the Cal.com database container.
+- If `bidirectional_sync_enabled = false`, confirm `event_type_id` is set.
+- If webhooks are not landing, verify the stored `webhook_secret` matches the Cal.com webhook registration.
+
 ### Entity Label Customization
 
 Administrators can rename navigation items (entities) for each tenant. This allows customizing terminology to match business vocabulary (e.g., "Accounts" → "Clients").

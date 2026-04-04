@@ -82,6 +82,8 @@ export default function LeadDetailPanel({
               leadId={lead.id}
               tenantId={lead.tenant_id || user?.tenant_id}
               assignedTo={lead.assigned_to}
+              fallbackLinkedUserId={user?.id || user?.user_id}
+              fallbackUserEmail={user?.email}
             />
           ),
         },

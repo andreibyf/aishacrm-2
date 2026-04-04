@@ -22,6 +22,28 @@ import { createOutlookEvent, updateOutlookEvent, deleteOutlookEvent } from '../l
 
 const router = express.Router();
 
+async function persistCalcomWebhookHealth(supabase, tenantId, updates) {
+  if (!tenantId) return;
+
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('tenant_integrations')
+    .update(payload)
+    .eq('tenant_id', tenantId)
+    .eq('integration_type', 'calcom');
+
+  if (error) {
+    logger.warn('[CalcomWebhook] Failed to persist webhook health', {
+      tenantId,
+      error: error.message,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Signature verification
 // ---------------------------------------------------------------------------
@@ -105,6 +127,45 @@ async function resolveEntityByEmail(supabase, tenant_id, email) {
   };
 }
 
+async function resolveAssignedEmployeeForBooking(supabase, tenant_id, { contact_id, lead_id, eventTypeId }) {
+  if (contact_id) {
+    const { data } = await supabase
+      .from('contacts')
+      .select('assigned_to')
+      .eq('tenant_id', tenant_id)
+      .eq('id', contact_id)
+      .maybeSingle();
+
+    if (data?.assigned_to) return data.assigned_to;
+  }
+
+  if (lead_id) {
+    const { data } = await supabase
+      .from('leads')
+      .select('assigned_to')
+      .eq('tenant_id', tenant_id)
+      .eq('id', lead_id)
+      .maybeSingle();
+
+    if (data?.assigned_to) return data.assigned_to;
+  }
+
+  if (eventTypeId) {
+    const { data } = await supabase
+      .from('employees')
+      .select('id, metadata')
+      .eq('tenant_id', tenant_id);
+
+    const matchedEmployee = (data || []).find(
+      (employee) => Number(employee?.metadata?.calcom_event_type_id) === Number(eventTypeId),
+    );
+
+    if (matchedEmployee?.id) return matchedEmployee.id;
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Helper: find the best available active credit for an entity
 // ---------------------------------------------------------------------------
@@ -135,7 +196,15 @@ async function findActiveCredit(supabase, tenant_id, contact_id, lead_id) {
 // Helper: create an activity record for the booking
 // ---------------------------------------------------------------------------
 
-async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id, booking, attendeeName, attendeeEmail }) {
+async function createBookingActivity(supabase, {
+  tenant_id,
+  contact_id,
+  lead_id,
+  booking,
+  attendeeName,
+  attendeeEmail,
+  assigned_to,
+}) {
   const { calcom_booking_id, calcom_event_type_id, scheduled_start, scheduled_end } = booking;
 
   const durationMinutes = Math.round((new Date(scheduled_end) - new Date(scheduled_start)) / 60000);
@@ -158,8 +227,9 @@ async function createBookingActivity(supabase, { tenant_id, contact_id, lead_id,
         related_id,
         ...(attendeeName ? { related_name: attendeeName } : {}),
         ...(attendeeEmail ? { related_email: attendeeEmail } : {}),
+        ...(assigned_to ? { assigned_to } : {}),
         type: 'booking_scheduled',
-        subject: `Booking Scheduled — ${startLabel}`,
+        subject: `Booking Scheduled - ${startLabel}`,
         body: `Cal.com session booked for ${startLabel} (${durationMinutes} min)`,
         due_date: scheduled_start?.split('T')[0],
         status: 'scheduled',
@@ -231,6 +301,12 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
     scheduled_end: payload.endTime,
   };
 
+  const assigned_to = await resolveAssignedEmployeeForBooking(supabase, tenant_id, {
+    contact_id,
+    lead_id,
+    eventTypeId: payload.eventTypeId || null,
+  });
+
   // Create CRM activity
   const activity_id = await createBookingActivity(supabase, {
     tenant_id,
@@ -239,6 +315,7 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
     booking: bookingData,
     attendeeName: payload.attendees?.[0]?.name,
     attendeeEmail,
+    assigned_to,
   });
 
   // Record in booking_sessions
@@ -282,6 +359,7 @@ async function handleBookingCreated(supabase, tenant_id, payload) {
     uid: payload.uid,
     contact_id,
     lead_id,
+    assigned_to,
     credit_id: credit?.id,
   });
 }
@@ -459,7 +537,8 @@ router.post('/calcom', express.raw({ type: 'application/json' }), async (req, re
         logger.info('[CalcomWebhook] BOOKING_REQUESTED — awaiting confirmation', {
           uid: payload?.uid,
         });
-        await supabase.from('booking_sessions').upsert(
+        {
+          const { error: upsertErr } = await supabase.from('booking_sessions').upsert(
           [
             {
               tenant_id,
@@ -471,11 +550,22 @@ router.post('/calcom', express.raw({ type: 'application/json' }), async (req, re
             },
           ],
           { onConflict: 'tenant_id,calcom_booking_id' },
-        );
+          );
+
+          if (upsertErr) {
+            throw new Error(`Could not persist pending booking: ${upsertErr.message}`);
+          }
+        }
         break;
       default:
         logger.debug('[CalcomWebhook] Unhandled event type', { triggerEvent });
     }
+
+    await persistCalcomWebhookHealth(supabase, tenant_id, {
+      sync_status: 'connected',
+      error_message: null,
+      last_sync: new Date().toISOString(),
+    });
 
     res.status(200).json({ received: true });
   } catch (err) {
@@ -483,6 +573,12 @@ router.post('/calcom', express.raw({ type: 'application/json' }), async (req, re
       triggerEvent,
       error: err.message,
     });
+
+    await persistCalcomWebhookHealth(supabase, tenant_id, {
+      sync_status: 'error',
+      error_message: `${triggerEvent || 'UNKNOWN_EVENT'}: ${err.message}`,
+    });
+
     res.status(500).json({ error: 'Internal server error' });
   }
 });
