@@ -51,7 +51,7 @@ export default function BookingWidget({
   tenantId,
   assignedTo, // employee UUID (lead.assigned_to / contact.assigned_to)
   contactEmail, // pre-fill attendee email on Cal.com form
-  contactName,  // pre-fill attendee name on Cal.com form
+  contactName, // pre-fill attendee name on Cal.com form
   fallbackLinkedUserId,
   fallbackUserEmail,
 }) {
@@ -99,7 +99,8 @@ export default function BookingWidget({
               : Promise.resolve(null),
         ];
 
-        const [linkRes, bookingsRes, employeeRes, fallbackEmployeeRes] = await Promise.all(requests);
+        const [linkRes, bookingsRes, employeeRes, fallbackEmployeeRes] =
+          await Promise.all(requests);
 
         const linkJson = await linkRes.json();
         let link = linkRes.ok && linkJson.status === 'success' ? linkJson.data.cal_link : null;
@@ -120,17 +121,27 @@ export default function BookingWidget({
               ? fallbackJson[0] || null
               : null;
           const fallbackLink =
-            fallbackEmployee?.metadata?.calcom_cal_link || fallbackEmployee?.calcom_cal_link || null;
+            fallbackEmployee?.metadata?.calcom_cal_link ||
+            fallbackEmployee?.calcom_cal_link ||
+            null;
           if (fallbackLink) link = fallbackLink;
         }
 
         if (link) {
-          const validationRes = await apiFetch(
-            `/api/calcom-sync/validate-link?cal_link=${encodeURIComponent(link)}`,
-          );
-          const validationJson = await validationRes.json().catch(() => ({}));
-          if (!validationRes.ok || validationJson.valid !== true) {
-            link = null;
+          try {
+            const validationRes = await apiFetch(
+              `/api/calcom-sync/validate-link?cal_link=${encodeURIComponent(link)}`,
+            );
+            const validationJson = await validationRes.json().catch(() => ({}));
+            if (validationRes.ok) {
+              if (validationJson.valid !== true) {
+                link = null;
+              }
+            } else if (![401, 403].includes(validationRes.status)) {
+              link = null;
+            }
+          } catch {
+            // Validation is best-effort here; do not disable booking on transient failures.
           }
         }
 
@@ -166,7 +177,6 @@ export default function BookingWidget({
             // Short link generation is best-effort; fall back to the full Cal.com link
           }
         }
-
       } catch {
         setBookingUnavailable(true);
       } finally {
@@ -178,7 +188,16 @@ export default function BookingWidget({
     return () => {
       cancelled = true;
     };
-  }, [tenantId, contactId, leadId, assignedTo, fallbackLinkedUserId, fallbackUserEmail, contactEmail, contactName]);
+  }, [
+    tenantId,
+    contactId,
+    leadId,
+    assignedTo,
+    fallbackLinkedUserId,
+    fallbackUserEmail,
+    contactEmail,
+    contactName,
+  ]);
 
   const handleCopyLink = () => {
     if (!calLink) return;

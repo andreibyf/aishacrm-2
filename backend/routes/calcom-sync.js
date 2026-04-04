@@ -41,7 +41,6 @@ async function updateCalcomIntegrationStatus(tenantId, updates) {
 export default function createCalcomSyncRoutes() {
   const router = express.Router();
   router.use(validateTenantAccess);
-  router.use(requireAdminRole);
 
   function resolveTenantId(req) {
     const id = req.tenant?.id || req.query?.tenant_id || req.body?.tenant_id;
@@ -50,7 +49,7 @@ export default function createCalcomSyncRoutes() {
   }
 
   // GET /api/calcom-sync/status
-  router.get('/status', async (req, res) => {
+  router.get('/status', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -97,7 +96,7 @@ export default function createCalcomSyncRoutes() {
   });
 
   // POST /api/calcom-sync/trigger
-  router.post('/trigger', async (req, res) => {
+  router.post('/trigger', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });
@@ -256,7 +255,7 @@ export default function createCalcomSyncRoutes() {
   // GET /api/calcom-sync/lookup-user?username=<username>
   // Resolve a Cal.com username to numeric user ID + available event types.
   // The username is extracted from the cal link slug (e.g. "jane/30min" → "jane").
-  router.get('/lookup-user', async (req, res) => {
+  router.get('/lookup-user', requireAdminRole, async (req, res) => {
     try {
       const raw = req.query.username || '';
       // Accept either "username" or "username/event-slug" formats
@@ -319,7 +318,7 @@ export default function createCalcomSyncRoutes() {
   // GET /api/calcom-sync/import-personal-calendar
   // Pull events from connected Google/Outlook calendars and create CRM activities.
   // Optional query param: ?since=<ISO8601> (defaults to 30 days ago)
-  router.get('/import-personal-calendar', async (req, res) => {
+  router.get('/import-personal-calendar', requireAdminRole, async (req, res) => {
     try {
       const { tenant_id, error } = resolveTenantId(req);
       if (error) return res.status(400).json({ status: 'error', message: error });

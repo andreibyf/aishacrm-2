@@ -21,6 +21,32 @@ import { validateCalcomBookingUrl } from '../lib/calcomLinkValidation.js';
 
 const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 const TABLE_NAME = 'aisha_booking_shortlinks';
+const DEFAULT_CALCOM_ORIGINS = ['https://app.cal.com', 'http://localhost:3002'];
+
+function normalizeOrigin(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getAllowedCalcomOrigins() {
+  const envOrigins = [
+    process.env.CALCOM_PUBLIC_URL,
+    process.env.CALCOM_NEXTAUTH_URL,
+    process.env.CALCOM_URL,
+  ]
+    .map(normalizeOrigin)
+    .filter(Boolean);
+
+  return new Set([...DEFAULT_CALCOM_ORIGINS, ...envOrigins]);
+}
+
+function isAllowedCalcomOrigin(origin) {
+  return getAllowedCalcomOrigins().has(origin);
+}
 
 function generateToken() {
   // 6 random bytes -> 8 base64url chars (URL-safe, no padding)
@@ -120,8 +146,14 @@ shortlinkCreateRouter.post('/', async (req, res) => {
       });
     }
 
+    if (!isAllowedCalcomOrigin(parsed.origin)) {
+      return res.status(400).json({
+        error: 'Unsupported Cal.com origin',
+      });
+    }
+
     const token = generateToken();
-    await persistShortlink(db, token, validation.url);
+    await persistShortlink(db, token, parsed.toString());
 
     logger.info('[ShortLink] Created', { token });
     return res.status(201).json({
