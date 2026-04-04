@@ -1,0 +1,3 @@
+# Minimal labeler configuration.
+# Keeping this file present prevents workflow hard-failure when no label rules are needed.
+{}
