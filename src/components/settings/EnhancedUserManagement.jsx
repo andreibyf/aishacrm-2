@@ -1430,16 +1430,25 @@ export default function EnhancedUserManagement() {
     const role = user.role?.toLowerCase();
     if (role === 'superadmin') return 'Super Admin';
     if (role === 'admin') return 'Tenant Admin';
-    if (user.employee_role === 'manager') return 'Manager';
-    return 'Employee';
+    if (role === 'owner') return 'Owner';
+    // Use employee_role for CRM-level display label
+    const empRole = user.employee_role?.toLowerCase();
+    if (empRole === 'director') return 'Director';
+    if (empRole === 'manager') return 'Manager';
+    if (empRole === 'employee') return 'Employee';
+    // Fallback: capitalize whatever employee_role or role value we have
+    const displayRole = user.employee_role || user.role || 'Employee';
+    return displayRole.charAt(0).toUpperCase() + displayRole.slice(1);
   };
 
   // Simplified role badge class
   const getRoleBadgeClass = (user) => {
     const role = user.role?.toLowerCase();
+    const empRole = user.employee_role?.toLowerCase();
     if (user.status === 'inactive') return 'bg-red-100 text-red-800';
     if (role === 'admin' || role === 'superadmin') return 'bg-purple-100 text-purple-800';
-    if (user.employee_role === 'manager') return 'bg-blue-100 text-blue-800';
+    if (role === 'owner' || empRole === 'director') return 'bg-indigo-100 text-indigo-800';
+    if (empRole === 'manager') return 'bg-blue-100 text-blue-800';
     return 'bg-gray-100 text-gray-800';
   };
 
