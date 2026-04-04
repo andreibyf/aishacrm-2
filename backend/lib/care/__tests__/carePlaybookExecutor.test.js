@@ -8,9 +8,18 @@
  * Run: node --test --force-exit backend/lib/care/__tests__/carePlaybookExecutor.test.js
  */
 
-import { describe, test } from 'node:test';
+import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { executeCareSendEmailAction } from '../carePlaybookExecutor.js';
+
+after(async () => {
+  try {
+    const { playbookQueue } = await import('../carePlaybookQueue.js');
+    await playbookQueue.close();
+  } catch {
+    // Ignore teardown errors in unit tests.
+  }
+});
 
 // ============================================================
 // Table Name Mapping

@@ -17,6 +17,26 @@ const VALID_CAMPAIGN_TYPES = [
   'sequence',
 ];
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeOptionalUuid(value) {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) {
+    if (value.length !== 1) return null;
+    return normalizeOptionalUuid(value[0]);
+  }
+
+  const asString = String(value).trim();
+  if (!asString || asString === 'null' || asString === '[]') return null;
+  return UUID_REGEX.test(asString) ? asString : null;
+}
+
+function normalizeTargetContacts(value) {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value) && value.length === 0) return null;
+  return JSON.stringify(value);
+}
+
 export default function createAICampaignRoutes(pgPool) {
   const router = express.Router();
   router.use(validateTenantAccess);
@@ -134,29 +154,33 @@ export default function createAICampaignRoutes(pgPool) {
         });
       }
 
+      const safeAssignedTo = normalizeOptionalUuid(assigned_to);
+
       const query = `
         INSERT INTO ai_campaign (
           tenant_id, name, campaign_type, type, status, description,
           assigned_to, target_contacts, target_audience, content,
           performance_metrics, metadata, is_test_data, created_at
         )
-        VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
         RETURNING *
       `;
       const values = [
         tenant_id,
         name,
         campaign_type,
+        campaign_type,
         status,
         description,
-        assigned_to,
-        JSON.stringify(target_contacts),
+        safeAssignedTo,
+        normalizeTargetContacts(target_contacts),
         JSON.stringify(target_audience),
         JSON.stringify(content),
         JSON.stringify(performance_metrics),
         JSON.stringify(metadata),
         is_test_data,
       ];
+
       const result = await pgPool.query(query, values);
       const created = result.rows[0];
 
@@ -205,6 +229,8 @@ export default function createAICampaignRoutes(pgPool) {
         });
       }
 
+      const safeAssignedTo = normalizeOptionalUuid(assigned_to);
+
       const update = `
         UPDATE ai_campaign
         SET name = COALESCE($3, name),
@@ -229,8 +255,8 @@ export default function createAICampaignRoutes(pgPool) {
         campaign_type,
         status,
         description,
-        assigned_to,
-        target_contacts ? JSON.stringify(target_contacts) : null,
+        safeAssignedTo,
+        normalizeTargetContacts(target_contacts),
         target_audience ? JSON.stringify(target_audience) : null,
         content ? JSON.stringify(content) : null,
         performance_metrics ? JSON.stringify(performance_metrics) : null,
