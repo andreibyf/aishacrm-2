@@ -734,9 +734,12 @@ export async function readLogs({
       if (log_type === 'errors') {
         query = query.in('level', ['error', 'critical', 'fatal']);
       } else if (log_type === 'ai') {
-        query = query.or('category.ilike.%ai%,category.ilike.%braid%,message.ilike.%LLM%');
+        // system_logs.category is not guaranteed across environments; filter on stable fields.
+        query = query.or(
+          'source.ilike.%ai%,source.ilike.%braid%,message.ilike.%ai%,message.ilike.%braid%,message.ilike.%LLM%',
+        );
       } else if (log_type === 'braid') {
-        query = query.ilike('category', '%braid%');
+        query = query.or('source.ilike.%braid%,message.ilike.%braid%');
       }
 
       // Apply text filter if provided
@@ -775,8 +778,10 @@ export async function readLogs({
       // Format logs for display
       const formattedLogs = logs
         .map(
-          (log) =>
-            `[${log.created_at}] [${log.level || 'info'}] ${log.category || 'general'}: ${log.message}`,
+          (log) => {
+            const category = log?.metadata?.category || log?.source || 'general';
+            return `[${log.created_at}] [${log.level || 'info'}] ${category}: ${log.message}`;
+          },
         )
         .join('\n');
 

@@ -414,10 +414,69 @@ router.post('/assign-copilot', async (req, res) => {
       });
     }
 
-    // Add comment requesting Copilot review
-    const commentBody = `🤖 **GitHub Copilot Review Requested**
+    const assigneeCandidates = [
+      process.env.GITHUB_COPILOT_ASSIGNEE,
+      'github-copilot',
+      'copilot',
+      'github-copilot[bot]',
+    ]
+      .filter((name) => !!name)
+      .map((name) => String(name).trim())
+      .filter((name, index, arr) => arr.indexOf(name) === index);
 
-@github-copilot please analyze this issue and:
+    const assignUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueId}/assignees`;
+    const assignValidation = validateUrlAgainstWhitelist(assignUrl, ['api.github.com']);
+    if (!assignValidation.valid) {
+      logger.error('[GitHub Issues] Invalid API URL:', assignValidation.error);
+      return res.status(400).json({ success: false, error: 'Invalid GitHub API URL' });
+    }
+
+    let assignedAs = null;
+    const assignAttempts = [];
+
+    for (const candidate of assigneeCandidates) {
+      const response = await fetch(assignValidation.url.toString(), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${GITHUB_TOKEN}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'aishacrm-health-monitor',
+        },
+        body: JSON.stringify({ assignees: [candidate] }),
+      });
+
+      if (response.ok) {
+        assignedAs = candidate;
+        break;
+      }
+
+      const details = await response.text();
+      assignAttempts.push({ candidate, status: response.status, details });
+    }
+
+    if (!assignedAs) {
+      logger.error('[GitHub Issues] Failed to assign Copilot assignee', {
+        issueId,
+        assignAttempts,
+      });
+
+      return res.status(422).json({
+        success: false,
+        error: 'Failed to assign Copilot',
+        message:
+          'Could not assign any Copilot assignee candidate. Ensure Copilot coding agent is enabled for this repository and token has issue write permissions.',
+        attemptedAssignees: assigneeCandidates,
+        details: assignAttempts,
+      });
+    }
+
+    // Add a follow-up comment (best effort) to provide context for the assignment.
+    const commentBody = `🤖 **GitHub Copilot Assignment Requested**
+
+Assigned to: @${assignedAs}
+
+Please analyze this issue and:
 1. Review the diagnostic information and suggested fix
 2. Implement the fix with comprehensive error handling
 3. Add tests to prevent regression
@@ -428,16 +487,15 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
 ---
 *This is an automated request from the AishaCRM health monitoring system.*`;
 
-    const apiUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueId}/comments`;
-
-    // Validate URL to prevent SSRF (only allow GitHub API domain)
-    const validation = validateUrlAgainstWhitelist(apiUrl, ['api.github.com']);
-    if (!validation.valid) {
-      logger.error('[GitHub Issues] Invalid API URL:', validation.error);
+    const commentUrl = `${GITHUB_API_BASE}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/issues/${issueId}/comments`;
+    const commentValidation = validateUrlAgainstWhitelist(commentUrl, ['api.github.com']);
+    if (!commentValidation.valid) {
+      logger.error('[GitHub Issues] Invalid API URL:', commentValidation.error);
       return res.status(400).json({ success: false, error: 'Invalid GitHub API URL' });
     }
 
-    const response = await fetch(validation.url.toString(), {
+    let comment = null;
+    const commentResponse = await fetch(commentValidation.url.toString(), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${GITHUB_TOKEN}`,
@@ -448,22 +506,28 @@ ${additionalContext ? `\n**Additional Context:**\n${additionalContext}` : ''}
       body: JSON.stringify({ body: commentBody }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(response.status).json({
-        success: false,
-        error: 'Failed to add comment',
-        details: errorText,
+    if (commentResponse.ok) {
+      comment = await commentResponse.json();
+    } else {
+      const commentError = await commentResponse.text();
+      logger.warn('[GitHub Issues] Copilot assigned but comment post failed', {
+        issueId,
+        assignedAs,
+        status: commentResponse.status,
+        details: commentError,
       });
     }
 
-    const comment = await response.json();
     res.json({
       success: true,
-      comment: {
-        id: comment.id,
-        url: comment.html_url,
-      },
+      assigned: true,
+      assignedAs,
+      comment: comment
+        ? {
+            id: comment.id,
+            url: comment.html_url,
+          }
+        : null,
     });
   } catch (error) {
     logger.error('[GitHub Issues] Error assigning Copilot:', error);

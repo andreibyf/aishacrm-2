@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { validateTenantScopedId } from '../lib/validation.js';
 import logger from '../lib/logger.js';
 import { supabase } from '../services/supabaseClient.js';
@@ -330,18 +330,36 @@ async function ensureCalcomWebhook(db, { userId, subscriberUrl, webhookSecret })
 
 async function ensureCalcomApiKey(db, { tenantId, userId, providedApiKey }) {
   const apiKey = (providedApiKey || '').trim() || `cal_auto_${randomBytes(24).toString('hex')}`;
+  const apiKeyId = `aisha-auto-${tenantId.slice(0, 8)}-${Date.now().toString(36)}`;
+  const note = `AiSHA auto-provisioned key for tenant ${tenantId}`;
 
-  await db.query(
-    `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")
-     VALUES ($1, $2, $3, encode(digest($4, 'sha256'), 'hex'))
-     ON CONFLICT ("hashedKey") DO NOTHING`,
-    [
-      `aisha-auto-${tenantId.slice(0, 8)}-${Date.now().toString(36)}`,
-      userId,
-      `AiSHA auto-provisioned key for tenant ${tenantId}`,
-      apiKey,
-    ],
-  );
+  try {
+    await db.query(
+      `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")
+       VALUES ($1, $2, $3, encode(digest($4, 'sha256'), 'hex'))
+       ON CONFLICT ("hashedKey") DO NOTHING`,
+      [apiKeyId, userId, note, apiKey],
+    );
+  } catch (err) {
+    // Some environments do not have pgcrypto enabled (digest undefined).
+    // Fall back to app-side SHA-256 to keep provisioning path operational.
+    if (err?.code !== '42883' && !String(err?.message || '').includes('function digest')) {
+      throw err;
+    }
+
+    const hashedKey = createHash('sha256').update(apiKey).digest('hex');
+    await db.query(
+      `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("hashedKey") DO NOTHING`,
+      [apiKeyId, userId, note, hashedKey],
+    );
+
+    logger.warn('[CalcomProvision] pgcrypto digest unavailable, used app-side SHA-256 fallback', {
+      tenantId,
+      code: err?.code,
+    });
+  }
 
   return apiKey;
 }
