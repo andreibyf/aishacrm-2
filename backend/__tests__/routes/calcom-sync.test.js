@@ -35,12 +35,103 @@ const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : tr
 // ---------------------------------------------------------------------------
 
 let pool;
+let resolvedCalcomUserId = 1;
+let resolvedEventTypeId = 1;
 
 function getCalcomPool() {
   if (!pool) {
     pool = new pg.Pool({ connectionString: CALCOM_DB_URL, ssl: false, max: 2 });
   }
   return pool;
+}
+
+async function resolveExistingCalcomMapping() {
+  const { rows } = await getCalcomPool().query(
+    `SELECT et.id AS event_type_id, et."userId" AS calcom_user_id
+       FROM "EventType" et
+      ORDER BY et.id ASC
+      LIMIT 1`,
+  );
+
+  if (!rows.length) {
+    throw new Error('No Cal.com EventType rows found; scheduling fixtures are not initialized');
+  }
+
+  return {
+    calcomUserId: Number(rows[0].calcom_user_id),
+    eventTypeId: Number(rows[0].event_type_id),
+  };
+}
+
+async function ensureTenantIntegrationCalcomConfig() {
+  const mapping = await resolveExistingCalcomMapping();
+  resolvedCalcomUserId = mapping.calcomUserId;
+  resolvedEventTypeId = mapping.eventTypeId;
+
+  const sb = getSupabaseClient();
+  const { data: rows, error } = await sb
+    .from('tenant_integrations')
+    .select('id,config')
+    .eq('tenant_id', TENANT_ID)
+    .eq('integration_type', 'calcom')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(`Failed to read tenant integration: ${error.message}`);
+  if (!rows?.length) {
+    throw new Error('Missing active Cal.com tenant integration for test tenant');
+  }
+
+  const current = rows[0].config || {};
+  const { rows: validRows } = await getCalcomPool().query(
+    `SELECT 1
+       FROM "EventType"
+      WHERE id = $1 AND "userId" = $2
+      LIMIT 1`,
+    [Number(current.event_type_id || 0), Number(current.calcom_user_id || 0)],
+  );
+
+  if (validRows.length > 0) return;
+
+  const nextConfig = {
+    ...current,
+    calcom_user_id: resolvedCalcomUserId,
+    event_type_id: resolvedEventTypeId,
+  };
+
+  const { error: updateError } = await sb
+    .from('tenant_integrations')
+    .update({ config: nextConfig })
+    .eq('id', rows[0].id)
+    .eq('tenant_id', TENANT_ID);
+
+  if (updateError) {
+    throw new Error(`Failed to update tenant integration config: ${updateError.message}`);
+  }
+}
+
+async function resolveEmployeeWithoutCalcomMapping() {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb
+    .from('employees')
+    .select('id, metadata')
+    .eq('tenant_id', TENANT_ID)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    throw new Error(`Failed to query employees for fixture setup: ${error.message}`);
+  }
+
+  for (const row of data || []) {
+    const meta = row.metadata || {};
+    if (!meta.calcom_user_id && !meta.calcom_event_type_id) {
+      return row.id;
+    }
+  }
+
+  throw new Error('No employee without Cal.com mapping found for assigned activity test');
 }
 
 async function getCalcomBookingByUid(uid) {
@@ -110,6 +201,7 @@ describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: !SHOUL
   let createdUid;
 
   before(async () => {
+    await ensureTenantIntegrationCalcomConfig();
     activity = await createTestActivity({ subject: 'Push Test Meeting' });
   });
 
@@ -184,6 +276,32 @@ describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: !SHOUL
     await deleteTestActivity(noTimeActivity.id);
   });
 
+  test('skips push for assigned activity when assignee has no employee Cal.com mapping', async () => {
+    const unmappedEmployeeId = await resolveEmployeeWithoutCalcomMapping();
+
+    const unmappedAssignedActivity = await createTestActivity({
+      type: 'meeting',
+      subject: 'Assigned without Cal.com mapping',
+      assigned_to: unmappedEmployeeId,
+    });
+
+    await pushActivityToCalcom(TENANT_ID, unmappedAssignedActivity);
+
+    const sb = getSupabaseClient();
+    const { data: reloaded } = await sb
+      .from('activities')
+      .select('metadata')
+      .eq('id', unmappedAssignedActivity.id)
+      .single();
+
+    assert.ok(
+      !reloaded?.metadata?.calcom_block_uid,
+      'Assigned activity without employee mapping should not get calcom_block_uid',
+    );
+
+    await deleteTestActivity(unmappedAssignedActivity.id);
+  });
+
   test('reschedules existing booking when calcom_block_uid already set', async () => {
     if (!createdUid) return;
 
@@ -218,6 +336,7 @@ describe('removeActivityFromCalcom — cancels Booking in calcom-db', { skip: !S
   let blockUid;
 
   before(async () => {
+    await ensureTenantIntegrationCalcomConfig();
     activity = await createTestActivity({ subject: 'Remove Test Meeting' });
     await pushActivityToCalcom(TENANT_ID, activity);
 
@@ -263,10 +382,14 @@ describe(
   { skip: !SHOULD_RUN },
   () => {
     const testUid = `test-pull-${Date.now()}`;
-    const calcomUserId = 1; // admin user in calcom-db
-    const eventTypeId = 1;
+    let calcomUserId = 1;
+    let eventTypeId = 1;
 
     before(async () => {
+      await ensureTenantIntegrationCalcomConfig();
+      calcomUserId = resolvedCalcomUserId;
+      eventTypeId = resolvedEventTypeId;
+
       // Insert a future booking directly into calcom-db (simulates a client booking)
       const start = new Date(Date.now() + 3600 * 1000 * 2); // 2 hours from now
       const end = new Date(start.getTime() + 30 * 60 * 1000);

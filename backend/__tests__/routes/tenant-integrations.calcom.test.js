@@ -346,3 +346,93 @@ test('PUT /api/tenantintegrations/:id preserves calcom_user_id and replaces cros
     );
   }
 });
+
+test('POST /api/tenantintegrations auto-provision creates tenant-dedicated user by default', async () => {
+  delete process.env.CALCOM_ALLOW_SHARED_PROVISION_USER;
+
+  const queryLog = [];
+  const writes = [];
+
+  const FakePool = createFakePool(queryLog, [
+    [
+      (sql, _params) =>
+        sql.includes('SELECT id, username, email, name FROM users WHERE username = $1 LIMIT 1'),
+      async () => ({ rows: [] }),
+    ],
+    [
+      (sql) =>
+        sql.includes('FROM users') &&
+        sql.includes('WHERE "completedOnboarding" = true') &&
+        sql.includes('ORDER BY CASE WHEN role = '),
+      async () => ({ rows: [{ id: 77, username: 'shared-user', email: 'shared@example.com' }] }),
+    ],
+    [
+      (sql) => sql.includes('INSERT INTO users (username, name, email, uuid)'),
+      async (_sql, params) => ({
+        rows: [{ id: 801, username: params[0], email: params[2], name: params[1] }],
+      }),
+    ],
+    [(sql) => sql.includes('SELECT id, "timeZone" FROM "Schedule"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('INSERT INTO "Schedule"'), async () => ({ rows: [{ id: 901 }] })],
+    [(sql) => sql.includes('SELECT id FROM "Availability"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('INSERT INTO "Availability"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('UPDATE users'), async () => ({ rows: [] })],
+    [
+      (sql) => sql.includes('SELECT id FROM "EventType" WHERE "userId" = $1 AND slug = $2'),
+      async () => ({ rows: [] }),
+    ],
+    [
+      (sql) =>
+        sql.includes(
+          'SELECT id, slug, title, length FROM "EventType" WHERE "userId" = $1 AND slug = $2',
+        ),
+      async () => ({ rows: [] }),
+    ],
+    [
+      (sql) => sql.includes('INSERT INTO "EventType"'),
+      async (_sql, params) => ({
+        rows: [{ id: 701, slug: params[1], title: params[0], length: 30 }],
+      }),
+    ],
+    [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],
+  ]);
+
+  const server = await createServer({
+    supabaseClient: buildSupabaseStub({ writes }),
+    FakePoolClass: FakePool,
+  });
+
+  try {
+    const address = server.address();
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/tenantintegrations?tenant_id=${tenantId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          integration_type: 'calcom',
+          integration_name: 'Tenant Booking',
+          config: {
+            auto_provision: true,
+          },
+          api_credentials: {},
+        }),
+      },
+    );
+
+    const json = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(json.status, 'success');
+
+    const insertCall = writes.find((entry) => entry.op === 'insert');
+    assert.ok(Number.isFinite(Number(insertCall.payload.config.calcom_user_id)));
+    assert.notEqual(insertCall.payload.config.calcom_user_id, 77);
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});

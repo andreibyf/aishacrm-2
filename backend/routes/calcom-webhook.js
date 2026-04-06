@@ -163,15 +163,34 @@ async function resolveAssignedEmployeeForBooking(
   }
 
   if (eventTypeId) {
-    // Filter in Postgres instead of loading all employees into memory
-    const { data } = await supabase
+    // Filter in Postgres instead of loading all employees into memory.
+    // Use limit(2) so we can detect ambiguous duplicate mappings safely.
+    const { data, error } = await supabase
       .from('employees')
-      .select('id')
+      .select('id,email')
       .eq('tenant_id', tenant_id)
       .eq('metadata->>calcom_event_type_id', String(eventTypeId))
-      .maybeSingle();
+      .limit(2);
 
-    if (data?.id) return data.id;
+    if (error) {
+      logger.warn('[CalcomWebhook] Failed to resolve employee by event type', {
+        tenant_id,
+        eventTypeId,
+        error: error.message,
+      });
+      return null;
+    }
+
+    if ((data || []).length > 1) {
+      logger.warn('[CalcomWebhook] Ambiguous event type mapping across employees', {
+        tenant_id,
+        eventTypeId,
+        employeeIds: (data || []).map((row) => row.id),
+      });
+      return null;
+    }
+
+    if (data?.[0]?.id) return data[0].id;
   }
 
   return null;

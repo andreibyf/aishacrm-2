@@ -149,6 +149,13 @@ async function findDefaultProvisionUser(db) {
   return result.rows[0] || null;
 }
 
+function isSharedCalcomProvisioningEnabled() {
+  const raw = String(process.env.CALCOM_ALLOW_SHARED_PROVISION_USER || '')
+    .trim()
+    .toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
 async function ensureCalcomUserBootstrap(db, { userId }) {
   // Ensure user can be surfaced on public booking pages.
   await db.query(
@@ -224,10 +231,12 @@ async function ensureCalcomUser(db, { tenantId, tenantName, requestedUserId, req
     });
   }
 
-  const defaultProvisionUser = await findDefaultProvisionUser(db);
-  if (defaultProvisionUser) {
-    await ensureCalcomUserBootstrap(db, { userId: defaultProvisionUser.id });
-    return defaultProvisionUser;
+  if (isSharedCalcomProvisioningEnabled()) {
+    const defaultProvisionUser = await findDefaultProvisionUser(db);
+    if (defaultProvisionUser) {
+      await ensureCalcomUserBootstrap(db, { userId: defaultProvisionUser.id });
+      return defaultProvisionUser;
+    }
   }
 
   return createCalcomUser(db, {
@@ -510,13 +519,21 @@ export default function createTenantIntegrationRoutes({
         query = query.eq('integration_type', integration_type);
       }
 
-      if (is_active !== undefined) {
+      if (is_active !== null) {
         query = query.eq('is_active', is_active === 'true');
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
+
+      logger.debug('[TenantIntegrations] List resolved', {
+        requestedTenantId: req.query?.tenant_id || req.body?.tenant_id || null,
+        resolvedTenantId: tenant_id,
+        integrationType: integration_type || null,
+        activeFilter: is_active ?? null,
+        rowCount: (data || []).length,
+      });
 
       res.json({ status: 'success', data: { tenantintegrations: data || [] } });
     } catch (error) {
