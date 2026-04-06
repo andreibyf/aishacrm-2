@@ -115,6 +115,10 @@ export default function CalendarSync({ tenantId }) {
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
+  const bookingLink = syncInfo?.cal_link || calcomIntegration?.config?.cal_link || null;
+  const schedulerUserId =
+    syncInfo?.calcom_user_id || calcomIntegration?.config?.calcom_user_id || null;
+  const eventTypeId = syncInfo?.event_type_id || calcomIntegration?.config?.event_type_id || null;
 
   const getTenantIntegrationRecord = (payload) => {
     if (Array.isArray(payload?.data?.tenantintegrations))
@@ -128,13 +132,26 @@ export default function CalendarSync({ tenantId }) {
     if (!tenantId) return;
     setLoading(true);
     try {
+      const cacheBust = `_t=${Date.now()}`;
       // Check if tenant has Cal.com configured
       const res = await apiFetch(
-        `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom`,
+        `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom&${cacheBust}`,
       );
-      if (res.status === 304) return;
-      const json = await res.json().catch(() => ({}));
-      const integration = getTenantIntegrationRecord(json);
+      const json = res.status === 304 ? {} : await res.json().catch(() => ({}));
+      let integration = getTenantIntegrationRecord(json);
+
+      // Fallback: if filtered query returned no row, load full tenant list and find calcom.
+      if (!integration) {
+        const allRes = await apiFetch(`/api/tenantintegrations?tenant_id=${tenantId}&${cacheBust}`);
+        const allJson = await allRes.json().catch(() => ({}));
+        const rows = allJson?.data?.tenantintegrations || allJson?.data || [];
+        if (Array.isArray(rows)) {
+          integration =
+            rows.find((row) => row?.integration_type === 'calcom' && row?.is_active !== false) ||
+            null;
+        }
+      }
+
       setCalcomIntegration(integration);
 
       if (!integration) {
@@ -174,7 +191,10 @@ export default function CalendarSync({ tenantId }) {
       );
       return;
     }
-    const base = calcomIntegration.config?.base_url || 'https://app.cal.com';
+    const base =
+      calcomIntegration.config?.base_url ||
+      import.meta.env.VITE_CALCOM_URL ||
+      'http://localhost:3002';
     // Cal.com OAuth flow — redirect user to Cal.com's calendar connection page
     const oauthUrl = `${base}/apps/${provider}?redirect_url=${encodeURIComponent(window.location.href)}`;
     window.open(oauthUrl, '_blank', 'noopener,noreferrer');
@@ -409,10 +429,39 @@ export default function CalendarSync({ tenantId }) {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <CalendarCheck className="w-10 h-10 text-muted-foreground" />
-              <p className="font-medium text-muted-foreground">No calendars connected yet</p>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Connect an external calendar to automatically block your busy times and enable
-                two-way sync.
+              <p className="font-medium text-foreground">Booking integration configured</p>
+              <p className="text-sm text-muted-foreground max-w-md">
+                The scheduling integration is saved for this tenant. No personal calendars are
+                connected yet, so this list is still empty.
+              </p>
+              <div className="w-full max-w-xl rounded-md border border-border/50 bg-muted/20 p-4 text-left text-sm">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div>
+                    Booking link:{' '}
+                    <span className="text-foreground">{bookingLink || 'Not set'}</span>
+                  </div>
+                  <div>
+                    Scheduler user ID:{' '}
+                    <span className="text-foreground">{schedulerUserId || 'Not set'}</span>
+                  </div>
+                  <div>
+                    Event type ID:{' '}
+                    <span className="text-foreground">{eventTypeId || 'Not set'}</span>
+                  </div>
+                  <div>
+                    Webhook configured:{' '}
+                    <span className="text-foreground">
+                      {syncInfo?.webhook_configured ||
+                      calcomIntegration?.api_credentials?.webhook_secret
+                        ? 'Yes'
+                        : 'No'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground max-w-md">
+                Use the connect buttons below to attach Google, Outlook, CalDAV, or Apple calendars
+                for busy-time sync in this view.
               </p>
             </div>
           </CardContent>
@@ -533,7 +582,11 @@ export default function CalendarSync({ tenantId }) {
         <ExternalLink className="w-4 h-4" />
         <span>Manage advanced availability settings in your</span>
         <a
-          href={calcomIntegration?.config?.base_url || 'https://app.cal.com'}
+          href={
+            calcomIntegration?.config?.base_url ||
+            import.meta.env.VITE_CALCOM_URL ||
+            'http://localhost:3002'
+          }
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-400 hover:text-blue-300 underline"

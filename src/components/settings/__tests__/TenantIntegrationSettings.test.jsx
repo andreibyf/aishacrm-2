@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   applyIntegrationTypeDefaults,
   createCommunicationsProviderTemplate,
+  normalizeIntegrationRecord,
+  upsertIntegrationRecord,
 } from '../TenantIntegrationSettings.jsx';
 
 describe('TenantIntegrationSettings communications provider helpers', () => {
@@ -72,5 +74,34 @@ describe('TenantIntegrationSettings communications provider helpers', () => {
     expect(result.integration_type).toBe('calcom');
     expect(result.integration_name).toBe('Custom');
     expect(result.config.auto_provision).toBe(false);
+  });
+
+  it('upserts saved integrations into the visible list immediately', () => {
+    const previous = [
+      {
+        id: 'twilio-1',
+        integration_type: 'twilio',
+        integration_name: 'SMS',
+        config: { enabled: true },
+      },
+    ];
+
+    const saved = normalizeIntegrationRecord({
+      id: 'calcom-1',
+      integration_type: 'calcom',
+      integration_name: 'Cal.com Booking',
+      config: {
+        cal_link: 'alice/team-meeting',
+        calcom_user_id: 42,
+      },
+    });
+
+    const result = upsertIntegrationRecord(previous, saved);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('calcom-1');
+    expect(result[0].config.cal_link).toBe('alice/team-meeting');
+    expect(result[0].configuration.calcom_user_id).toBe(42);
+    expect(previous[0].id).toBe('twilio-1');
   });
 });
