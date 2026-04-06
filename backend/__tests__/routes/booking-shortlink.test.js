@@ -7,6 +7,25 @@ import pg from 'pg';
 
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
+async function resolveExistingCalcomLink(pool) {
+  const { rows } = await pool.query(
+    `SELECT u.username, et.slug
+       FROM "EventType" et
+       JOIN users u ON u.id = et."userId"
+      ORDER BY et.id ASC
+      LIMIT 1`,
+  );
+
+  if (!rows.length) {
+    throw new Error('No Cal.com booking path found in test DB');
+  }
+
+  return {
+    username: rows[0].username,
+    slug: rows[0].slug,
+  };
+}
+
 async function createServer() {
   process.env.CALCOM_DB_URL ||= 'postgresql://calcom:calcom_local@calcom-db:5432/calcom';
 
@@ -35,10 +54,10 @@ test(
       max: 1,
     });
 
-    const url =
-      'https://app.cal.com/aishacrm-superadmin/dev-playground-b62b76?email=client%40example.com';
-
     try {
+      const link = await resolveExistingCalcomLink(pool);
+      const url = `https://app.cal.com/${link.username}/${link.slug}?email=client%40example.com`;
+
       const address = server.address();
       const createRes = await fetch(`http://127.0.0.1:${address.port}/api/scheduling/shortlink`, {
         method: 'POST',
@@ -73,9 +92,7 @@ test(
       assert.equal(redirectRes.status, 302);
       assert.equal(redirectRes.headers.get('location'), url);
     } finally {
-      await pool
-        .query('DELETE FROM aisha_booking_shortlinks WHERE destination_url = $1', [url])
-        .catch(() => {});
+      await pool.query('DELETE FROM aisha_booking_shortlinks').catch(() => {});
       await pool.end().catch(() => {});
       server.close();
     }
@@ -84,11 +101,16 @@ test(
 
 test('booking shortlink rejects non-Cal.com origins', { skip: !SHOULD_RUN }, async () => {
   const server = await createServer();
+  const pool = new pg.Pool({
+    connectionString: process.env.CALCOM_DB_URL,
+    ssl: false,
+    max: 1,
+  });
 
   try {
+    const link = await resolveExistingCalcomLink(pool);
     const address = server.address();
-    const url =
-      'https://evil.example/aishacrm-superadmin/dev-playground-b62b76?email=client%40example.com';
+    const url = `https://evil.example/${link.username}/${link.slug}?email=client%40example.com`;
 
     const createRes = await fetch(`http://127.0.0.1:${address.port}/api/scheduling/shortlink`, {
       method: 'POST',
@@ -98,6 +120,7 @@ test('booking shortlink rejects non-Cal.com origins', { skip: !SHOULD_RUN }, asy
 
     assert.equal(createRes.status, 400);
   } finally {
+    await pool.end().catch(() => {});
     server.close();
   }
 });

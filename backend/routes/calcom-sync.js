@@ -55,14 +55,17 @@ export default function createCalcomSyncRoutes() {
       if (error) return res.status(400).json({ status: 'error', message: error });
 
       const supabase = getSupabaseClient();
-      const { data } = await supabase
+      const { data: rows } = await supabase
         .from('tenant_integrations')
         .select(
           'id, is_active, config, api_credentials, sync_status, error_message, last_sync, updated_at',
         )
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom')
-        .maybeSingle();
+        .order('is_active', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const data = rows?.[0] || null;
 
       if (!data) {
         return res.json({
@@ -134,13 +137,15 @@ export default function createCalcomSyncRoutes() {
       if (error) return res.status(400).json({ status: 'error', message: error });
 
       const supabase = getSupabaseClient();
-      const { data: integration } = await supabase
+      const { data: integrationRows } = await supabase
         .from('tenant_integrations')
         .select('config')
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom')
         .eq('is_active', true)
-        .maybeSingle();
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const integration = integrationRows?.[0] || null;
 
       if (!integration) {
         return res
@@ -150,16 +155,19 @@ export default function createCalcomSyncRoutes() {
 
       const config = integration.config || {};
 
-      // Already stored — return it directly
+      // Already stored — validate it; if stale, fall through to re-derive from event_type_id
       if (config.cal_link) {
         const validation = await validateCalcomLink(getCalcomDb(), config.cal_link);
         if (validation.valid) {
           return res.json({ status: 'success', data: { cal_link: validation.calLink } });
         }
-        return res.status(404).json({
-          status: 'error',
-          message: 'Cal.com booking page not configured or no longer exists',
-        });
+        // Stale / deleted slug — fall through to re-derive from event_type_id below
+        logger.warn(
+          '[CalcomSync] Stored cal_link failed validation, re-deriving from event_type_id',
+          {
+            cal_link: config.cal_link,
+          },
+        );
       }
 
       const userId = config.calcom_user_id;
