@@ -181,9 +181,11 @@ export async function pushActivityToCalcom(tenantId, activity) {
     // For explicitly assigned activities, require per-employee Cal.com config.
     // This prevents one employee's activity from being pushed via another employee's
     // (or tenant default) scheduler mapping.
-    const employeeCalcom = await getEmployeeCalcomConfig(tenantId, activity.assigned_to);
-    const tenantCalcom = await getTenantCalcomConfig(tenantId);
+    // Resolve per-employee config eagerly; defer tenant-level config until we know it's needed.
     const hasExplicitAssignee = Boolean(activity.assigned_to);
+    const employeeCalcom = hasExplicitAssignee
+      ? await getEmployeeCalcomConfig(tenantId, activity.assigned_to)
+      : null;
 
     if (hasExplicitAssignee && !employeeCalcom) {
       logger.debug(
@@ -196,6 +198,10 @@ export async function pushActivityToCalcom(tenantId, activity) {
       );
       return false;
     }
+
+    // Only fetch tenant-level config when we actually need it (unassigned activity, or to
+    // supplement employee config for the shared calcom config block).
+    const tenantCalcom = await getTenantCalcomConfig(tenantId);
 
     const calcom = hasExplicitAssignee
       ? {

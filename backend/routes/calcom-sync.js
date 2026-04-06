@@ -62,6 +62,7 @@ export default function createCalcomSyncRoutes() {
         )
         .eq('tenant_id', tenant_id)
         .eq('integration_type', 'calcom')
+        .order('is_active', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(1);
       const data = rows?.[0] || null;
