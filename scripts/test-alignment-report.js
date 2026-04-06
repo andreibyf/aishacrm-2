@@ -213,35 +213,124 @@ function matchesPatterns(filePath, patterns) {
  * Find corresponding test file for a source file
  */
 function findTestFile(sourceFile, testFiles) {
-  const parsed = path.parse(sourceFile);
+  const normalize = (p) => p.replace(/\\/g, '/');
+  const source = normalize(sourceFile);
+  const parsed = path.parse(source);
   const nameWithoutExt = parsed.name;
-  const dir = parsed.dir;
+  const dir = normalize(parsed.dir);
+  const normalizedTests = testFiles.map(normalize);
 
-  // Possible test file patterns
-  const possibleTests = [
-    // Co-located: src/components/Button.test.jsx
-    path.join(dir, `${nameWithoutExt}.test.js`),
-    path.join(dir, `${nameWithoutExt}.test.jsx`),
-    path.join(dir, `${nameWithoutExt}.test.ts`),
-    path.join(dir, `${nameWithoutExt}.test.tsx`),
+  const hasTest = (candidate) => normalizedTests.includes(normalize(candidate));
+  const findByPrefix = (prefix) => normalizedTests.find((t) => t.startsWith(prefix));
 
-    // __tests__ directory: src/components/__tests__/Button.test.jsx
-    path.join(dir, '__tests__', `${nameWithoutExt}.test.js`),
-    path.join(dir, '__tests__', `${nameWithoutExt}.test.jsx`),
-    path.join(dir, '__tests__', `${nameWithoutExt}.test.ts`),
-    path.join(dir, '__tests__', `${nameWithoutExt}.test.tsx`),
+  const exts = ['js', 'jsx', 'ts', 'tsx'];
+  const possibleTests = [];
 
-    // Backend pattern: backend/__tests__/routes/users.route.test.js
-    sourceFile.includes('backend/routes/')
-      ? `backend/__tests__/routes/${nameWithoutExt}.route.test.js`
-      : null,
+  // Co-located and __tests__ patterns
+  for (const ext of exts) {
+    possibleTests.push(`${dir}/${nameWithoutExt}.test.${ext}`);
+    possibleTests.push(`${dir}/__tests__/${nameWithoutExt}.test.${ext}`);
+  }
 
-    // Spec files: tests/e2e/example.spec.js
-    path.join('tests', dir, `${nameWithoutExt}.spec.js`),
-    path.join('tests', dir, `${nameWithoutExt}.spec.ts`),
-  ].filter(Boolean);
+  // Backend route tests and dotted route test variants
+  if (source.startsWith('backend/routes/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/routes/${nameWithoutExt}.route.test.${ext}`);
+      possibleTests.push(`backend/__tests__/routes/${nameWithoutExt}.test.${ext}`);
+    }
+    const routePrefix = `backend/__tests__/routes/${nameWithoutExt}.`;
+    const dottedRouteTest = findByPrefix(routePrefix);
+    if (dottedRouteTest) return dottedRouteTest;
+  }
 
-  return testFiles.find((test) => possibleTests.includes(test));
+  // Backend domain folders commonly mapped to __tests__ mirrors
+  if (source.startsWith('backend/lib/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/lib/${nameWithoutExt}.test.${ext}`);
+    }
+    // lib subdirs often collapse into lib/<basename>.test.js
+    const libFlatPrefix = `backend/__tests__/lib/${nameWithoutExt}.`;
+    const libMatch = findByPrefix(libFlatPrefix);
+    if (libMatch) return libMatch;
+  }
+  if (source.startsWith('backend/services/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/services/${nameWithoutExt}.test.${ext}`);
+    }
+  }
+  if (source.startsWith('backend/middleware/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/middleware/${nameWithoutExt}.test.${ext}`);
+    }
+    // authenticate.js often covered by authenticate.* tests
+    if (nameWithoutExt === 'authenticate') {
+      const authVariant = findByPrefix('backend/__tests__/middleware/authenticate.');
+      if (authVariant) return authVariant;
+    }
+  }
+  if (source.startsWith('backend/workers/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/workers/${nameWithoutExt}.test.${ext}`);
+      possibleTests.push(`backend/__tests__/workers/${nameWithoutExt}.provider.test.${ext}`);
+    }
+  }
+  if (source.startsWith('backend/utils/')) {
+    for (const ext of ['js', 'ts']) {
+      possibleTests.push(`backend/__tests__/utils/${nameWithoutExt}.test.${ext}`);
+    }
+  }
+
+  // Frontend patterns
+  if (source.startsWith('src/components/')) {
+    const relative = source.replace('src/components/', '').replace(/\.[^.]+$/, '');
+    const segment = relative.split('/').slice(-1)[0];
+    for (const ext of exts) {
+      possibleTests.push(`src/components/__tests__/${segment}.test.${ext}`);
+      possibleTests.push(`src/components/${relative}.test.${ext}`);
+      possibleTests.push(
+        `src/components/${relative.split('/').slice(0, -1).join('/')}/__tests__/${segment}.test.${ext}`,
+      );
+      // mirrors used in this repo (e.g. src/__tests__/ai/AiSidebar.test.jsx)
+      const firstFolder = relative.split('/')[0];
+      possibleTests.push(`src/__tests__/${firstFolder}/${segment}.test.${ext}`);
+    }
+    const segmentPrefix = `src/__tests__/${relative.split('/')[0]}/${segment}.`;
+    const componentVariant = findByPrefix(segmentPrefix);
+    if (componentVariant) return componentVariant;
+  }
+
+  if (source.startsWith('src/pages/')) {
+    for (const ext of exts) {
+      possibleTests.push(`src/pages/__tests__/${nameWithoutExt}.test.${ext}`);
+      possibleTests.push(`src/pages/__tests__/${nameWithoutExt}.smoke.test.${ext}`);
+    }
+  }
+
+  if (source.startsWith('src/hooks/')) {
+    for (const ext of exts) {
+      possibleTests.push(`src/hooks/__tests__/${nameWithoutExt}.test.${ext}`);
+      possibleTests.push(`src/__tests__/ai/${nameWithoutExt}.test.${ext}`);
+    }
+  }
+
+  if (source.startsWith('src/api/')) {
+    for (const ext of exts) {
+      possibleTests.push(`src/api/__tests__/${nameWithoutExt}.test.${ext}`);
+      possibleTests.push(`src/__tests__/${nameWithoutExt}.test.${ext}`);
+    }
+  }
+
+  // E2E/spec tests are repo-level behavior tests, not 1:1 unit mirrors
+  if (source.startsWith('tests/')) {
+    return 'e2e-test';
+  }
+
+  const directMatch = possibleTests.find((candidate) => hasTest(candidate));
+  if (directMatch) {
+    return directMatch;
+  }
+
+  return null;
 }
 
 /**
