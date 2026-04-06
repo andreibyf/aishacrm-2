@@ -302,10 +302,11 @@ services:
       - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
-      # NEXTAUTH_URL = public browser-facing URL for auth redirects (sign-in, sign-out)
-      - NEXTAUTH_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
-      # NEXTAUTH_URL_INTERNAL = Docker service name so server-side CSRF/session fetches
-      # resolve internally without going through the host-mapped port.
+      # Keep NEXTAUTH_URL as the internal service URL so server-side auth/CSRF/session
+      # requests resolve correctly inside Docker, matching the production compose pattern.
+      - NEXTAUTH_URL=http://calcom:3000
+      # NEXTAUTH_URL_INTERNAL is the Cal.com-specific override for internal service resolution.
+      # Set it explicitly for Cal.com instances that support it; harmless if not supported.
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}

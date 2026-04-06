@@ -115,10 +115,10 @@ export default function CalendarSync({ tenantId }) {
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
-  const bookingLink = syncInfo?.cal_link || calcomIntegration?.config?.cal_link || null;
-  const schedulerUserId =
-    syncInfo?.calcom_user_id || calcomIntegration?.config?.calcom_user_id || null;
-  const eventTypeId = syncInfo?.event_type_id || calcomIntegration?.config?.event_type_id || null;
+  const calcomCfg = calcomIntegration?.config || calcomIntegration?.configuration || {};
+  const bookingLink = syncInfo?.cal_link || calcomCfg?.cal_link || null;
+  const schedulerUserId = syncInfo?.calcom_user_id || calcomCfg?.calcom_user_id || null;
+  const eventTypeId = syncInfo?.event_type_id || calcomCfg?.event_type_id || null;
 
   const getTenantIntegrationRecord = (payload) => {
     if (Array.isArray(payload?.data?.tenantintegrations))
