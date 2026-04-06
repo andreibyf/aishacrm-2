@@ -557,6 +557,7 @@ jobs:
               inject_secret CALCOM_DB_PASSWORD
               inject_secret CALCOM_NEXTAUTH_SECRET
               inject_secret CALCOM_ENCRYPTION_KEY
+              inject_secret CALCOM_GOOGLE_API_CREDENTIALS
             fi
             phase "Updating Cal.com scheduling stack (if running)"
             # Explicitly name only scheduling services to avoid --force-recreate touching main services
