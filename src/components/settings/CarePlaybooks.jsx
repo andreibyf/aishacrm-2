@@ -103,7 +103,7 @@ const EMPTY_PLAYBOOK = {
 };
 
 export default function CarePlaybooks() {
-  const { selectedTenantId: _selectedTenantId } = useTenant();
+  const { selectedTenantId } = useTenant();
   const [playbooks, setPlaybooks] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [executionTotal, setExecutionTotal] = useState(0);
@@ -120,14 +120,42 @@ export default function CarePlaybooks() {
   const [execDetailOpen, setExecDetailOpen] = useState(false);
   const [selectedExecution, setSelectedExecution] = useState(null);
 
+  const buildCareUrl = useCallback(
+    (path, params = {}) => {
+      const url = new URL(`${BACKEND_URL}${path}`);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          url.searchParams.set(key, String(value));
+        }
+      });
+
+      if (selectedTenantId) {
+        url.searchParams.set('tenant_id', selectedTenantId);
+      }
+
+      return url.toString();
+    },
+    [selectedTenantId],
+  );
+
+  const tenantHeaders = useCallback(
+    (base = {}) => {
+      const headers = { ...base };
+      if (selectedTenantId) headers['x-tenant-id'] = selectedTenantId;
+      return headers;
+    },
+    [selectedTenantId],
+  );
+
   // ============================================================
   // Data fetching
   // ============================================================
 
   const fetchPlaybooks = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/care-playbooks`, {
+      const res = await fetch(buildCareUrl('/api/care-playbooks'), {
         credentials: 'include',
+        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
@@ -136,12 +164,13 @@ export default function CarePlaybooks() {
     } catch (err) {
       console.error('Error fetching playbooks:', err);
     }
-  }, []);
+  }, [buildCareUrl, tenantHeaders]);
 
   const fetchExecutions = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/care-playbooks/executions?limit=25`, {
+      const res = await fetch(buildCareUrl('/api/care-playbooks/executions', { limit: 25 }), {
         credentials: 'include',
+        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
@@ -151,7 +180,7 @@ export default function CarePlaybooks() {
     } catch (err) {
       console.error('Error fetching executions:', err);
     }
-  }, []);
+  }, [buildCareUrl, tenantHeaders]);
 
   useEffect(() => {
     const load = async () => {
@@ -196,16 +225,19 @@ export default function CarePlaybooks() {
     setSaving(true);
     try {
       const url = editingPlaybook
-        ? `${BACKEND_URL}/api/care-playbooks/${editingPlaybook.id}`
-        : `${BACKEND_URL}/api/care-playbooks`;
+        ? buildCareUrl(`/api/care-playbooks/${editingPlaybook.id}`)
+        : buildCareUrl('/api/care-playbooks');
 
       const method = editingPlaybook ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        headers: tenantHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          ...formData,
+          ...(selectedTenantId ? { tenant_id: selectedTenantId } : {}),
+        }),
       });
 
       const data = await res.json();
@@ -226,9 +258,10 @@ export default function CarePlaybooks() {
 
   const handleToggle = async (playbook) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/care-playbooks/${playbook.id}/toggle`, {
+      const res = await fetch(buildCareUrl(`/api/care-playbooks/${playbook.id}/toggle`), {
         method: 'PUT',
         credentials: 'include',
+        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
@@ -245,9 +278,10 @@ export default function CarePlaybooks() {
       return;
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/care-playbooks/${playbook.id}`, {
+      const res = await fetch(buildCareUrl(`/api/care-playbooks/${playbook.id}`), {
         method: 'DELETE',
         credentials: 'include',
+        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
@@ -261,8 +295,9 @@ export default function CarePlaybooks() {
 
   const handleViewExecution = async (execution) => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/care-playbooks/executions/${execution.id}`, {
+      const res = await fetch(buildCareUrl(`/api/care-playbooks/executions/${execution.id}`), {
         credentials: 'include',
+        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
