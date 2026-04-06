@@ -41,6 +41,8 @@ const CONFIG = {
     'src/**/*.test.{js,jsx,ts,tsx}',
     'src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     'backend/__tests__/**/*.js',
+    'backend/**/__tests__/**/*.js',
+    'backend/**/*.test.js',
     'tests/**/*.spec.{js,ts}',
   ],
   excludePatterns: [
