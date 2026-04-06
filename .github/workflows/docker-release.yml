@@ -72,7 +72,7 @@ jobs:
             echo "  1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
             echo "  2. Add missing secrets (DOPPLER_TOKEN)"
             echo "  3. Go to: https://github.com/${{ github.repository }}/settings/variables/actions"
-            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG)"
+            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG, VITE_CALCOM_URL)"
             exit 1
           fi
           echo "✓ All required configuration present"

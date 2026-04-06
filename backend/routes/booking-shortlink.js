@@ -176,16 +176,16 @@ shortlinkCreateRouter.post('/', async (req, res) => {
   try {
     await ensureShortlinkTable(db);
 
+    if (!isAllowedCalcomOrigin(parsed.origin)) {
+      return res.status(400).json({
+        error: 'Unsupported Cal.com origin',
+      });
+    }
+
     const validation = await validateCalcomBookingUrl(db, parsed.toString());
     if (!validation.valid) {
       return res.status(404).json({
         error: 'Cal.com booking page not configured or no longer exists',
-      });
-    }
-
-    if (!isAllowedCalcomOrigin(parsed.origin)) {
-      return res.status(400).json({
-        error: 'Unsupported Cal.com origin',
       });
     }
 
@@ -234,7 +234,24 @@ shortlinkRedirectRouter.get('/:token', async (req, res) => {
       return res.status(404).send('Booking link not found or expired');
     }
 
-    const validation = await validateCalcomBookingUrl(db, row.destination_url);
+    const canonicalized = canonicalizeBookingDestinationUrl(row.destination_url);
+    if (!canonicalized.ok) {
+      await deleteShortlink(db, token).catch(() => {});
+      return res.status(404).send('Booking page not configured');
+    }
+
+    const destinationUrl = canonicalized.url;
+
+    if (destinationUrl !== row.destination_url) {
+      await db
+        .query(`UPDATE ${TABLE_NAME} SET destination_url = $1 WHERE token = $2`, [
+          destinationUrl,
+          token,
+        ])
+        .catch(() => {});
+    }
+
+    const validation = await validateCalcomBookingUrl(db, destinationUrl);
     if (!validation.valid) {
       await deleteShortlink(db, token).catch(() => {});
       return res.status(404).send('Booking page not configured');
