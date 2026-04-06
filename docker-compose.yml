@@ -302,9 +302,12 @@ services:
       - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
-      # NEXTAUTH_URL must be the *internal* container URL (port 3000) so server-side
-      # NextAuth CSRF/session fetches don't try to reach the host-mapped port 3002.
-      - NEXTAUTH_URL=http://localhost:3000
+      # Keep NEXTAUTH_URL as the internal service URL so server-side auth/CSRF/session
+      # requests resolve correctly inside Docker, matching the production compose pattern.
+      - NEXTAUTH_URL=http://calcom:3000
+      # NEXTAUTH_URL_INTERNAL is the Cal.com-specific override for internal service resolution.
+      # Set it explicitly for Cal.com instances that support it; harmless if not supported.
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
@@ -339,6 +342,7 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
+        VITE_CALCOM_URL: ${VITE_CALCOM_URL:-http://localhost:3002}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-dev-local}
         VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}

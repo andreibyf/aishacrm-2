@@ -138,6 +138,36 @@ export function applyIntegrationTypeDefaults(formData, nextType) {
   };
 }
 
+export function normalizeIntegrationRecord(integration) {
+  if (!integration) return integration;
+
+  const normalizedConfig = integration.config || integration.configuration || {};
+
+  return {
+    ...integration,
+    config: normalizedConfig,
+    configuration: integration.configuration || normalizedConfig,
+  };
+}
+
+export function upsertIntegrationRecord(list, integration) {
+  if (!integration) return list;
+
+  const normalized = normalizeIntegrationRecord(integration);
+  const next = Array.isArray(list) ? [...list] : [];
+  const existingIndex = next.findIndex((item) => item?.id === normalized.id);
+
+  if (existingIndex === -1) {
+    return [normalized, ...next];
+  }
+
+  next[existingIndex] = {
+    ...next[existingIndex],
+    ...normalized,
+  };
+  return next;
+}
+
 export default function TenantIntegrationSettings() {
   const [integrations, setIntegrations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -147,47 +177,43 @@ export default function TenantIntegrationSettings() {
   const [testingIntegration, setTestingIntegration] = useState(null);
   const { selectedTenantId } = useTenant(); // Add this line
 
-  const normalizeIntegration = useCallback((integration) => {
-    if (!integration) return integration;
+  const loadIntegrations = useCallback(
+    async ({ preserveCurrent = false } = {}) => {
+      if (!currentUser) return;
+      setLoading(true);
+      try {
+        // Use getTenantFilter for proper tenant isolation
+        const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
-    const normalizedConfig = integration.config || integration.configuration || {};
+        console.log('Loading integrations with filter:', tenantFilter);
 
-    return {
-      ...integration,
-      config: normalizedConfig,
-      configuration: integration.configuration || normalizedConfig,
-    };
-  }, []);
-
-  const loadIntegrations = useCallback(async () => {
-    if (!currentUser) return;
-    setLoading(true);
-    try {
-      // Use getTenantFilter for proper tenant isolation
-      const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
-
-      console.log('Loading integrations with filter:', tenantFilter);
-
-      if (
-        tenantFilter.tenant_id &&
-        tenantFilter.tenant_id !== 'NO_TENANT_SELECTED_SAFETY_FILTER' &&
-        tenantFilter.tenant_id !== 'NO_TENANT_ASSIGNED_SAFETY_FILTER'
-      ) {
-        const tenantIntegrations = await TenantIntegration.filter(tenantFilter);
-        console.log('Loaded tenant integrations:', tenantIntegrations.length);
-        setIntegrations((tenantIntegrations || []).map(normalizeIntegration));
-      } else {
-        console.log('No valid tenant filter, showing empty integrations');
-        setIntegrations([]);
+        if (
+          tenantFilter.tenant_id &&
+          tenantFilter.tenant_id !== 'NO_TENANT_SELECTED_SAFETY_FILTER' &&
+          tenantFilter.tenant_id !== 'NO_TENANT_ASSIGNED_SAFETY_FILTER'
+        ) {
+          const tenantIntegrations = await TenantIntegration.filter(tenantFilter);
+          console.log('Loaded tenant integrations:', tenantIntegrations.length);
+          setIntegrations((tenantIntegrations || []).map(normalizeIntegrationRecord));
+          return tenantIntegrations || [];
+        } else {
+          console.log('No valid tenant filter, showing empty integrations');
+          setIntegrations([]);
+          return [];
+        }
+      } catch (error) {
+        console.error('Failed to load integrations:', error);
+        toast.error('Failed to load integrations.');
+        if (!preserveCurrent) {
+          setIntegrations([]); // Also set empty on error
+        }
+        return [];
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to load integrations:', error);
-      toast.error('Failed to load integrations.');
-      setIntegrations([]); // Also set empty on error
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser, normalizeIntegration, selectedTenantId]); // Depend on currentUser and selectedTenantId
+    },
+    [currentUser, selectedTenantId],
+  ); // Depend on currentUser and selectedTenantId
 
   useEffect(() => {
     loadIntegrations();
@@ -325,17 +351,22 @@ export default function TenantIntegrationSettings() {
 
       console.log('Saving integration with tenant_id:', saveTenantId);
 
+      let savedIntegration;
       if (editingIntegration) {
-        await TenantIntegration.update(editingIntegration.id, data);
+        savedIntegration = await TenantIntegration.update(editingIntegration.id, data);
         toast.success('Integration updated successfully!');
       } else {
-        await TenantIntegration.create(data);
+        savedIntegration = await TenantIntegration.create(data);
         toast.success('Integration created successfully!');
+      }
+
+      if (savedIntegration) {
+        setIntegrations((prev) => upsertIntegrationRecord(prev, savedIntegration));
       }
 
       setIsDialogOpen(false);
       setEditingIntegration(null);
-      loadIntegrations();
+      await loadIntegrations({ preserveCurrent: true });
     } catch (error) {
       console.error('Failed to save integration:', error);
       toast.error('Failed to save integration.');
@@ -643,7 +674,11 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('Cal.com Webhook Secret is required.');
       return;
     }
-    if (formData.integration_type === 'calcom' && !autoProvisionCalcom && !formData.config.cal_link) {
+    if (
+      formData.integration_type === 'calcom' &&
+      !autoProvisionCalcom &&
+      !formData.config.cal_link
+    ) {
       toast.error('Cal.com booking link (cal_link) is required.');
       return;
     }
@@ -1747,8 +1782,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               />
               <p className="text-xs text-muted-foreground">
                 Optional with auto-provision on. If provided, AiSHA uses it as a preferred username
-                and event slug. e.g.{' '}
-                <code className="text-xs">your-domain.com/username/30min</code>.
+                and event slug. e.g. <code className="text-xs">your-domain.com/username/30min</code>
+                .
               </p>
             </div>
 
