@@ -78,6 +78,7 @@ test-results/
 *.tmp
 *.temp
 .cache/
+cal-backup-codes*.txt
 
 # API test files with actual credentials
 *.local.http
