@@ -19,6 +19,7 @@ import { CalendarCheck, Loader2, Copy, Check, ExternalLink } from 'lucide-react'
 import { supabase } from '@/lib/supabase';
 import { getBackendUrl } from '@/api/backendUrl';
 import { formatDate } from '@/utils/dateFormatting';
+import { getSchedulerBaseUrl } from '@/config/schedulerUrl';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -62,7 +63,7 @@ export default function BookingWidget({
   const [shortLink, setShortLink] = useState(null);
   const [bookingUnavailable, setBookingUnavailable] = useState(false);
 
-  const calOrigin = import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002';
+  const calOrigin = getSchedulerBaseUrl();
 
   useEffect(() => {
     if (!tenantId) {
@@ -197,6 +198,7 @@ export default function BookingWidget({
     fallbackUserEmail,
     contactEmail,
     contactName,
+    calOrigin,
   ]);
 
   const handleCopyLink = () => {

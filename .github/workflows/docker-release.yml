@@ -58,6 +58,9 @@ jobs:
           if [ -z "${{ vars.DOPPLER_CONFIG }}" ]; then
             MISSING_CONFIG+=("DOPPLER_CONFIG (variable)")
           fi
+          if [ -z "${{ vars.VITE_CALCOM_URL }}" ]; then
+            MISSING_CONFIG+=("VITE_CALCOM_URL (variable)")
+          fi
           
           if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
             echo "ERROR: Missing required GitHub configuration:"
@@ -234,6 +237,7 @@ jobs:
             VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
             VITE_AISHACRM_BACKEND_URL=${{ vars.VITE_AISHACRM_BACKEND_URL }}
+            VITE_CALCOM_URL=${{ vars.VITE_CALCOM_URL }}
             ADMIN_EMAILS=${{ steps.doppler.outputs.ADMIN_EMAILS }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false

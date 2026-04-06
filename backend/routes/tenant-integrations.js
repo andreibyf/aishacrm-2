@@ -510,7 +510,7 @@ export default function createTenantIntegrationRoutes({
         query = query.eq('integration_type', integration_type);
       }
 
-      if (is_active !== undefined) {
+      if (is_active !== null) {
         query = query.eq('is_active', is_active === 'true');
       }
 
