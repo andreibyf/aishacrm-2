@@ -45,6 +45,7 @@ import {
   Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getSchedulerBaseUrl } from '@/config/schedulerUrl';
 import { supabase } from '@/lib/supabase';
 import { formatDateTime } from '@/utils/dateFormatting';
 
@@ -114,6 +115,7 @@ export default function CalendarSync({ tenantId }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const schedulerBaseUrl = getSchedulerBaseUrl();
   const [removeTarget, setRemoveTarget] = useState(null);
   const calcomCfg = calcomIntegration?.config || calcomIntegration?.configuration || {};
   const bookingLink = syncInfo?.cal_link || calcomCfg?.cal_link || null;
@@ -191,10 +193,7 @@ export default function CalendarSync({ tenantId }) {
       );
       return;
     }
-    const base =
-      calcomIntegration.config?.base_url ||
-      import.meta.env.VITE_CALCOM_URL ||
-      'http://localhost:3002';
+    const base = schedulerBaseUrl;
     // Cal.com OAuth flow — redirect user to Cal.com's calendar connection page
     const oauthUrl = `${base}/apps/${provider}?redirect_url=${encodeURIComponent(window.location.href)}`;
     window.open(oauthUrl, '_blank', 'noopener,noreferrer');
@@ -582,11 +581,7 @@ export default function CalendarSync({ tenantId }) {
         <ExternalLink className="w-4 h-4" />
         <span>Manage advanced availability settings in your</span>
         <a
-          href={
-            calcomIntegration?.config?.base_url ||
-            import.meta.env.VITE_CALCOM_URL ||
-            'http://localhost:3002'
-          }
+          href={schedulerBaseUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="text-blue-400 hover:text-blue-300 underline"

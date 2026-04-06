@@ -21,7 +21,9 @@ import { validateCalcomBookingUrl } from '../lib/calcomLinkValidation.js';
 
 const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 const TABLE_NAME = 'aisha_booking_shortlinks';
-const DEFAULT_CALCOM_ORIGINS = ['https://app.cal.com', 'http://localhost:3002'];
+const DEFAULT_CALCOM_ORIGINS = ['https://app.cal.com', 'https://scheduler.aishacrm.com'];
+const DEFAULT_PUBLIC_SCHEDULER_URL = 'https://scheduler.aishacrm.com';
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 function normalizeOrigin(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -32,16 +34,54 @@ function normalizeOrigin(value) {
   }
 }
 
+function getPublicSchedulerOrigin() {
+  return (
+    normalizeOrigin(process.env.PUBLIC_SCHEDULER_URL) ||
+    normalizeOrigin(process.env.VITE_CALCOM_URL) ||
+    normalizeOrigin(process.env.CALCOM_PUBLIC_URL) ||
+    DEFAULT_PUBLIC_SCHEDULER_URL
+  );
+}
+
+export function canonicalizeBookingDestinationUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { ok: false, error: 'Invalid URL' };
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, error: 'URL must use http or https' };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { ok: false, error: 'URL must not include credentials' };
+  }
+
+  if (LOCAL_HOSTS.has(parsed.hostname)) {
+    const schedulerOrigin = getPublicSchedulerOrigin();
+    const schedulerUrl = new URL(schedulerOrigin);
+    parsed.protocol = schedulerUrl.protocol;
+    parsed.hostname = schedulerUrl.hostname;
+    parsed.port = schedulerUrl.port;
+  }
+
+  return { ok: true, url: parsed.toString() };
+}
+
 function getAllowedCalcomOrigins() {
   const envOrigins = [
     process.env.CALCOM_PUBLIC_URL,
     process.env.CALCOM_NEXTAUTH_URL,
     process.env.CALCOM_URL,
+    process.env.PUBLIC_SCHEDULER_URL,
+    process.env.VITE_CALCOM_URL,
   ]
     .map(normalizeOrigin)
     .filter(Boolean);
 
-  return new Set([...DEFAULT_CALCOM_ORIGINS, ...envOrigins]);
+  return new Set([...DEFAULT_CALCOM_ORIGINS, getPublicSchedulerOrigin(), ...envOrigins]);
 }
 
 function isAllowedCalcomOrigin(origin) {
@@ -120,15 +160,12 @@ shortlinkCreateRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'url is required' });
   }
 
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL' });
+  const canonicalized = canonicalizeBookingDestinationUrl(url);
+  if (!canonicalized.ok) {
+    return res.status(400).json({ error: canonicalized.error });
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return res.status(400).json({ error: 'URL must use http or https' });
-  }
+
+  const parsed = new URL(canonicalized.url);
 
   const db = getCalcomDb();
   if (!db) {
@@ -153,7 +190,7 @@ shortlinkCreateRouter.post('/', async (req, res) => {
     }
 
     const token = generateToken();
-    await persistShortlink(db, token, parsed.toString());
+    await persistShortlink(db, token, canonicalized.url);
 
     logger.info('[ShortLink] Created', { token });
     return res.status(201).json({

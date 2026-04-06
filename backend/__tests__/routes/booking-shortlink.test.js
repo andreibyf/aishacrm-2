@@ -7,6 +7,24 @@ import pg from 'pg';
 
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
 
+async function canReachCalcomDb() {
+  const pool = new pg.Pool({
+    connectionString:
+      process.env.CALCOM_DB_URL || 'postgresql://calcom:calcom_local@calcom-db:5432/calcom',
+    ssl: false,
+    max: 1,
+  });
+
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
 async function resolveExistingCalcomLink(pool) {
   const { rows } = await pool.query(
     `SELECT u.username, et.slug
@@ -46,7 +64,12 @@ async function createServer() {
 test(
   'booking shortlink persists in calcom-db and redirects to the Cal.com URL',
   { skip: !SHOULD_RUN },
-  async () => {
+  async (t) => {
+    if (!(await canReachCalcomDb())) {
+      t.skip('calcom-db unavailable for integration test');
+      return;
+    }
+
     const server = await createServer();
     const pool = new pg.Pool({
       connectionString: process.env.CALCOM_DB_URL,
@@ -99,7 +122,12 @@ test(
   },
 );
 
-test('booking shortlink rejects non-Cal.com origins', { skip: !SHOULD_RUN }, async () => {
+test('booking shortlink rejects non-Cal.com origins', { skip: !SHOULD_RUN }, async (t) => {
+  if (!(await canReachCalcomDb())) {
+    t.skip('calcom-db unavailable for integration test');
+    return;
+  }
+
   const server = await createServer();
   const pool = new pg.Pool({
     connectionString: process.env.CALCOM_DB_URL,
@@ -124,3 +152,67 @@ test('booking shortlink rejects non-Cal.com origins', { skip: !SHOULD_RUN }, asy
     server.close();
   }
 });
+
+test(
+  'booking shortlink canonicalizes localhost destination and redirects to scheduler domain',
+  { skip: !SHOULD_RUN },
+  async (t) => {
+    if (!(await canReachCalcomDb())) {
+      t.skip('calcom-db unavailable for integration test');
+      return;
+    }
+
+    const previousSchedulerUrl = process.env.PUBLIC_SCHEDULER_URL;
+    process.env.PUBLIC_SCHEDULER_URL = 'https://scheduler.aishacrm.com';
+
+    const server = await createServer();
+    const pool = new pg.Pool({
+      connectionString: process.env.CALCOM_DB_URL,
+      ssl: false,
+      max: 1,
+    });
+
+    try {
+      const link = await resolveExistingCalcomLink(pool);
+      const localhostUrl = `http://localhost:3002/${link.username}/${link.slug}?email=client%40example.com`;
+      const expectedUrl = `https://scheduler.aishacrm.com/${link.username}/${link.slug}?email=client%40example.com`;
+
+      const address = server.address();
+      const createRes = await fetch(`http://127.0.0.1:${address.port}/api/scheduling/shortlink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: localhostUrl }),
+      });
+      const createJson = await createRes.json();
+
+      assert.equal(createRes.status, 201);
+      assert.ok(createJson.token, 'shortlink token should be returned');
+
+      const stored = await pool.query(
+        `SELECT destination_url
+         FROM aisha_booking_shortlinks
+        WHERE token = $1
+        LIMIT 1`,
+        [createJson.token],
+      );
+
+      assert.equal(stored.rowCount, 1, 'shortlink row should persist in calcom-db');
+      assert.equal(stored.rows[0].destination_url, expectedUrl);
+
+      const redirectRes = await fetch(`http://127.0.0.1:${address.port}/book/${createJson.token}`, {
+        redirect: 'manual',
+      });
+      assert.equal(redirectRes.status, 302);
+      assert.equal(redirectRes.headers.get('location'), expectedUrl);
+    } finally {
+      await pool.query('DELETE FROM aisha_booking_shortlinks').catch(() => {});
+      await pool.end().catch(() => {});
+      await new Promise((resolve) => server.close(resolve));
+      if (previousSchedulerUrl === undefined) {
+        delete process.env.PUBLIC_SCHEDULER_URL;
+      } else {
+        process.env.PUBLIC_SCHEDULER_URL = previousSchedulerUrl;
+      }
+    }
+  },
+);
