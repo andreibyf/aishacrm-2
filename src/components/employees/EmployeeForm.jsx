@@ -15,6 +15,7 @@ import { useTenant } from '../shared/tenantContext';
 import { Employee } from '@/api/entities';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
+import { getSchedulerBaseUrl } from '@/config/schedulerUrl';
 import { Users, ExternalLink, Link2, CalendarCheck, Search } from 'lucide-react';
 
 const BACKEND_URL = getBackendUrl();
@@ -36,6 +37,7 @@ export default function EmployeeForm({
   onCancel,
   tenantId,
 }) {
+  const schedulerBaseUrl = getSchedulerBaseUrl();
   const employee = initialData || legacyEmployee || null;
   const isEdit = !!(employee && employee.id);
   useTenant(); // imported for tenant context; resolved via tenantId prop
@@ -108,7 +110,7 @@ export default function EmployeeForm({
       }
       setCalcomLookup({ loading: false, error: null, eventTypes: event_types });
       toast.success(`Found scheduler user ID ${user_id} with ${event_types.length} event type(s)`);
-    } catch (err) {
+    } catch {
       setCalcomLookup({
         loading: false,
         error: 'Could not reach scheduler database',
@@ -571,7 +573,7 @@ export default function EmployeeForm({
               <h3 className="text-lg font-medium text-slate-100">Booking Calendar</h3>
             </div>
             <a
-              href={`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/auth/signup`}
+              href={`${schedulerBaseUrl}/auth/signup`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
@@ -628,12 +630,12 @@ export default function EmployeeForm({
               </p>
               {formData.calcom_cal_link && (
                 <a
-                  href={`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/${formData.calcom_cal_link}`}
+                  href={`${schedulerBaseUrl}/${formData.calcom_cal_link}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 mt-1 font-mono"
                 >
-                  {`${import.meta.env.VITE_CALCOM_URL || 'http://localhost:3002'}/${formData.calcom_cal_link}`}
+                  {`${schedulerBaseUrl}/${formData.calcom_cal_link}`}
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"

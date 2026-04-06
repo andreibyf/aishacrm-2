@@ -10,7 +10,7 @@ ARG VITE_AISHACRM_BACKEND_URL
 ARG VITE_CURRENT_BRANCH=main
 ARG VITE_SYSTEM_TENANT_ID
 ARG VITE_USER_HEARTBEAT_INTERVAL_MS
-ARG VITE_CALCOM_URL=http://localhost:3002
+ARG VITE_CALCOM_URL=https://scheduler.aishacrm.com
 ARG APP_BUILD_VERSION=dev-local
 
 # Make them available to the build process
@@ -35,7 +35,11 @@ COPY . .
 
 # Build the app with increased memory limit
 ENV NODE_OPTIONS=--max-old-space-size=2048
-RUN npm run build:ci
+RUN npm run build:ci && \
+    if grep -R -n "localhost:3002" dist; then \
+      echo "ERROR: production dist contains localhost:3002. Set VITE_CALCOM_URL to a production scheduler URL."; \
+      exit 1; \
+    fi
 
 # Production stage - serve static files
 FROM node:22-alpine AS runner
