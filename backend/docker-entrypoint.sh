@@ -33,6 +33,15 @@ if [ -n "$DOPPLER_TOKEN" ]; then
         if [ -n "$DOCKER_CALCOM_PUBLIC_URL" ]; then
           export CALCOM_PUBLIC_URL="$DOCKER_CALCOM_PUBLIC_URL"
         fi
+        # Fallback: ensure backend startup guard has a scheduler URL even when
+        # only Cal.com-facing vars are provided by Doppler.
+        if [ -z "$PUBLIC_SCHEDULER_URL" ]; then
+          if [ -n "$CALCOM_PUBLIC_URL" ]; then
+            export PUBLIC_SCHEDULER_URL="$CALCOM_PUBLIC_URL"
+          elif [ -n "$VITE_CALCOM_URL" ]; then
+            export PUBLIC_SCHEDULER_URL="$VITE_CALCOM_URL"
+          fi
+        fi
         exec "$@"
       ' sh "$@"
 else

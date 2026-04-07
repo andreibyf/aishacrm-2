@@ -55,6 +55,7 @@ services:
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://scheduler.aishacrm.com}
       # Override Docker network URLs
       - REDIS_URL=redis://redis-memory:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379

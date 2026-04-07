@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Docker release config gate reliability:** Updated `.github/workflows/docker-release.yml` to stop hard-failing when GitHub Actions variable `VITE_CALCOM_URL` is unset. The workflow now only requires `DOPPLER_TOKEN`, `DOPPLER_PROJECT`, and `DOPPLER_CONFIG`, and uses a production-safe scheduler URL fallback at build time (`VITE_CALCOM_URL_BUILD` -> `VITE_CALCOM_URL` -> `https://scheduler.aishacrm.com`).
+- **Backend startup scheduler URL guard fallback:** Updated `backend/docker-entrypoint.sh` and `docker-compose.prod.yml` so `PUBLIC_SCHEDULER_URL` is guaranteed in production startup paths. The backend now derives `PUBLIC_SCHEDULER_URL` from `CALCOM_PUBLIC_URL` or `VITE_CALCOM_URL` when missing after Doppler injection, and production compose now sets a safe default (`https://scheduler.aishacrm.com`) to prevent restart loops.
 
 ### Removed
 
