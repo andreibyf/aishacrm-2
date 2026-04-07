@@ -23,7 +23,7 @@ const TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
 const TABLE_NAME = 'aisha_booking_shortlinks';
 const DEFAULT_CALCOM_ORIGINS = ['https://app.cal.com', 'https://scheduler.aishacrm.com'];
 const DEFAULT_PUBLIC_SCHEDULER_URL = 'https://scheduler.aishacrm.com';
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 function normalizeOrigin(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
