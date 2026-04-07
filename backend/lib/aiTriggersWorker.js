@@ -69,6 +69,20 @@ export const TRIGGER_TYPES = {
   CONTACT_INACTIVE: 'contact_inactive',
   OPPORTUNITY_HOT: 'opportunity_hot',
   FOLLOWUP_NEEDED: 'followup_needed',
+
+  // Florida Real Estate Transaction Lifecycle Triggers
+  // Phase 1 — Insurance Intelligence
+  BUYER_LEAD_CREATED: 'buyer_lead_created', // new lead with lead_type = 'buyer'
+  LISTING_LEAD_CREATED: 'listing_lead_created', // new lead with lead_type = 'seller'
+  INSPECTION_PERIOD_OPEN: 'inspection_period_open', // opp stage = proposal/negotiation
+  CLOSING_THIRTY_DAYS: 'closing_thirty_days', // close_date 25–35 days out
+  // Phase 2 — Transaction Compliance
+  SHOWING_SCHEDULED: 'showing_scheduled', // first meeting activity on a lead
+  EFFECTIVE_DATE_SET: 'effective_date_set', // opp metadata.effective_date populated
+  ESCROW_DAY3: 'escrow_day3', // 3 days after effective_date
+  HOA_DOCS_RECEIVED: 'hoa_docs_received', // opp metadata.hoa_docs_received_date set
+  LOAN_COMMITMENT_DAY30: 'loan_commitment_day30', // 28 days after effective_date
+  CLOSING_THREE_DAYS: 'closing_three_days', // close_date 2–4 days out
 };
 
 /**
@@ -1251,6 +1265,264 @@ async function processTriggersForTenant(tenant) {
       }
     }
 
+    // ── Florida Real Estate Triggers ──────────────────────────
+
+    // 5. Buyer leads created
+    let buyerLeads = [];
+    try {
+      buyerLeads = await detectBuyerLeadsCreated(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectBuyerLeadsCreated failed, skipping',
+      );
+    }
+    for (const lead of buyerLeads) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.BUYER_LEAD_CREATED,
+        recordType: 'lead',
+        recordId: lead.id,
+        context: {
+          lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          lead_type: lead.lead_type,
+          property_type: lead.metadata?.property_type || null,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 6. Listing/seller leads created
+    let listingLeads = [];
+    try {
+      listingLeads = await detectListingLeadsCreated(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectListingLeadsCreated failed, skipping',
+      );
+    }
+    for (const lead of listingLeads) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.LISTING_LEAD_CREATED,
+        recordType: 'lead',
+        recordId: lead.id,
+        context: {
+          lead_name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          lead_type: lead.lead_type,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 7. Showings scheduled (first meeting on a lead)
+    let showings = [];
+    try {
+      showings = await detectShowingsScheduled(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectShowingsScheduled failed, skipping',
+      );
+    }
+    for (const activity of showings) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.SHOWING_SCHEDULED,
+        recordType: 'lead',
+        recordId: activity.related_id,
+        context: {
+          activity_id: activity.id,
+          subject: activity.subject,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 8. Inspection period open (opp stage = proposal/negotiation)
+    let inspectionOpps = [];
+    try {
+      inspectionOpps = await detectInspectionPeriodsOpen(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectInspectionPeriodsOpen failed, skipping',
+      );
+    }
+    for (const opp of inspectionOpps) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.INSPECTION_PERIOD_OPEN,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          stage: opp.stage,
+          close_date: opp.close_date,
+          amount: opp.amount,
+          property_type: opp.metadata?.property_type || null,
+          year_built: opp.metadata?.year_built || null,
+          roof_age: opp.metadata?.roof_age || null,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 9. 30 days to closing (insurance binder check)
+    let closingThirtyOpps = [];
+    try {
+      closingThirtyOpps = await detectClosingThirtyDays(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectClosingThirtyDays failed, skipping',
+      );
+    }
+    for (const opp of closingThirtyOpps) {
+      const daysToClose = Math.round(
+        (new Date(opp.close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.CLOSING_THIRTY_DAYS,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          close_date: opp.close_date,
+          days_to_close: daysToClose,
+          amount: opp.amount,
+          flood_zone: opp.metadata?.flood_zone || null,
+          property_type: opp.metadata?.property_type || null,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 10. Effective date set (Day 0 — sprint kickoff)
+    let effectiveDateOpps = [];
+    try {
+      effectiveDateOpps = await detectEffectiveDateSet(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectEffectiveDateSet failed, skipping',
+      );
+    }
+    for (const opp of effectiveDateOpps) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.EFFECTIVE_DATE_SET,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          effective_date: opp.metadata?.effective_date,
+          close_date: opp.close_date,
+          amount: opp.amount,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 11. Escrow Day 3 — deposit verification
+    let escrowOpps = [];
+    try {
+      escrowOpps = await detectEscrowDay3(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectEscrowDay3 failed, skipping',
+      );
+    }
+    for (const opp of escrowOpps) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.ESCROW_DAY3,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          effective_date: opp.metadata?.effective_date,
+          close_date: opp.close_date,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 12. HOA/condo docs received — 3-day rescission
+    let hoaOpps = [];
+    try {
+      hoaOpps = await detectHoaDocsReceived(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectHoaDocsReceived failed, skipping',
+      );
+    }
+    for (const opp of hoaOpps) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.HOA_DOCS_RECEIVED,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          hoa_docs_received_date: opp.metadata?.hoa_docs_received_date,
+          close_date: opp.close_date,
+          property_type: opp.metadata?.property_type || null,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 13. Loan commitment Day 30 deadline
+    let loanCommitmentOpps = [];
+    try {
+      loanCommitmentOpps = await detectLoanCommitmentDay30(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectLoanCommitmentDay30 failed, skipping',
+      );
+    }
+    for (const opp of loanCommitmentOpps) {
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.LOAN_COMMITMENT_DAY30,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          effective_date: opp.metadata?.effective_date,
+          close_date: opp.close_date,
+          amount: opp.amount,
+        },
+      });
+      triggerCount++;
+    }
+
+    // 14. 3 days to closing — final compliance checklist
+    let closingThreeDayOpps = [];
+    try {
+      closingThreeDayOpps = await detectClosingThreeDays(tenantUuid);
+    } catch (detectErr) {
+      logger.warn(
+        { err: detectErr, tenantSlug },
+        '[AiTriggersWorker] detectClosingThreeDays failed, skipping',
+      );
+    }
+    for (const opp of closingThreeDayOpps) {
+      const daysToClose = Math.round(
+        (new Date(opp.close_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      await processTriggeredAction(tenantUuid, {
+        triggerId: TRIGGER_TYPES.CLOSING_THREE_DAYS,
+        recordType: 'opportunity',
+        recordId: opp.id,
+        context: {
+          deal_name: opp.name,
+          close_date: opp.close_date,
+          days_to_close: daysToClose,
+          amount: opp.amount,
+          effective_date: opp.metadata?.effective_date || null,
+        },
+      });
+      triggerCount++;
+    }
+
     if (triggerCount > 0) {
       logger.debug({ tenantSlug, triggerCount }, '[AiTriggersWorker] Triggers detected for tenant');
     }
@@ -1500,6 +1772,439 @@ async function detectHotOpportunities(tenantUuid) {
       }));
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectHotOpportunities error');
+    return [];
+  }
+}
+
+// ============================================================
+// Florida Real Estate Trigger Detectors
+// ============================================================
+
+/**
+ * Helper: get existing playbook execution IDs to deduplicate FL triggers.
+ * Uses care_playbook_execution (not ai_suggestions) since these route to playbooks.
+ * Returns a Set of entity_ids that have a recent non-skipped execution.
+ */
+async function getRecentPlaybookExecutionIds(tenantUuid, triggerType, windowHours = 25) {
+  try {
+    const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+    const { data } = await supabase
+      .from('care_playbook_execution')
+      .select('entity_id')
+      .eq('tenant_id', tenantUuid)
+      .eq('trigger_type', triggerType)
+      .neq('status', 'cooldown_skipped')
+      .gte('started_at', cutoff);
+    return new Set((data || []).map((r) => r.entity_id));
+  } catch (_) {
+    return new Set(); // fail open
+  }
+}
+
+/**
+ * Detect new buyer leads (lead_type = 'buyer') created in the last 25 hours.
+ * Fires PB-001: Buyer Lead — Property Type Triage
+ */
+async function detectBuyerLeadsCreated(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+    const { data: leads, error } = await supabase
+      .from('leads')
+      .select('id, first_name, last_name, lead_type, status, metadata, created_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('lead_type', 'buyer')
+      .gte('created_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectBuyerLeadsCreated error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.BUYER_LEAD_CREATED,
+    );
+    return (leads || []).filter((l) => !existingIds.has(l.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectBuyerLeadsCreated error');
+    return [];
+  }
+}
+
+/**
+ * Detect new seller/listing leads (lead_type = 'seller') created in the last 25 hours.
+ * Fires PB-004: Listing Lead — Seller Insurance Prep
+ */
+async function detectListingLeadsCreated(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+    const { data: leads, error } = await supabase
+      .from('leads')
+      .select('id, first_name, last_name, lead_type, status, metadata, created_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('lead_type', 'seller')
+      .gte('created_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectListingLeadsCreated error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.LISTING_LEAD_CREATED,
+    );
+    return (leads || []).filter((l) => !existingIds.has(l.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectListingLeadsCreated error');
+    return [];
+  }
+}
+
+/**
+ * Detect the first-ever meeting activity scheduled for a lead (created in last 25 hours).
+ * Fires PB-005: Pre-Showing — Compliance Check
+ * "First ever" is enforced by checking playbook_execution history with no time bound,
+ * and by verifying the activity is the earliest meeting on record for that lead.
+ */
+async function detectShowingsScheduled(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+    const { data: activities, error } = await supabase
+      .from('activities')
+      .select('id, related_id, related_to, subject, created_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('type', 'meeting')
+      .eq('related_to', 'lead')
+      .gte('created_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectShowingsScheduled error');
+      return [];
+    }
+
+    if (!activities || activities.length === 0) return [];
+
+    // Only fire for leads that have never had this playbook triggered (unbounded lookback)
+    const alreadyFiredIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.SHOWING_SCHEDULED,
+      // Use a 10-year window to approximate "first ever" without a full table scan
+      87600,
+    );
+
+    // Among candidates, keep only those where this is the earliest meeting for the lead
+    const candidateLeadIds = [
+      ...new Set(
+        (activities || [])
+          .filter((a) => a.related_id && !alreadyFiredIds.has(a.related_id))
+          .map((a) => a.related_id),
+      ),
+    ];
+
+    if (candidateLeadIds.length === 0) return [];
+
+    // Verify these are actually first-ever meetings: no earlier meeting exists for each lead
+    const { data: earlierMeetings } = await supabase
+      .from('activities')
+      .select('related_id, created_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('type', 'meeting')
+      .eq('related_to', 'lead')
+      .in('related_id', candidateLeadIds)
+      .lt('created_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(200);
+
+    // Leads with a pre-existing meeting are excluded — this would not be their first showing
+    const leadsWithPriorMeeting = new Set((earlierMeetings || []).map((m) => m.related_id));
+
+    return (activities || []).filter(
+      (a) =>
+        a.related_id &&
+        !alreadyFiredIds.has(a.related_id) &&
+        !leadsWithPriorMeeting.has(a.related_id),
+    );
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectShowingsScheduled error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where stage entered proposal/negotiation in last 25 hours.
+ * Fires PB-002: Inspection Period — Insurance Risk Flags
+ */
+async function detectInspectionPeriodsOpen(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata, updated_at')
+      .eq('tenant_id', tenantUuid)
+      .in('stage', ['proposal', 'negotiation'])
+      .gte('updated_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectInspectionPeriodsOpen error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.INSPECTION_PERIOD_OPEN,
+      168, // 7-day window — fire once per opportunity per week
+    );
+    return (opps || []).filter((o) => !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectInspectionPeriodsOpen error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where close_date is 25–35 days out.
+ * Fires PB-003: 30 Days to Close — Insurance Binder Checklist
+ */
+async function detectClosingThirtyDays(tenantUuid) {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() + 25 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    const windowEnd = new Date(now.getTime() + 35 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .gte('close_date', windowStart)
+      .lte('close_date', windowEnd)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectClosingThirtyDays error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.CLOSING_THIRTY_DAYS,
+      48, // 48-hour window — fire once per opportunity per 2 days
+    );
+    return (opps || []).filter((o) => !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectClosingThirtyDays error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where metadata.effective_date was set in the last 25 hours.
+ * Fires PB-006: Effective Date — Transaction Sprint Kickoff
+ *
+ * Note: effective_date is stored as YYYY-MM-DD string in opportunity metadata.
+ * Agents set this when the contract is fully executed (Day 0).
+ */
+async function detectEffectiveDateSet(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+
+    // Step 1: Get opportunities updated recently with effective_date in metadata
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata, updated_at')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .filter('metadata->>effective_date', 'not.is', null)
+      .gte('updated_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectEffectiveDateSet error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.EFFECTIVE_DATE_SET,
+      99999, // fire exactly once per opportunity — very long window
+    );
+    return (opps || []).filter((o) => o.metadata?.effective_date && !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectEffectiveDateSet error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where effective_date was 2–4 days ago.
+ * Fires PB-007: Day 3 — Escrow Deposit Verification
+ */
+async function detectEscrowDay3(tenantUuid) {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 4 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    const windowEnd = new Date(now.getTime() - 2 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .filter('metadata->>effective_date', 'not.is', null)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(100);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectEscrowDay3 error');
+      return [];
+    }
+
+    // JS filter: effective_date falls in the 2–4 day window
+    const candidates = (opps || []).filter((o) => {
+      const ed = o.metadata?.effective_date;
+      if (!ed) return false;
+      return ed >= windowStart && ed <= windowEnd;
+    });
+
+    if (candidates.length === 0) return [];
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.ESCROW_DAY3,
+      99999, // fire exactly once per opportunity
+    );
+    return candidates.filter((o) => !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectEscrowDay3 error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where metadata.hoa_docs_received_date was set in last 25 hours.
+ * Fires PB-008: Condo/HOA Docs — 3-Day Rescission Tracker
+ *
+ * Note: hoa_docs_received_date is set by the agent (or AiSHA) when docs are delivered.
+ */
+async function detectHoaDocsReceived(tenantUuid) {
+  try {
+    const since = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata, updated_at')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .filter('metadata->>hoa_docs_received_date', 'not.is', null)
+      .gte('updated_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectHoaDocsReceived error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.HOA_DOCS_RECEIVED,
+      99999, // fire exactly once per opportunity
+    );
+    return (opps || []).filter((o) => o.metadata?.hoa_docs_received_date && !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectHoaDocsReceived error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where effective_date was 26–30 days ago.
+ * Fires PB-009: Day 30 — Loan Commitment Deadline
+ */
+async function detectLoanCommitmentDay30(tenantUuid) {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    const windowEnd = new Date(now.getTime() - 26 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .filter('metadata->>effective_date', 'not.is', null)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(100);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectLoanCommitmentDay30 error');
+      return [];
+    }
+
+    const candidates = (opps || []).filter((o) => {
+      const ed = o.metadata?.effective_date;
+      if (!ed) return false;
+      return ed >= windowStart && ed <= windowEnd;
+    });
+
+    if (candidates.length === 0) return [];
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.LOAN_COMMITMENT_DAY30,
+      99999,
+    );
+    return candidates.filter((o) => !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectLoanCommitmentDay30 error');
+    return [];
+  }
+}
+
+/**
+ * Detect opportunities where close_date is 2–4 days out.
+ * Fires PB-010: 3 Days to Close — Final Compliance Checklist
+ */
+async function detectClosingThreeDays(tenantUuid) {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0];
+    const windowEnd = new Date(now.getTime() + 4 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+    const { data: opps, error } = await supabase
+      .from('opportunities')
+      .select('id, name, stage, close_date, amount, metadata')
+      .eq('tenant_id', tenantUuid)
+      .not('stage', 'in', '(closed_won,closed_lost)')
+      .gte('close_date', windowStart)
+      .lte('close_date', windowEnd)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(50);
+
+    if (error) {
+      logger.error({ err: error }, '[AiTriggersWorker] detectClosingThreeDays error');
+      return [];
+    }
+
+    const existingIds = await getRecentPlaybookExecutionIds(
+      tenantUuid,
+      TRIGGER_TYPES.CLOSING_THREE_DAYS,
+      48,
+    );
+    return (opps || []).filter((o) => !existingIds.has(o.id));
+  } catch (err) {
+    logger.error({ err }, '[AiTriggersWorker] detectClosingThreeDays error');
     return [];
   }
 }

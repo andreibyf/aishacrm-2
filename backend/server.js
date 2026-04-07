@@ -485,6 +485,7 @@ app.use(
   '/api/care-playbooks',
   defaultLimiter,
   authenticateRequest,
+  validateTenantAccess,
   createCarePlaybookRoutes(measuredPgPool),
 );
 // Braid SDK Audit Log routes
