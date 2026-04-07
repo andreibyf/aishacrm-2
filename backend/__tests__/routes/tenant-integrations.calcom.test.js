@@ -131,6 +131,10 @@ async function createServer({ supabaseClient, FakePoolClass }) {
 test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_link username', async () => {
   const queryLog = [];
   const writes = [];
+  const relationRows = {
+    host: [],
+    userEventType: [],
+  };
   const FakePool = createFakePool(queryLog, [
     [
       (sql, _params) => sql.includes('FROM users WHERE id = $1'),
@@ -188,6 +192,23 @@ test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_l
         rows: [{ id: 701, slug: params[1], title: params[0], length: params[2] }],
       }),
     ],
+    [
+      (sql) => sql.includes('INSERT INTO "Host"'),
+      async (_sql, params) => {
+        relationRows.host.push({ userId: Number(params[0]), eventTypeId: Number(params[1]) });
+        return { rows: [] };
+      },
+    ],
+    [
+      (sql) => sql.includes('INSERT INTO "_user_eventtype"'),
+      async (_sql, params) => {
+        relationRows.userEventType.push({
+          eventTypeId: Number(params[0]),
+          userId: Number(params[1]),
+        });
+        return { rows: [] };
+      },
+    ],
     [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],
@@ -230,6 +251,9 @@ test('POST /api/tenantintegrations auto-provisions Cal.com using preferred cal_l
     assert.match(insertCall.payload.api_credentials.api_key, /^cal_auto_/);
     assert.match(insertCall.payload.api_credentials.webhook_secret, /^whsec_/);
     assert.equal(insertCall.payload.metadata.auto_provisioned_by, 'tenant-integrations-route');
+
+    assert.deepEqual(relationRows.host, [{ userId: 501, eventTypeId: 701 }]);
+    assert.deepEqual(relationRows.userEventType, [{ eventTypeId: 701, userId: 501 }]);
 
     const userInsert = queryLog.find((entry) => entry.sql.includes('INSERT INTO users'));
     assert.equal(userInsert.params[0], 'preferred-user');
@@ -279,6 +303,8 @@ test('PUT /api/tenantintegrations/:id preserves calcom_user_id and replaces cros
           rows: [{ id: 333, slug: params[1], title: params[0], length: params[2] }],
         }),
       ],
+      [(sql) => sql.includes('INSERT INTO "Host"'), async () => ({ rows: [] })],
+      [(sql) => sql.includes('INSERT INTO "_user_eventtype"'), async () => ({ rows: [] })],
       [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
       [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
       [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],
@@ -394,6 +420,8 @@ test('POST /api/tenantintegrations auto-provision creates tenant-dedicated user 
         rows: [{ id: 701, slug: params[1], title: params[0], length: 30 }],
       }),
     ],
+    [(sql) => sql.includes('INSERT INTO "Host"'), async () => ({ rows: [] })],
+    [(sql) => sql.includes('INSERT INTO "_user_eventtype"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('INSERT INTO "ApiKey"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('SELECT id FROM "Webhook"'), async () => ({ rows: [] })],
     [(sql) => sql.includes('INSERT INTO "Webhook"'), async () => ({ rows: [] })],

@@ -310,6 +310,22 @@ async function ensureCalcomEventType(db, { userId, requestedSlug, requestedEvent
   return inserted.rows[0];
 }
 
+async function ensureCalcomEventTypeMappings(db, { userId, eventTypeId }) {
+  await db.query(
+    `INSERT INTO "Host" ("userId", "eventTypeId", "isFixed")
+     VALUES ($1, $2, true)
+     ON CONFLICT DO NOTHING`,
+    [userId, eventTypeId],
+  );
+
+  await db.query(
+    `INSERT INTO "_user_eventtype" ("A", "B")
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [eventTypeId, userId],
+  );
+}
+
 async function ensureCalcomWebhook(db, { userId, subscriberUrl, webhookSecret }) {
   const existing = await db.query(
     'SELECT id FROM "Webhook" WHERE "userId" = $1 AND "subscriberUrl" = $2 LIMIT 1',
@@ -405,6 +421,11 @@ async function autoProvisionCalcom({
     userId: user.id,
     requestedSlug,
     requestedEventTypeId: config?.event_type_id,
+  });
+
+  await ensureCalcomEventTypeMappings(db, {
+    userId: user.id,
+    eventTypeId: eventType.id,
   });
 
   const apiKey = await ensureCalcomApiKey(db, {
@@ -741,9 +762,17 @@ export default function createTenantIntegrationRoutes({
       let nextMetadata =
         metadata !== undefined ? { ...existingMetadata, ...metadata } : existingMetadata;
 
-      const shouldAutoProvisionCalcom =
+      const isCalcomEditSave =
         effectiveIntegrationType === 'calcom' &&
-        (nextConfig.auto_provision === true ||
+        (integration_type !== undefined ||
+          integration_name !== undefined ||
+          config !== undefined ||
+          api_credentials !== undefined ||
+          metadata !== undefined);
+
+      const shouldAutoProvisionCalcom =
+        isCalcomEditSave &&
+        (nextConfig.auto_provision !== false ||
           !nextConfig.calcom_user_id ||
           !nextConfig.event_type_id ||
           !nextApiCredentials.webhook_secret ||

@@ -292,6 +292,8 @@ services:
       POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
     volumes:
       - calcom_db_data:/var/lib/postgresql/data
+      # Init script: runs once on fresh volume creation (idempotent backfill)
+      - ./scripts/calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
       interval: 10s
@@ -305,8 +307,10 @@ services:
 
   # Cal.com — self-hosted scheduling (requires CALCOM_* secrets in Doppler prd_prd)
   # Start with: doppler run -- docker compose -f docker-compose.prod.yml --profile scheduling up -d
+  # Image pinned to known-good digest (2026-04-07). To upgrade: pull new image, verify fixes
+  # still apply (Host table, _user_eventtype, ALLOWED_HOSTNAMES), then update digest here.
   calcom:
-    image: calcom/cal.com:latest
+    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
     container_name: aishacrm-calcom
     restart: unless-stopped
     profiles: [scheduling]
@@ -328,8 +332,9 @@ services:
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
-      # Use comma-separated hostnames (no JSON array) for compatibility.
-      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-scheduler.aishacrm.com}
+      # Cal.com parses this as JSON.parse(`[${ALLOWED_HOSTNAMES}]`), so the value
+      # must include surrounding double-quotes: "scheduler.aishacrm.com" not scheduler.aishacrm.com
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"scheduler.aishacrm.com"}
       - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}

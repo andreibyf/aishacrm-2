@@ -21,8 +21,19 @@ let supabase;
 let createdPlaybookId = null;
 
 describe('CARE Playbook Data Layer (route-equivalent tests)', () => {
-  before(() => {
+  before(async () => {
     supabase = getSupabaseClient();
+    // Clean up any leftover test data from a previous interrupted run
+    await supabase
+      .from('care_playbook')
+      .delete()
+      .eq('tenant_id', TEST_TENANT_ID)
+      .eq('name', '__test_playbook__');
+    await supabase
+      .from('care_playbook')
+      .delete()
+      .eq('tenant_id', TEST_TENANT_ID)
+      .eq('trigger_type', 'followup_needed');
   });
 
   after(async () => {
@@ -36,6 +47,11 @@ describe('CARE Playbook Data Layer (route-equivalent tests)', () => {
       .delete()
       .eq('tenant_id', TEST_TENANT_ID)
       .eq('name', '__test_playbook__');
+    await supabase
+      .from('care_playbook')
+      .delete()
+      .eq('tenant_id', TEST_TENANT_ID)
+      .eq('trigger_type', 'followup_needed');
 
     // Close Bull queue Redis connection so Node can exit cleanly
     try {
@@ -316,3 +332,5 @@ describe('CARE Playbook Data Layer (route-equivalent tests)', () => {
     createdPlaybookId = null; // prevent after() double-delete
   });
 });
+// Also delete by trigger_type to handle stale records with any name
+// (the unique constraint is on tenant_id + trigger_type)

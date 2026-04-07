@@ -38,6 +38,61 @@ async function updateCalcomIntegrationStatus(tenantId, updates) {
   }
 }
 
+async function assessCalcomIntegrationReadiness(db, { config, apiCredentials }) {
+  const issues = [];
+  const userId = Number(config?.calcom_user_id);
+  const eventTypeId = Number(config?.event_type_id);
+
+  if (!db) {
+    issues.push('Cal.com database not available');
+    return { ready: false, issues };
+  }
+  if (!Number.isFinite(userId) || userId <= 0) issues.push('Missing or invalid calcom_user_id');
+  if (!Number.isFinite(eventTypeId) || eventTypeId <= 0) {
+    issues.push('Missing or invalid event_type_id');
+  }
+  if (!apiCredentials?.webhook_secret) issues.push('Webhook secret not configured');
+
+  if (Number.isFinite(userId) && userId > 0) {
+    const r = await db.query('SELECT id FROM users WHERE id = $1 LIMIT 1', [userId]);
+    if (!r.rows.length) issues.push(`Cal.com user ${userId} not found`);
+  }
+
+  if (Number.isFinite(eventTypeId) && eventTypeId > 0 && Number.isFinite(userId) && userId > 0) {
+    const et = await db.query(
+      'SELECT id FROM "EventType" WHERE id = $1 AND "userId" = $2 LIMIT 1',
+      [eventTypeId, userId],
+    );
+    if (!et.rows.length) issues.push(`Event type ${eventTypeId} not found for user ${userId}`);
+
+    const h = await db.query(
+      'SELECT 1 FROM "Host" WHERE "eventTypeId" = $1 AND "userId" = $2 LIMIT 1',
+      [eventTypeId, userId],
+    );
+    if (!h.rows.length) {
+      issues.push(`Host mapping missing for event type ${eventTypeId} and user ${userId}`);
+    }
+
+    const ue = await db.query(
+      'SELECT 1 FROM "_user_eventtype" WHERE "A" = $1 AND "B" = $2 LIMIT 1',
+      [eventTypeId, userId],
+    );
+    if (!ue.rows.length) {
+      issues.push(`User-event mapping missing for event type ${eventTypeId} and user ${userId}`);
+    }
+  }
+
+  const rawCalLink = String(config?.cal_link || '').trim();
+  if (rawCalLink) {
+    const validation = await validateCalcomLink(db, rawCalLink);
+    if (!validation.valid) {
+      issues.push(`Stored cal_link is invalid (${validation.reason || 'unknown reason'})`);
+    }
+  }
+
+  return { ready: issues.length === 0, issues };
+}
+
 export default function createCalcomSyncRoutes() {
   const router = express.Router();
   router.use(validateTenantAccess);
@@ -74,21 +129,33 @@ export default function createCalcomSyncRoutes() {
         });
       }
 
+      const db = getCalcomDb();
+      const readiness = await assessCalcomIntegrationReadiness(db, {
+        config: data.config || {},
+        apiCredentials: data.api_credentials || {},
+      });
+      const connected = !!(data.is_active && readiness.ready);
+      const healthError = readiness.ready ? null : readiness.issues.join(' | ');
+
       res.json({
         status: 'success',
         data: {
-          connected: data.is_active,
-          sync_status: data.sync_status || 'pending',
-          error_message: data.error_message || null,
+          connected,
+          sync_status: connected ? data.sync_status || 'connected' : 'error',
+          error_message: healthError || data.error_message || null,
           last_sync: data.last_sync || null,
           cal_link: data.config?.cal_link || null,
           calcom_user_id: data.config?.calcom_user_id || null,
           event_type_id: data.config?.event_type_id || null,
           auto_provision: data.config?.auto_provision !== false,
           webhook_configured: !!data.api_credentials?.webhook_secret,
-          calcom_db_available: !!getCalcomDb(),
-          // CRM→Cal.com push only works when event_type_id is configured
-          bidirectional_sync_enabled: !!(data.is_active && data.config?.event_type_id),
+          calcom_db_available: !!db,
+          health_issues: readiness.issues,
+          bidirectional_sync_enabled: !!(
+            data.is_active &&
+            readiness.ready &&
+            data.config?.event_type_id
+          ),
           last_updated: data.updated_at,
         },
       });
@@ -107,10 +174,29 @@ export default function createCalcomSyncRoutes() {
       logger.info('[CalcomSync] Full sync triggered', { tenant_id });
       const result = await fullBidirectionalSync(tenant_id);
 
-      const hasErrors = (result.errors || []).length > 0;
+      const { data: rows } = await supabase
+        .from('tenant_integrations')
+        .select('is_active, config, api_credentials')
+        .eq('tenant_id', tenant_id)
+        .eq('integration_type', 'calcom')
+        .order('is_active', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const integration = rows?.[0] || null;
+
+      const readiness = integration
+        ? await assessCalcomIntegrationReadiness(getCalcomDb(), {
+            config: integration.config || {},
+            apiCredentials: integration.api_credentials || {},
+          })
+        : { ready: false, issues: ['No Cal.com integration row found'] };
+
+      const allErrors = [...(result.errors || []), ...readiness.issues];
+      const hasErrors = allErrors.length > 0;
+
       await updateCalcomIntegrationStatus(tenant_id, {
         sync_status: hasErrors ? 'error' : 'connected',
-        error_message: hasErrors ? result.errors.slice(0, 5).join(' | ') : null,
+        error_message: hasErrors ? allErrors.slice(0, 5).join(' | ') : null,
         last_sync: hasErrors ? undefined : new Date().toISOString(),
       });
 
@@ -119,7 +205,7 @@ export default function createCalcomSyncRoutes() {
         data: {
           bookings_pulled: result.pulled,
           activities_pushed: result.pushed,
-          errors: result.errors,
+          errors: allErrors,
         },
       });
     } catch (err) {

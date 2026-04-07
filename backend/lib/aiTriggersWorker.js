@@ -1546,7 +1546,9 @@ async function detectStagnantLeads(tenantUuid) {
     // Exclude test data records
     const { data: leads, error } = await supabase
       .from('leads')
-      .select('id, first_name, last_name, status, updated_at, created_at, is_test_data')
+      .select(
+        'id, first_name, last_name, email, phone, status, updated_at, created_at, is_test_data',
+      )
       .eq('tenant_id', tenantUuid)
       .not('status', 'in', '(converted,closed,disqualified)')
       .lt('updated_at', stagnantDate.toISOString())
@@ -1574,8 +1576,21 @@ async function detectStagnantLeads(tenantUuid) {
     const existingIds = new Set((existingSuggestions || []).map((s) => s.record_id));
 
     // Step 3: Filter in JavaScript and calculate days_stagnant
+    // Exclude ghost leads (no name, email, or phone — not actionable)
     return (leads || [])
       .filter((lead) => !existingIds.has(lead.id))
+      .filter((lead) => {
+        const hasName = lead.first_name || lead.last_name;
+        const hasContact = lead.email || lead.phone;
+        if (!hasName && !hasContact) {
+          logger.debug(
+            { leadId: lead.id },
+            '[AiTriggersWorker] Skipping ghost lead (no name, email, or phone)',
+          );
+          return false;
+        }
+        return true;
+      })
       .map((lead) => ({
         ...lead,
         days_stagnant: Math.floor(

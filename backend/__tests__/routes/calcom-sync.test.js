@@ -324,6 +324,10 @@ describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: !SHOUL
   after(async () => {
     if (createdUid) await deleteCalcomBookingByUid(createdUid);
     if (activity?.id) await deleteTestActivity(activity.id);
+    if (pool) {
+      await pool.end();
+      pool = null;
+    }
   });
 });
 
@@ -370,6 +374,10 @@ describe('removeActivityFromCalcom — cancels Booking in calcom-db', { skip: !S
   after(async () => {
     if (blockUid) await deleteCalcomBookingByUid(blockUid);
     if (activity?.id) await deleteTestActivity(activity.id);
+    if (pool) {
+      await pool.end();
+      pool = null;
+    }
   });
 });
 
