@@ -210,6 +210,9 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      # Browser-facing runtime overrides (must be host-reachable values)
+      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-https://api.aishacrm.com}
+      - VITE_CALCOM_URL=${VITE_CALCOM_URL:-https://scheduler.aishacrm.com}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
