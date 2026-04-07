@@ -820,6 +820,20 @@ async function ensureStorageBucketExists() {
   }
 }
 
+// Validate PUBLIC_SCHEDULER_URL is a proper https:// URL in production.
+// Booking shortlinks will silently store localhost URLs if this is missing.
+if (process.env.NODE_ENV === 'production') {
+  const schedulerUrl = process.env.PUBLIC_SCHEDULER_URL;
+  if (!schedulerUrl || !/^https:\/\/.+/.test(schedulerUrl)) {
+    logger.fatal(
+      { PUBLIC_SCHEDULER_URL: schedulerUrl },
+      '[startup] PUBLIC_SCHEDULER_URL must be a valid https:// URL. ' +
+        'Booking shortlinks will be misconfigured. Refusing to start.',
+    );
+    process.exit(1);
+  }
+}
+
 // Start listening
 server.listen(PORT, async () => {
   const startTimestamp = new Date().toISOString();
