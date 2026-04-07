@@ -359,6 +359,58 @@ describe('Trigger Detection Logic', { skip: !SHOULD_RUN }, () => {
 
     assert.equal(TRIGGER_TYPES.OPPORTUNITY_HOT, 'opportunity_hot');
   });
+
+  // ── Florida Real Estate Trigger Types ───────────────────────
+
+  test('FL buyer_lead_created trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.BUYER_LEAD_CREATED, 'buyer_lead_created');
+  });
+
+  test('FL listing_lead_created trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.LISTING_LEAD_CREATED, 'listing_lead_created');
+  });
+
+  test('FL showing_scheduled trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.SHOWING_SCHEDULED, 'showing_scheduled');
+  });
+
+  test('FL effective_date_set trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.EFFECTIVE_DATE_SET, 'effective_date_set');
+  });
+
+  test('FL escrow_day3 trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.ESCROW_DAY3, 'escrow_day3');
+  });
+
+  test('FL hoa_docs_received trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.HOA_DOCS_RECEIVED, 'hoa_docs_received');
+  });
+
+  test('FL loan_commitment_day30 trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.LOAN_COMMITMENT_DAY30, 'loan_commitment_day30');
+  });
+
+  test('FL closing_three_days trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.CLOSING_THREE_DAYS, 'closing_three_days');
+  });
+
+  test('FL inspection_period_open trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.INSPECTION_PERIOD_OPEN, 'inspection_period_open');
+  });
+
+  test('FL closing_thirty_days trigger type constant is correct', async () => {
+    const { TRIGGER_TYPES } = await import('../../lib/aiTriggersWorker.js');
+    assert.equal(TRIGGER_TYPES.CLOSING_THIRTY_DAYS, 'closing_thirty_days');
+  });
 });
 
 describe('Suggestion Template Generation', { skip: !SHOULD_RUN }, () => {

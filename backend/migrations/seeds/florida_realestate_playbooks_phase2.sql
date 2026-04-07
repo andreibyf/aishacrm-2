@@ -32,7 +32,15 @@
 --   'closing_three_days'     → scheduled check: 3 days before closing_date
 --
 -- All playbooks default to shadow_mode = TRUE, is_enabled = FALSE.
--- Replace :tenant_id with actual tenant UUID before running.
+--
+-- USAGE:
+--   These files use psql variable syntax (:'tenant_id'). Run with psql:
+--     psql $DATABASE_URL -v tenant_id="'<your-tenant-uuid>'" \
+--       -f backend/migrations/seeds/florida_realestate_playbooks_phase2.sql
+--
+--   For existing tenants via npm run db:exec, use the self-contained
+--   backfill script instead:
+--     doppler run -- npm run db:exec -- backend/scripts/seeds/backfill-florida-playbooks.sql
 -- ============================================================
 
 

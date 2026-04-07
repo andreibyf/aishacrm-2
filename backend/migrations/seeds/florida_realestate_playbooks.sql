@@ -27,15 +27,22 @@
 --
 -- NOTE — New trigger types required in aiTriggersWorker.js:
 --   'buyer_lead_created'    → fire when lead.type = 'buyer' on create
---   'inspection_period_open'→ fire when opportunity stage = 'proposal'
---                             OR inspection_date field is set
+--   'inspection_period_open'→ fire when opportunity stage enters
+--                             'proposal' or 'negotiation' (updated_at
+--                             within last 25 hours). Does NOT fire on
+--                             inspection_date field — use stage change.
 --   'closing_thirty_days'   → fire when closing_date is 25–35 days out
 --                             (scheduled daily check)
 --   'listing_lead_created'  → fire when lead.type = 'seller' on create
 --
 -- USAGE:
---   Replace :tenant_id with the actual tenant UUID before running.
---   npm run db:exec -- backend/migrations/seeds/florida_realestate_playbooks.sql
+--   These files use psql variable syntax (:'tenant_id'). Run with psql:
+--     psql $DATABASE_URL -v tenant_id="'<your-tenant-uuid>'" \
+--       -f backend/migrations/seeds/florida_realestate_playbooks.sql
+--
+--   For existing tenants via npm run db:exec, use the self-contained
+--   backfill script instead:
+--     doppler run -- npm run db:exec -- backend/scripts/seeds/backfill-florida-playbooks.sql
 -- ============================================================
 
 -- PB-001: Buyer Lead — Property Type Triage

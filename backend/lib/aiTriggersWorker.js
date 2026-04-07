@@ -1866,8 +1866,10 @@ async function detectListingLeadsCreated(tenantUuid) {
 }
 
 /**
- * Detect first meeting activity scheduled for a lead in the last 25 hours.
+ * Detect the first-ever meeting activity scheduled for a lead (created in last 25 hours).
  * Fires PB-005: Pre-Showing — Compliance Check
+ * "First ever" is enforced by checking playbook_execution history with no time bound,
+ * and by verifying the activity is the earliest meeting on record for that lead.
  */
 async function detectShowingsScheduled(tenantUuid) {
   try {
@@ -1887,13 +1889,48 @@ async function detectShowingsScheduled(tenantUuid) {
       return [];
     }
 
-    const existingIds = await getRecentPlaybookExecutionIds(
+    if (!activities || activities.length === 0) return [];
+
+    // Only fire for leads that have never had this playbook triggered (unbounded lookback)
+    const alreadyFiredIds = await getRecentPlaybookExecutionIds(
       tenantUuid,
       TRIGGER_TYPES.SHOWING_SCHEDULED,
-      // Use a 7-day window — only fire once per lead per week max
-      168,
+      // Use a 10-year window to approximate "first ever" without a full table scan
+      87600,
     );
-    return (activities || []).filter((a) => a.related_id && !existingIds.has(a.related_id));
+
+    // Among candidates, keep only those where this is the earliest meeting for the lead
+    const candidateLeadIds = [
+      ...new Set(
+        (activities || [])
+          .filter((a) => a.related_id && !alreadyFiredIds.has(a.related_id))
+          .map((a) => a.related_id),
+      ),
+    ];
+
+    if (candidateLeadIds.length === 0) return [];
+
+    // Verify these are actually first-ever meetings: no earlier meeting exists for each lead
+    const { data: earlierMeetings } = await supabase
+      .from('activities')
+      .select('related_id, created_at')
+      .eq('tenant_id', tenantUuid)
+      .eq('type', 'meeting')
+      .eq('related_to', 'lead')
+      .in('related_id', candidateLeadIds)
+      .lt('created_at', since)
+      .or('is_test_data.is.null,is_test_data.eq.false')
+      .limit(200);
+
+    // Leads with a pre-existing meeting are excluded — this would not be their first showing
+    const leadsWithPriorMeeting = new Set((earlierMeetings || []).map((m) => m.related_id));
+
+    return (activities || []).filter(
+      (a) =>
+        a.related_id &&
+        !alreadyFiredIds.has(a.related_id) &&
+        !leadsWithPriorMeeting.has(a.related_id),
+    );
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectShowingsScheduled error');
     return [];

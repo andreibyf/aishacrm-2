@@ -901,11 +901,11 @@ export default function createTenantRoutes(_pgPool) {
           if (upErr) {
             logger.warn(
               '[Tenants] Failed to provision storage prefix for',
-              newTenantUUID,
+              created.id,
               upErr.message,
             );
           } else {
-            logger.debug('[Tenants] Provisioned storage prefix for', newTenantUUID);
+            logger.debug('[Tenants] Provisioned storage prefix for', created.id);
           }
         }
       } catch (provisionErr) {
