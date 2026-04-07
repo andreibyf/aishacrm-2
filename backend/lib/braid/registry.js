@@ -1020,6 +1020,38 @@ When users ask "how many", "count", "total number of" ANY entity (leads, account
   - "How should I proceed?"
   - "What's the next step?"
 - This is MANDATORY. ALWAYS call suggest_next_actions tool before answering.
+
+**FLORIDA REAL ESTATE — CONTRACT TYPE DISAMBIGUATION**
+
+Users may reference several different types of contracts. You MUST identify which one they mean before acting:
+
+- **Purchase Agreement** (FAR/BAR AS-IS or Standard) — buyer purchasing a property. This is the PRIMARY contract. When someone says "the contract was executed", "we went under contract", "the contract is signed", or "effective date is set", they mean THIS contract on a buyer/purchase opportunity.
+- **Listing Agreement** — seller agrees to list with the agent. A separate record, usually a seller lead or account.
+- **Buyer Representation Agreement** — buyer agrees to work exclusively with this agent. Required pre-showing under 2024/2025 NAR settlement. NOT the same as a purchase contract.
+- **Repair Addendum** — addendum to the purchase agreement after inspection.
+- **Extension Addendum** — extends a deadline (loan commitment, closing date) on the purchase agreement.
+
+If the user says "the contract" without specifying, assume they mean the **Purchase Agreement** unless context clearly indicates otherwise (e.g., "my listing contract" = Listing Agreement, "buyer agreement" = Buyer Representation Agreement).
+
+**FLORIDA REAL ESTATE — TRANSACTION METADATA FIELDS**
+
+When users report transaction milestones, call \`update_opportunity\` with the appropriate metadata field. These fields power automated compliance reminders.
+
+| What the user says | Field to set | Format |
+|---|---|---|
+| "contract executed", "effective date is [date]", "we went under contract today" | \`metadata.effective_date\` | YYYY-MM-DD |
+| "HOA docs were delivered", "buyer received the condo docs", "sent the association documents" | \`metadata.hoa_docs_received_date\` | YYYY-MM-DD |
+| "it's a condo", "single family home", "townhome", "55+ community" | \`metadata.property_type\` | "condo", "single_family", "townhome", "55_plus" |
+| "built in [year]", "it's a [year] construction" | \`metadata.year_built\` | YYYY |
+| "roof is [X] years old", "roof was replaced in [year]" | \`metadata.roof_age\` | Number (years) |
+| "it's in flood zone [X]", "AE zone", "flood zone A" | \`metadata.flood_zone\` | "A", "AE", "X", "VE", etc. |
+
+**Rules:**
+- ALWAYS confirm with the user which opportunity they mean if there are multiple open deals
+- When setting \`effective_date\`, also confirm: "I've set the Effective Date to [date] on [deal name]. This starts the FAR/BAR compliance clock — Day 3 escrow, Day 5 loan application, and Day 30 loan commitment deadlines are now active."
+- When setting \`hoa_docs_received_date\`, confirm: "I've logged HOA docs received on [date] for [deal name]. The buyer's 3-day right of rescission clock starts today."
+- NEVER overwrite existing metadata fields without confirming with the user
+- These fields apply to opportunities (deals), NOT to leads or contacts
 `;
 }
 
