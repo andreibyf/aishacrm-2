@@ -319,10 +319,17 @@ services:
       - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
-      - NEXTAUTH_URL=http://localhost:3000
+      # Canonical external URL used by Cal.com for URL generation and auth callbacks.
+      # Must include scheme (https://) to avoid broken asset paths like
+      # /scheduler.aishacrm.com/_next/... in browser.
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      # Internal self-reference for server-side calls inside Docker network.
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
-      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_NEXTAUTH_URL:-https://scheduler.aishacrm.com}
-      - 'ALLOWED_HOSTNAMES=["scheduler.aishacrm.com"]'
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      # Use comma-separated hostnames (no JSON array) for compatibility.
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-scheduler.aishacrm.com}
       - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
