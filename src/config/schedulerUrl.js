@@ -1,7 +1,10 @@
 const DEFAULT_PUBLIC_SCHEDULER_URL = 'https://scheduler.aishacrm.com';
 
 export function getSchedulerBaseUrl() {
-  const configured = String(import.meta.env.VITE_CALCOM_URL || '').trim();
+  const runtimeConfigured =
+    typeof window !== 'undefined' && window._env_ ? String(window._env_.VITE_CALCOM_URL || '') : '';
+  const buildConfigured = String(import.meta.env.VITE_CALCOM_URL || '');
+  const configured = (runtimeConfigured || buildConfigured).trim();
   if (configured) {
     return configured.replace(/\/+$/, '');
   }

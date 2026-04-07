@@ -145,6 +145,9 @@ services:
       - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       # Internal URL Cal.com uses to call back into AiSHA backend (Docker-to-Docker)
       - CALCOM_WEBHOOK_BACKEND_URL=http://backend:3001
+      # Dev-safe scheduler origin used by booking-shortlink canonicalization.
+      # Production should set this explicitly in production compose/secrets.
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-http://localhost:3002}
       # Supabase credentials (fallback if Doppler fails - from .env)
       - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
@@ -301,20 +304,23 @@ services:
       # and rejects Cal.com's raw Prisma/pg connections). The bundled postgres has no RLS.
       - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD:-calcom_local}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
-      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
-      # Keep NEXTAUTH_URL as the internal service URL so server-side auth/CSRF/session
-      # requests resolve correctly inside Docker, matching the production compose pattern.
+      # Dev-safe fallback so Cal.com can boot locally without Doppler injected secrets.
+      # Production should always set CALCOM_NEXTAUTH_SECRET explicitly.
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET:-dev-nextauth-secret-change-me-32chars}
+      # NEXTAUTH_URL must remain internal so server-side NextAuth/CSRF fetches
+      # don't try to call host-loopback from inside the container.
       - NEXTAUTH_URL=http://calcom:3000
-      # NEXTAUTH_URL_INTERNAL is the Cal.com-specific override for internal service resolution.
-      # Set it explicitly for Cal.com instances that support it; harmless if not supported.
+      # NEXTAUTH_URL_INTERNAL is the internal service URL used by server-side calls.
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
-      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      # Dev-safe fallback so encrypted fields work in local scheduling environments.
+      # Production should always set CALCOM_ENCRYPTION_KEY explicitly.
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY:-dev-calcom-encryption-key-change-me}
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
       - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
       - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
       - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
-      # Public URL is what the browser uses — the host-mapped port.
+      # Browser-facing app URL should stay localhost for desktop dev links.
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_NEXTAUTH_URL:-http://localhost:3002}
     ports:
       - "3002:3000"
@@ -342,7 +348,9 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
-        VITE_CALCOM_URL: ${VITE_CALCOM_URL:-https://scheduler.aishacrm.com}
+          # Build-time value must remain production-safe because Dockerfile blocks localhost in dist.
+          # Runtime value is injected by frontend-entrypoint.sh from service env (below).
+          VITE_CALCOM_URL: ${VITE_CALCOM_URL_BUILD:-https://scheduler.aishacrm.com}
         VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-dev-local}
         VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
@@ -366,6 +374,7 @@ services:
       - VITE_SUPABASE_ANON_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
       - VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
       - VITE_AISHACRM_BACKEND_URL=http://localhost:4001
+      - VITE_CALCOM_URL=${VITE_CALCOM_URL:-http://localhost:3002}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
