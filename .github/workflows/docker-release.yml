@@ -58,9 +58,6 @@ jobs:
           if [ -z "${{ vars.DOPPLER_CONFIG }}" ]; then
             MISSING_CONFIG+=("DOPPLER_CONFIG (variable)")
           fi
-          if [ -z "${{ vars.VITE_CALCOM_URL }}" ]; then
-            MISSING_CONFIG+=("VITE_CALCOM_URL (variable)")
-          fi
           
           if [ ${#MISSING_CONFIG[@]} -gt 0 ]; then
             echo "ERROR: Missing required GitHub configuration:"
@@ -72,7 +69,7 @@ jobs:
             echo "  1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
             echo "  2. Add missing secrets (DOPPLER_TOKEN)"
             echo "  3. Go to: https://github.com/${{ github.repository }}/settings/variables/actions"
-            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG, VITE_CALCOM_URL)"
+            echo "  4. Add missing variables (DOPPLER_PROJECT, DOPPLER_CONFIG)"
             exit 1
           fi
           echo "✓ All required configuration present"
@@ -237,7 +234,7 @@ jobs:
             VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
             VITE_AISHACRM_BACKEND_URL=${{ vars.VITE_AISHACRM_BACKEND_URL }}
-            VITE_CALCOM_URL=${{ vars.VITE_CALCOM_URL }}
+            VITE_CALCOM_URL=${{ vars.VITE_CALCOM_URL_BUILD || vars.VITE_CALCOM_URL || 'https://scheduler.aishacrm.com' }}
             ADMIN_EMAILS=${{ steps.doppler.outputs.ADMIN_EMAILS }}
             PUPPETEER_SKIP_DOWNLOAD=1
             USE_SYSTEM_CHROMIUM=false
