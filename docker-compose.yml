@@ -140,8 +140,6 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-      litellm:
-        condition: service_healthy
     ports:
       - "4001:3001"  # Host:Container - prod port 4001 maps to dev port 3001
     env_file:

@@ -1,4 +1,4 @@
-FROM ghcr.io/berriai/litellm:main-latest
+FROM ghcr.io/berriai/litellm:v1.81.3-stable
 
 # Install Doppler CLI so LiteLLM can load secrets at runtime.
 RUN apk add --no-cache wget ca-certificates && \
