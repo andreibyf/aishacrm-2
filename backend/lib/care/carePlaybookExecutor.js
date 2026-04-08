@@ -328,6 +328,26 @@ async function executePlaybook(executionId, startStep = null) {
   );
 }
 
+function getEntityNameSelectFields(entityType) {
+  const normalized = String(entityType || '').toLowerCase();
+  if (normalized === 'lead') {
+    return 'first_name, last_name, company, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'contact') {
+    return 'first_name, last_name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'account') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'opportunity') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'bizdev_source') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  return 'name, assigned_to, assigned_to_name';
+}
+
 // ============================================================
 // Step action dispatcher
 // ============================================================
@@ -465,16 +485,17 @@ export async function executeCareSendEmailAction(
               : entityType === 'opportunity'
                 ? 'opportunities'
                 : `${entityType}s`;
+          const nameFields = getEntityNameSelectFields(entityType);
           const { data: entRec } = await supabase
             .from(entityTable)
-            .select('first_name, last_name, name, assigned_to, assigned_to_name')
+            .select(nameFields)
             .eq('id', entityId)
             .eq('tenant_id', tenantId)
             .single();
           if (entRec) {
             const resolvedName = entRec.first_name
               ? `${entRec.first_name}${entRec.last_name ? ' ' + entRec.last_name : ''}`
-              : entRec.name || null;
+              : entRec.company || entRec.name || null;
             entityDisplayName = resolvedName;
             recipientName = resolvedName || to;
             // Sender: prefer assigned_to_name, then employee lookup, then admin fallback
@@ -633,16 +654,17 @@ export async function executeCareSendEmailAction(
               : entityType === 'opportunity'
                 ? 'opportunities'
                 : `${entityType}s`;
+          const nameFieldsNoApproval = getEntityNameSelectFields(entityType);
           const { data: entityRec } = await supabase
             .from(entityTable)
-            .select('first_name, last_name, name, assigned_to, assigned_to_name')
+            .select(nameFieldsNoApproval)
             .eq('id', entityId)
             .eq('tenant_id', tenantId)
             .single();
           if (entityRec) {
             recipientName = entityRec.first_name
               ? `${entityRec.first_name}${entityRec.last_name ? ' ' + entityRec.last_name : ''}`
-              : entityRec.name || to;
+              : entityRec.company || entityRec.name || to;
             // Prefer denormalized assigned_to_name; fall back to employees lookup
             if (entityRec.assigned_to_name) {
               senderName = entityRec.assigned_to_name;

@@ -1500,14 +1500,14 @@ export default function SettingsPage() {
                 <category.icon className={`w-5 h-5 text-${category.color}-400`} />
                 {category.label}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-stretch">
                 {items.map((item) => (
                   <Card
                     key={item.id}
-                    className={`cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg border-2 ${getColorClasses(CATEGORIES[item.category]?.color)}`}
+                    className={`h-full min-h-[110px] cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg border-2 ${getColorClasses(CATEGORIES[item.category]?.color)}`}
                     onClick={() => setActiveTabWithUrl(item.id)}
                   >
-                    <CardContent className="p-4">
+                    <CardContent className="p-4 h-full">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
                           <div

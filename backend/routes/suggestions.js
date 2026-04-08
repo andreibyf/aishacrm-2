@@ -36,8 +36,8 @@ export default function createSuggestionsRoutes(pgPool) {
     }
 
     const TABLE_CONFIG = {
-      contact: { table: 'contacts', select: 'id, first_name, last_name, name' },
-      lead: { table: 'leads', select: 'id, first_name, last_name, name' },
+      contact: { table: 'contacts', select: 'id, first_name, last_name' },
+      lead: { table: 'leads', select: 'id, first_name, last_name, company' },
       account: { table: 'accounts', select: 'id, name' },
       opportunity: { table: 'opportunities', select: 'id, name, subject' },
       bizdev_source: { table: 'bizdev_sources', select: 'id, name' },
@@ -68,7 +68,7 @@ export default function createSuggestionsRoutes(pgPool) {
             resolvedName = [row.first_name, row.last_name].filter(Boolean).join(' ');
           }
           if (!resolvedName) {
-            resolvedName = row.name || row.subject || '';
+            resolvedName = row.company || row.name || row.subject || '';
           }
           if (resolvedName) nameMap[row.id] = resolvedName;
         }
