@@ -20,13 +20,14 @@ export async function callViaLiteLLM({
     metadata: { user_id: tenantId || 'system' },
   };
   if (maxTokens != null) body.max_tokens = maxTokens;
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (masterKey) headers.Authorization = `Bearer ${masterKey}`;
 
   const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${masterKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(body),
     // 5 min — matches LOCAL_LLM_TIMEOUT_MS; LiteLLM router timeout is also 300s
     signal: AbortSignal.timeout(300_000),

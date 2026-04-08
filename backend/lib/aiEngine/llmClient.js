@@ -57,7 +57,15 @@ function resolveOpenAIAuthHeader(provider, explicitApiKey) {
 // Timeout (ms) for local Ollama inference — CPU inference can be slow
 const LOCAL_LLM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-async function callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl }) {
+async function callOpenAICompatible({
+  provider,
+  model,
+  messages,
+  temperature,
+  apiKey,
+  baseUrl,
+  maxTokens = null,
+}) {
   const finalBaseUrl = resolveOpenAIBaseUrl(provider, baseUrl);
   const authHeader = resolveOpenAIAuthHeader(provider, apiKey);
 
@@ -75,6 +83,7 @@ async function callOpenAICompatible({ provider, model, messages, temperature, ap
     messages,
     temperature,
   };
+  if (maxTokens != null) body.max_tokens = maxTokens;
 
   // For local Ollama, use a longer timeout since CPU inference can exceed 60s
   const controller = provider === 'local' ? new AbortController() : null;
@@ -157,7 +166,7 @@ function convertToAnthropicFormat(messages) {
   return { systemPrompt, anthropicMessages };
 }
 
-async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) {
+async function callAnthropic({ model, messages, temperature, apiKey, baseUrl, maxTokens = null }) {
   const finalBaseUrl = resolveAnthropicBaseUrl(baseUrl);
 
   if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
@@ -180,7 +189,7 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
 
   const body = {
     model,
-    max_tokens: 4096,
+    max_tokens: maxTokens ?? 4096,
     messages: anthropicMessages,
     temperature,
   };
@@ -281,9 +290,17 @@ export async function generateChatCompletion({
 
   // Route to appropriate provider handler
   if (provider === 'anthropic') {
-    return callAnthropic({ model, messages, temperature, apiKey, baseUrl });
+    return callAnthropic({ model, messages, temperature, apiKey, baseUrl, maxTokens });
   }
 
   // OpenAI-compatible providers: openai, groq, local
-  return callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl });
+  return callOpenAICompatible({
+    provider,
+    model,
+    messages,
+    temperature,
+    apiKey,
+    baseUrl,
+    maxTokens,
+  });
 }
