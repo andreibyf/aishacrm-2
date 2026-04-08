@@ -41,8 +41,8 @@ const C = {
   card: '#FFFFFF',
   cardAlt: '#FAFAF8',
   ink: '#1A1A1A',
-  inkMuted: '#6B6B6B',
-  inkLight: '#9C9C9C',
+  inkMuted: '#4B5563',
+  inkLight: '#6B7280',
   accent: '#2563EB',
   accentSoft: '#EFF4FF',
   success: '#059669',
@@ -136,12 +136,12 @@ function SectionHeader({ icon, title, count }) {
         borderBottom: `2px solid ${C.ink}`,
       }}
     >
-      <span style={{ fontSize: 18 }}>{icon}</span>
-      <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h3>
+      <span style={{ fontSize: 20 }}>{icon}</span>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h3>
       {count != null && (
         <span
           style={{
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             background: C.accentSoft,
             color: C.accent,
@@ -169,11 +169,11 @@ function StatCard({ label, value, sub, color }) {
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 600,
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
-          color: C.inkLight,
+          color: C.inkMuted,
           marginBottom: 6,
         }}
       >
@@ -181,7 +181,7 @@ function StatCard({ label, value, sub, color }) {
       </div>
       <div
         style={{
-          fontSize: 22,
+          fontSize: 26,
           fontWeight: 700,
           color: color || C.ink,
           fontFamily: "'JetBrains Mono', monospace",
@@ -189,7 +189,7 @@ function StatCard({ label, value, sub, color }) {
       >
         {value}
       </div>
-      {sub && <div style={{ fontSize: 11, color: C.inkMuted, marginTop: 4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 13, color: C.inkMuted, marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
@@ -197,7 +197,7 @@ function StatCard({ label, value, sub, color }) {
 function PipelineJourney({ journey }) {
   if (!journey || journey.length === 0) {
     return (
-      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+      <p style={{ fontSize: 15, color: C.inkMuted, fontStyle: 'italic' }}>
         No journey history yet. Journey steps will appear as this record moves through the pipeline.
       </p>
     );
@@ -264,7 +264,7 @@ function PipelineJourney({ journey }) {
 function CareStateTimeline({ timeline }) {
   if (!timeline || timeline.length === 0) {
     return (
-      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+      <p style={{ fontSize: 15, color: C.inkMuted, fontStyle: 'italic' }}>
         No relationship state tracked yet. C.A.R.E. state will appear once signals are detected.
       </p>
     );
@@ -356,7 +356,7 @@ function CareStateTimeline({ timeline }) {
 function AssignmentHistory({ assignments }) {
   if (!assignments || assignments.length === 0) {
     return (
-      <p style={{ fontSize: 13, color: C.inkLight, fontStyle: 'italic' }}>
+      <p style={{ fontSize: 15, color: C.inkMuted, fontStyle: 'italic' }}>
         No assignment history yet. Changes will appear here as this record is assigned or
         reassigned.
       </p>

@@ -236,6 +236,30 @@ export default function createNotificationRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Error'
    */
+  // DELETE /api/notifications/:id - Delete a notification
+  router.delete('/:id', invalidateCache('notifications'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tenant_id = req.tenant?.id || req.query.tenant_id;
+
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
+      const supabase = getSupabaseClient();
+
+      let q = supabase.from('notifications').delete().eq('id', id);
+      if (tenant_id) q = q.eq('tenant_id', tenant_id);
+      const { error } = await q;
+      if (error?.code === 'PGRST116') {
+        return res.status(404).json({ status: 'error', message: 'Notification not found' });
+      }
+      if (error) throw new Error(error.message);
+
+      res.json({ status: 'success', data: { id } });
+    } catch (error) {
+      logger.error('Error deleting notification:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // PUT /api/notifications/:id - Update notification (mark as read)
   router.put('/:id', invalidateCache('notifications'), async (req, res) => {
     try {

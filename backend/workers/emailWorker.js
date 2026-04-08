@@ -291,8 +291,9 @@ async function postStatusWebhook(payload) {
 async function createNotification({ tenant_id, title, message, type = 'info', user_email = null }) {
   try {
     await pgPool.query(
-      `INSERT INTO notifications (tenant_id, user_email, title, message, type, is_read, created_date)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      `INSERT INTO notifications (tenant_id, user_email, title, message, type, is_read, created_at, created_date)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+
       [tenant_id, user_email, title, message, type, false],
     );
   } catch (error) {

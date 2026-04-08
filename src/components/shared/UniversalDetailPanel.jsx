@@ -663,7 +663,7 @@ export default function UniversalDetailPanel({
         <div key="email" className="flex items-center gap-3">
           <Mail className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500 dark:text-slate-500">Email</Label>
+            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</Label>
             <a
               href={`mailto:${entity.email}`}
               className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
@@ -680,7 +680,7 @@ export default function UniversalDetailPanel({
         <div key="phone" className="flex items-center gap-3">
           <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500 dark:text-slate-500">Phone</Label>
+            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone</Label>
             <a
               href={`tel:${entity.phone}`}
               className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
@@ -697,7 +697,7 @@ export default function UniversalDetailPanel({
         <div key="mobile" className="flex items-center gap-3">
           <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
           <div>
-            <Label className="text-xs text-slate-500 dark:text-slate-500">Mobile</Label>
+            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mobile</Label>
             <a
               href={`tel:${entity.mobile}`}
               className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 text-base block"
@@ -713,7 +713,7 @@ export default function UniversalDetailPanel({
 
     return (
       <div>
-        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+        <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-4">
           Contact Information
         </h3>
         <div className="space-y-3">{infoFields}</div>
@@ -733,8 +733,10 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`display-${label}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-500 dark:text-slate-400">{label}</Label>
-            <div className="text-base text-slate-800 dark:text-slate-200 font-medium">{value}</div>
+            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {label}
+            </Label>
+            <div className="text-lg text-slate-900 dark:text-slate-100 font-medium">{value}</div>
           </div>,
         );
       });
@@ -833,8 +835,10 @@ export default function UniversalDetailPanel({
 
         detailFields.push(
           <div key={`entity-${key}`} className="grid grid-cols-2 gap-4 items-center">
-            <Label className="text-slate-500 dark:text-slate-400">{label}</Label>
-            <div className="text-base text-slate-800 dark:text-slate-200 font-medium">{value}</div>
+            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {label}
+            </Label>
+            <div className="text-lg text-slate-900 dark:text-slate-100 font-medium">{value}</div>
           </div>,
         );
       }
@@ -844,7 +848,7 @@ export default function UniversalDetailPanel({
 
     return (
       <div>
-        <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+        <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-4">
           Details
         </h3>
         <div className="space-y-3">{detailFields}</div>
@@ -890,10 +894,12 @@ export default function UniversalDetailPanel({
                   {getTitle()}
                 </SheetTitle>
                 {getSubtitle() && (
-                  <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">{getSubtitle()}</p>
+                  <p className="text-base text-slate-700 dark:text-slate-300 mt-1">
+                    {getSubtitle()}
+                  </p>
                 )}
                 {entity.job_title && (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  <p className="text-base text-slate-700 dark:text-slate-300 mt-1">
                     {entity.job_title}
                   </p>
                 )}
@@ -903,12 +909,12 @@ export default function UniversalDetailPanel({
                     entityType === 'lead' &&
                     (entity.lead_type === 'b2b' || entity.lead_type === 'B2B')
                   ) && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    <p className="text-base text-slate-700 dark:text-slate-300 mt-1">
                       {entity.company}
                     </p>
                   )}
                 {entity.unique_id && !entity.job_title && !entity.company && (
-                  <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+                  <p className="text-base text-slate-600 dark:text-slate-400 mt-1">
                     ID: {entity.unique_id}
                   </p>
                 )}
@@ -970,7 +976,7 @@ export default function UniversalDetailPanel({
           {/* Address Section - from outline, slightly adapted to match original data props */}
           {(entity.address_1 || entity.city || entity.state) && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+              <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-4">
                 Address
               </h3>
               <div className="flex items-start gap-3">
@@ -994,7 +1000,7 @@ export default function UniversalDetailPanel({
           {/* Tags */}
           {entity.tags && entity.tags.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-3 flex items-center gap-2">
                 <Tag className="w-4 h-4" />
                 Tags
               </h3>
@@ -1017,14 +1023,14 @@ export default function UniversalDetailPanel({
           {entity.description && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase">
                   Description
                 </h3>
-                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                <span className="text-sm text-slate-500 dark:text-slate-400 italic">
                   — What is this about?
                 </span>
               </div>
-              <div className="text-base text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 whitespace-pre-wrap">
+              <div className="text-base text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700 whitespace-pre-wrap">
                 {entity.description}
               </div>
             </div>
@@ -1160,7 +1166,7 @@ export default function UniversalDetailPanel({
           {/* Recent Activities Section - New from outline */}
           {activities.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4">
+              <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-4">
                 Recent Activities
               </h3>
               <div className="space-y-2">
@@ -1181,7 +1187,7 @@ export default function UniversalDetailPanel({
                         </Badge>
                       </div>
                       {activity.description && (
-                        <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2">
+                        <p className="text-base text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-2">
                           {activity.description}
                         </p>
                       )}
@@ -1203,7 +1209,7 @@ export default function UniversalDetailPanel({
               {customSections.map((section, index) => (
                 <div key={index} className="space-y-2">
                   {section.title && (
-                    <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3 flex items-center gap-2">
+                    <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase mb-3 flex items-center gap-2">
                       {section.icon && <span className="w-4 h-4">{section.icon}</span>}
                       {section.title}
                     </h3>
@@ -1232,10 +1238,10 @@ export default function UniversalDetailPanel({
           {showNotes && (
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase">
+                <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 uppercase">
                   Notes & Activity
                 </h3>
-                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                <span className="text-sm text-slate-500 dark:text-slate-400 italic">
                   — What happened?
                 </span>
               </div>
