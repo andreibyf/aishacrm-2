@@ -242,16 +242,24 @@ export default function createNotificationRoutes(_pgPool) {
       const { id } = req.params;
       const tenant_id = req.tenant?.id || req.query.tenant_id;
 
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
-      let q = supabase.from('notifications').delete().eq('id', id);
-      if (tenant_id) q = q.eq('tenant_id', tenant_id);
-      const { error } = await q;
-      if (error?.code === 'PGRST116') {
+      const { data, error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenant_id)
+        .select('id')
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) {
         return res.status(404).json({ status: 'error', message: 'Notification not found' });
       }
-      if (error) throw new Error(error.message);
 
       res.json({ status: 'success', data: { id } });
     } catch (error) {

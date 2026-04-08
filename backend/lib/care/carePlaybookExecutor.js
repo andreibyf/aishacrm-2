@@ -328,6 +328,26 @@ async function executePlaybook(executionId, startStep = null) {
   );
 }
 
+function getEntityNameSelectFields(entityType) {
+  const normalized = String(entityType || '').toLowerCase();
+  if (normalized === 'lead') {
+    return 'first_name, last_name, company, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'contact') {
+    return 'first_name, last_name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'account') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'opportunity') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  if (normalized === 'bizdev_source') {
+    return 'name, assigned_to, assigned_to_name';
+  }
+  return 'name, assigned_to, assigned_to_name';
+}
+
 // ============================================================
 // Step action dispatcher
 // ============================================================
@@ -465,12 +485,7 @@ export async function executeCareSendEmailAction(
               : entityType === 'opportunity'
                 ? 'opportunities'
                 : `${entityType}s`;
-          const nameFields =
-            entityType === 'lead'
-              ? 'first_name, last_name, company, assigned_to, assigned_to_name'
-              : entityType === 'contact'
-                ? 'first_name, last_name, assigned_to, assigned_to_name'
-                : 'first_name, last_name, name, assigned_to, assigned_to_name';
+          const nameFields = getEntityNameSelectFields(entityType);
           const { data: entRec } = await supabase
             .from(entityTable)
             .select(nameFields)
@@ -639,12 +654,7 @@ export async function executeCareSendEmailAction(
               : entityType === 'opportunity'
                 ? 'opportunities'
                 : `${entityType}s`;
-          const nameFieldsNoApproval =
-            entityType === 'lead'
-              ? 'first_name, last_name, company, assigned_to, assigned_to_name'
-              : entityType === 'contact'
-                ? 'first_name, last_name, assigned_to, assigned_to_name'
-                : 'first_name, last_name, name, assigned_to, assigned_to_name';
+          const nameFieldsNoApproval = getEntityNameSelectFields(entityType);
           const { data: entityRec } = await supabase
             .from(entityTable)
             .select(nameFieldsNoApproval)

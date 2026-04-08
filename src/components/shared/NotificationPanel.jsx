@@ -169,10 +169,10 @@ export default function NotificationPanel() {
     e.stopPropagation();
     try {
       await Notification.delete(id);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      setUnreadCount((prev) => {
-        const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
-        return wasUnread ? Math.max(0, prev - 1) : prev;
+      setNotifications((prev) => {
+        const nextNotifications = prev.filter((n) => n.id !== id);
+        setUnreadCount(nextNotifications.filter((n) => !n.is_read).length);
+        return nextNotifications;
       });
     } catch (err) {
       console.error('[NotificationPanel] Delete failed:', err);
@@ -256,16 +256,20 @@ export default function NotificationPanel() {
                   <div className="flex flex-col gap-1 flex-shrink-0 ml-1">
                     {!n.is_read && (
                       <button
+                        type="button"
                         onClick={(e) => markOneAsRead(e, n)}
                         title="Mark as read"
+                        aria-label="Mark notification as read"
                         className="p-1 rounded bg-transparent border-none cursor-pointer text-slate-500 hover:bg-slate-600 hover:text-green-400 transition-colors"
                       >
                         <Check className="w-3.5 h-3.5" />
                       </button>
                     )}
                     <button
+                      type="button"
                       onClick={(e) => deleteOne(e, n.id)}
                       title="Delete"
+                      aria-label="Delete notification"
                       className="p-1 rounded bg-transparent border-none cursor-pointer text-slate-500 hover:bg-slate-600 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
