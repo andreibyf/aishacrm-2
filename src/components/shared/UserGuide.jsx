@@ -861,8 +861,7 @@ export default function UserGuide() {
                 Calendar Booking Integration
               </h3>
               <p>
-                When a prospect books a meeting through your scheduling link (powered by Cal.com),
-                AiSHA automatically:
+                When a prospect books a meeting through your scheduling link, AiSHA automatically:
               </p>
               <ul className="list-disc list-inside space-y-1">
                 <li>

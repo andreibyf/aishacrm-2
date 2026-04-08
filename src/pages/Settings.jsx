@@ -118,7 +118,7 @@ const BraidSDKMonitor = lazy(() => import('../components/settings/BraidSDKMonito
 const AiSettings = lazy(() => import('../components/settings/AiSettings'));
 const CareSettings = lazy(() => import('../components/settings/CareSettings'));
 const McpAdmin = lazy(() => import('./McpAdmin'));
-// Cal.com Scheduling - lazy loaded
+// Scheduling integration - lazy loaded
 const BookingAnalytics = lazy(() => import('../components/scheduling/BookingAnalytics'));
 const CalendarSync = lazy(() => import('../components/settings/CalendarSync'));
 
@@ -302,7 +302,7 @@ export default function SettingsPage() {
         {
           id: 'calendar-sync',
           label: 'Calendar Sync',
-          description: 'Connect external calendars via Cal.com',
+          description: 'Connect external calendars via scheduling provider',
           icon: CalendarCheck,
           category: 'integrations',
           roles: ['admin'],
@@ -423,7 +423,7 @@ export default function SettingsPage() {
         {
           id: 'calendar-sync',
           label: 'Calendar Sync',
-          description: 'Connect external calendars via Cal.com',
+          description: 'Connect external calendars via scheduling provider',
           icon: CalendarCheck,
           category: 'integrations',
           roles: ['superadmin'],
@@ -946,7 +946,7 @@ export default function SettingsPage() {
                     Calendar Sync
                   </CardTitle>
                   <CardDescription>
-                    Connect external calendars (Google, Outlook, CalDAV) via Cal.com
+                    Connect external calendars (Google, Outlook, CalDAV) via scheduling provider
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

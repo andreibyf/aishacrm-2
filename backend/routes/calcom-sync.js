@@ -1,7 +1,7 @@
 /**
- * Cal.com Bidirectional Sync Routes
+ * Scheduler Bidirectional Sync Routes
  *
- * GET  /api/calcom-sync/status   — check Cal.com integration status for this tenant
+ * GET  /api/calcom-sync/status   — check scheduling integration status for this tenant
  * POST /api/calcom-sync/trigger  — admin: run a full bidirectional sync
  *
  * Admin-only (requireAdminRole).
@@ -44,7 +44,7 @@ async function assessCalcomIntegrationReadiness(db, { config, apiCredentials }) 
   const eventTypeId = Number(config?.event_type_id);
 
   if (!db) {
-    issues.push('Cal.com database not available');
+    issues.push('Scheduler database not available');
     return { ready: false, issues };
   }
   if (!Number.isFinite(userId) || userId <= 0) issues.push('Missing or invalid calcom_user_id');
@@ -55,7 +55,7 @@ async function assessCalcomIntegrationReadiness(db, { config, apiCredentials }) 
 
   if (Number.isFinite(userId) && userId > 0) {
     const r = await db.query('SELECT id FROM users WHERE id = $1 LIMIT 1', [userId]);
-    if (!r.rows.length) issues.push(`Cal.com user ${userId} not found`);
+    if (!r.rows.length) issues.push(`Scheduler user ${userId} not found`);
   }
 
   if (Number.isFinite(eventTypeId) && eventTypeId > 0 && Number.isFinite(userId) && userId > 0) {
@@ -174,6 +174,7 @@ export default function createCalcomSyncRoutes() {
       logger.info('[CalcomSync] Full sync triggered', { tenant_id });
       const result = await fullBidirectionalSync(tenant_id);
 
+      const supabase = getSupabaseClient();
       const { data: rows } = await supabase
         .from('tenant_integrations')
         .select('is_active, config, api_credentials')
@@ -189,7 +190,7 @@ export default function createCalcomSyncRoutes() {
             config: integration.config || {},
             apiCredentials: integration.api_credentials || {},
           })
-        : { ready: false, issues: ['No Cal.com integration row found'] };
+        : { ready: false, issues: ['No scheduling integration row found'] };
 
       const allErrors = [...(result.errors || []), ...readiness.issues];
       const hasErrors = allErrors.length > 0;
@@ -236,7 +237,7 @@ export default function createCalcomSyncRoutes() {
       if (!integration) {
         return res
           .status(404)
-          .json({ status: 'error', message: 'No active Cal.com integration found' });
+          .json({ status: 'error', message: 'No active scheduling integration found' });
       }
 
       const config = integration.config || {};
@@ -267,7 +268,9 @@ export default function createCalcomSyncRoutes() {
 
       const db = getCalcomDb();
       if (!db) {
-        return res.status(503).json({ status: 'error', message: 'Cal.com database not available' });
+        return res
+          .status(503)
+          .json({ status: 'error', message: 'Scheduler database not available' });
       }
 
       const userResult = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [
@@ -276,7 +279,7 @@ export default function createCalcomSyncRoutes() {
       if (!userResult.rows.length) {
         return res
           .status(404)
-          .json({ status: 'error', message: `Cal.com user ${userId} not found` });
+          .json({ status: 'error', message: `Scheduler user ${userId} not found` });
       }
       const username = userResult.rows[0].username;
 
@@ -294,7 +297,7 @@ export default function createCalcomSyncRoutes() {
       if (!validation.valid) {
         return res.status(404).json({
           status: 'error',
-          message: 'Cal.com booking page not configured or no longer exists',
+          message: 'Booking page is not configured or no longer exists',
         });
       }
 
@@ -318,7 +321,9 @@ export default function createCalcomSyncRoutes() {
       const raw = req.query.cal_link || '';
       const db = getCalcomDb();
       if (!db) {
-        return res.status(503).json({ status: 'error', message: 'Cal.com database not available' });
+        return res
+          .status(503)
+          .json({ status: 'error', message: 'Scheduler database not available' });
       }
 
       const validation = await validateCalcomLink(db, raw);
@@ -327,7 +332,7 @@ export default function createCalcomSyncRoutes() {
           status: 'error',
           valid: false,
           reason: validation.reason,
-          message: 'Cal.com booking page not configured or no longer exists',
+          message: 'Booking page is not configured or no longer exists',
         });
       }
 
@@ -347,7 +352,7 @@ export default function createCalcomSyncRoutes() {
   });
 
   // GET /api/calcom-sync/lookup-user?username=<username>
-  // Resolve a Cal.com username to numeric user ID + available event types.
+  // Resolve a scheduler username to numeric user ID + available event types.
   // The username is extracted from the cal link slug (e.g. "jane/30min" → "jane").
   router.get('/lookup-user', requireAdminRole, async (req, res) => {
     try {
@@ -364,7 +369,7 @@ export default function createCalcomSyncRoutes() {
       if (!db) {
         return res
           .status(503)
-          .json({ status: 'error', message: 'Cal.com database not configured' });
+          .json({ status: 'error', message: 'Scheduler database not configured' });
       }
 
       const userResult = await db.query(
@@ -375,7 +380,7 @@ export default function createCalcomSyncRoutes() {
       if (!userResult.rows.length) {
         return res.status(404).json({
           status: 'error',
-          message: `No Cal.com user found with username "${username}"`,
+          message: `No scheduler user found with username "${username}"`,
         });
       }
 

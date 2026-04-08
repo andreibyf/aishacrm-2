@@ -6,7 +6,7 @@
  * Props:
  *   entityId   — contact or lead UUID
  *   entityType — 'contact' | 'lead'
- *   email      — contact/lead email (used for Cal.com prefill)
+ *   email      — contact/lead email (used for scheduler prefill)
  *   tenantId   — UUID
  */
 
@@ -210,7 +210,7 @@ export default function SessionCreditsPanel({ entityId, entityType, email, tenan
             {expiringCredits.map((c) => (
               <span key={c.id} className="font-medium">
                 {c.credits_remaining} session{c.credits_remaining !== 1 ? 's' : ''} expire{' '}
-                      {formatRelativeTime(c.expiry_date)}
+                {formatRelativeTime(c.expiry_date)}
               </span>
             ))}
           </span>
@@ -270,7 +270,13 @@ export default function SessionCreditsPanel({ entityId, entityType, email, tenan
               >
                 <div>
                   <div className="font-medium">
-                    {formatDate(b.scheduled_start, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {formatDate(b.scheduled_start, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
                   </div>
                   <div className="text-xs text-muted-foreground">{b.calcom_booking_id}</div>
                 </div>

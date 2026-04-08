@@ -1,14 +1,14 @@
 /**
  * Calendar Service
  *
- * Frontend bridge for the 2-way Cal.com ↔ CRM calendar sync.
+ * Frontend bridge for the 2-way scheduler ↔ CRM calendar sync.
  *
  *   checkCalendarConflict  — queries CRM activities for time overlap before booking
- *   createCalendarEvent    — creates a CRM activity (backend then pushes it to Cal.com)
+ *   createCalendarEvent    — creates a CRM activity (backend then pushes it to scheduler)
  *   findNextAvailableSlot  — scans CRM activities to find the next conflict-free slot
  *
  * The CRM calendar is the go-between:
- *   Personal Calendar (Google/Outlook)  ↔  Cal.com  ↔  AiSHA CRM Activities
+ *   Personal Calendar (Google/Outlook)  ↔  Scheduler  ↔  AiSHA CRM Activities
  */
 
 import { supabase } from '@/lib/supabase';
@@ -83,8 +83,8 @@ export async function checkCalendarConflict(
 
 /**
  * Create a CRM activity for the given calendar event.
- * The backend will automatically push it to Cal.com as a blocker booking,
- * which Cal.com will then propagate into any connected personal calendars.
+ * The backend will automatically push it to scheduler as a blocker booking,
+ * which scheduler will then propagate into any connected personal calendars.
  */
 export async function createCalendarEvent(
   event: CalendarEvent,

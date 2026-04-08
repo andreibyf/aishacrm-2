@@ -2636,12 +2636,12 @@ Activities color-coded by:
 
 ## Calendar Booking Integration
 
-### Cal.com Scheduling
+### Scheduler Integration
 - **Client booking links** - Send a per-contact or per-lead booking page
 - **Assigned-owner routing** - Uses the assigned employee's booking profile first
 - **Fallback handling** - Uses the signed-in user's employee booking profile when unassigned
 - **CRM visibility** - Bookings create CRM activities and booking records automatically
-- **Availability blocking** - CRM calendar blocks reduce open slots in Cal.com
+- **Availability blocking** - CRM calendar blocks reduce open slots in the scheduler
 
 ## Best Practices
 

@@ -74,7 +74,7 @@ export default function EmployeeForm({
 
   const [saving, setSaving] = useState(false);
 
-  // Cal.com lookup state
+  // Scheduler lookup state
   const [calcomLookup, setCalcomLookup] = useState({ loading: false, error: null, eventTypes: [] });
 
   const handleCalcomLookup = async () => {

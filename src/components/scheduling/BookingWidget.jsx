@@ -1,10 +1,10 @@
 /**
  * BookingWidget.jsx
- * Shows booking history and embeds the Cal.com scheduling widget for a contact/lead.
+ * Shows booking history and embeds the scheduler widget for a contact/lead.
  *
  * Props:
- *   contactName  — Pre-fill name on Cal.com booking form
- *   contactEmail — Pre-fill email on Cal.com booking form (locks the attendee identity)
+ *   contactName  — Pre-fill name on scheduler booking form
+ *   contactEmail — Pre-fill email on scheduler booking form (locks the attendee identity)
  *   contactId    - CRM contact UUID
  *   leadId       - CRM lead UUID
  *   tenantId     - CRM tenant UUID
@@ -51,8 +51,8 @@ export default function BookingWidget({
   leadId,
   tenantId,
   assignedTo, // employee UUID (lead.assigned_to / contact.assigned_to)
-  contactEmail, // pre-fill attendee email on Cal.com form
-  contactName, // pre-fill attendee name on Cal.com form
+  contactEmail, // pre-fill attendee email on scheduler form
+  contactName, // pre-fill attendee name on scheduler form
   fallbackLinkedUserId,
   fallbackUserEmail,
 }) {
@@ -175,7 +175,7 @@ export default function BookingWidget({
               }
             }
           } catch {
-            // Short link generation is best-effort; fall back to the full Cal.com link
+            // Short link generation is best-effort; fall back to the full scheduler link
           }
         }
       } catch {
@@ -223,7 +223,7 @@ export default function BookingWidget({
         <p className="font-medium">Booking not configured</p>
         <p className="mt-1">
           {bookingUnavailable
-            ? 'The saved Cal.com booking page is missing or invalid.'
+            ? 'The saved booking page is missing or invalid.'
             : 'Assign an employee with a booking calendar to enable this.'}
         </p>
       </div>
@@ -273,7 +273,7 @@ export default function BookingWidget({
   }
 
   // Build pre-filled link.
-  // Cal.com passes ?metadata[key]=value through to the webhook payload unchanged,
+  // Scheduler passes ?metadata[key]=value through to the webhook payload unchanged,
   // so we embed CRM entity IDs here — the webhook handler uses these to
   // identify the lead/contact without relying on the attendee email.
   const prefillParams = new URLSearchParams();

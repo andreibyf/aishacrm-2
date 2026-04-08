@@ -42,7 +42,7 @@ describe('TenantIntegrationSettings communications provider helpers', () => {
     expect(result.config.outbound.from_address).toBe('aisha@aishacrm.com');
   });
 
-  it('applies Cal.com defaults with auto-provision enabled', () => {
+  it('applies scheduler defaults with auto-provision enabled', () => {
     const result = applyIntegrationTypeDefaults(
       {
         integration_type: 'other',
@@ -55,11 +55,11 @@ describe('TenantIntegrationSettings communications provider helpers', () => {
     );
 
     expect(result.integration_type).toBe('calcom');
-    expect(result.integration_name).toBe('Cal.com Booking');
+    expect(result.integration_name).toBe('Booking Scheduler');
     expect(result.config.auto_provision).toBe(true);
   });
 
-  it('preserves explicit Cal.com auto-provision false', () => {
+  it('preserves explicit scheduler auto-provision false', () => {
     const result = applyIntegrationTypeDefaults(
       {
         integration_type: 'other',
@@ -89,7 +89,7 @@ describe('TenantIntegrationSettings communications provider helpers', () => {
     const saved = normalizeIntegrationRecord({
       id: 'calcom-1',
       integration_type: 'calcom',
-      integration_name: 'Cal.com Booking',
+      integration_name: 'Booking Scheduler',
       config: {
         cal_link: 'alice/team-meeting',
         calcom_user_id: 42,

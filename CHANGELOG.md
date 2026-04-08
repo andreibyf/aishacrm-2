@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Calendar sync provider wording masked in UI/API responses:** Updated user-facing scheduling copy to neutral "scheduling provider/scheduler" language across settings, booking flows, and in-app guides (`src/pages/Settings.jsx`, `src/components/settings/CalendarSync.jsx`, `src/components/settings/TenantIntegrationSettings.jsx`, `src/components/scheduling/BookingWidget.jsx`, `src/components/shared/UserGuide.jsx`, `src/pages/Documentation.jsx`). Updated `backend/routes/calcom-sync.js` response/error messages to avoid explicit provider branding in toasts and API payloads while preserving existing route names and integration behavior.
+
 ### Fixed
 
 - **Cal.com image pinned to known-good digest (`docker-compose.prod.yml`):** Changed `calcom/cal.com:latest` to a pinned digest (`sha256:0aca8203c51d...`) so GHCR-triggered redeploys cannot pull a newer Cal.com image and override production fixes. To upgrade: pull new image, verify Host/\_user_eventtype backfills still apply, then update the digest.

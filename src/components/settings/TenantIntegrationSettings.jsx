@@ -91,7 +91,7 @@ export function applyIntegrationTypeDefaults(formData, nextType) {
     return {
       ...formData,
       integration_type: nextType,
-      integration_name: formData.integration_name || 'Cal.com Booking',
+      integration_name: formData.integration_name || 'Booking Scheduler',
       config: {
         ...(formData.config || {}),
         auto_provision:
@@ -663,7 +663,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       !autoProvisionCalcom &&
       !formData.api_credentials.api_key
     ) {
-      toast.error('Cal.com API Key is required.');
+      toast.error('Scheduler API Key is required.');
       return;
     }
     if (
@@ -671,7 +671,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       !autoProvisionCalcom &&
       !formData.api_credentials.webhook_secret
     ) {
-      toast.error('Cal.com Webhook Secret is required.');
+      toast.error('Scheduler webhook secret is required.');
       return;
     }
     if (
@@ -679,7 +679,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       !autoProvisionCalcom &&
       !formData.config.cal_link
     ) {
-      toast.error('Cal.com booking link (cal_link) is required.');
+      toast.error('Booking link (cal_link) is required.');
       return;
     }
     if (
@@ -1701,7 +1701,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
         </Card>
       )}
 
-      {/* ── Cal.com ── */}
+      {/* ── Booking Scheduler ── */}
       {formData.integration_type === 'calcom' && (
         <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
           <CardContent className="space-y-4 pt-4">
@@ -1716,7 +1716,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             <div className="flex items-center justify-between rounded-md border border-slate-200 dark:border-slate-700 p-3">
               <div>
                 <Label htmlFor="calcom_auto_provision" className="text-sm font-medium">
-                  Auto-provision Cal.com integration
+                  Auto-provision scheduler integration
                 </Label>
                 <p className="text-xs text-muted-foreground mt-1">
                   Recommended. Saves the integration with generated scheduler IDs, event type, API
@@ -1746,7 +1746,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               />
               <p className="text-xs text-muted-foreground">
                 Optional with auto-provision on. If left blank, AiSHA generates one and stores the
-                hashed key in Cal.com.
+                hashed key in the scheduler database.
               </p>
             </div>
 
@@ -1765,8 +1765,8 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 required={formData.config?.auto_provision === false}
               />
               <p className="text-xs text-muted-foreground">
-                Optional with auto-provision on. Webhooks are auto-registered to{' '}
-                <code className="text-xs">{getBackendUrl()}/api/webhooks/calcom</code>.
+                Optional with auto-provision on. Webhooks are auto-registered automatically for this
+                integration.
               </p>
             </div>
 
@@ -1825,7 +1825,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
                 id="calcom_base_url"
                 value={formData.config.base_url || ''}
                 onChange={(e) => handleConfigChange('base_url', e.target.value)}
-                placeholder="https://cal.com"
+                placeholder="https://scheduler.example.com"
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">

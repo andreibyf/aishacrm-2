@@ -1,7 +1,7 @@
 /**
  * BookingAnalytics.jsx
  *
- * Analytics dashboard for Cal.com booking metrics and session package performance.
+ * Analytics dashboard for scheduler booking metrics and session package performance.
  * Accessible via Settings → Booking Analytics.
  *
  * Features:

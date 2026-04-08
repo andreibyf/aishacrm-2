@@ -1,18 +1,18 @@
 /**
  * CalendarSync.jsx
  *
- * User/Tenant settings panel for Cal.com calendar sync configuration.
+ * User/Tenant settings panel for scheduling-provider calendar sync configuration.
  * Location: Settings → Calendar Sync
  *
  * Features:
- *   - List connected external calendars (fetched from Cal.com API via backend proxy)
- *   - "Connect Calendar" button → OAuth redirect through Cal.com
+ *   - List connected external calendars (fetched from scheduler API via backend proxy)
+ *   - "Connect Calendar" button → OAuth redirect through scheduler service
  *   - Remove / disconnect calendar
  *   - Primary calendar selector
  *   - Two-way sync status indicator
  *   - Business hours / availability preferences (tenant-level)
  *
- * OAuth tokens live in Cal.com DB — AiSHA just stores the Cal.com integration
+ * OAuth tokens live in scheduler DB — AiSHA just stores the scheduling integration
  * credentials (api_key, cal_link) in tenant_integrations and proxies calls.
  */
 
@@ -135,7 +135,7 @@ export default function CalendarSync({ tenantId }) {
     setLoading(true);
     try {
       const cacheBust = `_t=${Date.now()}`;
-      // Check if tenant has Cal.com configured
+      // Check if tenant has scheduling integration configured
       const res = await apiFetch(
         `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom&${cacheBust}`,
       );
@@ -170,8 +170,8 @@ export default function CalendarSync({ tenantId }) {
         setSyncInfo(null);
       }
 
-      // Fetch connected calendars via Cal.com API (proxied through backend)
-      // Note: Cal.com proxy routes (/api/session-packages/calcom/*) are not yet
+      // Fetch connected calendars via scheduling API (proxied through backend)
+      // Note: scheduling proxy routes (/api/session-packages/calcom/*) are not yet
       // implemented — show placeholder until the backend endpoints are added.
       setCalendars([]);
       setPrimaryCalendarId(null);
@@ -189,15 +189,15 @@ export default function CalendarSync({ tenantId }) {
   async function handleConnectOAuth(provider) {
     if (!calcomIntegration) {
       toast.error(
-        'Cal.com integration not configured. Add your Cal.com API key in Tenant Integrations first.',
+        'Scheduling integration not configured. Add your scheduler API key in Tenant Integrations first.',
       );
       return;
     }
     const base = schedulerBaseUrl;
-    // Cal.com OAuth flow — redirect user to Cal.com's calendar connection page
+    // Scheduler OAuth flow — redirect user to calendar connection page
     const oauthUrl = `${base}/apps/${provider}?redirect_url=${encodeURIComponent(window.location.href)}`;
     window.open(oauthUrl, '_blank', 'noopener,noreferrer');
-    toast.info('Complete the calendar connection in the Cal.com window, then refresh this page.');
+    toast.info('Complete the calendar connection in the scheduler window, then refresh this page.');
   }
 
   async function handleSetPrimary(calendarId) {
@@ -242,8 +242,8 @@ export default function CalendarSync({ tenantId }) {
     setSyncing(true);
     try {
       // Trigger full bidirectional sync:
-      //   1. Pull Cal.com bookings → CRM (reconcile missed webhooks)
-      //   2. Push unsynced CRM timed activities → Cal.com (create blocker bookings)
+      //   1. Pull scheduler bookings → CRM (reconcile missed webhooks)
+      //   2. Push unsynced CRM timed activities → scheduler (create blocker bookings)
       const res = await apiFetch(`/api/calcom-sync/trigger?tenant_id=${tenantId}`, {
         method: 'POST',
       });
@@ -259,7 +259,7 @@ export default function CalendarSync({ tenantId }) {
         );
       } else {
         toast.success(
-          `Sync complete — ${bookings_pulled} booking(s) pulled, ${activities_pushed} activit${activities_pushed === 1 ? 'y' : 'ies'} pushed to Cal.com.`,
+          `Sync complete — ${bookings_pulled} booking(s) pulled, ${activities_pushed} activit${activities_pushed === 1 ? 'y' : 'ies'} pushed to scheduler.`,
         );
       }
       await fetchCalendars();
@@ -360,7 +360,7 @@ export default function CalendarSync({ tenantId }) {
         <CardHeader>
           <CardTitle className="text-sm font-medium">Sync Health</CardTitle>
           <CardDescription>
-            Current Cal.com connectivity and the last known bidirectional sync state for this
+            Current scheduler connectivity and the last known bidirectional sync state for this
             tenant.
           </CardDescription>
         </CardHeader>
@@ -386,7 +386,7 @@ export default function CalendarSync({ tenantId }) {
             )}
             {syncInfo?.calcom_db_available === false && (
               <Badge className="bg-red-500/10 text-red-400 border-red-500/30">
-                Cal.com DB unavailable
+                Scheduler DB unavailable
               </Badge>
             )}
           </div>
@@ -576,7 +576,7 @@ export default function CalendarSync({ tenantId }) {
         </CardContent>
       </Card>
 
-      {/* Cal.com deep link */}
+      {/* Scheduler deep link */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <ExternalLink className="w-4 h-4" />
         <span>Manage advanced availability settings in your</span>
