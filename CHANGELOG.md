@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.0.15] - 2026-04-08
+
+### Fixed
+
+- **Tenant industry playbook seeding now tolerates enum variants (`backend/routes/tenants.js`):** Added `getIndustryPlaybookTemplates()` to normalize and alias industry values (including spacing/hyphen variants and legacy `real_estate_property_management` forms) before seed lookup. This prevents new real-estate tenants from silently skipping CARE playbook seeding when the submitted industry string is semantically correct but not an exact key match.
+- **Tenant edit now backfills playbooks when industry is set/changed (`backend/routes/tenants.js`):** `PUT /api/tenants/:id` now attempts non-fatal playbook seeding when `industry` is updated, so selecting "Real Estate & Property Management" in Edit Tenant can populate missing CARE playbooks without requiring tenant recreation.
+- **Playbook seeding is now idempotent (`backend/routes/tenants.js`):** `seedIndustryPlaybooks()` first loads existing `care_playbook.trigger_type` values and inserts only missing templates, preventing duplicate seeds when the function is called multiple times.
+- **Regression coverage for playbook seed resolution (`backend/__tests__/routes/tenants.playbook-seeding.test.js`):** Added focused tests for canonical and variant real-estate industry values to ensure seeding remains resilient.
+
+---
+
 ## [6.0.14] - 2026-04-08
 
 ### Fixed

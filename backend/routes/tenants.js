@@ -737,6 +737,43 @@ const INDUSTRY_PLAYBOOKS = {
   real_estate_and_property_management: FL_REAL_ESTATE_PLAYBOOKS,
 };
 
+const INDUSTRY_PLAYBOOK_ALIASES = {
+  real_estate_property_management: 'real_estate_and_property_management',
+  real_estate_and_property_mgmt: 'real_estate_and_property_management',
+  real_estate_and_property_manager: 'real_estate_and_property_management',
+  real_estate_and_property_managment: 'real_estate_and_property_management',
+  real_estate_and_property_management_: 'real_estate_and_property_management',
+};
+
+/**
+ * Resolve playbook templates for an industry with tolerant matching.
+ * This prevents missed seeding when an industry value is semantically
+ * equivalent but not an exact enum key match.
+ *
+ * @param {string | null | undefined} industry
+ * @returns {Array<object>}
+ */
+export function getIndustryPlaybookTemplates(industry) {
+  if (!industry || typeof industry !== 'string') return [];
+
+  const normalized = industry
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const canonical = INDUSTRY_PLAYBOOK_ALIASES[normalized] || normalized;
+
+  if (INDUSTRY_PLAYBOOKS[canonical]) {
+    return INDUSTRY_PLAYBOOKS[canonical];
+  }
+
+  // Defensive fallback for future/legacy enum variants.
+  if (canonical.includes('real_estate') || canonical.includes('property_management')) {
+    return FL_REAL_ESTATE_PLAYBOOKS;
+  }
+
+  return [];
+}
+
 /**
  * Seed industry-specific CARE playbooks for a newly created tenant.
  * No-ops silently if the industry has no playbooks defined.
@@ -747,13 +784,42 @@ const INDUSTRY_PLAYBOOKS = {
  * @returns {Promise<{success: boolean, count: number, error?: string}>}
  */
 async function seedIndustryPlaybooks(tenantId, industry) {
-  const templates = INDUSTRY_PLAYBOOKS[industry];
+  const templates = getIndustryPlaybookTemplates(industry);
   if (!templates || templates.length === 0) {
+    logger.info(
+      `[Tenants] No playbook templates found for industry "${industry}" (tenant ${tenantId})`,
+    );
     return { success: true, count: 0 };
   }
   try {
-    const rows = templates.map((t) => ({ ...t, tenant_id: tenantId }));
     const adminClient = getSupabaseAdmin();
+
+    // Seed only missing trigger types so update/edit flows are safe and idempotent.
+    const { data: existing, error: existingErr } = await adminClient
+      .from('care_playbook')
+      .select('trigger_type')
+      .eq('tenant_id', tenantId);
+
+    if (existingErr) {
+      logger.error(
+        `[Tenants] Failed to query existing playbooks for tenant ${tenantId}:`,
+        existingErr.message,
+      );
+      return { success: false, count: 0, error: existingErr.message };
+    }
+
+    const existingTriggerTypes = new Set((existing || []).map((p) => p.trigger_type));
+    const rows = templates
+      .filter((t) => !existingTriggerTypes.has(t.trigger_type))
+      .map((t) => ({ ...t, tenant_id: tenantId }));
+
+    if (rows.length === 0) {
+      logger.info(
+        `[Tenants] Playbooks already present for tenant ${tenantId}; no new rows inserted`,
+      );
+      return { success: true, count: 0 };
+    }
+
     const { data, error } = await adminClient.from('care_playbook').insert(rows).select('id');
     if (error) {
       logger.error(
@@ -1392,6 +1458,22 @@ export default function createTenantRoutes(_pgPool) {
         });
       }
       const row = updated;
+
+      // If industry was changed/set, attempt to seed relevant playbooks.
+      // Non-fatal by design: tenant update should still succeed.
+      let seeded_playbooks = 0;
+      if (industry !== undefined && row?.industry) {
+        try {
+          const pbResult = await seedIndustryPlaybooks(row.id, row.industry);
+          seeded_playbooks = pbResult.count || 0;
+          if (!pbResult.success) {
+            logger.warn(`[Tenants] Playbook seeding warning on tenant update: ${pbResult.error}`);
+          }
+        } catch (pbErr) {
+          logger.warn('[Tenants] Playbook seeding error on tenant update:', pbErr.message);
+        }
+      }
+
       const normalized = {
         ...row,
         logo_url: row.branding_settings?.logo_url || row.metadata?.logo_url || null,
@@ -1399,14 +1481,15 @@ export default function createTenantRoutes(_pgPool) {
         accent_color: row.branding_settings?.accent_color || row.metadata?.accent_color || null,
         settings: row.branding_settings || {}, // For backward compatibility
         // Extract metadata fields to top-level for UI
-        country: row.metadata?.country || '',
-        major_city: row.metadata?.major_city || '',
-        industry: row.metadata?.industry || 'other',
-        business_model: row.metadata?.business_model || 'b2b',
-        geographic_focus: row.metadata?.geographic_focus || 'north_america',
-        elevenlabs_agent_id: row.metadata?.elevenlabs_agent_id || '',
-        display_order: row.metadata?.display_order ?? 0,
-        domain: row.metadata?.domain || '',
+        country: row.country || '',
+        major_city: row.major_city || '',
+        industry: row.industry || 'other',
+        business_model: row.business_model || 'b2b',
+        geographic_focus: row.geographic_focus || 'north_america',
+        elevenlabs_agent_id: row.elevenlabs_agent_id || '',
+        display_order: row.display_order ?? 0,
+        domain: row.domain || '',
+        seeded_playbooks,
       };
 
       // Create audit log entry
