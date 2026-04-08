@@ -25,7 +25,7 @@
 --   SELECT t.name AS tenant, cp.name AS playbook, cp.trigger_type,
 --          cp.is_enabled, cp.shadow_mode
 --   FROM care_playbook cp
---   JOIN tenants t ON t.id = cp.tenant_id
+--   JOIN tenant t ON t.id = cp.tenant_id
 --   WHERE t.industry IN ('real_estate','real_estate_and_property_management')
 --   ORDER BY t.name, cp.priority, cp.created_at;
 -- ============================================================
@@ -78,7 +78,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 100, 2880, 20
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -144,7 +144,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 100, 1440, 30
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -210,7 +210,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 100, 2880, 20
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -263,7 +263,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 100, 2880, 20
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -317,7 +317,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 90, 4320, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -393,7 +393,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 80, 99999, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -443,7 +443,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 80, 99999, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -506,7 +506,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 85, 99999, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -569,7 +569,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 80, 99999, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -658,7 +658,7 @@ SELECT
     }
   ]'::jsonb,
   'native', FALSE, TRUE, 80, 99999, 10
-FROM tenants t
+FROM tenant t
 WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
   AND NOT EXISTS (
     SELECT 1 FROM care_playbook cp
@@ -673,7 +673,7 @@ WHERE t.industry IN ('real_estate', 'real_estate_and_property_management')
 -- ============================================================
 -- SELECT t.name AS tenant, count(*) AS playbooks_seeded
 -- FROM care_playbook cp
--- JOIN tenants t ON t.id = cp.tenant_id
+-- JOIN tenant t ON t.id = cp.tenant_id
 -- WHERE t.industry IN ('real_estate','real_estate_and_property_management')
 --   AND cp.name LIKE 'FL:%'
 -- GROUP BY t.name

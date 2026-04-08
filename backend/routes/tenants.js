@@ -605,14 +605,15 @@ const INDUSTRY_PLAYBOOKS = {
  * @param {string} industry - Industry value from tenant record
  * @returns {Promise<{success: boolean, count: number, error?: string}>}
  */
-async function seedIndustryPlaybooks(supabase, tenantId, industry) {
+async function seedIndustryPlaybooks(tenantId, industry) {
   const templates = INDUSTRY_PLAYBOOKS[industry];
   if (!templates || templates.length === 0) {
     return { success: true, count: 0 };
   }
   try {
     const rows = templates.map((t) => ({ ...t, tenant_id: tenantId }));
-    const { data, error } = await supabase.from('care_playbook').insert(rows).select('id');
+    const adminClient = getSupabaseAdmin();
+    const { data, error } = await adminClient.from('care_playbook').insert(rows).select('id');
     if (error) {
       logger.error(
         `[Tenants] Failed to seed ${industry} playbooks for tenant ${tenantId}:`,
@@ -929,7 +930,7 @@ export default function createTenantRoutes(_pgPool) {
       let playbookCount = 0;
       if (industry) {
         try {
-          const pbResult = await seedIndustryPlaybooks(supabase, created.id, industry);
+          const pbResult = await seedIndustryPlaybooks(created.id, industry);
           playbookCount = pbResult.count;
           if (!pbResult.success) {
             logger.warn(`[Tenants] Playbook seeding warning: ${pbResult.error}`);
