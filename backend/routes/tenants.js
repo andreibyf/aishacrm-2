@@ -1370,7 +1370,11 @@ export default function createTenantRoutes(_pgPool) {
         data,
       });
     } catch (error) {
-      logger.error('Error deleting tenant:', error);
+      logger.error({ err: error, tenantId: req.params.id, msg: error.message }, 'Error deleting tenant');
+      // FK constraint violation — child records exist
+      if (error.message?.includes('violates foreign key') || error.message?.includes('23503')) {
+        return res.status(409).json({ status: 'error', message: 'Cannot delete tenant: related records exist. Delete associated data first.' });
+      }
       res.status(500).json({ status: 'error', message: error.message });
     }
   });
