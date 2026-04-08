@@ -9,6 +9,147 @@ import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import logger from '../lib/logger.js';
 
 /**
+ * Cascade-deletes all data belonging to a tenant in dependency order,
+ * then deletes the tenant row itself.
+ * Uses service-role client to bypass RLS.
+ * @param {object} supabase - Supabase admin client
+ * @param {string} tenantId - UUID of the tenant to delete
+ * @returns {{ deletedCounts: object, tenantRow: object }}
+ */
+async function cascadeDeleteTenant(supabase, tenantId) {
+  // Tables ordered deepest-children → parents to avoid FK violations.
+  // Tables without a `tenant_id` column (e.g. junction/log tables) are
+  // skipped gracefully if the delete returns an error.
+  const tables = [
+    // Deep children
+    'conversation_messages',
+    'care_playbook_execution',
+    'customer_care_state_history',
+    'workflow_execution',
+    'project_milestones',
+    'project_assignments',
+    'booking_sessions',
+    'communications_messages',
+    'communications_entity_links',
+    'communications_lead_capture_queue',
+    'entity_transitions',
+    'assignment_history',
+    'contact_history',
+    'lead_history',
+    // Activity / audit
+    'activities',
+    'note',
+    'braid_audit_log',
+    'audit_log',
+    'system_logs',
+    'performance_logs',
+    'performance_log',
+    'synchealth',
+    'import_log',
+    'checkpoint',
+    'archive_index',
+    'artifact_refs',
+    'pep_saved_reports',
+    'test_report',
+    // CRM pipeline
+    'opportunities',
+    'leads',
+    'contacts',
+    'accounts',
+    'bizdev_sources',
+    'bizdev_source',
+    'client_requirement',
+    // Conversations / AI
+    'conversations',
+    'ai_suggestions',
+    'ai_memory_chunks',
+    'ai_conversation_summaries',
+    'ai_settings',
+    'ai_campaign',
+    'ai_campaigns',
+    // CARE / Workflows
+    'care_playbook',
+    'care_workflow_config',
+    'customer_care_state',
+    'workflow',
+    'workflows',
+    'workflow_template',
+    'webhook',
+    'email_template',
+    // Communications
+    'communications_threads',
+    // People
+    'projects',
+    'workers',
+    'teams',
+    'team_members',
+    'name_to_employee',
+    'employees',
+    'users',
+    // Finance
+    'cash_flow',
+    'daily_sales_metrics',
+    'session_credits',
+    'session_packages',
+    'subscription',
+    // Config / misc (last before tenant row)
+    'notifications',
+    'modulesettings',
+    'field_customization',
+    'entity_labels',
+    'systembranding',
+    'file',
+    'user_invitation',
+    'announcement',
+    'documentation',
+    'guide_content',
+    'api_key',
+    'apikey',
+    'tenant_integration',
+    'tenant_integrations',
+    'devai_health_alerts',
+    'cron_job',
+    'cache',
+    'person_profile',
+  ];
+
+  const deletedCounts = {};
+  for (const table of tables) {
+    try {
+      const { count, error } = await supabase
+        .from(table)
+        .delete({ count: 'exact' })
+        .eq('tenant_id', tenantId);
+      if (error) {
+        // Log but continue — table may not exist or may lack tenant_id column
+        logger.warn({ table, tenantId, msg: error.message }, '[cascadeDeleteTenant] skipped table');
+      } else if (count > 0) {
+        deletedCounts[table] = count;
+      }
+    } catch (err) {
+      logger.warn(
+        { table, tenantId, msg: err.message },
+        '[cascadeDeleteTenant] unexpected error on table',
+      );
+    }
+  }
+
+  // Finally delete the tenant row
+  const { data: tenantRow, error: tenantDeleteError } = await supabase
+    .from('tenant')
+    .delete()
+    .eq('id', tenantId)
+    .select()
+    .single();
+
+  if (tenantDeleteError && tenantDeleteError.code !== 'PGRST116') {
+    throw new Error(tenantDeleteError.message);
+  }
+
+  return { deletedCounts, tenantRow };
+}
+
+/**
  * Default modules that should be initialized for every new tenant.
  * These match the modules defined in frontend's ModuleManager.jsx
  * All modules are enabled by default.
@@ -1330,33 +1471,37 @@ export default function createTenantRoutes(_pgPool) {
     }
   });
 
-  // DELETE /api/tenants/:id - Delete tenant
+  // DELETE /api/tenants/:id - Cascade-delete tenant and all associated data
   router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
     try {
-      const { id } = req.params;
-
       const supabase = getSupabaseAdmin();
-      const { data, error } = await supabase.from('tenant').delete().eq('id', id).select().single();
-      if (error && error.code !== 'PGRST116') throw new Error(error.message);
-      if (!data) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Tenant not found',
-        });
+
+      // Verify the tenant exists before deleting
+      const { data: existing, error: fetchError } = await supabase
+        .from('tenant')
+        .select('id, name, tenant_id')
+        .eq('id', id)
+        .single();
+      if (fetchError && fetchError.code !== 'PGRST116') throw new Error(fetchError.message);
+      if (!existing) {
+        return res.status(404).json({ status: 'error', message: 'Tenant not found' });
       }
 
-      // Create audit log for tenant deletion
+      // Cascade-delete all child data then the tenant row
+      const { deletedCounts, tenantRow } = await cascadeDeleteTenant(supabase, id);
+
+      logger.info({ tenantId: id, deletedCounts }, '[Tenants] Cascade delete completed');
+
+      // Audit log (best-effort)
       try {
         await createAuditLog(supabase, {
-          tenant_id: data?.tenant_id || 'system',
+          tenant_id: existing.tenant_id || 'system',
           user_email: getUserEmailFromRequest(req),
           action: 'delete',
           entity_type: 'tenant',
           entity_id: id,
-          changes: {
-            name: data?.name,
-            tenant_id: data?.tenant_id,
-          },
+          changes: { name: existing.name, tenant_id: existing.tenant_id, deletedCounts },
           ip_address: getClientIP(req),
           user_agent: req.headers['user-agent'],
         });
@@ -1366,15 +1511,12 @@ export default function createTenantRoutes(_pgPool) {
 
       res.json({
         status: 'success',
-        message: 'Tenant deleted',
-        data,
+        message: 'Tenant and all associated data deleted',
+        data: tenantRow,
+        deletedCounts,
       });
     } catch (error) {
-      logger.error({ err: error, tenantId: req.params.id, msg: error.message }, 'Error deleting tenant');
-      // FK constraint violation — child records exist
-      if (error.message?.includes('violates foreign key') || error.message?.includes('23503')) {
-        return res.status(409).json({ status: 'error', message: 'Cannot delete tenant: related records exist. Delete associated data first.' });
-      }
+      logger.error({ err: error, tenantId: id, msg: error.message }, 'Error deleting tenant');
       res.status(500).json({ status: 'error', message: error.message });
     }
   });

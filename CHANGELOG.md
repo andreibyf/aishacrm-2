@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.0.14] - 2026-04-08
+
+### Fixed
+
+- **Tenant deletion now performs full cascade cleanup (`backend/routes/tenants.js`):** Replaced single-row tenant deletion with a new `cascadeDeleteTenant()` helper that deletes tenant-scoped child records across CRM, AI, workflows, communications, finance, and config tables before deleting the `tenant` row. This prevents `DELETE /api/tenants/:id` from failing with FK constraint errors when related data exists.
+- **Tenant delete API observability improved (`backend/routes/tenants.js`):** Delete responses now include `deletedCounts` by table and logs include structured cascade completion metadata, making production deletion behavior debuggable and auditable.
+
+---
+
 ## [6.0.13] - 2026-04-07
 
 ### Fixed
