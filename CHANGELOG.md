@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
+
 ### Fixed
 
 ---

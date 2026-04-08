@@ -1,38 +1,11 @@
 import express from 'express';
-import OpenAI from 'openai';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { generateChatCompletion } from '../lib/aiEngine/llmClient.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
 
 const CACHE_TTL_HOURS = 24;
-
-/**
- * Get an OpenAI-compatible client pointed at Ollama (or fallback to OpenAI).
- * Returns { client, model, source } or null if nothing is configured.
- */
-function getLLMClient() {
-  const baseURL = process.env.LOCAL_LLM_BASE_URL; // e.g. http://ollama:11434/v1
-  if (baseURL) {
-    return {
-      client: new OpenAI({
-        baseURL,
-        apiKey: process.env.LOCAL_LLM_API_KEY || 'ollama',
-      }),
-      model: process.env.SUMMARY_LLM_MODEL || 'llama3.2:3b',
-      source: 'ollama',
-    };
-  }
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (apiKey) {
-    return {
-      client: new OpenAI({ apiKey }),
-      model: 'gpt-4o-mini',
-      source: 'openai',
-    };
-  }
-  return null;
-}
 
 /**
  * Generate AI summary for a person/entity profile
@@ -76,49 +49,48 @@ router.post('/summarize-person-profile', async (req, res) => {
     // ── Build context string ────────────────────────────────────────────────
     const context = buildProfileContext(profile_data, person_type);
 
-    // ── Try LLM (Ollama first, OpenAI fallback) ────────────────────────────
+    // ── Try LLM via unified AI engine ──────────────────────────────────────
     let ai_summary = null;
     let source = 'fallback';
-    const llm = getLLMClient();
+    const provider = process.env.SUMMARY_LLM_PROVIDER || 'local';
+    const model = process.env.SUMMARY_LLM_MODEL || 'llama3.2:3b';
+    const temperature = parseFloat(process.env.SUMMARY_TEMPERATURE ?? '0.1');
 
-    if (llm) {
-      try {
-        logger.debug(
-          `[AI Summary] Generating via ${llm.source} model=${llm.model} for ${person_id}`,
-        );
-        const temperature = parseFloat(process.env.SUMMARY_TEMPERATURE ?? '0.1');
-        const completion = await llm.client.chat.completions.create({
-          model: llm.model,
-          temperature,
-          max_tokens: 150,
+    try {
+      logger.debug(`[AI Summary] Generating via ${provider} model=${model} for ${person_id}`);
+      const result = await generateChatCompletion({
+        provider,
+        model,
+        maxTokens: 150,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a CRM data summariser. Your job is to summarise ONLY the data you are given - ' +
+              'do NOT infer, assume, or invent any information that is not explicitly present in the input. ' +
+              'If a field is missing or empty, do not guess at it. ' +
+              'If there are no activities or notes, do not mention engagement or interest. ' +
+              'Write 2-3 factual sentences only. No bullet points, no headers. ' +
+              'Stick strictly to: who the person is (name, title, company), their current status, ' +
+              'and any concrete next action only if one is recorded in the data.',
+          },
+          {
+            role: 'user',
+            content: `Summarise this ${person_type} using only the data provided. Do not add context or assumptions:\n\n${context}`,
+          },
+        ],
+        temperature,
+        tenantId: req.tenant?.id || tenant_id || null,
+      });
 
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a CRM data summariser. Your job is to summarise ONLY the data you are given — ' +
-                'do NOT infer, assume, or invent any information that is not explicitly present in the input. ' +
-                'If a field is missing or empty, do not guess at it. ' +
-                'If there are no activities or notes, do not mention engagement or interest. ' +
-                'Write 2-3 factual sentences only. No bullet points, no headers. ' +
-                'Stick strictly to: who the person is (name, title, company), their current status, ' +
-                'and any concrete next action only if one is recorded in the data.',
-            },
-            {
-              role: 'user',
-              content: `Summarise this ${person_type} using only the data provided. Do not add context or assumptions:\n\n${context}`,
-            },
-          ],
-        });
-        const text = completion.choices?.[0]?.message?.content?.trim();
-        if (text && text.length > 20) {
-          ai_summary = text;
-          source = llm.source;
-          logger.debug(`[AI Summary] Generated via ${source} for ${person_id}`);
-        }
-      } catch (llmErr) {
-        logger.warn({ err: llmErr }, `[AI Summary] ${llm.source} failed, falling back to template`);
+      const text = result.status === 'success' ? String(result.content || '').trim() : '';
+      if (text && text.length > 20) {
+        ai_summary = text;
+        source = provider;
+        logger.debug(`[AI Summary] Generated via ${source} for ${person_id}`);
       }
+    } catch (llmErr) {
+      logger.warn({ err: llmErr }, `[AI Summary] ${provider} failed, falling back to template`);
     }
 
     // ── Fallback: deterministic template ───────────────────────────────────

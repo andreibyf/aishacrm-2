@@ -109,6 +109,42 @@ async function callLLMWithFailover({
   // Determine primary and secondary providers
   const primaryProvider =
     explicitProvider || baseConfig.provider || process.env.LLM_PROVIDER || 'openai';
+
+  if (process.env.LITELLM_ENABLED === 'true') {
+    const startMs = Date.now();
+    const result = await generateChatCompletion({
+      provider: primaryProvider,
+      model: explicitModel || baseConfig.model,
+      messages,
+      temperature,
+      tenantId,
+    });
+
+    logLLMActivity({
+      tenantId,
+      capability,
+      provider: primaryProvider,
+      model: result.raw?.model || baseConfig.model,
+      nodeId: 'mcp:callLLMWithFailover:litellm',
+      status: result.status,
+      durationMs: Date.now() - startMs,
+      usage: result.raw?.usage || null,
+      attempt: 1,
+      totalAttempts: 1,
+      ...(result.status === 'error' ? { error: result.error } : {}),
+    });
+
+    return result.status === 'success'
+      ? {
+          ok: true,
+          result,
+          provider: primaryProvider,
+          model: result.raw?.model || explicitModel || baseConfig.model,
+          usage: result.raw?.usage || null,
+        }
+      : { ok: false, error: result.error };
+  }
+
   const secondaryProvider = primaryProvider === 'anthropic' ? 'openai' : 'anthropic';
 
   // Build candidate list: primary first, then secondary

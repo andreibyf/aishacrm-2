@@ -15,6 +15,7 @@
  */
 
 import fetch from 'node-fetch';
+import { callViaLiteLLM } from './litellmClient.js';
 
 // ============================================================================
 // OpenAI-compatible providers (openai, groq, local)
@@ -257,8 +258,10 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
  * @param {string} opts.model      - model name
  * @param {Array}  opts.messages   - OpenAI-style messages [{ role, content }]
  * @param {number} [opts.temperature]
- * @param {string} [opts.apiKey]   - explicit API key override
- * @param {string} [opts.baseUrl]  - explicit base URL override
+ * @param {string} [opts.apiKey]    - explicit API key override
+ * @param {string} [opts.baseUrl]   - explicit base URL override
+ * @param {string} [opts.tenantId]  - tenant UUID for spend tracking (LiteLLM metadata)
+ * @param {number} [opts.maxTokens] - hard cap on response tokens (passed to LiteLLM when enabled)
  *
  * @returns {Promise<{ status: "success"|"error", content?: string, raw?: any, error?: string }>}
  */
@@ -269,7 +272,13 @@ export async function generateChatCompletion({
   temperature = 0.2,
   apiKey,
   baseUrl,
+  tenantId = null,
+  maxTokens = null,
 }) {
+  if (process.env.LITELLM_ENABLED === 'true') {
+    return await callViaLiteLLM({ provider, model, messages, temperature, tenantId, maxTokens });
+  }
+
   // Route to appropriate provider handler
   if (provider === 'anthropic') {
     return callAnthropic({ model, messages, temperature, apiKey, baseUrl });
