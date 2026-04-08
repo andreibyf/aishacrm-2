@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Production API URL resolution for settings and related pages (`src/components/settings/CarePlaybooks.jsx`, `src/components/settings/CareSettings.jsx`, `src/components/settings/AiSettings.jsx`, `src/components/leads/AssignmentHistory.jsx`, `src/components/dashboard/RecentActivities.jsx`, `src/pages/ConstructionProjects.jsx`, `src/config/constants.js`):** Replaced legacy `VITE_BACKEND_URL` localhost fallbacks with centralized backend URL resolution (`BACKEND_URL` from `@/api/entities` / `getBackendUrl()`), so browser requests consistently use runtime `window._env_.VITE_AISHACRM_BACKEND_URL` in production. This fixes CARE/workflow requests incorrectly hitting `http://localhost:4001`, which produced 401s and downstream auth-refresh 429 bursts.
 - **Tenant playbook seeding now handles additional real-estate industry variants and persisted values (`backend/routes/tenants.js`):** Improved industry normalization to handle `&`, punctuation, and `property_mgmt` variants, then seed from the persisted tenant industry (with metadata fallback) during create/update flows. This prevents "Real Estate & Property Management" tenants from missing realtor playbook seeding when payload values vary.
 - **Regression tests expanded for real-estate resolver variants (`backend/__tests__/routes/tenants.playbook-seeding.test.js`):** Added coverage for `&` and abbreviated `Mgmt` forms to prevent future seeding regressions.
 

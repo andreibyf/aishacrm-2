@@ -4,6 +4,7 @@
  * All application constants should be defined here to ensure consistency
  * across the codebase and make configuration changes easier.
  */
+import { getBackendUrl } from '../api/backendUrl';
 
 // =============================================================================
 // API & NETWORK TIMEOUTS
@@ -83,7 +84,7 @@ export const PAGINATION = {
 
 export const API = {
   /** Backend API base URL (from env or fallback) */
-  BASE_URL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001',
+  BASE_URL: getBackendUrl(),
 
   /** Supabase URL */
   SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || '',
@@ -241,7 +242,11 @@ export function isValidEmail(str) {
  * @param {number} maxLimit - Maximum allowed
  * @returns {number}
  */
-export function parseLimit(value, defaultLimit = PAGINATION.DEFAULT_LIMIT, maxLimit = PAGINATION.MAX_LIMIT) {
+export function parseLimit(
+  value,
+  defaultLimit = PAGINATION.DEFAULT_LIMIT,
+  maxLimit = PAGINATION.MAX_LIMIT,
+) {
   const parsed = parseInt(value, 10);
   if (isNaN(parsed) || parsed < 1) return defaultLimit;
   return Math.min(parsed, maxLimit);

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowRight, UserPlus, UserMinus, RefreshCw, ChevronUp } from 'lucide-react';
+import { BACKEND_URL } from '@/api/entities';
 
 /**
  * AssignmentHistory — visual breadcrumb trail of lead assignment changes.
@@ -14,8 +15,6 @@ export default function AssignmentHistory({ entityId, entityType = 'lead', tenan
 
     const fetchHistory = async () => {
       try {
-        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
-
         // Map entity types to their API route prefixes
         const routeMap = {
           lead: '/api/v2/leads',

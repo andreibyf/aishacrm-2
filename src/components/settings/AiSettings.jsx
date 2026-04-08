@@ -23,8 +23,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+import { BACKEND_URL } from '@/api/entities';
 
 const CATEGORY_CONFIG = {
   context: {

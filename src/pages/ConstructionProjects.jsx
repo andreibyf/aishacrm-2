@@ -3,30 +3,32 @@
  * Manages projects and team assignments across the organization
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { ConstructionProject, ConstructionAssignment, Account, Contact, Lead, Worker } from "@/api/entities";
-import { useTenant } from "@/components/shared/tenantContext";
-import { useUser } from "@/components/shared/useUser";
-import { useAuthCookiesReady } from "@/components/shared/useAuthCookiesReady";
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+  ConstructionProject,
+  ConstructionAssignment,
+  Account,
+  Contact,
+  Lead,
+  Worker,
+} from '@/api/entities';
+import { BACKEND_URL } from '@/api/entities';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -34,7 +36,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -42,8 +44,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Building2,
   Plus,
@@ -64,18 +66,18 @@ import {
   XCircle,
   Pause,
   Milestone,
-} from "lucide-react";
-import { toast } from "sonner";
-import { format } from "date-fns";
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 // Status badge colors
 const statusColors = {
-  Planned: "bg-blue-100 text-blue-800",
-  Active: "bg-green-100 text-green-800",
-  Completed: "bg-gray-100 text-gray-800",
-  Cancelled: "bg-red-100 text-red-800",
-  "On Hold": "bg-yellow-100 text-yellow-800",
-  Pending: "bg-orange-100 text-orange-800",
+  Planned: 'bg-blue-100 text-blue-800',
+  Active: 'bg-green-100 text-green-800',
+  Completed: 'bg-gray-100 text-gray-800',
+  Cancelled: 'bg-red-100 text-red-800',
+  'On Hold': 'bg-yellow-100 text-yellow-800',
+  Pending: 'bg-orange-100 text-orange-800',
 };
 
 const statusIcons = {
@@ -83,16 +85,16 @@ const statusIcons = {
   Active: CheckCircle,
   Completed: CheckCircle,
   Cancelled: XCircle,
-  "On Hold": Pause,
+  'On Hold': Pause,
   Pending: Clock,
 };
 
 // Format currency
 const formatCurrency = (value) => {
-  if (!value) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  if (!value) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
@@ -100,9 +102,9 @@ const formatCurrency = (value) => {
 
 // Format date
 const formatDate = (dateStr) => {
-  if (!dateStr) return "—";
+  if (!dateStr) return '—';
   try {
-    return format(new Date(dateStr), "MMM d, yyyy");
+    return format(new Date(dateStr), 'MMM d, yyyy');
   } catch {
     return dateStr;
   }
@@ -122,8 +124,8 @@ export default function ConstructionProjects() {
   const [workers, setWorkers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Dialog states
   const [showProjectDialog, setShowProjectDialog] = useState(false);
@@ -135,32 +137,32 @@ export default function ConstructionProjects() {
 
   // Form state for project
   const [projectForm, setProjectForm] = useState({
-    project_name: "",
-    account_id: "",
-    lead_id: "",
-    site_name: "",
-    site_address: "",
-    project_manager_contact_id: "",
-    supervisor_contact_id: "",
-    start_date: "",
-    end_date: "",
-    project_value: "",
-    status: "Planned",
-    description: "",
-    notes: "",
+    project_name: '',
+    account_id: '',
+    lead_id: '',
+    site_name: '',
+    site_address: '',
+    project_manager_contact_id: '',
+    supervisor_contact_id: '',
+    start_date: '',
+    end_date: '',
+    project_value: '',
+    status: 'Planned',
+    description: '',
+    notes: '',
   });
 
   // Form state for assignment
   const [assignmentForm, setAssignmentForm] = useState({
-    worker_id: "",
-    role: "",
-    start_date: "",
-    end_date: "",
-    pay_rate: "",
-    bill_rate: "",
-    rate_type: "hourly",
-    status: "Active",
-    notes: "",
+    worker_id: '',
+    role: '',
+    start_date: '',
+    end_date: '',
+    pay_rate: '',
+    bill_rate: '',
+    rate_type: 'hourly',
+    status: 'Active',
+    notes: '',
   });
 
   // Milestone states
@@ -168,10 +170,10 @@ export default function ConstructionProjects() {
   const [showMilestoneDialog, setShowMilestoneDialog] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState(null);
   const [milestoneForm, setMilestoneForm] = useState({
-    title: "",
-    description: "",
-    due_date: "",
-    status: "pending",
+    title: '',
+    description: '',
+    due_date: '',
+    status: 'pending',
   });
 
   // Load data
@@ -194,8 +196,8 @@ export default function ConstructionProjects() {
       setLeads(Array.isArray(leadsData) ? leadsData : leadsData?.data || []);
       setWorkers(Array.isArray(workersData) ? workersData : workersData?.data || []);
     } catch (err) {
-      console.error("[ConstructionProjects] Load error:", err);
-      toast.error("Failed to load data");
+      console.error('[ConstructionProjects] Load error:', err);
+      toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -214,7 +216,7 @@ export default function ConstructionProjects() {
         project.site_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         project.account?.name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStatus = statusFilter === "all" || project.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -224,19 +226,19 @@ export default function ConstructionProjects() {
   const handleCreateProject = () => {
     setEditingProject(null);
     setProjectForm({
-      project_name: "",
-      account_id: "__none__",
-      lead_id: "__none__",
-      site_name: "",
-      site_address: "",
-      project_manager_contact_id: "__none__",
-      supervisor_contact_id: "__none__",
-      start_date: "",
-      end_date: "",
-      project_value: "",
-      status: "Planned",
-      description: "",
-      notes: "",
+      project_name: '',
+      account_id: '__none__',
+      lead_id: '__none__',
+      site_name: '',
+      site_address: '',
+      project_manager_contact_id: '__none__',
+      supervisor_contact_id: '__none__',
+      start_date: '',
+      end_date: '',
+      project_value: '',
+      status: 'Planned',
+      description: '',
+      notes: '',
     });
     setShowProjectDialog(true);
   };
@@ -244,31 +246,31 @@ export default function ConstructionProjects() {
   const handleEditProject = (project) => {
     setEditingProject(project);
     setProjectForm({
-      project_name: project.project_name || "",
-      account_id: project.account_id || "__none__",
-      lead_id: project.lead_id || "__none__",
-      site_name: project.site_name || "",
-      site_address: project.site_address || "",
-      project_manager_contact_id: project.project_manager_contact_id || "__none__",
-      supervisor_contact_id: project.supervisor_contact_id || "__none__",
-      start_date: project.start_date || "",
-      end_date: project.end_date || "",
-      project_value: project.project_value || "",
-      status: project.status || "Planned",
-      description: project.description || "",
-      notes: project.notes || "",
+      project_name: project.project_name || '',
+      account_id: project.account_id || '__none__',
+      lead_id: project.lead_id || '__none__',
+      site_name: project.site_name || '',
+      site_address: project.site_address || '',
+      project_manager_contact_id: project.project_manager_contact_id || '__none__',
+      supervisor_contact_id: project.supervisor_contact_id || '__none__',
+      start_date: project.start_date || '',
+      end_date: project.end_date || '',
+      project_value: project.project_value || '',
+      status: project.status || 'Planned',
+      description: project.description || '',
+      notes: project.notes || '',
     });
     setShowProjectDialog(true);
   };
 
   const handleSaveProject = async () => {
     if (!projectForm.project_name?.trim()) {
-      toast.error("Project name is required");
+      toast.error('Project name is required');
       return;
     }
 
     // Helper to convert __none__ sentinel value to null
-    const toNullable = (v) => (!v || v === "__none__" ? null : v);
+    const toNullable = (v) => (!v || v === '__none__' ? null : v);
 
     try {
       const payload = {
@@ -283,32 +285,34 @@ export default function ConstructionProjects() {
 
       if (editingProject) {
         await ConstructionProject.update(editingProject.id, payload);
-        toast.success("Project updated");
+        toast.success('Project updated');
       } else {
         await ConstructionProject.create(payload);
-        toast.success("Project created");
+        toast.success('Project created');
       }
 
       setShowProjectDialog(false);
       loadData();
     } catch (err) {
-      console.error("[ConstructionProjects] Save error:", err);
-      toast.error(err.message || "Failed to save project");
+      console.error('[ConstructionProjects] Save error:', err);
+      toast.error(err.message || 'Failed to save project');
     }
   };
 
   const handleDeleteProject = async (project) => {
-    if (!confirm(`Delete project "${project.project_name}"? This will also delete all assignments.`)) {
+    if (
+      !confirm(`Delete project "${project.project_name}"? This will also delete all assignments.`)
+    ) {
       return;
     }
 
     try {
       await ConstructionProject.delete(project.id);
-      toast.success("Project deleted");
+      toast.success('Project deleted');
       loadData();
     } catch (err) {
-      console.error("[ConstructionProjects] Delete error:", err);
-      toast.error(err.message || "Failed to delete project");
+      console.error('[ConstructionProjects] Delete error:', err);
+      toast.error(err.message || 'Failed to delete project');
     }
   };
 
@@ -320,8 +324,8 @@ export default function ConstructionProjects() {
       // Load milestones for this project
       loadMilestones(project.id);
     } catch (err) {
-      console.error("[ConstructionProjects] View error:", err);
-      toast.error("Failed to load project details");
+      console.error('[ConstructionProjects] View error:', err);
+      toast.error('Failed to load project details');
     }
   };
 
@@ -329,15 +333,15 @@ export default function ConstructionProjects() {
   const handleAddAssignment = () => {
     setEditingAssignment(null);
     setAssignmentForm({
-      worker_id: "",
-      role: "",
-      start_date: "",
-      end_date: "",
-      pay_rate: "",
-      bill_rate: "",
-      rate_type: "hourly",
-      status: "Active",
-      notes: "",
+      worker_id: '',
+      role: '',
+      start_date: '',
+      end_date: '',
+      pay_rate: '',
+      bill_rate: '',
+      rate_type: 'hourly',
+      status: 'Active',
+      notes: '',
     });
     setShowAssignmentDialog(true);
   };
@@ -345,26 +349,26 @@ export default function ConstructionProjects() {
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
     setAssignmentForm({
-      worker_id: assignment.worker_id || "",
-      role: assignment.role || "",
-      start_date: assignment.start_date || "",
-      end_date: assignment.end_date || "",
-      pay_rate: assignment.pay_rate || "",
-      bill_rate: assignment.bill_rate || "",
-      rate_type: assignment.rate_type || "hourly",
-      status: assignment.status || "Active",
-      notes: assignment.notes || "",
+      worker_id: assignment.worker_id || '',
+      role: assignment.role || '',
+      start_date: assignment.start_date || '',
+      end_date: assignment.end_date || '',
+      pay_rate: assignment.pay_rate || '',
+      bill_rate: assignment.bill_rate || '',
+      rate_type: assignment.rate_type || 'hourly',
+      status: assignment.status || 'Active',
+      notes: assignment.notes || '',
     });
     setShowAssignmentDialog(true);
   };
 
   const handleSaveAssignment = async () => {
     if (!assignmentForm.worker_id) {
-      toast.error("Please select a worker");
+      toast.error('Please select a worker');
       return;
     }
     if (!assignmentForm.role?.trim()) {
-      toast.error("Role is required");
+      toast.error('Role is required');
       return;
     }
 
@@ -379,10 +383,10 @@ export default function ConstructionProjects() {
 
       if (editingAssignment) {
         await ConstructionAssignment.update(editingAssignment.id, payload);
-        toast.success("Assignment updated");
+        toast.success('Assignment updated');
       } else {
         await ConstructionAssignment.create(payload);
-        toast.success("Worker assigned");
+        toast.success('Worker assigned');
       }
 
       setShowAssignmentDialog(false);
@@ -390,28 +394,28 @@ export default function ConstructionProjects() {
       const refreshed = await ConstructionProject.get(selectedProject.id);
       setSelectedProject(refreshed);
     } catch (err) {
-      console.error("[ConstructionProjects] Assignment save error:", err);
-      toast.error(err.message || "Failed to save assignment");
+      console.error('[ConstructionProjects] Assignment save error:', err);
+      toast.error(err.message || 'Failed to save assignment');
     }
   };
 
   const handleDeleteAssignment = async (assignment) => {
     const workerName = assignment.worker
       ? `${assignment.worker.first_name} ${assignment.worker.last_name}`
-      : "this worker";
+      : 'this worker';
     if (!confirm(`Remove ${workerName} from this project?`)) {
       return;
     }
 
     try {
       await ConstructionAssignment.delete(assignment.id);
-      toast.success("Assignment removed");
+      toast.success('Assignment removed');
       // Refresh project detail
       const refreshed = await ConstructionProject.get(selectedProject.id);
       setSelectedProject(refreshed);
     } catch (err) {
-      console.error("[ConstructionProjects] Assignment delete error:", err);
-      toast.error(err.message || "Failed to remove assignment");
+      console.error('[ConstructionProjects] Assignment delete error:', err);
+      toast.error(err.message || 'Failed to remove assignment');
     }
   };
 
@@ -419,14 +423,14 @@ export default function ConstructionProjects() {
   const loadMilestones = async (projectId) => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${projectId}/milestones`,
-        { credentials: "include" }
+        `${BACKEND_URL}/api/construction/projects/${projectId}/milestones`,
+        { credentials: 'include' },
       );
-      if (!response.ok) throw new Error("Failed to load milestones");
+      if (!response.ok) throw new Error('Failed to load milestones');
       const data = await response.json();
       setMilestones(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("[ConstructionProjects] Milestones load error:", err);
+      console.error('[ConstructionProjects] Milestones load error:', err);
       setMilestones([]);
     }
   };
@@ -434,10 +438,10 @@ export default function ConstructionProjects() {
   const handleAddMilestone = () => {
     setEditingMilestone(null);
     setMilestoneForm({
-      title: "",
-      description: "",
-      due_date: "",
-      status: "pending",
+      title: '',
+      description: '',
+      due_date: '',
+      status: 'pending',
     });
     setShowMilestoneDialog(true);
   };
@@ -445,55 +449,54 @@ export default function ConstructionProjects() {
   const handleEditMilestone = (milestone) => {
     setEditingMilestone(milestone);
     setMilestoneForm({
-      title: milestone.title || "",
-      description: milestone.description || "",
-      due_date: milestone.due_date || "",
-      status: milestone.status || "pending",
+      title: milestone.title || '',
+      description: milestone.description || '',
+      due_date: milestone.due_date || '',
+      status: milestone.status || 'pending',
     });
     setShowMilestoneDialog(true);
   };
 
   const handleSaveMilestone = async () => {
     if (!milestoneForm.title?.trim()) {
-      toast.error("Milestone title is required");
+      toast.error('Milestone title is required');
       return;
     }
 
     try {
-      const baseUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:4001";
       const payload = { ...milestoneForm };
 
       if (editingMilestone) {
         const response = await fetch(
-          `${baseUrl}/api/construction/projects/${selectedProject.id}/milestones/${editingMilestone.id}`,
+          `${BACKEND_URL}/api/construction/projects/${selectedProject.id}/milestones/${editingMilestone.id}`,
           {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload),
-          }
+          },
         );
-        if (!response.ok) throw new Error("Failed to update milestone");
-        toast.success("Milestone updated");
+        if (!response.ok) throw new Error('Failed to update milestone');
+        toast.success('Milestone updated');
       } else {
         const response = await fetch(
-          `${baseUrl}/api/construction/projects/${selectedProject.id}/milestones`,
+          `${BACKEND_URL}/api/construction/projects/${selectedProject.id}/milestones`,
           {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload),
-          }
+          },
         );
-        if (!response.ok) throw new Error("Failed to create milestone");
-        toast.success("Milestone created");
+        if (!response.ok) throw new Error('Failed to create milestone');
+        toast.success('Milestone created');
       }
 
       setShowMilestoneDialog(false);
       loadMilestones(selectedProject.id);
     } catch (err) {
-      console.error("[ConstructionProjects] Milestone save error:", err);
-      toast.error(err.message || "Failed to save milestone");
+      console.error('[ConstructionProjects] Milestone save error:', err);
+      toast.error(err.message || 'Failed to save milestone');
     }
   };
 
@@ -502,60 +505,60 @@ export default function ConstructionProjects() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
-        { method: "DELETE", credentials: "include" }
+        `${BACKEND_URL}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
+        { method: 'DELETE', credentials: 'include' },
       );
-      if (!response.ok) throw new Error("Failed to delete milestone");
-      toast.success("Milestone deleted");
+      if (!response.ok) throw new Error('Failed to delete milestone');
+      toast.success('Milestone deleted');
       loadMilestones(selectedProject.id);
     } catch (err) {
-      console.error("[ConstructionProjects] Milestone delete error:", err);
-      toast.error(err.message || "Failed to delete milestone");
+      console.error('[ConstructionProjects] Milestone delete error:', err);
+      toast.error(err.message || 'Failed to delete milestone');
     }
   };
 
   const handleToggleMilestoneStatus = async (milestone) => {
-    const newStatus = milestone.status === "completed" ? "pending" : "completed";
+    const newStatus = milestone.status === 'completed' ? 'pending' : 'completed';
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL || "http://localhost:4001"}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
+        `${BACKEND_URL}/api/construction/projects/${selectedProject.id}/milestones/${milestone.id}`,
         {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ status: newStatus }),
-        }
+        },
       );
-      if (!response.ok) throw new Error("Failed to update milestone");
+      if (!response.ok) throw new Error('Failed to update milestone');
       loadMilestones(selectedProject.id);
     } catch (err) {
-      console.error("[ConstructionProjects] Milestone toggle error:", err);
-      toast.error("Failed to update milestone");
+      console.error('[ConstructionProjects] Milestone toggle error:', err);
+      toast.error('Failed to update milestone');
     }
   };
 
   // Get contact name helper
   const getContactName = (contact) => {
-    if (!contact) return "—";
-    return `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || contact.email || "—";
+    if (!contact) return '—';
+    return `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || contact.email || '—';
   };
 
   // Common team roles for autocomplete
   const commonRoles = [
-    "Team Member",
-    "Developer",
-    "Designer",
-    "Analyst",
-    "Consultant",
-    "Specialist",
-    "Coordinator",
-    "Lead",
-    "Manager",
-    "Director",
-    "Project Manager",
-    "Supervisor",
-    "Contractor",
-    "Technician",
+    'Team Member',
+    'Developer',
+    'Designer',
+    'Analyst',
+    'Consultant',
+    'Specialist',
+    'Coordinator',
+    'Lead',
+    'Manager',
+    'Director',
+    'Project Manager',
+    'Supervisor',
+    'Contractor',
+    'Technician',
   ];
 
   if (loading) {
@@ -615,8 +618,10 @@ export default function ConstructionProjects() {
               <div className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">{selectedProject.site_name || "—"}</p>
-                  <p className="text-sm text-muted-foreground">{selectedProject.site_address || ""}</p>
+                  <p className="font-medium">{selectedProject.site_name || '—'}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedProject.site_address || ''}
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -631,7 +636,8 @@ export default function ConstructionProjects() {
                 <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">
-                    {formatDate(selectedProject.start_date)} — {formatDate(selectedProject.end_date)}
+                    {formatDate(selectedProject.start_date)} —{' '}
+                    {formatDate(selectedProject.end_date)}
                   </p>
                 </div>
               </div>
@@ -640,12 +646,16 @@ export default function ConstructionProjects() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Project Value</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Project Value
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-start gap-2">
                 <DollarSign className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                <p className="font-medium text-lg">{formatCurrency(selectedProject.project_value)}</p>
+                <p className="font-medium text-lg">
+                  {formatCurrency(selectedProject.project_value)}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -662,14 +672,18 @@ export default function ConstructionProjects() {
                 <Label className="text-muted-foreground">Project Manager</Label>
                 <p className="font-medium">{getContactName(selectedProject.project_manager)}</p>
                 {selectedProject.project_manager?.email && (
-                  <p className="text-sm text-muted-foreground">{selectedProject.project_manager.email}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedProject.project_manager.email}
+                  </p>
                 )}
               </div>
               <div>
                 <Label className="text-muted-foreground">Supervisor</Label>
                 <p className="font-medium">{getContactName(selectedProject.supervisor)}</p>
                 {selectedProject.supervisor?.email && (
-                  <p className="text-sm text-muted-foreground">{selectedProject.supervisor.email}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedProject.supervisor.email}
+                  </p>
                 )}
               </div>
             </div>
@@ -708,7 +722,8 @@ export default function ConstructionProjects() {
                 Milestones
               </CardTitle>
               <CardDescription>
-                {milestones.length} milestone{milestones.length !== 1 ? "s" : ""} • {milestones.filter(m => m.status === "completed").length} completed
+                {milestones.length} milestone{milestones.length !== 1 ? 's' : ''} •{' '}
+                {milestones.filter((m) => m.status === 'completed').length} completed
               </CardDescription>
             </div>
             <Button onClick={handleAddMilestone}>
@@ -723,22 +738,24 @@ export default function ConstructionProjects() {
                   <div
                     key={milestone.id}
                     className={`flex items-center justify-between p-3 rounded-lg border ${
-                      milestone.status === "completed" ? "bg-green-50 border-green-200" : "bg-white"
+                      milestone.status === 'completed' ? 'bg-green-50 border-green-200' : 'bg-white'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => handleToggleMilestoneStatus(milestone)}
                         className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          milestone.status === "completed"
-                            ? "bg-green-500 border-green-500 text-white"
-                            : "border-gray-300 hover:border-green-400"
+                          milestone.status === 'completed'
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300 hover:border-green-400'
                         }`}
                       >
-                        {milestone.status === "completed" && <CheckCircle className="h-3 w-3" />}
+                        {milestone.status === 'completed' && <CheckCircle className="h-3 w-3" />}
                       </button>
                       <div>
-                        <p className={`font-medium ${milestone.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                        <p
+                          className={`font-medium ${milestone.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}
+                        >
                           {milestone.title}
                         </p>
                         {milestone.description && (
@@ -753,18 +770,33 @@ export default function ConstructionProjects() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        milestone.status === "completed" ? "bg-green-100 text-green-800" :
-                        milestone.status === "in_progress" ? "bg-blue-100 text-blue-800" :
-                        milestone.status === "cancelled" ? "bg-red-100 text-red-800" :
-                        "bg-gray-100 text-gray-800"
-                      }`}>
-                        {milestone.status === "in_progress" ? "In Progress" : milestone.status?.charAt(0).toUpperCase() + milestone.status?.slice(1)}
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          milestone.status === 'completed'
+                            ? 'bg-green-100 text-green-800'
+                            : milestone.status === 'in_progress'
+                              ? 'bg-blue-100 text-blue-800'
+                              : milestone.status === 'cancelled'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {milestone.status === 'in_progress'
+                          ? 'In Progress'
+                          : milestone.status?.charAt(0).toUpperCase() + milestone.status?.slice(1)}
                       </span>
-                      <Button variant="ghost" size="sm" onClick={() => handleEditMilestone(milestone)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditMilestone(milestone)}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteMilestone(milestone)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteMilestone(milestone)}
+                      >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </div>
@@ -816,7 +848,9 @@ export default function ConstructionProjects() {
                         <div>
                           <p className="font-medium">{getContactName(assignment.worker)}</p>
                           {assignment.worker?.email && (
-                            <p className="text-sm text-muted-foreground">{assignment.worker.email}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {assignment.worker.email}
+                            </p>
                           )}
                         </div>
                       </TableCell>
@@ -828,15 +862,17 @@ export default function ConstructionProjects() {
                       <TableCell>
                         {assignment.pay_rate
                           ? `$${assignment.pay_rate}/${assignment.rate_type}`
-                          : "—"}
+                          : '—'}
                       </TableCell>
                       <TableCell>
                         {assignment.bill_rate
                           ? `$${assignment.bill_rate}/${assignment.rate_type}`
-                          : "—"}
+                          : '—'}
                       </TableCell>
                       <TableCell>
-                        <Badge className={statusColors[assignment.status]}>{assignment.status}</Badge>
+                        <Badge className={statusColors[assignment.status]}>
+                          {assignment.status}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -877,11 +913,11 @@ export default function ConstructionProjects() {
         <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{editingAssignment ? "Edit Assignment" : "Assign Worker"}</DialogTitle>
+              <DialogTitle>{editingAssignment ? 'Edit Assignment' : 'Assign Worker'}</DialogTitle>
               <DialogDescription>
                 {editingAssignment
-                  ? "Update worker assignment details"
-                  : "Assign a worker to this project"}
+                  ? 'Update worker assignment details'
+                  : 'Assign a worker to this project'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -890,10 +926,10 @@ export default function ConstructionProjects() {
                 <Select
                   value={assignmentForm.worker_id}
                   onValueChange={(v) => {
-                    if (v === "__create_new__") {
+                    if (v === '__create_new__') {
                       // Open workers page in new tab
                       window.open('/Workers', '_blank');
-                      toast.info("Create the worker, then come back and refresh this dialog");
+                      toast.info('Create the worker, then come back and refresh this dialog');
                     } else {
                       setAssignmentForm({ ...assignmentForm, worker_id: v });
                     }
@@ -907,7 +943,11 @@ export default function ConstructionProjects() {
                       <Plus className="h-4 w-4 inline mr-2" />
                       Create New Worker
                     </SelectItem>
-                    {workers.length > 0 && <SelectItem value="__divider__" disabled>────────────────</SelectItem>}
+                    {workers.length > 0 && (
+                      <SelectItem value="__divider__" disabled>
+                        ────────────────
+                      </SelectItem>
+                    )}
                     {workers.map((worker) => (
                       <SelectItem key={worker.id} value={worker.id}>
                         {worker.first_name} {worker.last_name}
@@ -945,7 +985,9 @@ export default function ConstructionProjects() {
                   <Input
                     type="date"
                     value={assignmentForm.start_date}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, start_date: e.target.value })}
+                    onChange={(e) =>
+                      setAssignmentForm({ ...assignmentForm, start_date: e.target.value })
+                    }
                   />
                 </div>
                 <div>
@@ -953,7 +995,9 @@ export default function ConstructionProjects() {
                   <Input
                     type="date"
                     value={assignmentForm.end_date}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, end_date: e.target.value })}
+                    onChange={(e) =>
+                      setAssignmentForm({ ...assignmentForm, end_date: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -966,7 +1010,9 @@ export default function ConstructionProjects() {
                     step="0.01"
                     placeholder="0.00"
                     value={assignmentForm.pay_rate}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, pay_rate: e.target.value })}
+                    onChange={(e) =>
+                      setAssignmentForm({ ...assignmentForm, pay_rate: e.target.value })
+                    }
                   />
                 </div>
                 <div>
@@ -976,7 +1022,9 @@ export default function ConstructionProjects() {
                     step="0.01"
                     placeholder="0.00"
                     value={assignmentForm.bill_rate}
-                    onChange={(e) => setAssignmentForm({ ...assignmentForm, bill_rate: e.target.value })}
+                    onChange={(e) =>
+                      setAssignmentForm({ ...assignmentForm, bill_rate: e.target.value })
+                    }
                   />
                 </div>
                 <div>
@@ -1030,7 +1078,7 @@ export default function ConstructionProjects() {
                 Cancel
               </Button>
               <Button onClick={handleSaveAssignment}>
-                {editingAssignment ? "Update" : "Assign"}
+                {editingAssignment ? 'Update' : 'Assign'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1049,9 +1097,7 @@ export default function ConstructionProjects() {
             <Building2 className="h-6 w-6" />
             Project Management
           </h1>
-          <p className="text-muted-foreground">
-            Manage projects and team assignments
-          </p>
+          <p className="text-muted-foreground">Manage projects and team assignments</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={loadData}>
@@ -1122,10 +1168,10 @@ export default function ConstructionProjects() {
                           <p className="font-medium">{project.project_name}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{project.account?.name || "—"}</TableCell>
+                      <TableCell>{project.account?.name || '—'}</TableCell>
                       <TableCell>
                         <div>
-                          <p>{project.site_name || "—"}</p>
+                          <p>{project.site_name || '—'}</p>
                           {project.site_address && (
                             <p className="text-sm text-muted-foreground truncate max-w-[200px]">
                               {project.site_address}
@@ -1139,7 +1185,7 @@ export default function ConstructionProjects() {
                           {project.end_date && (
                             <>
                               <br />
-                              <span className="text-muted-foreground">to</span>{" "}
+                              <span className="text-muted-foreground">to</span>{' '}
                               {formatDate(project.end_date)}
                             </>
                           )}
@@ -1209,11 +1255,9 @@ export default function ConstructionProjects() {
       <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingProject ? "Edit Project" : "Create Project"}</DialogTitle>
+            <DialogTitle>{editingProject ? 'Edit Project' : 'Create Project'}</DialogTitle>
             <DialogDescription>
-              {editingProject
-                ? "Update project details"
-                : "Create a new project"}
+              {editingProject ? 'Update project details' : 'Create a new project'}
             </DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="basic" className="w-full">
@@ -1385,7 +1429,9 @@ export default function ConstructionProjects() {
                   step="0.01"
                   placeholder="Contract or expected revenue value"
                   value={projectForm.project_value}
-                  onChange={(e) => setProjectForm({ ...projectForm, project_value: e.target.value })}
+                  onChange={(e) =>
+                    setProjectForm({ ...projectForm, project_value: e.target.value })
+                  }
                 />
               </div>
 
@@ -1415,7 +1461,7 @@ export default function ConstructionProjects() {
               Cancel
             </Button>
             <Button onClick={handleSaveProject}>
-              {editingProject ? "Update" : "Create"} Project
+              {editingProject ? 'Update' : 'Create'} Project
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1425,9 +1471,11 @@ export default function ConstructionProjects() {
       <Dialog open={showMilestoneDialog} onOpenChange={setShowMilestoneDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingMilestone ? "Edit" : "Add"} Milestone</DialogTitle>
+            <DialogTitle>{editingMilestone ? 'Edit' : 'Add'} Milestone</DialogTitle>
             <DialogDescription>
-              {editingMilestone ? "Update milestone details" : "Create a new milestone for this project"}
+              {editingMilestone
+                ? 'Update milestone details'
+                : 'Create a new milestone for this project'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1445,7 +1493,9 @@ export default function ConstructionProjects() {
                 placeholder="Details about this milestone..."
                 rows={3}
                 value={milestoneForm.description}
-                onChange={(e) => setMilestoneForm({ ...milestoneForm, description: e.target.value })}
+                onChange={(e) =>
+                  setMilestoneForm({ ...milestoneForm, description: e.target.value })
+                }
               />
             </div>
             <div>
@@ -1479,7 +1529,7 @@ export default function ConstructionProjects() {
               Cancel
             </Button>
             <Button onClick={handleSaveMilestone}>
-              {editingMilestone ? "Update" : "Add"} Milestone
+              {editingMilestone ? 'Update' : 'Add'} Milestone
             </Button>
           </DialogFooter>
         </DialogContent>

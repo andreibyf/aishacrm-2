@@ -57,8 +57,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { useTenant } from '@/components/shared/tenantContext';
 import PlaybookStepBuilder from './PlaybookStepBuilder';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4001';
+import { BACKEND_URL } from '@/api/entities';
 
 const TRIGGER_TYPES = [
   { value: 'lead_stagnant', label: 'Lead Stagnant', icon: Clock },

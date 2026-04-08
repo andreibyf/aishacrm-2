@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 
 import { Activity } from '@/api/entities';
+import { BACKEND_URL } from '@/api/entities';
 import { useApiManager } from '../shared/ApiManager';
 import { useEmployeeScope } from '../shared/EmployeeScopeContext';
 import { useUser } from '@/components/shared/useUser';
@@ -348,8 +349,7 @@ function RecentActivities(props) {
   const handleRefresh = async () => {
     // First, trigger the mark-overdue endpoint to update past-due activities
     try {
-      const baseUrl = import.meta.env.VITE_BACKEND_URL || '';
-      const response = await fetch(`${baseUrl}/api/v2/activities/mark-overdue`, {
+      const response = await fetch(`${BACKEND_URL}/api/v2/activities/mark-overdue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
