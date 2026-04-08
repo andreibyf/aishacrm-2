@@ -1,0 +1,50 @@
+model_list:
+  # Pass-through: any explicit provider/model call from existing code
+  - model_name: openai/*
+    litellm_params:
+      model: openai/*
+      api_key: "os.environ/OPENAI_API_KEY"
+  - model_name: anthropic/*
+    litellm_params:
+      model: anthropic/*
+      api_key: "os.environ/ANTHROPIC_API_KEY"
+  - model_name: groq/*
+    litellm_params:
+      model: groq/*
+      api_key: "os.environ/GROQ_API_KEY"
+
+  # Local models via Ollama (Docker container: http://ollama:11434, host: port 11436)
+  # Models auto-pulled on container startup: llama3.2:3b, qwen2.5-coder:3b
+  - model_name: ollama/*
+    litellm_params:
+      model: ollama/*
+      api_base: "http://ollama:11434"
+
+  # Named local model aliases for direct capability mapping
+  - model_name: local/llama3.2:3b
+    litellm_params:
+      model: ollama/llama3.2:3b
+      api_base: "http://ollama:11434"
+  - model_name: local/qwen2.5-coder:3b
+    litellm_params:
+      model: ollama/qwen2.5-coder:3b
+      api_base: "http://ollama:11434"
+
+router_settings:
+  num_retries: 2
+  timeout: 300
+  fallbacks:
+    - "anthropic/*": ["openai/*"]
+    - "openai/*": ["groq/*"]
+    - "ollama/*": ["groq/*"]
+
+litellm_settings:
+  json_logs: true
+  set_verbose: false
+  # Uncomment for persistent spend tracking (Phase 2):
+  # success_callback: ["langfuse"]
+  # database_url: os.environ/LITELLM_DB_URL
+
+general_settings:
+  master_key: "os.environ/LITELLM_MASTER_KEY"
+  store_model_in_db: false

@@ -68,7 +68,7 @@ services:
     networks:
       - aishanet
 
-  # Ollama — local LLM server for PEP compiler parser
+  # Ollama - local LLM server for PEP compiler parser
   ollama:
     image: ollama/ollama:latest
     container_name: aishacrm-ollama
@@ -95,6 +95,31 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+    networks:
+      - aishanet
+
+  litellm:
+    build:
+      context: .
+      dockerfile: litellm/Dockerfile
+    container_name: aishacrm-litellm
+    restart: unless-stopped
+    ports:
+      - "4002:4000"
+    env_file:
+      - .env
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=aishacrm
+      - DOPPLER_CONFIG=dev_personal
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - aishanet
 
@@ -152,6 +177,9 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-https://efzqxjpfewkrgpdootte.supabase.co}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
+      - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
+      - LITELLM_BASE_URL=http://litellm:4000
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       # GitHub Issues integration - loaded from .env.local
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}

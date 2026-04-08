@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
+
 ### Fixed
 
 - **Notifications route testability hotfix for Node ESM mocks (`backend/routes/notifications.js`, `backend/__tests__/routes/notifications.delete.test.js`):** Refactored notifications routes to accept an injected `getSupabaseClient` dependency (with production default) and updated delete-route tests to use dependency injection instead of `mock.method` on ESM exports. This resolves 3 test failures (`Cannot redefine property: getSupabaseClient`) while preserving runtime behavior.

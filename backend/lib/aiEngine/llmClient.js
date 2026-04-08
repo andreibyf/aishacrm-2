@@ -15,6 +15,7 @@
  */
 
 import fetch from 'node-fetch';
+import { callViaLiteLLM } from './litellmClient.js';
 
 // ============================================================================
 // OpenAI-compatible providers (openai, groq, local)
@@ -56,7 +57,15 @@ function resolveOpenAIAuthHeader(provider, explicitApiKey) {
 // Timeout (ms) for local Ollama inference — CPU inference can be slow
 const LOCAL_LLM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-async function callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl }) {
+async function callOpenAICompatible({
+  provider,
+  model,
+  messages,
+  temperature,
+  apiKey,
+  baseUrl,
+  maxTokens = null,
+}) {
   const finalBaseUrl = resolveOpenAIBaseUrl(provider, baseUrl);
   const authHeader = resolveOpenAIAuthHeader(provider, apiKey);
 
@@ -74,6 +83,7 @@ async function callOpenAICompatible({ provider, model, messages, temperature, ap
     messages,
     temperature,
   };
+  if (maxTokens != null) body.max_tokens = maxTokens;
 
   // For local Ollama, use a longer timeout since CPU inference can exceed 60s
   const controller = provider === 'local' ? new AbortController() : null;
@@ -156,7 +166,7 @@ function convertToAnthropicFormat(messages) {
   return { systemPrompt, anthropicMessages };
 }
 
-async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) {
+async function callAnthropic({ model, messages, temperature, apiKey, baseUrl, maxTokens = null }) {
   const finalBaseUrl = resolveAnthropicBaseUrl(baseUrl);
 
   if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
@@ -179,7 +189,7 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
 
   const body = {
     model,
-    max_tokens: 4096,
+    max_tokens: maxTokens ?? 4096,
     messages: anthropicMessages,
     temperature,
   };
@@ -257,8 +267,10 @@ async function callAnthropic({ model, messages, temperature, apiKey, baseUrl }) 
  * @param {string} opts.model      - model name
  * @param {Array}  opts.messages   - OpenAI-style messages [{ role, content }]
  * @param {number} [opts.temperature]
- * @param {string} [opts.apiKey]   - explicit API key override
- * @param {string} [opts.baseUrl]  - explicit base URL override
+ * @param {string} [opts.apiKey]    - explicit API key override
+ * @param {string} [opts.baseUrl]   - explicit base URL override
+ * @param {string} [opts.tenantId]  - tenant UUID for spend tracking (LiteLLM metadata)
+ * @param {number} [opts.maxTokens] - hard cap on response tokens (passed to LiteLLM when enabled)
  *
  * @returns {Promise<{ status: "success"|"error", content?: string, raw?: any, error?: string }>}
  */
@@ -269,12 +281,26 @@ export async function generateChatCompletion({
   temperature = 0.2,
   apiKey,
   baseUrl,
+  tenantId = null,
+  maxTokens = null,
 }) {
+  if (process.env.LITELLM_ENABLED === 'true') {
+    return await callViaLiteLLM({ provider, model, messages, temperature, tenantId, maxTokens });
+  }
+
   // Route to appropriate provider handler
   if (provider === 'anthropic') {
-    return callAnthropic({ model, messages, temperature, apiKey, baseUrl });
+    return callAnthropic({ model, messages, temperature, apiKey, baseUrl, maxTokens });
   }
 
   // OpenAI-compatible providers: openai, groq, local
-  return callOpenAICompatible({ provider, model, messages, temperature, apiKey, baseUrl });
+  return callOpenAICompatible({
+    provider,
+    model,
+    messages,
+    temperature,
+    apiKey,
+    baseUrl,
+    maxTokens,
+  });
 }
