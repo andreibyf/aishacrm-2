@@ -1,10 +1,9 @@
-import test, { mock } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
 
 import createNotificationRoutes from '../../routes/notifications.js';
-import * as supabaseDb from '../../lib/supabase-db.js';
 
 const tenantId = '11111111-1111-1111-1111-111111111111';
 
@@ -36,7 +35,7 @@ function buildSupabaseDeleteStub({ found = true, capture }) {
   };
 }
 
-async function createServer({ injectTenant = true, supabaseClient }) {
+async function createServer({ injectTenant = true, supabaseClient } = {}) {
   const app = express();
   app.use(express.json());
 
@@ -45,16 +44,17 @@ async function createServer({ injectTenant = true, supabaseClient }) {
     next();
   });
 
-  const methodMock = mock.method(supabaseDb, 'getSupabaseClient', () => supabaseClient);
-
-  app.use('/api/notifications', createNotificationRoutes(null));
+  app.use(
+    '/api/notifications',
+    createNotificationRoutes(null, { getSupabaseClient: () => supabaseClient }),
+  );
 
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, resolve));
 
   return {
     server,
-    restore: () => methodMock.mock.restore(),
+    restore: () => {},
   };
 }
 

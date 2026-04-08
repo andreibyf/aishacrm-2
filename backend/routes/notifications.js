@@ -1,8 +1,10 @@
 import express from 'express';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
+import { getSupabaseClient as _getSupabaseClient } from '../lib/supabase-db.js';
 
-export default function createNotificationRoutes(_pgPool) {
+export default function createNotificationRoutes(_pgPool, options = {}) {
+  const { getSupabaseClient: getSupabaseClientFn = _getSupabaseClient } = options;
   const router = express.Router();
 
   // Helper function to expand metadata fields to top-level properties
@@ -77,8 +79,7 @@ export default function createNotificationRoutes(_pgPool) {
         });
       }
 
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClientFn();
       let q = supabase
         .from('notifications')
         .select('*', { count: 'exact' }) // Get accurate total count
@@ -162,8 +163,7 @@ export default function createNotificationRoutes(_pgPool) {
       };
 
       const nowIso = new Date().toISOString();
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClientFn();
       const { data, error } = await supabase
         .from('notifications')
         .insert([
@@ -246,8 +246,7 @@ export default function createNotificationRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClientFn();
 
       const { data, error } = await supabase
         .from('notifications')
@@ -274,8 +273,7 @@ export default function createNotificationRoutes(_pgPool) {
       const { id } = req.params;
       const { is_read, metadata, ...otherFields } = req.body;
 
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClientFn();
 
       // Fetch current metadata
       const { data: current, error: fetchErr } = await supabase
