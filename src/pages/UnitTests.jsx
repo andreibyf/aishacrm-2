@@ -11,24 +11,27 @@ import { userContextTests } from '../components/testing/userContextTests.jsx';
 import { userMigrationIntegrationTests } from '../components/testing/userMigrationIntegrationTests.jsx';
 import { schemaValidationTests } from '../components/testing/schemaValidationTests';
 import { avatarTests } from '../components/testing/avatarTests.jsx';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info, TestTube } from "lucide-react";
+import { playbookSeedingTests } from '../components/testing/playbookSeedingTests.jsx';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Info, TestTube } from 'lucide-react';
 
-  const testSuites = [
-    avatarTests, // Braid integration and AI backend tests
-    schemaValidationTests, // New comprehensive schema validation tests
-    userContextTests,
-    userMigrationIntegrationTests,
-    errorLoggerTests,
-    formValidationTests,
-    dataIntegrityTests,
-    utilityFunctionTests,
-    employeeScopeTests,
-    apiHealthMonitorTests,
-    crudTests,
-    systemLogsTests
-  ];export default function UnitTestsPage() {
+const testSuites = [
+  playbookSeedingTests, // Tenant industry playbook seeding verification
+  avatarTests, // Braid integration and AI backend tests
+  schemaValidationTests, // New comprehensive schema validation tests
+  userContextTests,
+  userMigrationIntegrationTests,
+  errorLoggerTests,
+  formValidationTests,
+  dataIntegrityTests,
+  utilityFunctionTests,
+  employeeScopeTests,
+  apiHealthMonitorTests,
+  crudTests,
+  systemLogsTests,
+];
+export default function UnitTestsPage() {
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -46,9 +49,10 @@ import { Info, TestTube } from "lucide-react";
           <Info className="h-4 w-4 text-blue-400" />
           <AlertTitle className="text-blue-300">Testing Information</AlertTitle>
           <AlertDescription className="text-blue-400">
-            This test suite validates core functionality including schema validation (minimal required fields),
-            CRUD operations, error logging, form validation, data integrity, utility functions, employee scope filtering,
-            and API health monitoring. Click &quot;Run All Tests&quot; to execute the full suite.
+            This test suite validates core functionality including schema validation (minimal
+            required fields), CRUD operations, error logging, form validation, data integrity,
+            utility functions, employee scope filtering, and API health monitoring. Click &quot;Run
+            All Tests&quot; to execute the full suite.
           </AlertDescription>
         </Alert>
 
@@ -56,7 +60,7 @@ import { Info, TestTube } from "lucide-react";
           <Info className="h-4 w-4 text-green-400" />
           <AlertTitle className="text-green-300">✅ Full Database Testing Enabled</AlertTitle>
           <AlertDescription className="text-green-400">
-            Backend is connected to Supabase Cloud PostgreSQL with full CRUD operations implemented. 
+            Backend is connected to Supabase Cloud PostgreSQL with full CRUD operations implemented.
             All tests run against real database operations for comprehensive validation.
           </AlertDescription>
         </Alert>
@@ -90,28 +94,38 @@ import { Info, TestTube } from "lucide-react";
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   🤖 Braid & AI Backend
-                  <span className="text-xs px-2 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/60 rounded">4 Tests</span>
+                  <span className="text-xs px-2 py-0.5 bg-purple-900/40 text-purple-300 border border-purple-700/60 rounded">
+                    4 Tests
+                  </span>
                 </div>
                 <div className="text-sm text-slate-400">
-                  Braid MCP integration, health checks, AI conversation endpoints, and backend tool execution.
+                  Braid MCP integration, health checks, AI conversation endpoints, and backend tool
+                  execution.
                 </div>
               </div>
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   ✅ Schema Validation
-                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">30+ Tests</span>
+                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">
+                    30+ Tests
+                  </span>
                 </div>
                 <div className="text-sm text-slate-400">
-                  Validates minimal required fields, optional fields, metadata storage, email uniqueness, and UI indicators for all entities (Employees, Accounts, Contacts, Leads, Opportunities).
+                  Validates minimal required fields, optional fields, metadata storage, email
+                  uniqueness, and UI indicators for all entities (Employees, Accounts, Contacts,
+                  Leads, Opportunities).
                 </div>
               </div>
               <div className="p-3 bg-slate-700 rounded-lg">
                 <div className="font-medium text-slate-200 mb-1 flex items-center gap-2">
                   🔧 CRUD Operations
-                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">Live DB</span>
+                  <span className="text-xs px-2 py-0.5 bg-green-900/40 text-green-300 border border-green-700/60 rounded">
+                    Live DB
+                  </span>
                 </div>
                 <div className="text-sm text-slate-400">
-                  End-to-end Create, Read, Update, Delete tests running against Supabase Cloud PostgreSQL.
+                  End-to-end Create, Read, Update, Delete tests running against Supabase Cloud
+                  PostgreSQL.
                 </div>
               </div>
               <div className="p-3 bg-slate-700 rounded-lg">

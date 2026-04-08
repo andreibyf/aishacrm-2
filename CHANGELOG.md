@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Tenant playbook seeding now handles additional real-estate industry variants and persisted values (`backend/routes/tenants.js`):** Improved industry normalization to handle `&`, punctuation, and `property_mgmt` variants, then seed from the persisted tenant industry (with metadata fallback) during create/update flows. This prevents "Real Estate & Property Management" tenants from missing realtor playbook seeding when payload values vary.
+- **Regression tests expanded for real-estate resolver variants (`backend/__tests__/routes/tenants.playbook-seeding.test.js`):** Added coverage for `&` and abbreviated `Mgmt` forms to prevent future seeding regressions.
+
 ---
 
 ## [6.0.15] - 2026-04-08

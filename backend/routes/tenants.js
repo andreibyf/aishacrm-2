@@ -740,6 +740,8 @@ const INDUSTRY_PLAYBOOKS = {
 const INDUSTRY_PLAYBOOK_ALIASES = {
   real_estate_property_management: 'real_estate_and_property_management',
   real_estate_and_property_mgmt: 'real_estate_and_property_management',
+  'real_estate_&_property_mgmt': 'real_estate_and_property_management',
+  'real_estate_&_property_management': 'real_estate_and_property_management',
   real_estate_and_property_manager: 'real_estate_and_property_management',
   real_estate_and_property_managment: 'real_estate_and_property_management',
   real_estate_and_property_management_: 'real_estate_and_property_management',
@@ -759,7 +761,11 @@ export function getIndustryPlaybookTemplates(industry) {
   const normalized = industry
     .trim()
     .toLowerCase()
-    .replace(/[\s-]+/g, '_');
+    .replace(/&/g, '_and_')
+    .replace(/[\s-]+/g, '_')
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
   const canonical = INDUSTRY_PLAYBOOK_ALIASES[normalized] || normalized;
 
   if (INDUSTRY_PLAYBOOKS[canonical]) {
@@ -767,7 +773,11 @@ export function getIndustryPlaybookTemplates(industry) {
   }
 
   // Defensive fallback for future/legacy enum variants.
-  if (canonical.includes('real_estate') || canonical.includes('property_management')) {
+  if (
+    canonical.includes('real_estate') ||
+    canonical.includes('property_management') ||
+    canonical.includes('property_mgmt')
+  ) {
     return FL_REAL_ESTATE_PLAYBOOKS;
   }
 
@@ -1133,9 +1143,10 @@ export default function createTenantRoutes(_pgPool) {
 
       // Seed industry-specific CARE playbooks (non-fatal if it fails)
       let playbookCount = 0;
-      if (industry) {
+      const seedIndustry = created?.industry || industry || finalMetadata?.industry || null;
+      if (seedIndustry) {
         try {
-          const pbResult = await seedIndustryPlaybooks(created.id, industry);
+          const pbResult = await seedIndustryPlaybooks(created.id, seedIndustry);
           playbookCount = pbResult.count;
           if (!pbResult.success) {
             logger.warn(`[Tenants] Playbook seeding warning: ${pbResult.error}`);
@@ -1462,9 +1473,11 @@ export default function createTenantRoutes(_pgPool) {
       // If industry was changed/set, attempt to seed relevant playbooks.
       // Non-fatal by design: tenant update should still succeed.
       let seeded_playbooks = 0;
-      if (industry !== undefined && row?.industry) {
+      const seedIndustry =
+        row?.industry || industry || metadata?.industry || metadata?.industry_category || null;
+      if (industry !== undefined && seedIndustry) {
         try {
-          const pbResult = await seedIndustryPlaybooks(row.id, row.industry);
+          const pbResult = await seedIndustryPlaybooks(row.id, seedIndustry);
           seeded_playbooks = pbResult.count || 0;
           if (!pbResult.success) {
             logger.warn(`[Tenants] Playbook seeding warning on tenant update: ${pbResult.error}`);

@@ -18,7 +18,11 @@ describe('Tenant playbook seeding industry resolver', () => {
   test('resolves common variant keys via normalization/aliases', () => {
     const variants = [
       'Real Estate and Property Management',
+      'Real Estate & Property Management',
+      'Real Estate & Property Mgmt',
       'real-estate-and-property-management',
+      'real_estate_&_property_management',
+      'real_estate_&_property_mgmt',
       'real_estate_property_management',
       'real_estate_and_property_mgmt',
     ];
