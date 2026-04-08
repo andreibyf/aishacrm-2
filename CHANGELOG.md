@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+### Fixed
+
+---
+
+## [6.0.13] - 2026-04-07
+
+### Fixed
+
+- **Tenant CRUD now uses admin client (`backend/routes/tenants.js`):** All tenant operations (GET list, GET single, POST create, PUT update, DELETE) were using the RLS-bound `getSupabaseClient()` instead of `getSupabaseAdmin()`. This caused silent 500 errors for delete, create, and update since the `tenant` table has RLS policies that block unauthenticated server-side writes. Replaced all 7 occurrences with `getSupabaseAdmin()`.
+
+---
+
+## [6.0.12] - 2026-04-07
+
+### Fixed
+
+- **FL real estate playbook seeding now uses admin client (`backend/routes/tenants.js`):** `seedIndustryPlaybooks()` was passed the RLS-bound Supabase client, causing `care_playbook` inserts to fail silently on new tenant creation. Changed to call `getSupabaseAdmin()` internally so the service-role client bypasses RLS.
+- **Backfill SQL table name corrected (`backend/scripts/seeds/backfill-florida-playbooks.sql`):** All 10 `INSERT ... FROM tenants t` and 2 verification `JOIN tenants t` references used the wrong plural table name `tenants` (correct: `tenant`). Fixed with `sed` replacement; script is now runnable against production.
+
+---
+
+## [6.0.11] - 2026-04-07
+
+### Changed
+
 - **Calendar sync provider wording masked in UI/API responses:** Updated user-facing scheduling copy to neutral "scheduling provider/scheduler" language across settings, booking flows, and in-app guides (`src/pages/Settings.jsx`, `src/components/settings/CalendarSync.jsx`, `src/components/settings/TenantIntegrationSettings.jsx`, `src/components/scheduling/BookingWidget.jsx`, `src/components/shared/UserGuide.jsx`, `src/pages/Documentation.jsx`). Updated `backend/routes/calcom-sync.js` response/error messages to avoid explicit provider branding in toasts and API payloads while preserving existing route names and integration behavior.
 
 ### Fixed
@@ -27,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backend startup scheduler URL guard fallback:** Updated `backend/docker-entrypoint.sh` and `docker-compose.prod.yml` so `PUBLIC_SCHEDULER_URL` is guaranteed in production startup paths. The backend now derives `PUBLIC_SCHEDULER_URL` from `CALCOM_PUBLIC_URL` or `VITE_CALCOM_URL` when missing after Doppler injection, and production compose now sets a safe default (`https://scheduler.aishacrm.com`) to prevent restart loops.
 - **Frontend production URL fallback hardening:** Updated `src/functions/index.js` and `docker-compose.prod.yml` to prevent browser calls from falling back to `http://localhost:4001` in production and to enforce runtime host-reachable defaults for API/scheduler URLs (`https://api.aishacrm.com`, `https://scheduler.aishacrm.com`) even when Doppler values are missing or dev-scoped.
 - **Cal.com scheduler host/path normalization:** Updated `docker-compose.prod.yml` Cal.com env wiring to use canonical `CALCOM_PUBLIC_URL` (with `https://`) for both `NEXTAUTH_URL` and `NEXT_PUBLIC_WEBAPP_URL`, added `NEXTAUTH_URL_INTERNAL=http://calcom:3000`, and switched `ALLOWED_HOSTNAMES` to comma-separated host format. This prevents malformed asset paths like `/scheduler.aishacrm.com/_next/...` and host-allowlist mismatch warnings.
+
+### Fixed
+
+- **Cal.com sync trigger `supabase not defined` (`backend/routes/calcom-sync.js`):** The `/trigger` handler called `supabase.from(...)` without first calling `getSupabaseClient()`, causing a `ReferenceError` and 500 response for tenant admins triggering manual sync. Added `const supabase = getSupabaseClient();` immediately before the post-sync query.
+- **`docker-compose.yml` YAML parse error:** `VITE_CALCOM_URL` and two flanking comment lines under `frontend.build.args` were indented 10 spaces instead of 8, causing `yaml: while parsing a block mapping` at lines 347/352 and blocking all builds.
 
 ### Removed
 
