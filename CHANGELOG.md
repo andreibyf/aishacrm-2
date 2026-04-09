@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.1.1] - 2026-04-08
+
+### Fixed
+
+- **Booking Analytics settings fetch path and error handling (`src/components/scheduling/BookingAnalytics.jsx`, `src/components/settings/__tests__/BookingAnalytics.test.jsx`):** Switched Booking Analytics to the centralized backend URL resolver with authenticated `credentials: 'include'` requests, matching the other scheduling panels. Added non-JSON response guards so misrouted HTML responses now surface a clear error instead of `Unexpected token '<'` during `Response.json()` parsing.
+
+---
+
 ## [6.0.15] - 2026-04-08
 
 ### Fixed

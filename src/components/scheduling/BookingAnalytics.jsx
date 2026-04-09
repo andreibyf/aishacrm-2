@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/table';
 import { Loader2, Download, Calendar, TrendingUp, Users, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { getBackendUrl } from '@/api/backendUrl';
 import { supabase } from '@/lib/supabase';
 import CsvExportButton from '@/components/shared/CsvExportButton';
 
@@ -63,18 +64,46 @@ const STATUS_COLORS = {
 const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 async function apiFetch(path, options = {}) {
+  const backendUrl = getBackendUrl();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   const token = session?.access_token;
-  return fetch(path, {
+  return fetch(`${backendUrl}${path}`, {
     ...options,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });
+}
+
+async function parseJsonResponse(response, fallbackMessage) {
+  const contentType = response.headers?.get?.('content-type') || '';
+
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const body = await response.text().catch(() => '');
+    const preview = body.trim().slice(0, 80).toLowerCase();
+
+    if (preview.startsWith('<!doctype') || preview.startsWith('<html') || preview.startsWith('<')) {
+      throw new Error(`${fallbackMessage}. The server returned HTML instead of JSON.`);
+    }
+
+    throw new Error(`${fallbackMessage}. The server returned an unexpected response.`);
+  }
+
+  const json = await response.json().catch(() => null);
+  if (!json) {
+    throw new Error(`${fallbackMessage}. The server returned invalid JSON.`);
+  }
+
+  if (!response.ok) {
+    throw new Error(json.message || fallbackMessage);
+  }
+
+  return json;
 }
 
 function StatCard({ title, value, sub, icon: Icon, color = 'blue' }) {
@@ -133,11 +162,11 @@ export default function BookingAnalytics({ tenantId }) {
         apiFetch(`/api/analytics/credits-utilization?tenant_id=${tenantId}`),
       ]);
 
-      const [b, p, u] = await Promise.all([bRes.json(), pRes.json(), uRes.json()]);
-
-      if (!bRes.ok) throw new Error(b.message || 'Failed to load booking stats');
-      if (!pRes.ok) throw new Error(p.message || 'Failed to load package stats');
-      if (!uRes.ok) throw new Error(u.message || 'Failed to load utilization stats');
+      const [b, p, u] = await Promise.all([
+        parseJsonResponse(bRes, 'Failed to load booking stats'),
+        parseJsonResponse(pRes, 'Failed to load package stats'),
+        parseJsonResponse(uRes, 'Failed to load utilization stats'),
+      ]);
 
       setBookingData(b.data);
       setPackageData(p.data);
