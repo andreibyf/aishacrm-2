@@ -29,6 +29,7 @@ import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useAccountsData } from '@/hooks/useAccountsData';
 import { useAccountsBulkOps } from '@/hooks/useAccountsBulkOps';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function AccountsPage() {
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
@@ -160,7 +161,11 @@ export default function AccountsPage() {
     if (wasEditing && editingId) setUpdatingId(editingId);
     try {
       clearCacheByKey('Account');
-      await Promise.all([loadAccounts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
       toast.success(wasEditing ? 'Account updated successfully' : 'Account created successfully');
     } catch (error) {
       console.error('[Accounts] Error in handleSave:', error);
@@ -186,7 +191,11 @@ export default function AccountsPage() {
       setTotalItems((prev) => Math.max(0, prev - 1));
       toast.success('Account deleted successfully');
       clearCacheByKey('Account');
-      await Promise.all([loadAccounts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
     } catch (error) {
       console.error('Failed to delete account:', error);
       const errorMsg =

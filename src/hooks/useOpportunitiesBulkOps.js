@@ -1,5 +1,6 @@
 import { Opportunity } from '@/api/entities';
 import { toast } from 'sonner';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 /**
  * useOpportunitiesBulkOps hook - Manages bulk operations for opportunities
@@ -51,11 +52,7 @@ export function useOpportunitiesBulkOps({
       const { $or: existingOr, ...restFilter } = effectiveFilter;
       return {
         ...restFilter,
-        $and: [
-          ...(restFilter.$and || []),
-          { $or: existingOr },
-          { $or: searchConditions },
-        ],
+        $and: [...(restFilter.$and || []), { $or: existingOr }, { $or: searchConditions }],
       };
     }
     return { ...effectiveFilter, $or: searchConditions };
@@ -132,11 +129,11 @@ export function useOpportunitiesBulkOps({
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
 
-        // Refresh in background
-        setTimeout(async () => {
-          clearCacheByKey('Opportunity');
-          await Promise.all([loadOpportunities(1, pageSize), loadTotalStats()]);
-        }, 500);
+        clearCacheByKey('Opportunity');
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(1, pageSize), loadTotalStats()]),
+          { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+        );
 
         toast.success(`${successCount} opportunity/opportunities deleted`);
         if (failCount > 0) toast.error(`${failCount} failed to delete`);
@@ -175,9 +172,7 @@ export function useOpportunitiesBulkOps({
 
         for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
           const batch = selectedArray.slice(i, i + BATCH_SIZE);
-          const batchResults = await Promise.allSettled(
-            batch.map((id) => Opportunity.delete(id)),
-          );
+          const batchResults = await Promise.allSettled(batch.map((id) => Opportunity.delete(id)));
           batchResults.forEach((r) => {
             if (r.status === 'fulfilled') succeeded++;
             else {
@@ -201,11 +196,11 @@ export function useOpportunitiesBulkOps({
 
         setSelectedOpportunities(new Set());
 
-        // Refresh in background
-        setTimeout(async () => {
-          clearCacheByKey('Opportunity');
-          await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
-        }, 500);
+        clearCacheByKey('Opportunity');
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+          { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+        );
 
         toast.success(`${succeeded} opportunity/opportunities deleted`);
         if (failed > 0) toast.error(`${failed} failed to delete`);
@@ -243,7 +238,10 @@ export function useOpportunitiesBulkOps({
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
         clearCacheByKey('Opportunity');
-        await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         toast.success(
           `Updated ${updateCount} opportunity/opportunities to ${newStage.replace(/_/g, ' ')}`,
         );
@@ -265,7 +263,10 @@ export function useOpportunitiesBulkOps({
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
         clearCacheByKey('Opportunity');
-        await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         toast.success(
           `Updated ${promises.length} opportunity/opportunities to ${newStage.replace(/_/g, ' ')}`,
         );
@@ -304,7 +305,10 @@ export function useOpportunitiesBulkOps({
         setSelectedOpportunities(new Set());
         setSelectAllMode(false);
         clearCacheByKey('Opportunity');
-        await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         toast.success(`Assigned ${updateCount} opportunity/opportunities`);
       } catch (error) {
         console.error('Failed to assign opportunities:', error);
@@ -324,7 +328,10 @@ export function useOpportunitiesBulkOps({
         await Promise.all(promises);
         setSelectedOpportunities(new Set());
         clearCacheByKey('Opportunity');
-        await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         toast.success(`Assigned ${promises.length} opportunity/opportunities`);
       } catch (error) {
         console.error('Failed to assign opportunities:', error);

@@ -2,9 +2,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Loader2, Trash2 } from 'lucide-react';
+import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
 import PhoneDisplay from '../shared/PhoneDisplay';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
+import RowOperationIndicator from '../shared/RowOperationIndicator';
 
 import { contactStatusColors as statusBadgeColors } from '@/utils/statusColors';
 
@@ -53,7 +54,9 @@ export default function ContactTable({
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Phone</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Company</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Job Title</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Assigned To</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                Assigned To
+              </th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
               <th className="px-4 py-3 text-right text-sm font-medium text-slate-300">Actions</th>
             </tr>
@@ -63,7 +66,10 @@ export default function ContactTable({
               const account = accountMap.get(contact.account_id);
 
               return (
-                <tr key={contact.id} className={`hover:bg-slate-700/30 transition-colors ${deletingId === contact.id || updatingId === contact.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                <tr
+                  key={contact.id}
+                  className={`hover:bg-slate-700/30 transition-colors ${deletingId === contact.id || updatingId === contact.id ? 'opacity-50 pointer-events-none' : ''}`}
+                >
                   <td className="px-4 py-3">
                     <Checkbox
                       checked={selectedContacts.has(contact.id) || selectAllMode}
@@ -139,77 +145,97 @@ export default function ContactTable({
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    {(deletingId === contact.id || updatingId === contact.id) ? (
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>{deletingId === contact.id ? 'Deleting…' : 'Updating…'}</span>
-                      </div>
+                    {deletingId === contact.id || updatingId === contact.id ? (
+                      <RowOperationIndicator
+                        mode={deletingId === contact.id ? 'deleting' : 'updating'}
+                      />
                     ) : (
-                    <div className="flex items-center justify-end gap-2">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`/contacts/${contact.id}`, '_blank', 'noopener,noreferrer');
-                              }}
-                              className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
-                            >
-                              <Globe className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Open web profile</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => { e.stopPropagation(); handleViewDetails(contact); }}
-                              className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>View Details</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => { e.stopPropagation(); handleEdit(contact); }}
-                              className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Edit</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(contact.id); }}
-                              className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-slate-700"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Delete</p></TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(
+                                    `/contacts/${contact.id}`,
+                                    '_blank',
+                                    'noopener,noreferrer',
+                                  );
+                                }}
+                                className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+                              >
+                                <Globe className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Open web profile</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewDetails(contact);
+                                }}
+                                className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View Details</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(contact);
+                                }}
+                                className="h-8 w-8 text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(contact.id);
+                                }}
+                                className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-slate-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     )}
                   </td>
                 </tr>

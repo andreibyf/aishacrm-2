@@ -10,9 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Edit, Eye, Loader2, Trash2 } from 'lucide-react';
+import { Edit, Eye, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
+import RowOperationIndicator from '../shared/RowOperationIndicator';
 
 const stageColors = {
   prospecting: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -166,69 +167,69 @@ export default function OpportunityTable({
                   />
                 </TableCell>
                 <TableCell className="p-3 text-center">
-                  {(deletingId === opp.id || updatingId === opp.id) ? (
-                    <div className="flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>{deletingId === opp.id ? 'Deleting…' : 'Updating…'}</span>
-                    </div>
+                  {deletingId === opp.id || updatingId === opp.id ? (
+                    <RowOperationIndicator
+                      mode={deletingId === opp.id ? 'deleting' : 'updating'}
+                      center={true}
+                    />
                   ) : (
-                  <div className="flex items-center justify-center gap-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingOpportunity(opp);
-                            setIsFormOpen(true);
-                          }}
-                          className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Edit {opportunityLabel.toLowerCase()}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewDetails(opp);
-                          }}
-                          className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>View details</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(opp.id);
-                          }}
-                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Delete opportunity</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingOpportunity(opp);
+                              setIsFormOpen(true);
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Edit {opportunityLabel.toLowerCase()}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(opp);
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-slate-200 hover:bg-slate-700"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>View details</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(opp.id);
+                            }}
+                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Delete opportunity</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   )}
                 </TableCell>
               </TableRow>

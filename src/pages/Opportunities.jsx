@@ -31,6 +31,7 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useOpportunitiesData } from '@/hooks/useOpportunitiesData';
 import { useOpportunitiesBulkOps } from '@/hooks/useOpportunitiesBulkOps';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function OpportunitiesPage() {
   const { plural: opportunitiesLabel, singular: opportunityLabel } =
@@ -178,10 +179,14 @@ export default function OpportunitiesPage() {
     try {
       if (wasCreating) setCurrentPage(1);
       clearCacheByKey('Opportunity');
-      await Promise.all([
-        loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
-        loadTotalStats(),
-      ]);
+      await runMutationRefresh(
+        () =>
+          Promise.all([
+            loadOpportunities(wasCreating ? 1 : currentPage, pageSize),
+            loadTotalStats(),
+          ]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } catch (error) {
       console.error('[Opportunities] Error in handleSave:', error);
     } finally {
@@ -206,9 +211,11 @@ export default function OpportunitiesPage() {
       setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
       toast.success('Opportunity deleted successfully');
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
       clearCacheByKey('Opportunity');
-      await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+      await runMutationRefresh(
+        () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } catch (error) {
       console.error('Failed to delete opportunity:', error);
       toast.error('Failed to delete opportunity');
@@ -294,7 +301,10 @@ export default function OpportunitiesPage() {
       await Opportunity.update(opportunityId, updateData);
 
       clearCacheByKey('Opportunity');
-      await Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]);
+      await runMutationRefresh(
+        () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
       toast.success(`Opportunity moved to ${newStage.replace(/_/g, ' ')}`);
 
       const updated = await Opportunity.filter(
