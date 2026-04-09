@@ -4,18 +4,198 @@
  * Generalized project tracking with team assignments
  */
 
-import express from "express";
-import {
-  enforceEmployeeDataScope,
-  validateTenantAccess,
-} from "../middleware/validateTenant.js";
-import { tenantScopedId } from "../middleware/tenantScopedId.js";
-import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import express from 'express';
+import { enforceEmployeeDataScope, validateTenantAccess } from '../middleware/validateTenant.js';
+import { tenantScopedId } from '../middleware/tenantScopedId.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { toNullableString, toNumeric } from '../lib/typeConversions.js';
 
 export default function createConstructionProjectsRoutes(_pgPool) {
   const router = express.Router();
+
+  /**
+   * @openapi
+   * /api/construction/projects:
+   *   get:
+   *     summary: List construction projects
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string }
+   *       - in: query
+   *         name: account_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Project list
+   *   post:
+   *     summary: Create construction project
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, project_name]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               project_name: { type: string }
+   *               account_id: { type: string, format: uuid }
+   *               lead_id: { type: string, format: uuid }
+   *               status: { type: string }
+   *     responses:
+   *       201:
+   *         description: Project created
+   *
+   * /api/construction/projects/{id}:
+   *   get:
+   *     summary: Get construction project by ID
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Project details
+   *       404:
+   *         description: Project not found
+   *   put:
+   *     summary: Update construction project
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Project updated
+   *   delete:
+   *     summary: Delete construction project
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Project deleted
+   *
+   * /api/construction/projects/{projectId}/milestones:
+   *   get:
+   *     summary: List milestones for a project
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Milestone list
+   *   post:
+   *     summary: Create project milestone
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [title]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               title: { type: string }
+   *               due_date: { type: string, format: date }
+   *               status: { type: string }
+   *     responses:
+   *       201:
+   *         description: Milestone created
+   *
+   * /api/construction/projects/{projectId}/milestones/{milestoneId}:
+   *   put:
+   *     summary: Update milestone
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: path
+   *         name: milestoneId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Milestone updated
+   *   delete:
+   *     summary: Delete milestone
+   *     tags: [construction-projects]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: path
+   *         name: milestoneId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Milestone deleted
+   */
 
   // Apply tenant validation to all routes
   router.use(validateTenantAccess);
@@ -23,9 +203,9 @@ export default function createConstructionProjectsRoutes(_pgPool) {
 
   // Helper functions
   const toDate = (value) => {
-    if (value === null || value === undefined || value === "") return null;
+    if (value === null || value === undefined || value === '') return null;
     const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   };
 
   const isValidUUID = (str) => {
@@ -36,14 +216,14 @@ export default function createConstructionProjectsRoutes(_pgPool) {
   // ==============================================
   // GET /api/construction/projects - List all projects
   // ==============================================
-  router.get("/", cacheList("projects", 180), async (req, res) => {
+  router.get('/', cacheList('projects', 180), async (req, res) => {
     try {
       const { tenant_id, status, account_id, limit, offset } = req.query;
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("projects")
+        .from('projects')
         .select(
           `
           *,
@@ -64,18 +244,18 @@ export default function createConstructionProjectsRoutes(_pgPool) {
             worker:workers(id, first_name, last_name, worker_type, primary_skill)
           )
         `,
-          { count: "exact" }
+          { count: 'exact' },
         )
-        .order("created_at", { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (tenant_id && isValidUUID(tenant_id)) {
-        q = q.eq("tenant_id", tenant_id);
+        q = q.eq('tenant_id', tenant_id);
       }
       if (status) {
-        q = q.eq("status", status);
+        q = q.eq('status', status);
       }
       if (account_id && isValidUUID(account_id)) {
-        q = q.eq("account_id", account_id);
+        q = q.eq('account_id', account_id);
       }
       if (limit) {
         q = q.limit(parseInt(limit, 10));
@@ -87,33 +267,33 @@ export default function createConstructionProjectsRoutes(_pgPool) {
       const { data, error, count } = await q;
 
       if (error) {
-        logger.error("[construction-projects] GET error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-projects] GET error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         data: {
           projects: data || [],
           total: count || 0,
         },
       });
     } catch (err) {
-      logger.error("[construction-projects] GET exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-projects] GET exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // GET /api/construction/projects/:id - Get single project
   // ==============================================
-  router.get("/:id", tenantScopedId(), async (req, res) => {
+  router.get('/:id', tenantScopedId(), async (req, res) => {
     try {
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("projects")
+        .from('projects')
         .select(
           `
           *,
@@ -125,35 +305,35 @@ export default function createConstructionProjectsRoutes(_pgPool) {
             id, worker_id, role, start_date, end_date, pay_rate, bill_rate, rate_type, status, notes,
             worker:workers!worker_id(id, first_name, last_name, email, phone, worker_type, primary_skill)
           )
-        `
+        `,
         )
-        .eq("id", req.idScope.id);
+        .eq('id', req.idScope.id);
 
       if (req.idScope.tenant_id) {
-        q = q.eq("tenant_id", req.idScope.tenant_id);
+        q = q.eq('tenant_id', req.idScope.tenant_id);
       }
 
       const { data, error } = await q.single();
 
       if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Project not found" });
+        if (error.code === 'PGRST116') {
+          return res.status(404).json({ status: 'error', message: 'Project not found' });
         }
-        logger.error("[construction-projects] GET/:id error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-projects] GET/:id error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
-      res.json({ status: "success", data });
+      res.json({ status: 'success', data });
     } catch (err) {
-      logger.error("[construction-projects] GET/:id exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-projects] GET/:id exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // POST /api/construction/projects - Create project
   // ==============================================
-  router.post("/", invalidateCache("projects"), async (req, res) => {
+  router.post('/', invalidateCache('projects'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -175,13 +355,13 @@ export default function createConstructionProjectsRoutes(_pgPool) {
       } = req.body;
 
       if (!tenant_id || !isValidUUID(tenant_id)) {
-        return res.status(400).json({ status: "error", message: "Valid tenant_id is required" });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id is required' });
       }
       if (!project_name || !project_name.trim()) {
-        return res.status(400).json({ status: "error", message: "project_name is required" });
+        return res.status(400).json({ status: 'error', message: 'project_name is required' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const payload = {
@@ -191,12 +371,18 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         lead_id: lead_id && isValidUUID(lead_id) ? lead_id : null,
         site_name: toNullableString(site_name),
         site_address: toNullableString(site_address),
-        project_manager_contact_id: project_manager_contact_id && isValidUUID(project_manager_contact_id) ? project_manager_contact_id : null,
-        supervisor_contact_id: supervisor_contact_id && isValidUUID(supervisor_contact_id) ? supervisor_contact_id : null,
+        project_manager_contact_id:
+          project_manager_contact_id && isValidUUID(project_manager_contact_id)
+            ? project_manager_contact_id
+            : null,
+        supervisor_contact_id:
+          supervisor_contact_id && isValidUUID(supervisor_contact_id)
+            ? supervisor_contact_id
+            : null,
         start_date: toDate(start_date),
         end_date: toDate(end_date),
         project_value: toNumeric(project_value),
-        status: status || "Planned",
+        status: status || 'Planned',
         description: toNullableString(description),
         notes: toNullableString(notes),
         metadata: metadata || {},
@@ -204,35 +390,35 @@ export default function createConstructionProjectsRoutes(_pgPool) {
       };
 
       const { data, error } = await supabase
-        .from("projects")
+        .from('projects')
         .insert([payload])
-        .select("*")
+        .select('*')
         .single();
 
       if (error) {
-        logger.error("[construction-projects] POST error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-projects] POST error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.status(201).json({
-        status: "success",
-        message: "Project created successfully",
+        status: 'success',
+        message: 'Project created successfully',
         data,
       });
     } catch (err) {
-      logger.error("[construction-projects] POST exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-projects] POST exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // PUT /api/construction/projects/:id - Update project
   // ==============================================
-  router.put("/:id", invalidateCache("projects"), async (req, res) => {
+  router.put('/:id', invalidateCache('projects'), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
-        return res.status(400).json({ status: "error", message: "Invalid project ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid project ID' });
       }
 
       const {
@@ -252,17 +438,26 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         metadata,
       } = req.body;
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const payload = {};
       if (project_name !== undefined) payload.project_name = project_name.trim();
-      if (account_id !== undefined) payload.account_id = account_id && isValidUUID(account_id) ? account_id : null;
+      if (account_id !== undefined)
+        payload.account_id = account_id && isValidUUID(account_id) ? account_id : null;
       if (lead_id !== undefined) payload.lead_id = lead_id && isValidUUID(lead_id) ? lead_id : null;
       if (site_name !== undefined) payload.site_name = toNullableString(site_name);
       if (site_address !== undefined) payload.site_address = toNullableString(site_address);
-      if (project_manager_contact_id !== undefined) payload.project_manager_contact_id = project_manager_contact_id && isValidUUID(project_manager_contact_id) ? project_manager_contact_id : null;
-      if (supervisor_contact_id !== undefined) payload.supervisor_contact_id = supervisor_contact_id && isValidUUID(supervisor_contact_id) ? supervisor_contact_id : null;
+      if (project_manager_contact_id !== undefined)
+        payload.project_manager_contact_id =
+          project_manager_contact_id && isValidUUID(project_manager_contact_id)
+            ? project_manager_contact_id
+            : null;
+      if (supervisor_contact_id !== undefined)
+        payload.supervisor_contact_id =
+          supervisor_contact_id && isValidUUID(supervisor_contact_id)
+            ? supervisor_contact_id
+            : null;
       if (start_date !== undefined) payload.start_date = toDate(start_date);
       if (end_date !== undefined) payload.end_date = toDate(end_date);
       if (project_value !== undefined) payload.project_value = toNumeric(project_value);
@@ -272,72 +467,72 @@ export default function createConstructionProjectsRoutes(_pgPool) {
       if (metadata !== undefined) payload.metadata = metadata;
 
       if (Object.keys(payload).length === 0) {
-        return res.status(400).json({ status: "error", message: "No fields to update" });
+        return res.status(400).json({ status: 'error', message: 'No fields to update' });
       }
 
       const { data, error } = await supabase
-        .from("projects")
+        .from('projects')
         .update(payload)
-        .eq("id", id)
-        .select("*")
+        .eq('id', id)
+        .select('*')
         .single();
 
       if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Project not found" });
+        if (error.code === 'PGRST116') {
+          return res.status(404).json({ status: 'error', message: 'Project not found' });
         }
-        logger.error("[construction-projects] PUT error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-projects] PUT error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
-        message: "Project updated successfully",
+        status: 'success',
+        message: 'Project updated successfully',
         data,
       });
     } catch (err) {
-      logger.error("[construction-projects] PUT exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-projects] PUT exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // DELETE /api/construction/projects/:id - Delete project
   // ==============================================
-  router.delete("/:id", invalidateCache("projects"), async (req, res) => {
+  router.delete('/:id', invalidateCache('projects'), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
-        return res.status(400).json({ status: "error", message: "Invalid project ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid project ID' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const { data, error } = await supabase
-        .from("projects")
+        .from('projects')
         .delete()
-        .eq("id", id)
-        .select("id")
+        .eq('id', id)
+        .select('id')
         .maybeSingle();
 
       if (error) {
-        logger.error("[construction-projects] DELETE error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-projects] DELETE error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       if (!data) {
-        return res.status(404).json({ status: "error", message: "Project not found" });
+        return res.status(404).json({ status: 'error', message: 'Project not found' });
       }
 
       res.json({
-        status: "success",
-        message: "Project deleted successfully",
+        status: 'success',
+        message: 'Project deleted successfully',
         data: { id: data.id },
       });
     } catch (err) {
-      logger.error("[construction-projects] DELETE exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-projects] DELETE exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
@@ -346,61 +541,61 @@ export default function createConstructionProjectsRoutes(_pgPool) {
   // ==============================================
 
   // GET /api/construction/projects/:projectId/milestones - List milestones for a project
-  router.get("/:projectId/milestones", async (req, res) => {
+  router.get('/:projectId/milestones', async (req, res) => {
     try {
       const { projectId } = req.params;
       if (!isValidUUID(projectId)) {
-        return res.status(400).json({ status: "error", message: "Invalid project ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid project ID' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const { data, error } = await supabase
-        .from("project_milestones")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("sort_order", { ascending: true })
-        .order("due_date", { ascending: true, nullsFirst: false });
+        .from('project_milestones')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true })
+        .order('due_date', { ascending: true, nullsFirst: false });
 
       if (error) {
-        logger.error("[milestones] GET error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[milestones] GET error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
-      res.json({ status: "success", data: data || [] });
+      res.json({ status: 'success', data: data || [] });
     } catch (err) {
-      logger.error("[milestones] GET exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[milestones] GET exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // POST /api/construction/projects/:projectId/milestones - Create milestone
-  router.post("/:projectId/milestones", invalidateCache("project_milestones"), async (req, res) => {
+  router.post('/:projectId/milestones', invalidateCache('project_milestones'), async (req, res) => {
     try {
       const { projectId } = req.params;
       if (!isValidUUID(projectId)) {
-        return res.status(400).json({ status: "error", message: "Invalid project ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid project ID' });
       }
 
       const { tenant_id, title, description, due_date, status, sort_order } = req.body;
 
       if (!title || !title.trim()) {
-        return res.status(400).json({ status: "error", message: "Title is required" });
+        return res.status(400).json({ status: 'error', message: 'Title is required' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       // Verify project exists and get tenant_id if not provided
       const { data: project } = await supabase
-        .from("projects")
-        .select("id, tenant_id")
-        .eq("id", projectId)
+        .from('projects')
+        .select('id, tenant_id')
+        .eq('id', projectId)
         .single();
 
       if (!project) {
-        return res.status(404).json({ status: "error", message: "Project not found" });
+        return res.status(404).json({ status: 'error', message: 'Project not found' });
       }
 
       const payload = {
@@ -409,131 +604,139 @@ export default function createConstructionProjectsRoutes(_pgPool) {
         title: title.trim(),
         description: toNullableString(description),
         due_date: toDate(due_date),
-        status: status || "pending",
+        status: status || 'pending',
         sort_order: sort_order ?? 0,
         created_by: req.user?.id || null,
       };
 
       const { data, error } = await supabase
-        .from("project_milestones")
+        .from('project_milestones')
         .insert(payload)
-        .select("*")
+        .select('*')
         .single();
 
       if (error) {
-        logger.error("[milestones] POST error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[milestones] POST error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.status(201).json({
-        status: "success",
-        message: "Milestone created successfully",
+        status: 'success',
+        message: 'Milestone created successfully',
         data,
       });
     } catch (err) {
-      logger.error("[milestones] POST exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[milestones] POST exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // PUT /api/construction/projects/:projectId/milestones/:milestoneId - Update milestone
-  router.put("/:projectId/milestones/:milestoneId", invalidateCache("project_milestones"), async (req, res) => {
-    try {
-      const { projectId, milestoneId } = req.params;
-      if (!isValidUUID(projectId) || !isValidUUID(milestoneId)) {
-        return res.status(400).json({ status: "error", message: "Invalid ID" });
-      }
-
-      const { title, description, due_date, status, sort_order, completed_at } = req.body;
-
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
-      const supabase = getSupabaseClient();
-
-      const payload = {};
-      if (title !== undefined) payload.title = title.trim();
-      if (description !== undefined) payload.description = toNullableString(description);
-      if (due_date !== undefined) payload.due_date = toDate(due_date);
-      if (status !== undefined) {
-        payload.status = status;
-        // Auto-set completed_at when status changes to completed
-        if (status === "completed" && completed_at === undefined) {
-          payload.completed_at = new Date().toISOString();
-        } else if (status !== "completed") {
-          payload.completed_at = null;
+  router.put(
+    '/:projectId/milestones/:milestoneId',
+    invalidateCache('project_milestones'),
+    async (req, res) => {
+      try {
+        const { projectId, milestoneId } = req.params;
+        if (!isValidUUID(projectId) || !isValidUUID(milestoneId)) {
+          return res.status(400).json({ status: 'error', message: 'Invalid ID' });
         }
-      }
-      if (completed_at !== undefined) payload.completed_at = completed_at;
-      if (sort_order !== undefined) payload.sort_order = sort_order;
 
-      if (Object.keys(payload).length === 0) {
-        return res.status(400).json({ status: "error", message: "No fields to update" });
-      }
+        const { title, description, due_date, status, sort_order, completed_at } = req.body;
 
-      const { data, error } = await supabase
-        .from("project_milestones")
-        .update(payload)
-        .eq("id", milestoneId)
-        .eq("project_id", projectId)
-        .select("*")
-        .single();
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Milestone not found" });
+        const payload = {};
+        if (title !== undefined) payload.title = title.trim();
+        if (description !== undefined) payload.description = toNullableString(description);
+        if (due_date !== undefined) payload.due_date = toDate(due_date);
+        if (status !== undefined) {
+          payload.status = status;
+          // Auto-set completed_at when status changes to completed
+          if (status === 'completed' && completed_at === undefined) {
+            payload.completed_at = new Date().toISOString();
+          } else if (status !== 'completed') {
+            payload.completed_at = null;
+          }
         }
-        logger.error("[milestones] PUT error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
-      }
+        if (completed_at !== undefined) payload.completed_at = completed_at;
+        if (sort_order !== undefined) payload.sort_order = sort_order;
 
-      res.json({
-        status: "success",
-        message: "Milestone updated successfully",
-        data,
-      });
-    } catch (err) {
-      logger.error("[milestones] PUT exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
-    }
-  });
+        if (Object.keys(payload).length === 0) {
+          return res.status(400).json({ status: 'error', message: 'No fields to update' });
+        }
+
+        const { data, error } = await supabase
+          .from('project_milestones')
+          .update(payload)
+          .eq('id', milestoneId)
+          .eq('project_id', projectId)
+          .select('*')
+          .single();
+
+        if (error) {
+          if (error.code === 'PGRST116') {
+            return res.status(404).json({ status: 'error', message: 'Milestone not found' });
+          }
+          logger.error('[milestones] PUT error:', error);
+          return res.status(500).json({ status: 'error', message: error.message });
+        }
+
+        res.json({
+          status: 'success',
+          message: 'Milestone updated successfully',
+          data,
+        });
+      } catch (err) {
+        logger.error('[milestones] PUT exception:', err);
+        res.status(500).json({ status: 'error', message: err.message });
+      }
+    },
+  );
 
   // DELETE /api/construction/projects/:projectId/milestones/:milestoneId - Delete milestone
-  router.delete("/:projectId/milestones/:milestoneId", invalidateCache("project_milestones"), async (req, res) => {
-    try {
-      const { projectId, milestoneId } = req.params;
-      if (!isValidUUID(projectId) || !isValidUUID(milestoneId)) {
-        return res.status(400).json({ status: "error", message: "Invalid ID" });
+  router.delete(
+    '/:projectId/milestones/:milestoneId',
+    invalidateCache('project_milestones'),
+    async (req, res) => {
+      try {
+        const { projectId, milestoneId } = req.params;
+        if (!isValidUUID(projectId) || !isValidUUID(milestoneId)) {
+          return res.status(400).json({ status: 'error', message: 'Invalid ID' });
+        }
+
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
+
+        const { data, error } = await supabase
+          .from('project_milestones')
+          .delete()
+          .eq('id', milestoneId)
+          .eq('project_id', projectId)
+          .select('id')
+          .maybeSingle();
+
+        if (error) {
+          logger.error('[milestones] DELETE error:', error);
+          return res.status(500).json({ status: 'error', message: error.message });
+        }
+
+        if (!data) {
+          return res.status(404).json({ status: 'error', message: 'Milestone not found' });
+        }
+
+        res.json({
+          status: 'success',
+          message: 'Milestone deleted successfully',
+          data: { id: data.id },
+        });
+      } catch (err) {
+        logger.error('[milestones] DELETE exception:', err);
+        res.status(500).json({ status: 'error', message: err.message });
       }
-
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
-      const supabase = getSupabaseClient();
-
-      const { data, error } = await supabase
-        .from("project_milestones")
-        .delete()
-        .eq("id", milestoneId)
-        .eq("project_id", projectId)
-        .select("id")
-        .maybeSingle();
-
-      if (error) {
-        logger.error("[milestones] DELETE error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
-      }
-
-      if (!data) {
-        return res.status(404).json({ status: "error", message: "Milestone not found" });
-      }
-
-      res.json({
-        status: "success",
-        message: "Milestone deleted successfully",
-        data: { id: data.id },
-      });
-    } catch (err) {
-      logger.error("[milestones] DELETE exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
-    }
-  });
+    },
+  );
 
   return router;
 }

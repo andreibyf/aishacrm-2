@@ -3,18 +3,144 @@
  * Full CRUD operations for worker assignments to construction projects
  */
 
-import express from "express";
-import {
-  enforceEmployeeDataScope,
-  validateTenantAccess,
-} from "../middleware/validateTenant.js";
-import { tenantScopedId } from "../middleware/tenantScopedId.js";
-import { cacheList, invalidateCache } from "../lib/cacheMiddleware.js";
+import express from 'express';
+import { enforceEmployeeDataScope, validateTenantAccess } from '../middleware/validateTenant.js';
+import { tenantScopedId } from '../middleware/tenantScopedId.js';
+import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { toNullableString, toNumeric } from '../lib/typeConversions.js';
 
 export default function createConstructionAssignmentsRoutes(_pgPool) {
   const router = express.Router();
+
+  /**
+   * @openapi
+   * /api/construction/assignments:
+   *   get:
+   *     summary: List worker assignments
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: project_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: contact_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string }
+   *       - in: query
+   *         name: role
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Assignment list
+   *   post:
+   *     summary: Create assignment
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, project_id, worker_id, role]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               project_id: { type: string, format: uuid }
+   *               worker_id: { type: string, format: uuid }
+   *               contact_id: { type: string, format: uuid }
+   *               role: { type: string }
+   *               status: { type: string }
+   *     responses:
+   *       201:
+   *         description: Assignment created
+   *
+   * /api/construction/assignments/{id}:
+   *   get:
+   *     summary: Get assignment by ID
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignment details
+   *   put:
+   *     summary: Update assignment
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Assignment updated
+   *   delete:
+   *     summary: Delete assignment
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignment deleted
+   *
+   * /api/construction/assignments/by-project/{projectId}:
+   *   get:
+   *     summary: List assignments by project
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: projectId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignments for project
+   *
+   * /api/construction/assignments/by-worker/{contactId}:
+   *   get:
+   *     summary: List assignments by worker/contact
+   *     tags: [construction-assignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: contactId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignments for worker
+   */
 
   // Apply tenant validation to all routes
   router.use(validateTenantAccess);
@@ -22,9 +148,9 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
 
   // Helper functions
   const toDate = (value) => {
-    if (value === null || value === undefined || value === "") return null;
+    if (value === null || value === undefined || value === '') return null;
     const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   };
 
   const isValidUUID = (str) => {
@@ -35,38 +161,38 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
   // ==============================================
   // GET /api/construction/assignments - List all assignments
   // ==============================================
-  router.get("/", cacheList("project_assignments", 180), async (req, res) => {
+  router.get('/', cacheList('project_assignments', 180), async (req, res) => {
     try {
       const { tenant_id, project_id, contact_id, status, role, limit, offset } = req.query;
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .select(
           `
           *,
           project:projects!project_id(id, project_name, site_name, status),
           worker:workers!worker_id(id, first_name, last_name, email, phone, primary_skill, worker_type)
         `,
-          { count: "exact" }
+          { count: 'exact' },
         )
-        .order("created_at", { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (tenant_id && isValidUUID(tenant_id)) {
-        q = q.eq("tenant_id", tenant_id);
+        q = q.eq('tenant_id', tenant_id);
       }
       if (project_id && isValidUUID(project_id)) {
-        q = q.eq("project_id", project_id);
+        q = q.eq('project_id', project_id);
       }
       if (contact_id && isValidUUID(contact_id)) {
-        q = q.eq("worker_id", contact_id); // Note: query param still named contact_id for backwards compat
+        q = q.eq('worker_id', contact_id); // Note: query param still named contact_id for backwards compat
       }
       if (status) {
-        q = q.eq("status", status);
+        q = q.eq('status', status);
       }
       if (role) {
-        q = q.ilike("role", `%${role}%`);
+        q = q.ilike('role', `%${role}%`);
       }
       if (limit) {
         q = q.limit(parseInt(limit, 10));
@@ -78,67 +204,67 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       const { data, error, count } = await q;
 
       if (error) {
-        logger.error("[construction-assignments] GET error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] GET error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         data: {
           assignments: data || [],
           total: count || 0,
         },
       });
     } catch (err) {
-      logger.error("[construction-assignments] GET exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] GET exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // GET /api/construction/assignments/:id - Get single assignment
   // ==============================================
-  router.get("/:id", tenantScopedId(), async (req, res) => {
+  router.get('/:id', tenantScopedId(), async (req, res) => {
     try {
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       let q = supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .select(
           `
           *,
           project:projects!project_id(id, project_name, site_name, site_address, status, account_id),
           worker:contacts!contact_id(id, first_name, last_name, email, phone, worker_role)
-        `
+        `,
         )
-        .eq("id", req.idScope.id);
+        .eq('id', req.idScope.id);
 
       if (req.idScope.tenant_id) {
-        q = q.eq("tenant_id", req.idScope.tenant_id);
+        q = q.eq('tenant_id', req.idScope.tenant_id);
       }
 
       const { data, error } = await q.single();
 
       if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Assignment not found" });
+        if (error.code === 'PGRST116') {
+          return res.status(404).json({ status: 'error', message: 'Assignment not found' });
         }
-        logger.error("[construction-assignments] GET/:id error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] GET/:id error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
-      res.json({ status: "success", data });
+      res.json({ status: 'success', data });
     } catch (err) {
-      logger.error("[construction-assignments] GET/:id exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] GET/:id exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // POST /api/construction/assignments - Create assignment
   // ==============================================
-  router.post("/", invalidateCache("project_assignments"), async (req, res) => {
+  router.post('/', invalidateCache('project_assignments'), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -162,19 +288,19 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
 
       // Validate required fields
       if (!tenant_id || !isValidUUID(tenant_id)) {
-        return res.status(400).json({ status: "error", message: "Valid tenant_id is required" });
+        return res.status(400).json({ status: 'error', message: 'Valid tenant_id is required' });
       }
       if (!project_id || !isValidUUID(project_id)) {
-        return res.status(400).json({ status: "error", message: "Valid project_id is required" });
+        return res.status(400).json({ status: 'error', message: 'Valid project_id is required' });
       }
       if (!workerId || !isValidUUID(workerId)) {
-        return res.status(400).json({ status: "error", message: "Valid worker_id is required" });
+        return res.status(400).json({ status: 'error', message: 'Valid worker_id is required' });
       }
       if (!role || !role.trim()) {
-        return res.status(400).json({ status: "error", message: "role is required" });
+        return res.status(400).json({ status: 'error', message: 'role is required' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const payload = {
@@ -186,58 +312,61 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         end_date: toDate(end_date),
         pay_rate: toNumeric(pay_rate),
         bill_rate: toNumeric(bill_rate),
-        rate_type: rate_type || "hourly",
-        status: status || "Active",
+        rate_type: rate_type || 'hourly',
+        status: status || 'Active',
         notes: toNullableString(notes),
         metadata: metadata || {},
         created_by: created_by && isValidUUID(created_by) ? created_by : null,
       };
 
       const { data, error } = await supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .insert([payload])
-        .select("*")
+        .select('*')
         .single();
 
       if (error) {
         // Check for unique constraint violation
-        if (error.code === "23505") {
+        if (error.code === '23505') {
           return res.status(409).json({
-            status: "error",
-            message: "This worker is already assigned to this project in the same role",
+            status: 'error',
+            message: 'This worker is already assigned to this project in the same role',
           });
         }
-        logger.error("[construction-assignments] POST error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] POST error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       // Also invalidate projects cache since assignment counts changed
       try {
-        const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
-        invalidateCacheByKey("projects");
+        const { invalidateCacheByKey } = await import('../lib/cacheMiddleware.js');
+        invalidateCacheByKey('projects');
       } catch (cacheErr) {
-        logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
+        logger.warn(
+          '[construction-assignments] Could not invalidate projects cache:',
+          cacheErr.message,
+        );
       }
 
       res.status(201).json({
-        status: "success",
-        message: "Assignment created successfully",
+        status: 'success',
+        message: 'Assignment created successfully',
         data,
       });
     } catch (err) {
-      logger.error("[construction-assignments] POST exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] POST exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // PUT /api/construction/assignments/:id - Update assignment
   // ==============================================
-  router.put("/:id", invalidateCache("project_assignments"), async (req, res) => {
+  router.put('/:id', invalidateCache('project_assignments'), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
-        return res.status(400).json({ status: "error", message: "Invalid assignment ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid assignment ID' });
       }
 
       const {
@@ -254,12 +383,14 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
         metadata,
       } = req.body;
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const payload = {};
-      if (project_id !== undefined) payload.project_id = project_id && isValidUUID(project_id) ? project_id : null;
-      if (contact_id !== undefined) payload.contact_id = contact_id && isValidUUID(contact_id) ? contact_id : null;
+      if (project_id !== undefined)
+        payload.project_id = project_id && isValidUUID(project_id) ? project_id : null;
+      if (contact_id !== undefined)
+        payload.contact_id = contact_id && isValidUUID(contact_id) ? contact_id : null;
       if (role !== undefined) payload.role = role.trim();
       if (start_date !== undefined) payload.start_date = toDate(start_date);
       if (end_date !== undefined) payload.end_date = toDate(end_date);
@@ -271,147 +402,150 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
       if (metadata !== undefined) payload.metadata = metadata;
 
       if (Object.keys(payload).length === 0) {
-        return res.status(400).json({ status: "error", message: "No fields to update" });
+        return res.status(400).json({ status: 'error', message: 'No fields to update' });
       }
 
       const { data, error } = await supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .update(payload)
-        .eq("id", id)
-        .select("*")
+        .eq('id', id)
+        .select('*')
         .single();
 
       if (error) {
-        if (error.code === "PGRST116") {
-          return res.status(404).json({ status: "error", message: "Assignment not found" });
+        if (error.code === 'PGRST116') {
+          return res.status(404).json({ status: 'error', message: 'Assignment not found' });
         }
-        if (error.code === "23505") {
+        if (error.code === '23505') {
           return res.status(409).json({
-            status: "error",
-            message: "This worker is already assigned to this project in the same role",
+            status: 'error',
+            message: 'This worker is already assigned to this project in the same role',
           });
         }
-        logger.error("[construction-assignments] PUT error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] PUT error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
-        message: "Assignment updated successfully",
+        status: 'success',
+        message: 'Assignment updated successfully',
         data,
       });
     } catch (err) {
-      logger.error("[construction-assignments] PUT exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] PUT exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // DELETE /api/construction/assignments/:id - Delete assignment
   // ==============================================
-  router.delete("/:id", invalidateCache("project_assignments"), async (req, res) => {
+  router.delete('/:id', invalidateCache('project_assignments'), async (req, res) => {
     try {
       const { id } = req.params;
       if (!isValidUUID(id)) {
-        return res.status(400).json({ status: "error", message: "Invalid assignment ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid assignment ID' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const { data, error } = await supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .delete()
-        .eq("id", id)
-        .select("id, project_id")
+        .eq('id', id)
+        .select('id, project_id')
         .maybeSingle();
 
       if (error) {
-        logger.error("[construction-assignments] DELETE error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] DELETE error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       if (!data) {
-        return res.status(404).json({ status: "error", message: "Assignment not found" });
+        return res.status(404).json({ status: 'error', message: 'Assignment not found' });
       }
 
       // Also invalidate projects cache
       try {
-        const { invalidateCacheByKey } = await import("../lib/cacheMiddleware.js");
-        invalidateCacheByKey("projects");
+        const { invalidateCacheByKey } = await import('../lib/cacheMiddleware.js');
+        invalidateCacheByKey('projects');
       } catch (cacheErr) {
-        logger.warn("[construction-assignments] Could not invalidate projects cache:", cacheErr.message);
+        logger.warn(
+          '[construction-assignments] Could not invalidate projects cache:',
+          cacheErr.message,
+        );
       }
 
       res.json({
-        status: "success",
-        message: "Assignment deleted successfully",
+        status: 'success',
+        message: 'Assignment deleted successfully',
         data: { id: data.id },
       });
     } catch (err) {
-      logger.error("[construction-assignments] DELETE exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] DELETE exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // GET /api/construction/assignments/by-project/:projectId - Get all assignments for a project
   // ==============================================
-  router.get("/by-project/:projectId", async (req, res) => {
+  router.get('/by-project/:projectId', async (req, res) => {
     try {
       const { projectId } = req.params;
       if (!isValidUUID(projectId)) {
-        return res.status(400).json({ status: "error", message: "Invalid project ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid project ID' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const { data, error, count } = await supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .select(
           `
           *,
           worker:contacts!contact_id(id, first_name, last_name, email, phone, worker_role)
         `,
-          { count: "exact" }
+          { count: 'exact' },
         )
-        .eq("project_id", projectId)
-        .order("role", { ascending: true });
+        .eq('project_id', projectId)
+        .order('role', { ascending: true });
 
       if (error) {
-        logger.error("[construction-assignments] GET by-project error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] GET by-project error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         data: {
           assignments: data || [],
           total: count || 0,
         },
       });
     } catch (err) {
-      logger.error("[construction-assignments] GET by-project exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] GET by-project exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 
   // ==============================================
   // GET /api/construction/assignments/by-worker/:contactId - Get all assignments for a worker
   // ==============================================
-  router.get("/by-worker/:contactId", async (req, res) => {
+  router.get('/by-worker/:contactId', async (req, res) => {
     try {
       const { contactId } = req.params;
       if (!isValidUUID(contactId)) {
-        return res.status(400).json({ status: "error", message: "Invalid contact ID" });
+        return res.status(400).json({ status: 'error', message: 'Invalid contact ID' });
       }
 
-      const { getSupabaseClient } = await import("../lib/supabase-db.js");
+      const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
 
       const { data, error, count } = await supabase
-        .from("project_assignments")
+        .from('project_assignments')
         .select(
           `
           *,
@@ -419,26 +553,26 @@ export default function createConstructionAssignmentsRoutes(_pgPool) {
             account:accounts!account_id(id, name)
           )
         `,
-          { count: "exact" }
+          { count: 'exact' },
         )
-        .eq("contact_id", contactId)
-        .order("start_date", { ascending: false });
+        .eq('contact_id', contactId)
+        .order('start_date', { ascending: false });
 
       if (error) {
-        logger.error("[construction-assignments] GET by-worker error:", error);
-        return res.status(500).json({ status: "error", message: error.message });
+        logger.error('[construction-assignments] GET by-worker error:', error);
+        return res.status(500).json({ status: 'error', message: error.message });
       }
 
       res.json({
-        status: "success",
+        status: 'success',
         data: {
           assignments: data || [],
           total: count || 0,
         },
       });
     } catch (err) {
-      logger.error("[construction-assignments] GET by-worker exception:", err);
-      res.status(500).json({ status: "error", message: err.message });
+      logger.error('[construction-assignments] GET by-worker exception:', err);
+      res.status(500).json({ status: 'error', message: err.message });
     }
   });
 

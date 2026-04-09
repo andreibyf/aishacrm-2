@@ -29,6 +29,288 @@ import logger from '../lib/logger.js';
 export default function createTeamsV2Routes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/v2/teams/scope:
+   *   get:
+   *     summary: Get current user team visibility scope
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Visibility scope
+   *
+   * /api/v2/teams/settings:
+   *   get:
+   *     summary: Get team settings (visibility mode and labels)
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Team settings
+   *
+   * /api/v2/teams/visibility-mode:
+   *   get:
+   *     summary: Get current visibility mode
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Visibility mode
+   *   put:
+   *     summary: Update visibility mode and label mappings
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               visibility_mode: { type: string, enum: [shared, hierarchical] }
+   *               role_labels: { type: object }
+   *               tier_labels: { type: object }
+   *     responses:
+   *       200:
+   *         description: Visibility mode updated
+   *
+   * /api/v2/teams:
+   *   get:
+   *     summary: List teams
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: include_inactive
+   *         schema: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Team list
+   *   post:
+   *     summary: Create team
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               name: { type: string }
+   *               description: { type: string }
+   *               parent_team_id: { type: string, format: uuid }
+   *     responses:
+   *       201:
+   *         description: Team created
+   *
+   * /api/v2/teams/{id}:
+   *   put:
+   *     summary: Update team
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Team updated
+   *   delete:
+   *     summary: Deactivate or hard-delete team
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: hard
+   *         schema: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Team removed/deactivated
+   *
+   * /api/v2/teams/{id}/members:
+   *   get:
+   *     summary: List team members
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Team member list
+   *   post:
+   *     summary: Add member to team
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [employee_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               employee_id: { type: string, format: uuid }
+   *               role: { type: string, enum: [member, manager, director] }
+   *     responses:
+   *       201:
+   *         description: Member added
+   *
+   * /api/v2/teams/{id}/members/{memberId}:
+   *   put:
+   *     summary: Update team member role
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: path
+   *         name: memberId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [role]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               role: { type: string, enum: [member, manager, director] }
+   *     responses:
+   *       200:
+   *         description: Member role updated
+   *   delete:
+   *     summary: Remove member from team
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: path
+   *         name: memberId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Member removed
+   *
+   * /api/v2/teams/employee-memberships:
+   *   post:
+   *     summary: Get memberships for an employee
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, employee_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               employee_id: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Memberships list
+   *
+   * /api/v2/teams/user-memberships:
+   *   get:
+   *     summary: Get memberships for a user
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: user_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Memberships list
+   *
+   * /api/v2/teams/sync-user-memberships:
+   *   post:
+   *     summary: Replace user memberships with provided set
+   *     tags: [teams-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, user_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               user_id: { type: string, format: uuid }
+   *               memberships:
+   *                 type: array
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     team_id: { type: string, format: uuid }
+   *                     access_level: { type: string }
+   *     responses:
+   *       200:
+   *         description: Memberships synced
+   */
+
   // All team routes require authentication (applied at mount point in server.js)
   // Tenant validation on all routes
   router.use(validateTenantAccess);

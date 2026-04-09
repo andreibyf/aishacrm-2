@@ -103,6 +103,126 @@ function writeOllamaEnvToCompose(updates) {
 const router = express.Router();
 
 /**
+ * @openapi
+ * /api/ai-settings:
+ *   get:
+ *     summary: List AI settings for the current tenant
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: agent_role
+ *         schema: { type: string, enum: [aisha, developer] }
+ *     responses:
+ *       200:
+ *         description: AI settings retrieved
+ *       400:
+ *         description: tenant_id is required
+ *
+ * /api/ai-settings/categories:
+ *   get:
+ *     summary: List setting categories and labels
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Categories retrieved
+ *
+ * /api/ai-settings/{id}:
+ *   put:
+ *     summary: Update one AI setting
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               setting_value:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Setting updated
+ *       404:
+ *         description: Setting not found
+ *
+ * /api/ai-settings/reset:
+ *   post:
+ *     summary: Reset AI settings to defaults for an agent role
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               agent_role:
+ *                 type: string
+ *                 enum: [aisha, developer]
+ *     responses:
+ *       200:
+ *         description: Settings reset
+ *
+ * /api/ai-settings/clear-cache:
+ *   post:
+ *     summary: Clear in-memory AI settings cache
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cache cleared
+ *
+ * /api/ai-settings/ollama:
+ *   get:
+ *     summary: Get current Ollama runtime settings
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Ollama settings retrieved
+ *   post:
+ *     summary: Update Ollama runtime settings
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *     responses:
+ *       200:
+ *         description: Ollama settings updated
+ *
+ * /api/ai-settings/ollama/restart:
+ *   post:
+ *     summary: Restart Ollama service after config change
+ *     tags: [ai-settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Restart requested
+ */
+
+/**
  * Default seed settings for bootstrapping a new tenant.
  */
 const DEFAULT_SETTINGS = {

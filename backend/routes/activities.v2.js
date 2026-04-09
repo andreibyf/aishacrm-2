@@ -192,6 +192,185 @@ function normalizeDueDateTimeFields(rawDueDate, rawDueTime) {
 
 export default function createActivityV2Routes(_pgPool, options = {}) {
   const router = express.Router();
+
+  /**
+   * @openapi
+   * /api/v2/activities/mark-overdue:
+   *   post:
+   *     summary: Mark past-due activities as overdue
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *     responses:
+   *       200:
+   *         description: Overdue update summary
+   *
+   * /api/v2/activities:
+   *   get:
+   *     summary: List activities (v2)
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string }
+   *       - in: query
+   *         name: assigned_to
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Activity list
+   *   post:
+   *     summary: Create activity (v2)
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               subject: { type: string }
+   *               related_to: { type: string }
+   *               related_id: { type: string, format: uuid }
+   *               due_date: { type: string, format: date }
+   *               due_time: { type: string }
+   *               status: { type: string }
+   *     responses:
+   *       201:
+   *         description: Activity created
+   *
+   * /api/v2/activities/search:
+   *   post:
+   *     summary: Search activities with advanced filters
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               query: { type: string }
+   *               filters: { type: object }
+   *     responses:
+   *       200:
+   *         description: Search results
+   *
+   * /api/v2/activities/{id}:
+   *   get:
+   *     summary: Get activity by ID
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Activity details
+   *       404:
+   *         description: Activity not found
+   *   put:
+   *     summary: Update activity
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Activity updated
+   *   delete:
+   *     summary: Delete activity
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Activity deleted
+   *
+   * /api/v2/activities/{id}/assignment-history:
+   *   get:
+   *     summary: Get assignment history for an activity
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignment history
+   *
+   * /api/v2/activities/{id}/generate-ai-email:
+   *   post:
+   *     summary: Generate AI draft email for activity follow-up
+   *     tags: [activities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               prompt: { type: string }
+   *     responses:
+   *       200:
+   *         description: Draft generated
+   */
   const {
     generateScheduledAiEmailDraft = defaultGenerateScheduledAiEmailDraft,
     getSupabaseClient: getSupabaseClientOverride = getSupabaseClient,

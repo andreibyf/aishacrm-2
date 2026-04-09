@@ -13,6 +13,155 @@ import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 export default function createOpportunityV2Routes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/v2/opportunities/stats:
+   *   get:
+   *     summary: Get opportunity stage statistics
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: assigned_to
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: assigned_to_team
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: is_test_data
+   *         schema: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: Stage statistics
+   *
+   * /api/v2/opportunities/count:
+   *   get:
+   *     summary: Get filtered opportunity count
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: filter
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Count response
+   *
+   * /api/v2/opportunities:
+   *   get:
+   *     summary: List opportunities (v2)
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Opportunities list
+   *   post:
+   *     summary: Create opportunity (v2)
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, name]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               name: { type: string }
+   *               stage: { type: string }
+   *               amount: { type: number }
+   *     responses:
+   *       201:
+   *         description: Opportunity created
+   *
+   * /api/v2/opportunities/{id}:
+   *   get:
+   *     summary: Get opportunity by ID
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Opportunity details
+   *   put:
+   *     summary: Update opportunity
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Opportunity updated
+   *   delete:
+   *     summary: Delete opportunity
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Opportunity deleted
+   *
+   * /api/v2/opportunities/{id}/assignment-history:
+   *   get:
+   *     summary: Get assignment history for an opportunity
+   *     tags: [opportunities-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Assignment history
+   */
+
   router.use(validateTenantAccess);
 
   // Allowed sort fields to prevent column injection attacks

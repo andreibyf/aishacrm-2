@@ -11,6 +11,118 @@ import logger from '../lib/logger.js';
 export default function createAnnouncementRoutes(_pgPool) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/announcements:
+   *   get:
+   *     summary: List announcements
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: is_active
+   *         schema: { type: boolean }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 50 }
+   *       - in: query
+   *         name: offset
+   *         schema: { type: integer, default: 0 }
+   *     responses:
+   *       200:
+   *         description: Announcements list
+   *   post:
+   *     summary: Create announcement
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [title, content]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               title: { type: string }
+   *               content: { type: string }
+   *               type: { type: string }
+   *               is_active: { type: boolean }
+   *     responses:
+   *       201:
+   *         description: Announcement created
+   *
+   * /api/announcements/active:
+   *   get:
+   *     summary: List currently active announcements
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Active announcements list
+   *
+   * /api/announcements/{id}:
+   *   get:
+   *     summary: Get announcement by ID
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Announcement retrieved
+   *       404:
+   *         description: Not found
+   *   put:
+   *     summary: Update announcement
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             additionalProperties: true
+   *     responses:
+   *       200:
+   *         description: Announcement updated
+   *   delete:
+   *     summary: Delete announcement
+   *     tags: [announcements]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Announcement deleted
+   */
+
   // GET /api/announcements - List announcements
   router.get('/', cacheList('announcements', 180), async (req, res) => {
     try {

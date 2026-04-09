@@ -7,36 +7,90 @@ import { getSupabaseAdmin } from '../lib/supabaseFactory.js';
 export function createTasksRoutes() {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/tasks/from-intent:
+   *   post:
+   *     summary: Create and enqueue a task from AI intent
+   *     tags: [tasks]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, description]
+   *             properties:
+   *               tenant_id:
+   *                 type: string
+   *                 format: uuid
+   *               description:
+   *                 type: string
+   *               entity_type:
+   *                 type: string
+   *               entity_id:
+   *                 type: string
+   *                 format: uuid
+   *               related_data:
+   *                 type: object
+   *     responses:
+   *       200:
+   *         description: Task created and queued
+   *       400:
+   *         description: Missing required fields
+   *       500:
+   *         description: Task creation failed
+   *
+   * /api/tasks/{id}:
+   *   get:
+   *     summary: Get task by ID
+   *     tags: [tasks]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       200:
+   *         description: Task retrieved
+   *       404:
+   *         description: Task not found
+   */
+
   router.post('/from-intent', async (req, res) => {
     try {
       const supabase = getSupabaseAdmin();
       const { description, entity_type, entity_id, tenant_id, related_data } = req.body;
-      
+
       // Validate required fields
       if (!tenant_id) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'tenant_id is required for task creation',
-          hint: 'Ensure a tenant is selected before creating tasks'
+          hint: 'Ensure a tenant is selected before creating tasks',
         });
       }
       if (!description) {
         return res.status(400).json({ error: 'description is required' });
       }
-      
+
       const taskId = randomUUID();
       const runId = randomUUID(); // Use run_id for correlation
 
       // 1. Persist task
-      const { error: insertError } = await supabase
-        .from('tasks')
-        .insert({
-          id: taskId,
-          tenant_id,
-          description,
-          status: 'PENDING',
-          entity_type,
-          entity_id
-        });
+      const { error: insertError } = await supabase.from('tasks').insert({
+        id: taskId,
+        tenant_id,
+        description,
+        status: 'PENDING',
+        entity_type,
+        entity_id,
+      });
 
       if (insertError) {
         console.error('Failed to insert task:', insertError);
@@ -51,7 +105,7 @@ export function createTasksRoutes() {
         tenant_id,
         task_id: taskId,
         input_summary: description,
-        agent_name: 'System'
+        agent_name: 'System',
       });
 
       // 3. Enqueue Ops Dispatch - include related_data from frontend
@@ -62,7 +116,7 @@ export function createTasksRoutes() {
         description,
         entity_type,
         entity_id,
-        related_data // opportunities, activities, notes from profile page
+        related_data, // opportunities, activities, notes from profile page
       });
 
       res.json({ ok: true, task_id: taskId, run_id: runId });
@@ -76,13 +130,9 @@ export function createTasksRoutes() {
     try {
       const supabase = getSupabaseAdmin();
       const { id } = req.params;
-      
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
+
+      const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single();
+
       if (error || !data) {
         return res.status(404).json({ error: 'Task not found' });
       }

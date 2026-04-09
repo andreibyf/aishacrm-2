@@ -5,11 +5,139 @@
 
 import express from 'express';
 import { getCacheStats } from '../lib/cacheMiddleware.js';
-import { getLLMActivity, getLLMActivityStats, clearLLMActivity } from '../lib/aiEngine/activityLogger.js';
+import {
+  getLLMActivity,
+  getLLMActivityStats,
+  clearLLMActivity,
+} from '../lib/aiEngine/activityLogger.js';
 import logger from '../lib/logger.js';
 
 export default function createSystemRoutes(_pgPool) {
   const router = express.Router();
+
+  /**
+   * @openapi
+   * /api/system/status:
+   *   get:
+   *     summary: Get system status and DB connectivity
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: System status
+   *
+   * /api/system/health:
+   *   get:
+   *     summary: Lightweight health check
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Service healthy
+   *
+   * /api/system/runtime:
+   *   get:
+   *     summary: Runtime and environment diagnostics
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Runtime diagnostics
+   *
+   * /api/system/diagnostics:
+   *   get:
+   *     summary: Deep diagnostics snapshot
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Diagnostics payload
+   *
+   * /api/system/containers-status:
+   *   get:
+   *     summary: Probe container/service reachability
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Reachability report
+   *
+   * /api/system/logs:
+   *   get:
+   *     summary: List system logs
+   *     tags: [system]
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 100 }
+   *       - in: query
+   *         name: level
+   *         schema: { type: string }
+   *       - in: query
+   *         name: source
+   *         schema: { type: string }
+   *     responses:
+   *       200:
+   *         description: Logs list
+   *
+   * /api/system/cleanup-orphans:
+   *   post:
+   *     summary: Delete orphan tenant-less records from selected tables
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Cleanup summary
+   *
+   * /api/system/cache-stats:
+   *   get:
+   *     summary: Get Redis cache statistics
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Cache stats
+   *       503:
+   *         description: Cache unavailable
+   *
+   * /api/system/llm-activity:
+   *   get:
+   *     summary: List recent LLM activity entries
+   *     tags: [system]
+   *     parameters:
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 100 }
+   *       - in: query
+   *         name: tenantId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: provider
+   *         schema: { type: string }
+   *       - in: query
+   *         name: capability
+   *         schema: { type: string }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string }
+   *       - in: query
+   *         name: since
+   *         schema: { type: string, format: date-time }
+   *     responses:
+   *       200:
+   *         description: Activity list
+   *   delete:
+   *     summary: Clear in-memory LLM activity log
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Activity log cleared
+   *
+   * /api/system/llm-activity/stats:
+   *   get:
+   *     summary: Get aggregated LLM activity metrics
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Activity metrics
+   */
 
   // GET /api/system/status - System status check
   router.get('/status', async (req, res) => {
@@ -54,7 +182,10 @@ export default function createSystemRoutes(_pgPool) {
 
   // GET /api/system/health - Simple health check (lightweight, always fast)
   router.get('/health', (req, res) => {
-    res.json({ status: 'success', data: { service: 'backend', healthy: true, timestamp: new Date().toISOString() } });
+    res.json({
+      status: 'success',
+      data: { service: 'backend', healthy: true, timestamp: new Date().toISOString() },
+    });
   });
 
   // GET /api/system/runtime - Runtime diagnostics (non-secret)
@@ -75,7 +206,13 @@ export default function createSystemRoutes(_pgPool) {
           configured: true,
           connection_type: 'supabase',
           using_supabase_prod: usingSupabaseProd,
-          db_config_path: locals.dbConfigPath || (usingSupabaseProd ? 'supabase_discrete' : (process.env.DATABASE_URL ? 'database_url' : 'none')),
+          db_config_path:
+            locals.dbConfigPath ||
+            (usingSupabaseProd
+              ? 'supabase_discrete'
+              : process.env.DATABASE_URL
+                ? 'database_url'
+                : 'none'),
           database_url_present: Boolean(process.env.DATABASE_URL),
           supabase_host_present: Boolean(process.env.SUPABASE_DB_HOST),
           resolved_ipv4: locals.resolvedDbIPv4 || null,
@@ -154,7 +291,7 @@ export default function createSystemRoutes(_pgPool) {
       { name: 'mcp-node-1', url: 'http://braid-mcp-1:8000/health' },
       { name: 'mcp-node-2', url: 'http://braid-mcp-2:8000/health' },
       { name: 'redis-memory', url: null, type: 'tcp' },
-      { name: 'redis-cache', url: null, type: 'tcp' }
+      { name: 'redis-cache', url: null, type: 'tcp' },
       // NOTE: n8n containers removed from health check - they are optional (--profile workflows)
       // To enable n8n: docker compose --profile workflows up -d
     ];
@@ -172,7 +309,8 @@ export default function createSystemRoutes(_pgPool) {
         // Implement a lightweight Redis probe for both memory and cache instances
         if ((svc.name === 'redis-memory' || svc.name === 'redis-cache') && svc.type === 'tcp') {
           const start = performance.now ? performance.now() : Date.now();
-          let reachable = false; let note = 'no_client';
+          let reachable = false;
+          let note = 'no_client';
           const client = svc.name === 'redis-memory' ? memoryClient : cacheManager?.client;
           try {
             if (client) {
@@ -180,7 +318,7 @@ export default function createSystemRoutes(_pgPool) {
               if (typeof client.ping === 'function') {
                 const pong = await Promise.race([
                   client.ping(),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 750))
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 750)),
                 ]);
                 if (pong) {
                   reachable = true;
@@ -192,48 +330,64 @@ export default function createSystemRoutes(_pgPool) {
               }
             }
           } catch (err) {
-            note = `error:${err.message}`.substring(0,120);
+            note = `error:${err.message}`.substring(0, 120);
           }
           const latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - start);
-          results.push({ name: svc.name, type: 'tcp', reachable, status_code: reachable ? 200 : 0, latency_ms: latencyMs, note });
+          results.push({
+            name: svc.name,
+            type: 'tcp',
+            reachable,
+            status_code: reachable ? 200 : 0,
+            latency_ms: latencyMs,
+            note,
+          });
           continue;
         }
-        results.push({ name: svc.name, type: svc.type || 'http', reachable: false, status_code: null, note: 'probe_not_implemented' });
+        results.push({
+          name: svc.name,
+          type: svc.type || 'http',
+          reachable: false,
+          status_code: null,
+          note: 'probe_not_implemented',
+        });
         continue;
       }
       const urls = Array.isArray(svc.url) ? svc.url : [svc.url];
       let usedUrl = urls[0];
-      let statusCode = 0; let reachable = false; let latencyMs = 0; let attemptedUrls = [];
+      let statusCode = 0;
+      let reachable = false;
+      let latencyMs = 0;
+      let attemptedUrls = [];
       // Probe all candidates in parallel and take the first successful response
-      const withTimeout = (p, ms) => Promise.race([
-        p,
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
-      ]);
+      const withTimeout = (p, ms) =>
+        Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
       const startAll = performance.now ? performance.now() : Date.now();
       try {
-        const attempts = urls.map(url => (async () => {
-          attemptedUrls.push(url);
-          const t0 = performance.now ? performance.now() : Date.now();
-          const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
-          const ok = resp.ok || (resp.status >= 200 && resp.status < 500);
-          const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
-          if (!ok) throw new Error('bad_status_' + resp.status);
-          // Additional validation: for MCP health endpoint, check response body
-          if (svc.name.startsWith('mcp-node') && url.includes('/health')) {
-            try {
-              const body = await resp.text();
-              const data = JSON.parse(body);
-              // MCP health should return status: "ok" or similar
-              if (!data.status || (data.status !== 'ok' && data.status !== 'healthy')) {
-                throw new Error('invalid_mcp_health_response');
+        const attempts = urls.map((url) =>
+          (async () => {
+            attemptedUrls.push(url);
+            const t0 = performance.now ? performance.now() : Date.now();
+            const resp = await withTimeout(fetch(url, { method: 'GET' }), 1500);
+            const ok = resp.ok || (resp.status >= 200 && resp.status < 500);
+            const dt = Math.round((performance.now ? performance.now() : Date.now()) - t0);
+            if (!ok) throw new Error('bad_status_' + resp.status);
+            // Additional validation: for MCP health endpoint, check response body
+            if (svc.name.startsWith('mcp-node') && url.includes('/health')) {
+              try {
+                const body = await resp.text();
+                const data = JSON.parse(body);
+                // MCP health should return status: "ok" or similar
+                if (!data.status || (data.status !== 'ok' && data.status !== 'healthy')) {
+                  throw new Error('invalid_mcp_health_response');
+                }
+              } catch {
+                // If not valid JSON or missing status, treat as unreachable
+                throw new Error('mcp_health_parse_error');
               }
-            } catch {
-              // If not valid JSON or missing status, treat as unreachable
-              throw new Error('mcp_health_parse_error');
             }
-          }
-          return { url, status: resp.status, dt };
-        })());
+            return { url, status: resp.status, dt };
+          })(),
+        );
         const first = await Promise.any(attempts);
         usedUrl = first.url;
         statusCode = first.status;
@@ -245,10 +399,20 @@ export default function createSystemRoutes(_pgPool) {
         latencyMs = Math.round((performance.now ? performance.now() : Date.now()) - startAll);
         reachable = false;
       }
-      results.push({ name: svc.name, url: usedUrl, reachable, status_code: statusCode, latency_ms: latencyMs, attempted: attemptedUrls.length });
+      results.push({
+        name: svc.name,
+        url: usedUrl,
+        reachable,
+        status_code: statusCode,
+        latency_ms: latencyMs,
+        attempted: attemptedUrls.length,
+      });
     }
 
-    res.json({ status: 'success', data: { services: results, timestamp: new Date().toISOString() } });
+    res.json({
+      status: 'success',
+      data: { services: results, timestamp: new Date().toISOString() },
+    });
   });
 
   // GET /api/system/logs - Get system logs
@@ -259,7 +423,7 @@ export default function createSystemRoutes(_pgPool) {
       if (!tenant_id) {
         return res.status(400).json({
           status: 'error',
-          message: 'tenant_id is required'
+          message: 'tenant_id is required',
         });
       }
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -350,17 +514,17 @@ export default function createSystemRoutes(_pgPool) {
   router.get('/cache-stats', async (req, res) => {
     try {
       const stats = await getCacheStats();
-      
+
       if (!stats) {
         return res.status(503).json({
           status: 'error',
-          message: 'Cache unavailable'
+          message: 'Cache unavailable',
         });
       }
 
       return res.status(200).json({
         status: 'success',
-        data: stats
+        data: stats,
       });
     } catch (err) {
       logger.error('[System] Cache stats error:', err);
@@ -432,4 +596,3 @@ export default function createSystemRoutes(_pgPool) {
 
   return router;
 }
-

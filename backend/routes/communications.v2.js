@@ -53,6 +53,238 @@ export default function createCommunicationsV2Routes(
 ) {
   const router = express.Router();
 
+  /**
+   * @openapi
+   * /api/v2/communications/threads:
+   *   get:
+   *     summary: List communication threads
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: view
+   *         schema: { type: string, enum: [all, unread, open, closed, archived] }
+   *       - in: query
+   *         name: entity_type
+   *         schema: { type: string, enum: [lead, contact, account, opportunity, activity] }
+   *     responses:
+   *       200:
+   *         description: Thread list
+   *
+   * /api/v2/communications/threads/{threadId}/messages:
+   *   get:
+   *     summary: Get messages for a thread
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: threadId
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Thread messages
+   *       404:
+   *         description: Thread not found
+   *
+   * /api/v2/communications/lead-capture-queue:
+   *   get:
+   *     summary: List lead-capture queue entries
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, enum: [pending_review, duplicate, promoted, dismissed] }
+   *     responses:
+   *       200:
+   *         description: Queue list
+   *
+   * /api/v2/communications/lead-capture-queue/{queueItemId}:
+   *   get:
+   *     summary: Get lead-capture queue item by ID
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: queueItemId
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Queue item
+   *       404:
+   *         description: Queue item not found
+   *
+   * /api/v2/communications/lead-capture-queue/{queueItemId}/status:
+   *   post:
+   *     summary: Update lead-capture queue item status
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: queueItemId
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, status]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               status: { type: string, enum: [pending_review, duplicate, promoted, dismissed] }
+   *               note: { type: string }
+   *     responses:
+   *       200:
+   *         description: Status updated
+   *
+   * /api/v2/communications/lead-capture-queue/{queueItemId}/promote:
+   *   post:
+   *     summary: Promote lead-capture item to lead entity
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: queueItemId
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               first_name: { type: string }
+   *               last_name: { type: string }
+   *               email: { type: string }
+   *               company: { type: string }
+   *     responses:
+   *       200:
+   *         description: Already promoted or promoted successfully
+   *       201:
+   *         description: Promoted successfully
+   *
+   * /api/v2/communications/threads/{threadId}/replay:
+   *   post:
+   *     summary: Replay communication thread events
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: threadId
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               mailbox_id: { type: string }
+   *     responses:
+   *       202:
+   *         description: Replay accepted
+   *
+   * /api/v2/communications/threads/{threadId}/status:
+   *   post:
+   *     summary: Update communication thread status
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: threadId
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [tenant_id, status]
+   *             properties:
+   *               tenant_id: { type: string, format: uuid }
+   *               status: { type: string, enum: [unread, open, closed, archived] }
+   *     responses:
+   *       200:
+   *         description: Thread status updated
+   *
+   * /api/v2/communications/threads/{threadId}/generate-ai-reply:
+   *   post:
+   *     summary: Generate AI draft reply for thread
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: threadId
+   *         required: true
+   *         schema: { type: string }
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               prompt: { type: string }
+   *               subject: { type: string }
+   *               require_approval: { type: boolean }
+   *     responses:
+   *       200:
+   *         description: AI draft generated
+   *
+   * /api/v2/communications/threads/{threadId}:
+   *   delete:
+   *     summary: Purge thread and related messages
+   *     tags: [communications-v2]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: threadId
+   *         required: true
+   *         schema: { type: string }
+   *       - in: query
+   *         name: tenant_id
+   *         schema: { type: string, format: uuid }
+   *     responses:
+   *       200:
+   *         description: Thread purged
+   */
+
   router.use(validateTenantAccess);
 
   router.get('/threads', async (req, res) => {
