@@ -36,6 +36,10 @@ jobs:
             context: addons/agent-office/services/telemetry-sidecar
             dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
             image: ghcr.io/${{ github.repository }}-telemetry-sidecar
+          - service: litellm
+            context: .
+            dockerfile: ./litellm/Dockerfile
+            image: ghcr.io/${{ github.repository }}-litellm
 
     steps:
       - name: Checkout code
@@ -389,7 +393,7 @@ jobs:
           username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf"
+          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,litellm_config.yaml"
           target: "/opt/aishacrm/"
           strip_components: 0
           timeout: 120s

@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **LiteLLM container in production (`docker-compose.prod.yml`, `.github/workflows/docker-release.yml`):** Added `litellm` service using `ghcr.io/andreibyf/aishacrm-2-litellm:latest` with Doppler runtime injection (`prd_prd`); added `LITELLM_ENABLED`, `LITELLM_BASE_URL`, and `LITELLM_MASTER_KEY` to the backend service; added `litellm` to the CI build matrix so the image is built and pushed on every tag release; added `litellm_config.yaml` to the SCP deploy step so the config file is deployed to the VPS.
+
 ### Changed
 
 - **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
