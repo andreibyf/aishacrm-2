@@ -1369,6 +1369,38 @@ export default function createLeadsV2Routes() {
       }
 
       const supabase = getSupabaseClient();
+
+      // ── Two-tier write access check for bulk delete ──
+      if (req.user) {
+        const { data: currentRecords, error: currentErr } = await supabase
+          .from('leads')
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenant_id)
+          .in('id', ids);
+
+        if (currentErr) throw new Error(currentErr.message);
+
+        if (currentRecords?.length) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const unauthorized = currentRecords.filter((record) => {
+            const access = getAccessLevel(
+              scope,
+              record.assigned_to_team,
+              record.assigned_to,
+              req.user.id,
+            );
+            return access !== 'full';
+          });
+
+          if (unauthorized.length > 0) {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to delete one or more selected records',
+            });
+          }
+        }
+      }
+
       const startMs = Date.now();
 
       const { error, count } = await supabase
