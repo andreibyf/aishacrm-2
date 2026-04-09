@@ -719,6 +719,12 @@ export default function createAccountV2Routes(_pgPool) {
             .status(403)
             .json({ status: 'error', message: 'You do not have access to this record' });
         }
+        if (access === 'read_only') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'This record is read-only for your access level',
+          });
+        }
         if (access === 'read_notes' && !isNotesOnlyUpdate(body)) {
           return res.status(403).json({
             status: 'error',
