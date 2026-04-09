@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Document extraction fetch/extract failures (`src/api/integrations.js`, `backend/routes/documents.v2.js`, `backend/lib/cors.js`):** Switched frontend extractor calls to `POST /api/v2/documents/extract` with tenant header propagation, added tenant-scoped v2 extract endpoint, and hardened error-path CORS origin resolution to include `ALLOWED_ORIGINS` and production domains (`app.aishacrm.com`, `api.aishacrm.com`) so browser clients receive proper CORS headers on failures.
+
 - **Cold Leads status-card consistency for assignee filters (`src/pages/BizDevSources.jsx`):** Aligned status filtering/count logic with the row-level status fallback semantics by normalizing source status values before computing card totals and bucket counts. This fixes mismatches where records displayed as Active in the list were excluded from Active/Total stat cards under assignee and other filters.
 
 - **Leads bulk-delete UI consistency for records + totals (`src/hooks/useLeadsBulkOps.js`):** Updated chunked delete flow to optimistically remove records that were confirmed deleted by successful chunks even when other chunks fail. This prevents deleted rows from lingering in the grid until full reload, and keeps visible totals aligned sooner while still performing authoritative post-delete refresh.

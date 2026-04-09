@@ -15,7 +15,9 @@ import logger from './logger.js';
  * @returns {string[]} Array of allowed origin URLs
  */
 function getAllowedOrigins() {
-  const envOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(',')
+  const envOriginsRaw = process.env.CORS_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || '';
+  const envOrigins = envOriginsRaw
+    .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 
@@ -31,6 +33,8 @@ function getAllowedOrigins() {
     'https://localhost:5173',
     'https://localhost:4000',
     'https://localhost:3000',
+    'https://app.aishacrm.com',
+    'https://api.aishacrm.com',
   ];
 
   // Add production domain if configured

@@ -163,10 +163,25 @@ export const GenerateImage = Core.GenerateImage;
 export const ExtractDataFromUploadedFile = async ({ file_url, json_schema } = {}) => {
   const backendUrl = getBackendUrl();
   try {
-    const response = await fetch(`${backendUrl}/api/documents/extract`, {
+    // Keep tenant context explicit for v2 document APIs.
+    let tenantId = null;
+    try {
+      const urlTenant = new URL(window.location.href).searchParams.get('tenant');
+      const storedTenant = localStorage.getItem('selected_tenant_id');
+      tenantId = urlTenant || storedTenant || null;
+    } catch (err) {
+      void err;
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (tenantId) {
+      headers['x-tenant-id'] = tenantId;
+    }
+
+    const response = await fetch(`${backendUrl}/api/v2/documents/extract`, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ file_url, json_schema }),
     });
     const data = await response.json();
