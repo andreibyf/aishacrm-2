@@ -17,6 +17,7 @@ import {
   resolveEmployeeNames,
   invalidateEmployeeCache,
 } from '../lib/employeeCache.js';
+import { clearVisibilityCache } from '../lib/teamVisibility.js';
 
 export default function createEmployeeRoutes(_pgPool) {
   const router = express.Router();
@@ -975,14 +976,12 @@ export default function createEmployeeRoutes(_pgPool) {
             await supabase
               .from('users')
               .update({
-                role: crmRole === 'manager' ? 'manager' : linkedUser.role,
                 metadata: syncedMeta,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', linkedUser.id);
-            logger.debug(
-              `[EmployeeRoutes] Synced role/metadata to users record for ${employeeEmail}: ${crmRole}`,
-            );
+            clearVisibilityCache(linkedUser.id);
+            logger.debug(`[EmployeeRoutes] Synced metadata to users record for ${employeeEmail}`);
           }
         } catch (syncErr) {
           logger.error('[EmployeeRoutes] Role sync to users table failed:', syncErr.message);
@@ -1133,109 +1132,129 @@ export default function createEmployeeRoutes(_pgPool) {
   });
 
   // POST /api/employees/:id/sync-permissions - Sync employee role/permissions to linked CRM user
-  router.post('/:id/sync-permissions', invalidateCache('employees'), async (req, res) => {
-    try {
-      const { id } = req.params;
-      const tenant_id = req.body.tenant_id || req.query.tenant_id;
+  router.post(
+    '/:id/sync-permissions',
+    requireAuth,
+    invalidateCache('employees'),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const tenant_id = req.body.tenant_id || req.query.tenant_id;
 
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
-      }
+        if (!tenant_id) {
+          return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+        }
 
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+        const requesterRole = (req.user?.role || '').toLowerCase();
+        const canSyncPermissions =
+          requesterRole === 'admin' ||
+          requesterRole === 'superadmin' ||
+          req.user?.perm_employees === true;
 
-      // Get employee with metadata
-      const { data: employee, error: empErr } = await supabase
-        .from('employees')
-        .select('id, email, role, metadata, tenant_id')
-        .eq('id', id)
-        .eq('tenant_id', tenant_id)
-        .single();
+        if (!canSyncPermissions) {
+          return res.status(403).json({
+            status: 'error',
+            success: false,
+            error: 'Forbidden: insufficient permissions to sync employee/user permissions',
+          });
+        }
 
-      if (empErr || !employee) {
-        return res.status(404).json({ status: 'error', message: 'Employee not found' });
-      }
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
 
-      const meta =
-        employee.metadata && typeof employee.metadata === 'object' ? employee.metadata : {};
+        // Get employee with metadata
+        const { data: employee, error: empErr } = await supabase
+          .from('employees')
+          .select('id, email, role, metadata, tenant_id')
+          .eq('id', id)
+          .eq('tenant_id', tenant_id)
+          .single();
 
-      if (!meta.user_email) {
-        return res.status(400).json({
-          status: 'error',
-          success: false,
-          error: 'Employee is not linked to a CRM user. Link them first.',
-        });
-      }
+        if (empErr || !employee) {
+          return res.status(404).json({ status: 'error', message: 'Employee not found' });
+        }
 
-      // Find the linked CRM user
-      const { data: user, error: userErr } = await supabase
-        .from('users')
-        .select('id, email, role, metadata')
-        .ilike('email', meta.user_email.trim())
-        .eq('tenant_id', tenant_id)
-        .maybeSingle();
+        const meta =
+          employee.metadata && typeof employee.metadata === 'object' ? employee.metadata : {};
 
-      if (userErr || !user) {
-        return res.status(404).json({
-          status: 'error',
-          success: false,
-          error: `Linked CRM user not found: ${meta.user_email}`,
-        });
-      }
+        if (!meta.user_email) {
+          return res.status(400).json({
+            status: 'error',
+            success: false,
+            error: 'Employee is not linked to a CRM user. Link them first.',
+          });
+        }
 
-      // Sync: copy employee role to user record, and update employee metadata
-      const userMeta = user.metadata && typeof user.metadata === 'object' ? user.metadata : {};
-      const updatedUserMeta = {
-        ...userMeta,
-        employee_id: employee.id,
-        employee_role: employee.role,
-        synced_at: new Date().toISOString(),
-      };
+        // Find the linked CRM user
+        const { data: user, error: userErr } = await supabase
+          .from('users')
+          .select('id, email, role, metadata')
+          .ilike('email', meta.user_email.trim())
+          .eq('tenant_id', tenant_id)
+          .maybeSingle();
 
-      // Update user with employee role info
-      const userRole = employee.role || user.role;
-      const { error: updateUserErr } = await supabase
-        .from('users')
-        .update({ role: userRole, metadata: updatedUserMeta })
-        .eq('id', user.id)
-        .eq('tenant_id', tenant_id);
+        if (userErr || !user) {
+          return res.status(404).json({
+            status: 'error',
+            success: false,
+            error: `Linked CRM user not found: ${meta.user_email}`,
+          });
+        }
 
-      if (updateUserErr) {
-        logger.error(
-          '[Employees POST /:id/sync-permissions] User update error:',
-          updateUserErr.message,
+        // Sync: update user metadata linkage only.
+        // User authority (role/perm_*) must remain user-managed.
+        const userMeta = user.metadata && typeof user.metadata === 'object' ? user.metadata : {};
+        const updatedUserMeta = {
+          ...userMeta,
+          employee_id: employee.id,
+          employee_role: employee.role,
+          synced_at: new Date().toISOString(),
+        };
+
+        const { error: updateUserErr } = await supabase
+          .from('users')
+          .update({ metadata: updatedUserMeta, updated_at: new Date().toISOString() })
+          .eq('id', user.id)
+          .eq('tenant_id', tenant_id);
+
+        if (updateUserErr) {
+          logger.error(
+            '[Employees POST /:id/sync-permissions] User update error:',
+            updateUserErr.message,
+          );
+          return res.status(500).json({ status: 'error', message: 'Failed to sync user record' });
+        }
+
+        // Update employee metadata with sync timestamp
+        const updatedEmpMeta = {
+          ...meta,
+          permissions_synced_at: new Date().toISOString(),
+          user_role: user.role,
+        };
+
+        await supabase
+          .from('employees')
+          .update({ metadata: updatedEmpMeta })
+          .eq('id', id)
+          .eq('tenant_id', tenant_id);
+
+        clearVisibilityCache(user.id);
+
+        logger.info(
+          `[Employees POST /:id/sync-permissions] Synced employee ${id} -> user ${user.id}`,
         );
-        return res.status(500).json({ status: 'error', message: 'Failed to sync user record' });
+        return res.json({
+          status: 'success',
+          success: true,
+          message: 'Permissions synced successfully',
+          data: { user_id: user.id, role: user.role },
+        });
+      } catch (err) {
+        logger.error('[Employees POST /:id/sync-permissions] Error:', err.message);
+        return res.status(500).json({ status: 'error', message: err.message });
       }
-
-      // Update employee metadata with sync timestamp
-      const updatedEmpMeta = {
-        ...meta,
-        permissions_synced_at: new Date().toISOString(),
-        user_role: userRole,
-      };
-
-      await supabase
-        .from('employees')
-        .update({ metadata: updatedEmpMeta })
-        .eq('id', id)
-        .eq('tenant_id', tenant_id);
-
-      logger.info(
-        `[Employees POST /:id/sync-permissions] Synced employee ${id} -> user ${user.id}`,
-      );
-      return res.json({
-        status: 'success',
-        success: true,
-        message: 'Permissions synced successfully',
-        data: { user_id: user.id, role: userRole },
-      });
-    } catch (err) {
-      logger.error('[Employees POST /:id/sync-permissions] Error:', err.message);
-      return res.status(500).json({ status: 'error', message: err.message });
-    }
-  });
+    },
+  );
 
   // POST /api/employees/:id/validate-user-link - Validate and establish user link
   router.post('/:id/validate-user-link', async (req, res) => {

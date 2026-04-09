@@ -1205,6 +1205,11 @@ export default function EnhancedUserManagement() {
         tags: cleanedData.tags,
         employee_role: cleanedData.employee_role,
         permissions: permissionsToSave,
+        perm_notes_anywhere: cleanedData.perm_notes_anywhere,
+        perm_all_records: cleanedData.perm_all_records,
+        perm_reports: cleanedData.perm_reports,
+        perm_employees: cleanedData.perm_employees,
+        perm_settings: cleanedData.perm_settings,
         // Support both field names: nav_permissions (from UserFormWizard) and navigation_permissions (legacy UserFormModal)
         nav_permissions: cleanedData.nav_permissions || cleanedData.navigation_permissions,
         ...(platformRoleChanged && { role: cleanedData.platform_role }),
