@@ -8,7 +8,7 @@ import React from 'react';
  * - Layer thickness proportional to counts with minimum height
  * - Color gradient: Teal/Cyan → Yellow/Lime (matching AISHA logo)
  * - Filters out zero-count layers
- * 
+ *
  * Props:
  *   data: Array<{ label: string, count: number }>
  *   width?: number - Total SVG width (default 500)
@@ -26,14 +26,14 @@ export default function FunnelChart3D({
   minLayerHeight = 50,
 }) {
   // Filter out zero-count layers
-  const activeData = data.filter(d => d.count > 0);
-  
+  const activeData = data.filter((d) => d.count > 0);
+
   if (!activeData.length) {
     return <div className="text-muted-foreground">No funnel data</div>;
   }
 
   const total = activeData.reduce((sum, d) => sum + d.count, 0);
-  
+
   // Layout constants
   const yAxisWidth = 50;
   const rightLabelSpace = 150;
@@ -42,30 +42,30 @@ export default function FunnelChart3D({
   const coneOffset = 30; // Shift cone and labels toward center
   const coneCenterX = yAxisWidth + coneWidth / 2 + coneOffset;
   const coneTopY = 30;
-  
+
   // Ellipse parameters for 3D effect (viewing from above)
   const ellipseRatio = 0.3;
-  
+
   // Calculate minimum height needed if all layers were at minimum
   const _totalMinHeight = activeData.length * minLayerHeight;
-  
+
   // Calculate layer heights with minimum floor
   // If pure proportional would make layers too small, use adjusted heights
-  const layerHeights = activeData.map(d => {
+  const layerHeights = activeData.map((d) => {
     const proportionalHeight = (d.count / total) * coneHeight;
     return Math.max(proportionalHeight, minLayerHeight);
   });
-  
+
   // Normalize heights to fit within coneHeight
   const totalCalculatedHeight = layerHeights.reduce((a, b) => a + b, 0);
   const scaleFactor = coneHeight / totalCalculatedHeight;
-  const normalizedHeights = layerHeights.map(h => h * scaleFactor);
+  const normalizedHeights = layerHeights.map((h) => h * scaleFactor);
 
   // AISHA brand color gradient: Teal/Cyan at top → Yellow/Lime at bottom
   const getLayerColors = (index, totalLayers) => {
     // Interpolate from teal (top) to yellow-green (bottom)
     const ratio = index / Math.max(1, totalLayers - 1);
-    
+
     // Hue: 180 (cyan/teal) → 75 (yellow-green/lime)
     const hue = 180 - (180 - 75) * ratio;
     // Saturation: 70% constant
@@ -74,7 +74,7 @@ export default function FunnelChart3D({
     const lightMain = 50;
     const lightDark = 32;
     const lightLight = 65;
-    
+
     return {
       main: `hsl(${hue}, ${sat}%, ${lightMain}%)`,
       dark: `hsl(${hue}, ${sat}%, ${lightDark}%)`,
@@ -88,21 +88,23 @@ export default function FunnelChart3D({
   const layers = [];
   const labelData = [];
   let verticalSegmentRadius = null; // Track shared radius for all vertical segments
+  let finalLayerBottom = null;
 
   activeData.forEach((segment, idx) => {
     const layerHeight = normalizedHeights[idx];
     const topY = coneTopY + currentY;
     const bottomY = coneTopY + currentY + layerHeight;
-    
+
     // Check if this segment should have vertical sides (Contact or Account)
-    const isVerticalSegment = segment.label && 
-      (segment.label.toLowerCase().includes('contact') || 
-       segment.label.toLowerCase().includes('account'));
-    
+    const isVerticalSegment =
+      segment.label &&
+      (segment.label.toLowerCase().includes('contact') ||
+        segment.label.toLowerCase().includes('account'));
+
     // For vertical segments, use same radius top and bottom
     // For tapered segments, calculate radius at each Y position
     let topRadius, bottomRadius;
-    
+
     if (isVerticalSegment) {
       // All vertical segments share the same radius (calculated at first vertical segment)
       if (verticalSegmentRadius === null) {
@@ -115,15 +117,16 @@ export default function FunnelChart3D({
       topRadius = maxRadius - (maxRadius - minRadius) * (currentY / coneHeight);
       bottomRadius = maxRadius - (maxRadius - minRadius) * ((currentY + layerHeight) / coneHeight);
     }
-    
+
     const topEllipseRy = topRadius * ellipseRatio;
     const bottomEllipseRy = bottomRadius * ellipseRatio;
 
     const colors = getLayerColors(idx, activeData.length);
+    const isLastLayer = idx === activeData.length - 1;
 
     // Layer midpoint for label positioning
     const midY = (topY + bottomY) / 2;
-    
+
     // Store label data
     labelData.push({
       label: segment.label,
@@ -134,6 +137,15 @@ export default function FunnelChart3D({
       bottomY,
       topRadius,
     });
+
+    if (isLastLayer) {
+      finalLayerBottom = {
+        bottomY,
+        bottomRadius,
+        bottomEllipseRy,
+        colors,
+      };
+    }
 
     layers.push(
       <g key={idx}>
@@ -154,7 +166,26 @@ export default function FunnelChart3D({
           <filter id={`cone-shadow-${idx}`} x="-20%" y="-10%" width="140%" height="130%">
             <feDropShadow dx="3" dy="6" stdDeviation="4" floodOpacity="0.3" />
           </filter>
+          <linearGradient id={`bottom-cap-${idx}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={colors.light} stopOpacity="0.5" />
+            <stop offset="35%" stopColor={colors.main} stopOpacity="0.92" />
+            <stop offset="100%" stopColor={colors.dark} />
+          </linearGradient>
         </defs>
+
+        {/* Bottom cap for the final layer, rendered behind the body so only the lower arc shows. */}
+        {isLastLayer && (
+          <ellipse
+            cx={coneCenterX}
+            cy={bottomY}
+            rx={bottomRadius}
+            ry={bottomEllipseRy}
+            fill={`url(#bottom-cap-${idx})`}
+            stroke={colors.accent}
+            strokeWidth="1.5"
+            opacity="0.95"
+          />
+        )}
 
         {/* Main cone body - front surface (no bottom ellipse visible from above) */}
         <path
@@ -200,7 +231,7 @@ export default function FunnelChart3D({
           ry={topEllipseRy * 0.3}
           fill="rgba(255,255,255,0.15)"
         />
-      </g>
+      </g>,
     );
 
     currentY += layerHeight;
@@ -210,15 +241,15 @@ export default function FunnelChart3D({
   const yAxisX = yAxisWidth - 10;
   const yAxisTop = coneTopY;
   const yAxisBottom = coneTopY + coneHeight;
-  
+
   // Generate tick marks at layer boundaries
   const yAxisTicks = [];
   let cumulativeHeight = 0;
   let cumulativeCount = 0;
-  
+
   // Top tick (total)
   yAxisTicks.push({ y: yAxisTop, value: total });
-  
+
   activeData.forEach((segment, idx) => {
     cumulativeHeight += normalizedHeights[idx];
     cumulativeCount += segment.count;
@@ -246,7 +277,7 @@ export default function FunnelChart3D({
           className="stroke-slate-400 dark:stroke-slate-500"
           strokeWidth="2"
         />
-        
+
         {yAxisTicks.map((tick, i) => (
           <g key={i}>
             <line
@@ -275,12 +306,27 @@ export default function FunnelChart3D({
       {/* Cone layers (rendered in reverse so top layers render on top) */}
       {[...layers].reverse()}
 
+      {/* Front rim to complete the bottom cylinder silhouette */}
+      {finalLayerBottom && (
+        <path
+          d={[
+            `M ${coneCenterX - finalLayerBottom.bottomRadius} ${finalLayerBottom.bottomY}`,
+            `A ${finalLayerBottom.bottomRadius} ${finalLayerBottom.bottomEllipseRy} 0 0 0 ${coneCenterX + finalLayerBottom.bottomRadius} ${finalLayerBottom.bottomY}`,
+          ].join(' ')}
+          fill="none"
+          stroke={finalLayerBottom.colors.accent}
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity="0.95"
+        />
+      )}
+
       {/* External labels with count beside name */}
       <g className="labels">
         {labelData.map((item, idx) => {
           const labelX = coneCenterX + maxRadius + 25;
           const lineEndX = coneCenterX + item.topRadius + 5;
-          
+
           return (
             <g key={idx}>
               {/* Connecting line */}
@@ -294,7 +340,7 @@ export default function FunnelChart3D({
                 strokeDasharray="4,2"
                 opacity="0.8"
               />
-              
+
               {/* Dot at cone edge */}
               <circle
                 cx={lineEndX}
