@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dashboard cache TTL alignment (`backend/routes/reports.js`, `backend/lib/cacheManager.js`, `src/api/dashboardCache.js`):** Increased dashboard bundle Redis TTL from 120s to 300s to match the frontend's 5-minute stale threshold, eliminating cold-cache DB hits on background refreshes. Restored Redis list/detail/count TTLs to their original values (180s/300s/600s from 30s/60s/120s) — mutations call `clearCacheByKey` so stale data from writes was never a risk. Extended frontend stale-while-revalidate window from 5 to 10 minutes so background refreshes within that window always hit a warm Redis cache.
 - **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
 
 ### Fixed

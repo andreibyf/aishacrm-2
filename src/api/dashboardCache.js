@@ -38,7 +38,7 @@ export function getCachedDashboardData(tenantId, includeTestData = true, scopeKe
       data: JSON.parse(data),
       cached: true,
       cachedAt: metadata.cachedAt,
-      isStale: now - metadata.cachedAt > 5 * 60 * 1000, // > 5 minutes old
+      isStale: now - metadata.cachedAt > 10 * 60 * 1000, // > 10 minutes old (backend Redis TTL is 5min, so refreshes within this window always hit warm cache)
     };
   } catch (e) {
     console.warn('[Dashboard] Cache read error:', e.message);

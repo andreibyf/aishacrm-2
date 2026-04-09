@@ -107,7 +107,7 @@ export default function createReportRoutes(_pgPool) {
   const router = express.Router();
   // Redis cache for dashboard bundle (distributed, persistent)
   // Get cacheManager from app.locals (initialized in startup/initServices.js)
-  const BUNDLE_TTL_SECONDS = 120; // 2 minutes - balances freshness vs. DB load
+  const BUNDLE_TTL_SECONDS = 300; // 5 minutes - aligns with frontend stale threshold so background refreshes always hit warm Redis
 
   // POST /api/reports/clear-cache - Clear dashboard bundle cache (admin only, uses redis)
   router.post('/clear-cache', async (req, res) => {
