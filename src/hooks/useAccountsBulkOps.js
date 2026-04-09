@@ -1,5 +1,6 @@
 import { Account } from '@/api/entities';
 import { toast } from 'sonner';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 /**
  * useAccountsBulkOps hook - Manages bulk operations for accounts
@@ -97,7 +98,11 @@ export function useAccountsBulkOps({
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
         clearCacheByKey('Account');
-        await Promise.all([loadAccounts(), loadTotalStats()]);
+        await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+          passes: 3,
+          initialDelayMs: 80,
+          stepDelayMs: 160,
+        });
         if (successCount > 0) toast.success(`${successCount} account(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} account(s) failed to delete`);
       } catch (error) {
@@ -149,7 +154,11 @@ export function useAccountsBulkOps({
       completeProgress();
       setSelectedAccounts(new Set());
       clearCacheByKey('Account');
-      await Promise.all([loadAccounts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
 
       if (failed > 0) toast.error(`${succeeded} deleted, ${failed} failed`);
       else toast.success(`${succeeded} account(s) deleted`);
@@ -158,7 +167,11 @@ export function useAccountsBulkOps({
       console.error('Failed to delete accounts:', error);
       toast.error('Failed to delete accounts');
       setSelectedAccounts(new Set());
-      await Promise.all([loadAccounts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+        passes: 2,
+        initialDelayMs: 80,
+        stepDelayMs: 140,
+      });
     }
   };
 
@@ -184,7 +197,11 @@ export function useAccountsBulkOps({
         setSelectedAccounts(new Set());
         setSelectAllMode(false);
         clearCacheByKey('Account');
-        await Promise.all([loadAccounts(), loadTotalStats()]);
+        await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Updated ${updateCount} account(s) to ${newType}`);
       } catch (error) {
         console.error('Failed to update accounts:', error);
@@ -201,7 +218,11 @@ export function useAccountsBulkOps({
         await Promise.all(promises);
         setSelectedAccounts(new Set());
         clearCacheByKey('Account');
-        await Promise.all([loadAccounts(), loadTotalStats()]);
+        await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Updated ${promises.length} account(s) to ${newType}`);
       } catch (error) {
         console.error('Failed to update accounts:', error);
@@ -272,7 +293,11 @@ export function useAccountsBulkOps({
       setSelectedAccounts(new Set());
       if (selectAllMode) setSelectAllMode(false);
       clearCacheByKey('Account');
-      await Promise.all([loadAccounts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
+        passes: 2,
+        initialDelayMs: 80,
+        stepDelayMs: 140,
+      });
       if (successCount > 0) toast.success(`Assigned ${successCount} account(s)`);
       if (skipCount > 0) toast.warning(`${skipCount} account(s) skipped (no write access)`);
     } catch (error) {

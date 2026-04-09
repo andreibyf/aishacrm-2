@@ -1,5 +1,6 @@
 import { Activity } from '@/api/entities';
 import { toast } from 'sonner';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 /**
  * useActivitiesBulkOps hook - Manages bulk operations for activities
@@ -47,8 +48,7 @@ export function useActivitiesBulkOps({
   };
 
   // Helper to extract activities array from API result (handles legacy array or object formats)
-  const extractItems = (result) =>
-    Array.isArray(result) ? result : result?.activities || [];
+  const extractItems = (result) => (Array.isArray(result) ? result : result?.activities || []);
 
   const handleBulkDelete = async () => {
     if (selectAllMode) {
@@ -63,7 +63,11 @@ export function useActivitiesBulkOps({
         const allActivities = extractItems(activitiesResult);
         const deleteCount = allActivities.length;
 
-        updateProgress({ message: `Deleting ${deleteCount} activities...`, total: deleteCount, current: 0 });
+        updateProgress({
+          message: `Deleting ${deleteCount} activities...`,
+          total: deleteCount,
+          current: 0,
+        });
 
         const BATCH_SIZE = 50;
         let deletedCount = 0;
@@ -79,7 +83,10 @@ export function useActivitiesBulkOps({
               else deletedCount++;
             }
           });
-          updateProgress({ current: deletedCount + failCount, message: `Deleted ${deletedCount} of ${deleteCount} activities...` });
+          updateProgress({
+            current: deletedCount + failCount,
+            message: `Deleted ${deletedCount} of ${deleteCount} activities...`,
+          });
         }
 
         completeProgress();
@@ -91,11 +98,13 @@ export function useActivitiesBulkOps({
         setSelectedActivities(new Set());
         setSelectAllMode(false);
 
-        setTimeout(() => {
-          clearCache('');
-          clearCacheByKey('Activity');
-          loadActivities(1, pageSize);
-        }, 500);
+        clearCache('');
+        clearCacheByKey('Activity');
+        await runMutationRefresh(() => loadActivities(1, pageSize), {
+          passes: 3,
+          initialDelayMs: 80,
+          stepDelayMs: 160,
+        });
 
         if (deletedCount > 0) toast.success(`${deletedCount} activity/activities deleted`);
         if (failCount > 0) toast.error(`${failCount} failed to delete`);
@@ -114,7 +123,11 @@ export function useActivitiesBulkOps({
 
       try {
         const selectedCount = selectedActivities.size;
-        startProgress({ message: `Deleting ${selectedCount} activities...`, total: selectedCount, current: 0 });
+        startProgress({
+          message: `Deleting ${selectedCount} activities...`,
+          total: selectedCount,
+          current: 0,
+        });
 
         const selectedArray = [...selectedActivities];
         const BATCH_SIZE = 50;
@@ -132,7 +145,10 @@ export function useActivitiesBulkOps({
               else deletedCount++;
             }
           });
-          updateProgress({ current: deletedCount + failCount, message: `Deleted ${deletedCount} of ${selectedCount} activities...` });
+          updateProgress({
+            current: deletedCount + failCount,
+            message: `Deleted ${deletedCount} of ${selectedCount} activities...`,
+          });
         }
 
         completeProgress();
@@ -143,11 +159,13 @@ export function useActivitiesBulkOps({
 
         setSelectedActivities(new Set());
 
-        setTimeout(() => {
-          clearCache('');
-          clearCacheByKey('Activity');
-          loadActivities(currentPage, pageSize);
-        }, 500);
+        clearCache('');
+        clearCacheByKey('Activity');
+        await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+          passes: 3,
+          initialDelayMs: 80,
+          stepDelayMs: 160,
+        });
 
         if (deletedCount > 0) toast.success(`${deletedCount} activity/activities deleted`);
         if (failCount > 0) toast.error(`${failCount} failed to delete`);
@@ -161,7 +179,9 @@ export function useActivitiesBulkOps({
 
   const handleBulkStatusChange = async (newStatus) => {
     if (selectAllMode) {
-      if (!window.confirm(`Update status for ALL ${totalItems} activity/activities to ${newStatus}?`))
+      if (
+        !window.confirm(`Update status for ALL ${totalItems} activity/activities to ${newStatus}?`)
+      )
         return;
 
       try {
@@ -172,7 +192,11 @@ export function useActivitiesBulkOps({
         const allActivities = extractItems(statusResult);
         const updateCount = allActivities.length;
 
-        updateProgress({ message: `Updating ${updateCount} activities...`, total: updateCount, current: 0 });
+        updateProgress({
+          message: `Updating ${updateCount} activities...`,
+          total: updateCount,
+          current: 0,
+        });
 
         const BATCH_SIZE = 50;
         let updatedCount = 0;
@@ -180,7 +204,10 @@ export function useActivitiesBulkOps({
           const batch = allActivities.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map((a) => Activity.update(a.id, { status: newStatus })));
           updatedCount += batch.length;
-          updateProgress({ current: updatedCount, message: `Updated ${updatedCount} of ${updateCount} activities...` });
+          updateProgress({
+            current: updatedCount,
+            message: `Updated ${updatedCount} of ${updateCount} activities...`,
+          });
         }
 
         completeProgress();
@@ -188,7 +215,11 @@ export function useActivitiesBulkOps({
         setSelectAllMode(false);
         clearCache('');
         clearCacheByKey('Activity');
-        await loadActivities(currentPage, pageSize);
+        await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Updated ${updateCount} activity/activities to ${newStatus}`);
       } catch (error) {
         completeProgress();
@@ -203,7 +234,11 @@ export function useActivitiesBulkOps({
 
       try {
         const selectedCount = selectedActivities.size;
-        startProgress({ message: `Updating ${selectedCount} activities...`, total: selectedCount, current: 0 });
+        startProgress({
+          message: `Updating ${selectedCount} activities...`,
+          total: selectedCount,
+          current: 0,
+        });
 
         const selectedArray = [...selectedActivities];
         const BATCH_SIZE = 50;
@@ -213,14 +248,21 @@ export function useActivitiesBulkOps({
           const batch = selectedArray.slice(i, i + BATCH_SIZE);
           await Promise.all(batch.map((id) => Activity.update(id, { status: newStatus })));
           updatedCount += batch.length;
-          updateProgress({ current: updatedCount, message: `Updated ${updatedCount} of ${selectedCount} activities...` });
+          updateProgress({
+            current: updatedCount,
+            message: `Updated ${updatedCount} of ${selectedCount} activities...`,
+          });
         }
 
         completeProgress();
         setSelectedActivities(new Set());
         clearCache('');
         clearCacheByKey('Activity');
-        await loadActivities(currentPage, pageSize);
+        await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Updated ${selectedCount} activity/activities to ${newStatus}`);
       } catch (error) {
         completeProgress();
@@ -242,15 +284,24 @@ export function useActivitiesBulkOps({
         const allActivities = extractItems(assignResult);
         const updateCount = allActivities.length;
 
-        updateProgress({ message: `Assigning ${updateCount} activities...`, total: updateCount, current: 0 });
+        updateProgress({
+          message: `Assigning ${updateCount} activities...`,
+          total: updateCount,
+          current: 0,
+        });
 
         const BATCH_SIZE = 50;
         let assignedCount = 0;
         for (let i = 0; i < allActivities.length; i += BATCH_SIZE) {
           const batch = allActivities.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((a) => Activity.update(a.id, { assigned_to: assignedTo || null })));
+          await Promise.all(
+            batch.map((a) => Activity.update(a.id, { assigned_to: assignedTo || null })),
+          );
           assignedCount += batch.length;
-          updateProgress({ current: assignedCount, message: `Assigned ${assignedCount} of ${updateCount} activities...` });
+          updateProgress({
+            current: assignedCount,
+            message: `Assigned ${assignedCount} of ${updateCount} activities...`,
+          });
         }
 
         completeProgress();
@@ -258,7 +309,11 @@ export function useActivitiesBulkOps({
         setSelectAllMode(false);
         clearCache('');
         clearCacheByKey('Activity');
-        await loadActivities(currentPage, pageSize);
+        await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Assigned ${updateCount} activity/activities`);
       } catch (error) {
         completeProgress();
@@ -273,7 +328,11 @@ export function useActivitiesBulkOps({
 
       try {
         const selectedCount = selectedActivities.size;
-        startProgress({ message: `Assigning ${selectedCount} activities...`, total: selectedCount, current: 0 });
+        startProgress({
+          message: `Assigning ${selectedCount} activities...`,
+          total: selectedCount,
+          current: 0,
+        });
 
         const selectedArray = [...selectedActivities];
         const BATCH_SIZE = 50;
@@ -281,16 +340,25 @@ export function useActivitiesBulkOps({
 
         for (let i = 0; i < selectedArray.length; i += BATCH_SIZE) {
           const batch = selectedArray.slice(i, i + BATCH_SIZE);
-          await Promise.all(batch.map((id) => Activity.update(id, { assigned_to: assignedTo || null })));
+          await Promise.all(
+            batch.map((id) => Activity.update(id, { assigned_to: assignedTo || null })),
+          );
           assignedCount += batch.length;
-          updateProgress({ current: assignedCount, message: `Assigned ${assignedCount} of ${selectedCount} activities...` });
+          updateProgress({
+            current: assignedCount,
+            message: `Assigned ${assignedCount} of ${selectedCount} activities...`,
+          });
         }
 
         completeProgress();
         setSelectedActivities(new Set());
         clearCache('');
         clearCacheByKey('Activity');
-        await loadActivities(currentPage, pageSize);
+        await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+          passes: 2,
+          initialDelayMs: 80,
+          stepDelayMs: 140,
+        });
         toast.success(`Assigned ${selectedCount} activity/activities`);
       } catch (error) {
         completeProgress();

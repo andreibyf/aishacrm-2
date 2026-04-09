@@ -39,6 +39,7 @@ import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useLeadsData } from '@/hooks/useLeadsData';
 import { useLeadsBulkOps } from '@/hooks/useLeadsBulkOps';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function LeadsPage() {
   const { user } = useUser();
@@ -310,13 +311,15 @@ export default function LeadsPage() {
     try {
       clearCache('Lead');
       clearCacheByKey('Lead');
-      // Brief delay so backend cache invalidation propagates
-      await new Promise((r) => setTimeout(r, 150));
-      await Promise.all([
-        loadLeads(currentPage, pageSize), // Stay on current page
-        loadTotalStats(),
-        refreshAccounts(),
-      ]);
+      await runMutationRefresh(
+        () =>
+          Promise.all([
+            loadLeads(currentPage, pageSize), // Stay on current page
+            loadTotalStats(),
+            refreshAccounts(),
+          ]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } catch (error) {
       console.error('[Leads.handleSave] Failed to reload data after save:', {
         error,
@@ -351,7 +354,10 @@ export default function LeadsPage() {
       clearCacheByKey('Lead');
       clearDashboardResultsCache();
       clearAllDashboardCaches();
-      await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+      await runMutationRefresh(
+        () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } catch (error) {
       console.error('Failed to delete lead:', error);
       toast.error('Failed to delete lead');

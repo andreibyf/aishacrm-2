@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Loader2, Trash2, UserCheck } from 'lucide-react';
+import { Edit, Eye, Globe, Trash2, UserCheck } from 'lucide-react';
 import AssignedToDisplay from '@/components/shared/AssignedToDisplay';
+import RowOperationIndicator from '@/components/shared/RowOperationIndicator';
 
 import { leadStatusColors as statusColors } from '@/utils/statusColors';
 
@@ -210,76 +211,19 @@ export default function LeadTable({
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
-                      {lead.updated_date
-                        ? formatDate(lead.updated_date)
-                        : <span className="text-slate-600">—</span>}
+                      {lead.updated_date ? (
+                        formatDate(lead.updated_date)
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      {(deletingId === lead.id || updatingId === lead.id) ? (
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>{deletingId === lead.id ? 'Deleting…' : 'Updating…'}</span>
-                        </div>
+                      {deletingId === lead.id || updatingId === lead.id ? (
+                        <RowOperationIndicator
+                          mode={deletingId === lead.id ? 'deleting' : 'updating'}
+                        />
                       ) : (
-                      <div className="flex items-center gap-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDetailLead(lead);
-                                setIsDetailOpen(true);
-                              }}
-                              className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>View details</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(`/leads/${lead.id}`, '_blank', 'noopener,noreferrer');
-                              }}
-                              className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                            >
-                              <Globe className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Open profile in new tab</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingLead(lead);
-                                setIsFormOpen(true);
-                              }}
-                              className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                              disabled={isConverted}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit {leadLabel.toLowerCase()}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        {lead.status !== 'converted' && (
+                        <div className="flex items-center gap-1">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -287,37 +231,95 @@ export default function LeadTable({
                                 size="icon"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleConvert(lead);
+                                  setDetailLead(lead);
+                                  setIsDetailOpen(true);
                                 }}
-                                className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-900/20"
+                                className="h-8 w-8 text-slate-400 hover:text-blue-400"
                               >
-                                <UserCheck className="w-4 h-4" />
+                                <Eye className="w-4 h-4" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Convert to contact</p>
+                              <p>View details</p>
                             </TooltipContent>
                           </Tooltip>
-                        )}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(lead.id);
-                              }}
-                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Delete lead</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`/leads/${lead.id}`, '_blank', 'noopener,noreferrer');
+                                }}
+                                className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                              >
+                                <Globe className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Open profile in new tab</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingLead(lead);
+                                  setIsFormOpen(true);
+                                }}
+                                className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                                disabled={isConverted}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit {leadLabel.toLowerCase()}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {lead.status !== 'converted' && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleConvert(lead);
+                                  }}
+                                  className="h-8 w-8 text-green-400 hover:text-green-300 hover:bg-green-900/20"
+                                >
+                                  <UserCheck className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Convert to contact</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(lead.id);
+                                }}
+                                className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete lead</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Lead } from '@/api/entities';
 import { toast } from 'sonner';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 // [2026-03-07 Cursor] — extracted from Leads.jsx (PR #331)
 
@@ -184,7 +185,15 @@ export function useLeadsBulkOps({
               chunk,
               getTenantFilter().tenant_id || user.tenant_id,
             );
-            successCount += result?.deleted ?? chunk.length;
+            const deletedInChunk = Math.max(0, Number(result?.deleted ?? chunk.length));
+            successCount += deletedInChunk;
+
+            // Optimistically remove only when backend confirms full chunk deletion.
+            if (deletedInChunk === chunk.length) {
+              const deletedIds = new Set(chunk);
+              setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
+              setTotalItems((prev) => Math.max(0, prev - chunk.length));
+            }
           } catch (err) {
             console.error('[Leads] Bulk delete chunk failed:', err);
             failCount += chunk.length;
@@ -200,12 +209,6 @@ export function useLeadsBulkOps({
         setSelectedLeads(new Set());
         setSelectAllMode(false);
 
-        // Optimistic UI: only clear the list if all deletes succeeded
-        if (failCount === 0) {
-          setLeads([]);
-          setTotalItems(0);
-        }
-
         if (successCount > 0) toast.success(`${successCount} lead(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} lead(s) failed to delete`);
 
@@ -214,7 +217,11 @@ export function useLeadsBulkOps({
         clearCacheByKey('Lead');
         clearDashboardResultsCache();
         clearAllDashboardCaches();
-        await Promise.all([loadLeads(1, pageSize), loadTotalStats()]);
+        await runMutationRefresh(() => Promise.all([loadLeads(1, pageSize), loadTotalStats()]), {
+          passes: 3,
+          initialDelayMs: 80,
+          stepDelayMs: 160,
+        });
       } catch (error) {
         completeProgress();
         console.error('Failed to delete leads:', error);
@@ -258,7 +265,15 @@ export function useLeadsBulkOps({
           const chunk = selectedArray.slice(i, i + CHUNK_SIZE);
           try {
             const result = await Lead.bulkDelete(chunk, tenantId);
-            successCount += result?.deleted ?? chunk.length;
+            const deletedInChunk = Math.max(0, Number(result?.deleted ?? chunk.length));
+            successCount += deletedInChunk;
+
+            // Optimistically remove only when backend confirms full chunk deletion.
+            if (deletedInChunk === chunk.length) {
+              const deletedIds = new Set(chunk);
+              setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
+              setTotalItems((prev) => Math.max(0, prev - chunk.length));
+            }
           } catch (err) {
             console.error('[Leads] Bulk delete chunk failed:', err);
             failedCount += chunk.length;
@@ -273,13 +288,6 @@ export function useLeadsBulkOps({
 
         setSelectedLeads(new Set());
 
-        // Optimistic UI: only remove items if all chunks succeeded
-        if (failedCount === 0) {
-          const deletedIds = new Set(selectedArray);
-          setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
-          setTotalItems((prev) => Math.max(0, prev - successCount));
-        }
-
         if (failedCount > 0) {
           toast.error(`${successCount} deleted, ${failedCount} failed`);
         } else {
@@ -291,7 +299,10 @@ export function useLeadsBulkOps({
         clearCacheByKey('Lead');
         clearDashboardResultsCache();
         clearAllDashboardCaches();
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+        );
       } catch (error) {
         completeProgress();
         console.error('Failed to delete leads:', error);
@@ -299,8 +310,10 @@ export function useLeadsBulkOps({
         setSelectedLeads(new Set());
         clearCache('Lead');
         clearCacheByKey('Lead');
-        await loadLeads(currentPage, pageSize);
-        await loadTotalStats();
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
       }
     }
   };
@@ -386,7 +399,10 @@ export function useLeadsBulkOps({
         setSelectAllMode(false);
         clearCache('Lead');
         clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         if (successCount > 0) toast.success(`Updated ${successCount} lead(s) to ${newStatus}`);
         if (failCount > 0) toast.error(`${failCount} lead(s) failed to update`);
       } catch (error) {
@@ -406,7 +422,10 @@ export function useLeadsBulkOps({
         setSelectedLeads(new Set());
         clearCache('Lead');
         clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         toast.success(`Updated ${promises.length} lead(s) to ${newStatus}`);
       } catch (error) {
         console.error('Failed to update leads:', error);
@@ -526,7 +545,10 @@ export function useLeadsBulkOps({
         setSelectAllMode(false);
         clearCache('Lead');
         clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         if (successCount > 0) toast.success(`Assigned ${successCount} lead(s)`);
         if (skipCount > 0) toast.warning(`${skipCount} lead(s) skipped (no write access)`);
       } catch (error) {
@@ -580,7 +602,10 @@ export function useLeadsBulkOps({
         setSelectedLeads(new Set());
         clearCache('Lead');
         clearCacheByKey('Lead');
-        await Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]);
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          { passes: 2, initialDelayMs: 80, stepDelayMs: 140 },
+        );
         if (result.updated > 0) toast.success(`Assigned ${result.updated} lead(s)`);
         if (result.skipped > 0)
           toast.warning(`${result.skipped} lead(s) skipped (no write access)`);

@@ -2,9 +2,10 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Edit, Eye, Globe, Loader2, Trash2 } from 'lucide-react';
+import { Edit, Eye, Globe, Trash2 } from 'lucide-react';
 import { formatIndustry } from '@/utils/industryUtils';
 import AssignedToDisplay from '../shared/AssignedToDisplay';
+import RowOperationIndicator from '../shared/RowOperationIndicator';
 
 const typeBadgeColors = {
   prospect: 'bg-blue-900/20 text-blue-300 border-blue-700',
@@ -55,14 +56,19 @@ export default function AccountTable({
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Website</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Phone</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Industry</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Assigned To</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">
+                Assigned To
+              </th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Type</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700">
             {accounts.map((account) => (
-              <tr key={account.id} className={`hover:bg-slate-700/30 transition-colors ${deletingId === account.id || updatingId === account.id ? 'opacity-50 pointer-events-none' : ''}`}>
+              <tr
+                key={account.id}
+                className={`hover:bg-slate-700/30 transition-colors ${deletingId === account.id || updatingId === account.id ? 'opacity-50 pointer-events-none' : ''}`}
+              >
                 <td className="px-4 py-3">
                   <Checkbox
                     checked={selectedAccounts.has(account.id) || selectAllMode}
@@ -110,69 +116,89 @@ export default function AccountTable({
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
-                  {(deletingId === account.id || updatingId === account.id) ? (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>{deletingId === account.id ? 'Deleting…' : 'Updating…'}</span>
-                    </div>
+                  {deletingId === account.id || updatingId === account.id ? (
+                    <RowOperationIndicator
+                      mode={deletingId === account.id ? 'deleting' : 'updating'}
+                    />
                   ) : (
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(`/accounts/${account.id}`, '_blank', 'noopener,noreferrer');
-                          }}
-                          className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                        >
-                          <Globe className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Open web profile</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => { e.stopPropagation(); handleViewDetails(account); }}
-                          className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>View details</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => { e.stopPropagation(); handleEdit(account); }}
-                          className="h-8 w-8 text-slate-400 hover:text-blue-400"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Edit {accountLabel?.toLowerCase()}</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(account.id); }}
-                          className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Delete account</p></TooltipContent>
-                    </Tooltip>
-                  </div>
+                    <div className="flex items-center gap-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(
+                                `/accounts/${account.id}`,
+                                '_blank',
+                                'noopener,noreferrer',
+                              );
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                          >
+                            <Globe className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Open web profile</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewDetails(account);
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>View details</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(account);
+                            }}
+                            className="h-8 w-8 text-slate-400 hover:text-blue-400"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Edit {accountLabel?.toLowerCase()}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(account.id);
+                            }}
+                            className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Delete account</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   )}
                 </td>
               </tr>

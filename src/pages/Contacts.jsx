@@ -31,6 +31,7 @@ import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useContactsData } from '@/hooks/useContactsData';
 import { useContactsBulkOps } from '@/hooks/useContactsBulkOps';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function ContactsPage() {
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
@@ -179,7 +180,10 @@ export default function ContactsPage() {
     try {
       setCurrentPage(1);
       clearCacheByKey('Contact');
-      await Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]);
+      await runMutationRefresh(
+        () => Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } catch (error) {
       console.error('[Contacts] Error in handleCreate:', error);
     }
@@ -195,7 +199,10 @@ export default function ContactsPage() {
       setIsFormOpen(false);
       setEditingContact(null);
       clearCacheByKey('Contact');
-      await Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]);
+      await runMutationRefresh(
+        () => Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]),
+        { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
+      );
     } finally {
       setUpdatingId(null);
     }
@@ -217,7 +224,11 @@ export default function ContactsPage() {
       setTotalItems((prev) => Math.max(0, prev - 1));
       toast.success('Contact deleted successfully');
       clearCacheByKey('Contact');
-      await Promise.all([loadContacts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
     } catch (error) {
       console.error('Error deleting contact:', error);
       toast.error('Failed to delete contact');

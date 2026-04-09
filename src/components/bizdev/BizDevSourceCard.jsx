@@ -5,7 +5,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Building2,
-  Loader2,
   Mail,
   Phone,
   MapPin,
@@ -24,6 +23,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { BizDevSource, Employee } from '@/api/entities';
 import { bizdevStatusColors, licenseStatusColors, getStatusColor } from '@/utils/statusColors';
+import RowOperationIndicator from '@/components/shared/RowOperationIndicator';
 
 export default function BizDevSourceCard({
   source,
@@ -198,10 +198,11 @@ export default function BizDevSourceCard({
     >
       {(isDeleting || isUpdating) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-slate-900/70 rounded-lg z-10 pointer-events-none">
-          <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>{isDeleting ? 'Deleting…' : 'Updating…'}</span>
-          </div>
+          <RowOperationIndicator
+            mode={isDeleting ? 'deleting' : 'updating'}
+            className="text-sm text-slate-600 dark:text-slate-300"
+            center={true}
+          />
         </div>
       )}
       <CardHeader className="pb-3">

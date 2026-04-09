@@ -1,5 +1,6 @@
 import { Contact } from '@/api/entities';
 import { toast } from 'sonner';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 /**
  * useContactsBulkOps hook - Manages bulk operations for contacts
@@ -131,7 +132,11 @@ export function useContactsBulkOps({
         setSelectedContacts(new Set());
         setSelectAllMode(false);
         clearCacheByKey('Contact');
-        await Promise.all([loadContacts(), loadTotalStats()]);
+        await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
+          passes: 3,
+          initialDelayMs: 80,
+          stepDelayMs: 160,
+        });
         if (successCount > 0) toast.success(`${successCount} contact(s) deleted`);
         if (failCount > 0) toast.error(`${failCount} contact(s) failed to delete`);
       } catch (error) {
@@ -183,7 +188,11 @@ export function useContactsBulkOps({
       completeProgress();
       setSelectedContacts(new Set());
       clearCacheByKey('Contact');
-      await Promise.all([loadContacts(), loadTotalStats()]);
+      await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
 
       if (successCount > 0)
         toast.success(
@@ -235,8 +244,11 @@ export function useContactsBulkOps({
     setSelectedContacts(new Set());
     setSelectAllMode(false);
     clearCacheByKey('Contact');
-    loadContacts();
-    loadTotalStats();
+    await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
+      passes: 2,
+      initialDelayMs: 80,
+      stepDelayMs: 140,
+    });
   };
 
   const handleBulkAssign = async (assigneeId) => {
@@ -303,8 +315,11 @@ export function useContactsBulkOps({
     setSelectedContacts(new Set());
     setSelectAllMode(false);
     clearCacheByKey('Contact');
-    loadContacts();
-    loadTotalStats();
+    await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
+      passes: 2,
+      initialDelayMs: 80,
+      stepDelayMs: 140,
+    });
   };
 
   return {
