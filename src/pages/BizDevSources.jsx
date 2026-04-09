@@ -73,6 +73,12 @@ function matchesUpdatedFilter(updatedAtRaw, updatedFilter) {
   return true;
 }
 
+function normalizeBizDevStatus(status) {
+  return String(status || 'Active')
+    .trim()
+    .toLowerCase();
+}
+
 export default function BizDevSourcesPage() {
   const navigate = useNavigate();
   const { plural: bizdevLabel, singular: bizdevSourceLabel } = useEntityLabel('bizdev_sources');
@@ -663,7 +669,7 @@ export default function BizDevSourcesPage() {
       source.city?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus =
-      statusFilter === 'all' || source.status?.toLowerCase() === statusFilter.toLowerCase();
+      statusFilter === 'all' || normalizeBizDevStatus(source.status) === statusFilter.toLowerCase();
     const matchesLicenseStatus =
       licenseStatusFilter === 'all' ||
       source.license_status?.toLowerCase() === licenseStatusFilter.toLowerCase();
@@ -852,11 +858,15 @@ export default function BizDevSourcesPage() {
         matchesAge
       );
     });
-    const activeCount   = base.filter((s) => s.status?.toLowerCase() === 'active').length;
-    const promotedCount = base.filter((s) => ['promoted', 'converted'].includes(s.status?.toLowerCase())).length;
-    const archivedCount = base.filter((s) => s.status?.toLowerCase() === 'archived').length;
+    const activeCount = base.filter((s) => normalizeBizDevStatus(s.status) === 'active').length;
+    const promotedCount = base.filter((s) =>
+      ['promoted', 'converted'].includes(normalizeBizDevStatus(s.status)),
+    ).length;
+    const archivedCount = base.filter((s) => normalizeBizDevStatus(s.status) === 'archived').length;
     return {
-      total: activeCount + promotedCount + archivedCount,
+      // Total should reflect every source in the current filtered context,
+      // not only the subset that maps to known status buckets.
+      total: base.length,
       active: activeCount,
       promoted: promotedCount,
       archived: archivedCount,
