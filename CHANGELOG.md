@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Wave 6 archive permission hardening (`backend/routes/bizdevsources.js`, `backend/__tests__/routes/teamVisibility.archive-guards.test.js`):** Added per-record team-visibility enforcement to `POST /api/bizdevsources/archive` so archive operations are allowed only when `getAccessLevel(...)` is `full` for all selected records. The endpoint now rejects mixed/unauthorized archive batches and includes regression coverage to keep full-access checks from regressing.
+
 - **Wave 5 bulk-assign assignment-history canonical mapping (`backend/lib/bulkAssign.js`, `backend/__tests__/routes/bulkAssign.test.js`):** Fixed `TABLE_TO_ENTITY` mapping for bulk assignment history so BizDev bulk assignments use canonical `entity_type='bizdev_source'` (instead of non-standard `bizdevsource`) and added explicit canonical mappings for `opportunity`/`activity` parity. Added regression assertions to lock canonical mapping keys and prevent future history query mismatches.
 
 - **Wave 4 bulk-delete permission hardening (`backend/routes/leads.v2.js`, `backend/__tests__/routes/teamVisibility.bulk-delete-guards.test.js`):** Added per-record team-visibility enforcement to `POST /api/v2/leads/bulk-delete` so records are only deletable when `getAccessLevel(...)` is `full` for every selected lead. The endpoint now rejects bulk deletions that include unauthorized records, closing a parity gap where bulk delete bypassed route-level write checks. Added a regression test to lock the guard logic in place.
