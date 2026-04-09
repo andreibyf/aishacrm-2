@@ -13,11 +13,14 @@
 export const navItems = [
   { href: 'Dashboard', label: 'Dashboard' },
   { href: 'Contacts', label: 'Contacts' },
-  { href: 'Customers', label: 'Customers' },
+  { href: 'Accounts', label: 'Accounts' },
   { href: 'Leads', label: 'Leads' },
   { href: 'Opportunities', label: 'Opportunities' },
   { href: 'Activities', label: 'Activities' },
+  { href: 'Communications', label: 'Communications' },
   { href: 'Calendar', label: 'Calendar' },
+  { href: 'ConstructionProjects', label: 'Project Management' },
+  { href: 'Workers', label: 'Workers' },
   { href: 'BizDevSources', label: 'Potential Leads' },
   { href: 'CashFlow', label: 'Cash Flow' },
   { href: 'DocumentProcessing', label: 'Document Processing' },
@@ -37,9 +40,8 @@ export const navItems = [
  * Secondary navigation items (documentation, tools, etc.)
  */
 export const secondaryNavItems = [
-  { href: 'WorkflowGuide', label: 'Workflow Guide' },
   { href: 'Documentation', label: 'Documentation' },
-  { href: 'Agent', label: 'AI Agent', isAvatar: true },
+  { href: 'DeveloperAI', label: 'Developer AI' },
   { href: 'ClientRequirements', label: 'Client Requirements' },
 ];
 
@@ -48,36 +50,38 @@ export const secondaryNavItems = [
  * Used for checking if a module is enabled/disabled
  */
 export const moduleMapping = {
-  Dashboard: 'dashboard',
-  Contacts: 'contacts',
-  Customers: 'accounts',
-  Leads: 'leads',
-  Opportunities: 'opportunities',
-  Activities: 'activities',
-  Calendar: 'calendar',
-  BizDevSources: 'bizdev_sources',
-  CashFlow: 'cash_flow',
-  DocumentProcessing: 'document_processing',
-  DocumentManagement: 'document_processing',
-  Employees: 'employees',
-  Reports: 'reports',
-  Integrations: 'integrations',
-  PaymentPortal: 'payment_portal',
-  AICampaigns: 'ai_campaigns',
-  AISuggestions: 'ai_suggestions',
-  Agent: 'ai_agent',
-  Utilities: 'utilities',
-  ClientOnboarding: 'client_onboarding',
-  Workflows: 'workflows',
+  Dashboard: 'Dashboard',
+  Contacts: 'Contact Management',
+  Accounts: 'Account Management',
+  Leads: 'Lead Management',
+  Opportunities: 'Opportunities',
+  Activities: 'Activity Tracking',
+  Communications: 'Activity Tracking',
+  Calendar: 'Calendar',
+  BizDevSources: 'Potential Leads',
+  CashFlow: 'Cash Flow Management',
+  DocumentProcessing: 'Document Processing & Management',
+  DocumentManagement: 'Document Processing & Management',
+  Employees: 'Employee Management',
+  Reports: 'Analytics & Reports',
+  Integrations: 'Integrations',
+  PaymentPortal: 'Payment Portal',
+  AICampaigns: 'AI Campaigns',
+  AISuggestions: 'AI Suggestions',
+  DeveloperAI: 'Developer AI',
+  Utilities: 'Utilities',
+  ClientOnboarding: 'Client Onboarding',
+  Workflows: 'Workflows',
+  ConstructionProjects: 'Project Management',
+  Workers: 'Workers',
   DuplicateContacts: null,
-  DuplicateCustomers: null,
+  DuplicateAccounts: null,
   DuplicateLeads: null,
   Tenants: null,
   Settings: null,
   Documentation: null,
   AuditLog: null,
   UnitTests: null,
-  WorkflowGuide: null,
   ClientRequirements: null,
 };
 
@@ -87,13 +91,11 @@ export const moduleMapping = {
  */
 export const pagesAllowedWithoutCRM = new Set([
   'Documentation',
-  'Agent',
+  'DeveloperAI',
   'Settings',
   'AuditLog',
   'UnitTests',
-  'WorkflowGuide',
   'ClientRequirements',
-  'Workflows',
 ]);
 
 /**
@@ -103,11 +105,9 @@ export const systemPages = new Set([
   'Documentation',
   'AuditLog',
   'Tenants',
-  'Agent',
   'UnitTests',
-  'WorkflowGuide',
   'ClientRequirements',
-  'Workflows',
+  'DeveloperAI',
 ]);
 
 /**
@@ -126,8 +126,10 @@ export function getAllPageNames() {
     'DataDiagnostics',
     'TenantDataDebug',
     'DuplicateContacts',
-    'DuplicateCustomers',
+    'DuplicateAccounts',
     'DuplicateLeads',
     'DataQualityReport',
+    'Agent',
+    'WorkflowGuide',
   ];
 }

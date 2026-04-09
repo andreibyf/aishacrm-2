@@ -1041,6 +1041,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Fixed
 
+- **Documentation relevance and coverage refresh (`src/pages/Documentation.jsx`, `src/pages/Layout.jsx`, `src/utils/navigationConfig.js`):** Documentation visibility now derives from the same shared sidebar navigation source used by Layout instead of a separate docs-only mapping, reducing drift between visible modules and visible docs. Updated section coverage with missing module docs for Communications, AI Campaigns, AI Suggestions, Project Management, Workers, Payment Portal, Client Onboarding, Client Requirements, and Developer AI, and expanded the universal AI documentation to cover the AiSHA side panel, Task AiSHA, optional voice, and WhatsApp access. Changes remain scoped to navigation metadata and Documentation UI/content only.
 - Legacy `/aisha-avatar.jpg` references migrated to `/assets/aisha-executive-portrait.jpg`
 - Documentation updated with correct avatar paths
 

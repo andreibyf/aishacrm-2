@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import {
   Download,
   FileText,
   Info,
+  Library,
+  Printer,
   Puzzle,
   Search,
   Settings,
@@ -28,17 +30,60 @@ import {
   Zap,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import UserContext from '@/components/shared/UserContext';
-import { useContext } from 'react';
+import { ModuleSettings } from '@/api/entities';
 import { getBackendUrl } from '@/api/backendUrl';
+import { useApiManager } from '@/components/shared/ApiManager';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser.js';
+import {
+  navItems as sidebarNavItems,
+  secondaryNavItems as sidebarSecondaryNavItems,
+} from '@/utils/navigationConfig';
+import { hasPageAccess } from '@/utils/permissions';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 export default function DocumentationPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSection, setActiveSection] = useState('overview');
-  const { currentUser } = useContext(UserContext);
+  const [moduleSettings, setModuleSettings] = useState([]);
+  const contentRef = useRef(null);
+  const { user, loading: userLoading } = useUser();
+  const { selectedTenantId } = useTenant();
+  const { cachedRequest } = useApiManager();
+  const effectiveTenantId = selectedTenantId || user?.tenant_id || null;
 
-  const isAdmin = currentUser?.role === 'admin';
-  const isSuperadmin = currentUser?.role === 'superadmin';
+  const isAdmin = user?.role === 'admin';
+  const isSuperadmin = user?.role === 'superadmin';
+
+  useEffect(() => {
+    const loadModuleSettings = async () => {
+      if (!user) {
+        setModuleSettings([]);
+        return;
+      }
+
+      try {
+        let settings;
+        if (effectiveTenantId) {
+          settings = await cachedRequest(
+            'ModuleSettings',
+            'filter',
+            { filter: { tenant_id: effectiveTenantId } },
+            () => ModuleSettings.filter({ tenant_id: effectiveTenantId }),
+          );
+        } else {
+          settings = [];
+        }
+
+        setModuleSettings(settings || []);
+      } catch (error) {
+        console.warn('Module settings load failed for documentation:', error);
+        setModuleSettings([]);
+      }
+    };
+
+    loadModuleSettings();
+  }, [cachedRequest, effectiveTenantId, user]);
 
   const handleDownloadPDF = async () => {
     // Prefer backend-generated PDF from our markdown-based User Guide
@@ -82,6 +127,181 @@ export default function DocumentationPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const buildPrintableHtml = (title, body) => `
+    <!doctype html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="utf-8" />
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            color: #0f172a;
+            margin: 32px;
+            line-height: 1.6;
+          }
+          h1, h2, h3, h4 {
+            color: #111827;
+            margin-top: 1.25em;
+            margin-bottom: 0.5em;
+          }
+          h1 {
+            font-size: 28px;
+            border-bottom: 2px solid #cbd5e1;
+            padding-bottom: 12px;
+          }
+          h2 {
+            font-size: 22px;
+          }
+          h3 {
+            font-size: 18px;
+          }
+          p, li {
+            font-size: 14px;
+          }
+          ul, ol {
+            padding-left: 24px;
+          }
+          code {
+            font-family: Consolas, monospace;
+            background: #f1f5f9;
+            padding: 2px 4px;
+            border-radius: 4px;
+          }
+          blockquote {
+            border-left: 4px solid #7c3aed;
+            margin: 16px 0;
+            padding-left: 16px;
+            color: #475569;
+          }
+          .print-header {
+            margin-bottom: 24px;
+          }
+          .print-meta {
+            color: #64748b;
+            font-size: 12px;
+          }
+          .section-break {
+            page-break-before: always;
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid #cbd5e1;
+          }
+          .section-break:first-of-type {
+            page-break-before: auto;
+            margin-top: 0;
+            padding-top: 0;
+            border-top: 0;
+          }
+        </style>
+      </head>
+      <body>${body}</body>
+    </html>
+  `;
+
+  const openPrintableWindow = (html) => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720');
+    if (!printWindow) {
+      window.print();
+      return null;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    return printWindow;
+  };
+
+  const renderMarkdownForPrint = (content) =>
+    renderToStaticMarkup(<ReactMarkdown>{content}</ReactMarkdown>);
+
+  const handlePrintSection = () => {
+    const activeSectionContent = contentRef.current?.innerHTML;
+    const activeSectionTitle = filteredSections.find(
+      (section) => section.id === activeSection,
+    )?.title;
+
+    if (!activeSectionContent || !activeSectionTitle) {
+      window.print();
+      return;
+    }
+
+    const printWindow = openPrintableWindow(
+      buildPrintableHtml(
+        `${activeSectionTitle} - Ai-SHA CRM Documentation`,
+        `
+          <div class="print-header">
+            <h1>${activeSectionTitle}</h1>
+            <div class="print-meta">Ai-SHA CRM Documentation • Printed ${new Date().toLocaleString()}</div>
+          </div>
+          <div>${activeSectionContent}</div>
+        `,
+      ),
+    );
+    if (!printWindow) return;
+    printWindow.print();
+    printWindow.close();
+  };
+
+  const handlePrintAllSections = () => {
+    if (filteredSections.length === 0) {
+      window.print();
+      return;
+    }
+
+    const sectionsHtml = filteredSections
+      .map(
+        (section) => `
+          <section class="section-break">
+            <h1>${section.title}</h1>
+            <div class="print-meta">Section ID: ${section.id}</div>
+            ${renderMarkdownForPrint(section.content)}
+          </section>
+        `,
+      )
+      .join('');
+
+    const printWindow = openPrintableWindow(
+      buildPrintableHtml(
+        'Ai-SHA CRM Documentation - All Visible Sections',
+        `
+          <div class="print-header">
+            <h1>Ai-SHA CRM Documentation</h1>
+            <div class="print-meta">Visible sections for current access • Printed ${new Date().toLocaleString()}</div>
+          </div>
+          ${sectionsHtml}
+        `,
+      ),
+    );
+    if (!printWindow) return;
+    printWindow.print();
+    printWindow.close();
+  };
+
+  const handleExportSectionPdf = () => {
+    const activeSectionContent = contentRef.current?.innerHTML;
+    if (!activeSectionData || !activeSectionContent) {
+      window.print();
+      return;
+    }
+
+    const printWindow = openPrintableWindow(
+      buildPrintableHtml(
+        `${activeSectionData.title} - Ai-SHA CRM Documentation`,
+        `
+          <div class="print-header">
+            <h1>${activeSectionData.title}</h1>
+            <div class="print-meta">Use your browser's Save as PDF destination to export this section • Generated ${new Date().toLocaleString()}</div>
+          </div>
+          <div>${activeSectionContent}</div>
+        `,
+      ),
+    );
+    if (!printWindow) return;
+    printWindow.print();
+    printWindow.close();
   };
 
   const documentationSections = [
@@ -206,6 +426,8 @@ Use the search function above to find specific topics quickly. The User Guide in
     },
     {
       id: 'tenant-admin',
+      pageName: 'Settings',
+      adminOnly: true,
       title: 'Tenant Administration',
       icon: Shield,
       color: 'text-amber-500',
@@ -586,7 +808,7 @@ As admin, you can:
 1. ✅ **Login** with your credentials (check your email for invitation)
 2. ✅ **Complete your profile** in Settings → User Profile
 3. ✅ **Explore the Dashboard** to see your tenant overview
-4. ✅ **Try the AI Assistant** by clicking the AI icon in the sidebar
+4. ✅ **Try AiSHA** using the assistant launcher or Task AiSHA on a record
 5. ✅ **Create your first contact** to start building relationships
 
 ### Sales Teams
@@ -624,6 +846,7 @@ As admin, you can:
     },
     {
       id: 'contacts',
+      pageName: 'Contacts',
       title: 'Contacts',
       icon: Users,
       color: 'text-blue-400',
@@ -756,6 +979,7 @@ The Contacts module is fully responsive:
     },
     {
       id: 'accounts',
+      pageName: 'Accounts',
       title: 'Accounts',
       icon: Building2,
       color: 'text-emerald-400',
@@ -977,6 +1201,7 @@ Access account reports via **Reports** module:
     },
     {
       id: 'leads',
+      pageName: 'Leads',
       title: 'Leads',
       icon: Star,
       color: 'text-yellow-400',
@@ -1201,6 +1426,7 @@ Track leads through stages:
     },
     {
       id: 'opportunities',
+      pageName: 'Opportunities',
       title: 'Opportunities',
       icon: Target,
       color: 'text-orange-400',
@@ -1395,6 +1621,7 @@ Access opportunity reports via **Reports** module:
     },
     {
       id: 'activities',
+      pageName: 'Activities',
       title: 'Activities',
       icon: Calendar,
       color: 'text-indigo-400',
@@ -1480,6 +1707,7 @@ Configure automated emails with:
     },
     {
       id: 'bizdev',
+      pageName: 'BizDevSources',
       title: 'Potential Leads',
       icon: Database,
       color: 'text-cyan-400',
@@ -1618,6 +1846,7 @@ For industries requiring specific certifications or licenses, track their status
     },
     {
       id: 'workflows',
+      pageName: 'Workflows',
       title: 'Workflows & Automation',
       icon: Zap,
       color: 'text-yellow-400',
@@ -1878,6 +2107,7 @@ Popular templates updated monthly based on user feedback and industry best pract
     },
     {
       id: 'cashflow',
+      pageName: 'CashFlow',
       title: 'Cash Flow',
       icon: DollarSign,
       color: 'text-green-400',
@@ -1966,6 +2196,7 @@ Set up repeating transactions:
     },
     {
       id: 'documents',
+      pageNames: ['DocumentProcessing', 'DocumentManagement'],
       title: 'Document Processing',
       icon: FileText,
       color: 'text-pink-400',
@@ -2049,6 +2280,7 @@ AI suggests appropriate tax categories:
     },
     {
       id: 'reports',
+      pageName: 'Reports',
       title: 'Reports & Analytics',
       icon: BarChart3,
       color: 'text-purple-400',
@@ -2148,6 +2380,7 @@ All reports support:
     },
     {
       id: 'employees',
+      pageName: 'Employees',
       title: 'Employee Management',
       icon: Briefcase,
       color: 'text-amber-400',
@@ -2259,15 +2492,22 @@ Control which modules each user can access:
 
 Leverage artificial intelligence to automate tasks, gain insights, and work smarter.
 
-## AI Agent (Avatar)
+## AiSHA Assistant
 
-### Access via:
-- **Navigation Menu** - Click AI Agent icon
-- **Agent Page** - Full conversational interface
-- **WhatsApp Integration** - Connect your WhatsApp
+AiSHA is available through multiple entry points. Some are universal for all CRM users, while others depend on tenant configuration or page context.
+
+### Available to All Users
+- **AiSHA Side Panel** - Open the assistant launcher from the main app and chat from anywhere in the CRM
+- **Text Chat** - Always available when you can open the side panel
+- **Voice** - Optional, depends on browser/device support and whether your team enables voice use
+- **Task AiSHA** - Available from supported record experiences such as AI summary cards, opening a context-aware assistant tied to that record
+
+### Additional Access Modes
+- **Dedicated Agent Page** - A full conversational workspace may be available through direct navigation or linked workflows
+- **WhatsApp Integration** - Available when your tenant has a WhatsApp connect URL or WhatsApp access configured
 
 ### Capabilities
-The AI Agent can:
+AiSHA can help you:
 - **Search Records**: Find contacts, leads, opportunities
 - **Create Records**: Add new contacts, leads, activities
 - **Update Records**: Modify existing data
@@ -2275,21 +2515,43 @@ The AI Agent can:
 - **Answer Questions**: About your CRM data
 - **Provide Recommendations**: Next best actions
 - **Web Research**: Search internet for company info
+- **Work in Context**: Use Task AiSHA against a specific contact, account, lead, or opportunity
 
-### Using the Agent
+### Using AiSHA
 
-**Voice Commands** (if mic enabled):
+**Voice Commands** (optional):
 - &quot;Show me all high-value opportunities&quot;
 - &quot;Create a new contact for John Smith at Acme Corp&quot;
 - &quot;What&apos;s my pipeline value this month?&quot;
+
+Voice is not required. If voice is unavailable or disabled, the same requests can be sent through text chat.
 
 **Text Chat**:
 - Type natural language queries
 - Get structured responses
 - Follow-up questions for clarification
 
-### Agent Context
-The agent has access to:
+### Task AiSHA
+
+Task AiSHA opens a focused assistant tied to the record you are viewing. Use it when you want help on one specific entity without manually restating all of the context.
+
+Common uses:
+- Summarize a contact, account, lead, or opportunity
+- Ask for next-step suggestions on an active deal
+- Review recent activity before a call or meeting
+- Generate follow-up ideas based on that record's history
+
+### WhatsApp Access
+
+If your tenant has WhatsApp configured, AiSHA can also be reached through a WhatsApp connection flow.
+
+Notes:
+- Availability depends on tenant setup and user enablement
+- Some teams expose a WhatsApp connect button from the agent experience
+- If WhatsApp is not configured, this option will not appear
+
+### Assistant Context
+AiSHA works with:
 - Your tenant data
 - Current user permissions
 - Recent activities and notes
@@ -2392,6 +2654,7 @@ From receipts:
     },
     {
       id: 'integrations',
+      pageName: 'Integrations',
       title: 'Integrations',
       icon: Puzzle,
       color: 'text-blue-400',
@@ -2539,6 +2802,7 @@ Notify Customer Success Team
     },
     {
       id: 'calendar',
+      pageName: 'Calendar',
       title: 'Calendar',
       icon: Calendar,
       color: 'text-teal-400',
@@ -2655,6 +2919,7 @@ Activities color-coded by:
     },
     {
       id: 'utilities',
+      pageName: 'Utilities',
       title: 'Utilities & Tools',
       icon: Wrench,
       color: 'text-slate-400',
@@ -2821,6 +3086,7 @@ Configure retention policies:
     },
     {
       id: 'settings',
+      pageName: 'Settings',
       title: 'User Settings',
       icon: Settings,
       color: 'text-gray-400',
@@ -2978,10 +3244,341 @@ If you're integrating with external tools:
 ✓ **Enable 2FA** - Extra security when available
       `,
     },
+    {
+      id: 'communications',
+      pageName: 'Communications',
+      title: 'Communications',
+      icon: Zap,
+      color: 'text-cyan-400',
+      content: `
+# Communications
+
+The Communications module is the central workspace for message history, outreach activity, and conversation tracking across channels.
+
+## What You Can Do
+
+- Review communication timelines tied to contacts, accounts, and leads
+- Track inbound and outbound messaging activity in one place
+- Filter by channel, owner, date range, or related CRM record
+- Use communications context before making calls, sending follow-ups, or escalating issues
+
+## Typical Workflow
+
+1. Open **Communications** from the sidebar
+2. Search by contact, account, phone number, or email
+3. Apply filters to narrow to a campaign, owner, or date range
+4. Open a thread or activity entry to review the full context
+5. Jump to the related CRM record when you need to update notes, tasks, or ownership
+
+## Best Practices
+
+✓ Review the latest thread before contacting a customer
+✓ Keep related CRM records up to date so communication history stays meaningful
+✓ Use filters for daily triage instead of scanning the full feed
+✓ Confirm tenant and owner context before acting on a thread
+      `,
+    },
+    {
+      id: 'ai-campaigns',
+      pageName: 'AICampaigns',
+      title: 'AI Campaigns',
+      icon: Brain,
+      color: 'text-fuchsia-400',
+      content: `
+# AI Campaigns
+
+AI Campaigns helps you create, schedule, and monitor outbound sequences that use AI-generated messaging and CRM data.
+
+## Core Capabilities
+
+- Build campaigns for email, call, or multi-step outreach
+- Generate subject lines and message drafts with AI assistance
+- Assign target audiences from leads, contacts, or filtered CRM segments
+- Track campaign status, progress, and performance over time
+
+## Running a Campaign
+
+1. Open **AI Campaigns**
+2. Create a new campaign or duplicate an existing one
+3. Define the audience and review inclusion filters carefully
+4. Generate or refine the campaign copy
+5. Set timing, ownership, and approval rules
+6. Launch only after validating the sample output and targeting
+
+## Best Practices
+
+✓ Start with a narrow audience before scaling
+✓ Review AI-generated copy for tone and compliance
+✓ Avoid overlapping campaigns against the same audience
+✓ Watch reply rates and pause weak-performing sequences quickly
+      `,
+    },
+    {
+      id: 'ai-suggestions',
+      pageName: 'AISuggestions',
+      title: 'AI Suggestions',
+      icon: Star,
+      color: 'text-amber-400',
+      content: `
+# AI Suggestions
+
+AI Suggestions surfaces recommended next steps based on CRM activity, pipeline state, and recent context.
+
+## Common Suggestions
+
+- Follow-up reminders for stale leads or opportunities
+- Account and contact enrichment opportunities
+- Suggested activities for deals missing recent engagement
+- Workflow or data-quality actions to keep records complete
+
+## How to Use It
+
+1. Open **AI Suggestions**
+2. Review priority recommendations first
+3. Open the related record before applying a suggestion
+4. Complete, dismiss, or defer the suggestion based on real context
+
+## Best Practices
+
+✓ Treat suggestions as decision support, not automatic truth
+✓ Verify important actions against the source record
+✓ Use suggestions to triage work at the start of the day
+✓ Dismiss outdated items so the queue stays useful
+      `,
+    },
+    {
+      id: 'project-management',
+      pageName: 'ConstructionProjects',
+      title: 'Project Management',
+      icon: Briefcase,
+      color: 'text-indigo-400',
+      content: `
+# Project Management
+
+Project Management tracks delivery work, internal initiatives, and client-linked projects in a structured workspace.
+
+## Core Capabilities
+
+- Create projects with owners, due dates, and status tracking
+- Organize work into phases, tasks, and milestones
+- Link projects to accounts, contacts, or client onboarding work
+- Track progress, blockers, and resource assignments
+
+## Recommended Workflow
+
+1. Open **Project Management**
+2. Create a project and set the owner, timeline, and linked client record
+3. Add milestones or tasks for each delivery phase
+4. Update status regularly as work moves forward
+5. Review overdue items and blocked tasks in team check-ins
+
+## Best Practices
+
+✓ Keep one clear owner per project
+✓ Break large engagements into milestones
+✓ Update blockers early so teams can respond
+✓ Use linked CRM records to keep delivery and relationship context connected
+      `,
+    },
+    {
+      id: 'workers',
+      pageName: 'Workers',
+      title: 'Workers',
+      icon: Users,
+      color: 'text-emerald-400',
+      content: `
+# Workers
+
+Workers is used to manage contractors, temporary labor, or other workforce resources tied to operational delivery.
+
+## What You Can Track
+
+- Worker profiles and contact details
+- Assignment status and role information
+- Availability, start dates, and engagement notes
+- Links between workers and projects or client work
+
+## Common Workflow
+
+1. Open **Workers**
+2. Add a worker profile with the required identifying details
+3. Assign the worker to active projects or jobs as needed
+4. Update status, availability, and notes when assignments change
+
+## Best Practices
+
+✓ Keep assignment records current
+✓ Record changes in availability as soon as they happen
+✓ Link workers to the relevant project for reporting clarity
+✓ Use notes for operational context, not sensitive personal data
+      `,
+    },
+    {
+      id: 'payment-portal',
+      pageName: 'PaymentPortal',
+      title: 'Payment Portal',
+      icon: DollarSign,
+      color: 'text-lime-400',
+      content: `
+# Payment Portal
+
+Payment Portal supports payment collection workflows and gives teams visibility into customer-facing payment activity.
+
+## Typical Uses
+
+- Review payment requests and statuses
+- Share portal access or payment links with clients
+- Confirm completed payments against CRM records
+- Coordinate with cash flow or account teams on outstanding balances
+
+## Workflow
+
+1. Open **Payment Portal**
+2. Review the customer or invoice context before sending a request
+3. Share the relevant payment link or portal instructions
+4. Confirm status changes after the client completes payment
+5. Follow up on pending or failed payments as needed
+
+## Best Practices
+
+✓ Verify amounts before sending payment requests
+✓ Keep payment records aligned with the linked account
+✓ Use notes for exceptions or disputes
+✓ Coordinate with finance when statuses do not reconcile
+      `,
+    },
+    {
+      id: 'client-onboarding',
+      pageName: 'ClientOnboarding',
+      title: 'Client Onboarding',
+      icon: Users,
+      color: 'text-sky-400',
+      content: `
+# Client Onboarding
+
+Client Onboarding organizes the steps required to bring a new client into service consistently.
+
+## What It Covers
+
+- Intake and kickoff tasks
+- Required documents and setup steps
+- Ownership across sales, delivery, and support teams
+- Progress visibility from signed client to active account
+
+## Recommended Workflow
+
+1. Open **Client Onboarding**
+2. Create or review the onboarding record for the new client
+3. Confirm owners for each onboarding phase
+4. Complete required setup tasks and documentation checkpoints
+5. Mark onboarding complete only after handoff is finished
+
+## Best Practices
+
+✓ Use a consistent checklist across clients
+✓ Assign each onboarding task to a real owner
+✓ Keep account and contact records linked from the start
+✓ Document blockers before the client handoff slips
+      `,
+    },
+    {
+      id: 'client-requirements',
+      pageName: 'ClientRequirements',
+      title: 'Client Requirements',
+      icon: FileText,
+      color: 'text-orange-400',
+      content: `
+# Client Requirements
+
+Client Requirements captures structured needs, expectations, and delivery constraints for each client engagement.
+
+## What to Record
+
+- Business requirements and scope notes
+- Technical constraints or dependencies
+- Approval checkpoints and key deliverables
+- Special handling instructions for teams working the account
+
+## Workflow
+
+1. Open **Client Requirements**
+2. Create or update the requirements entry for the client
+3. Group notes into clear categories so teams can scan quickly
+4. Keep the record updated when scope or constraints change
+
+## Best Practices
+
+✓ Record decisions in clear operational language
+✓ Separate confirmed requirements from open questions
+✓ Update requirements immediately after client approval changes
+✓ Link requirements to the related project or onboarding flow
+      `,
+    },
+    {
+      id: 'developer-ai',
+      pageName: 'DeveloperAI',
+      title: 'Developer AI',
+      icon: Wrench,
+      color: 'text-rose-400',
+      content: `
+# Developer AI
+
+Developer AI is an advanced workspace for technical users managing prompts, experimentation, diagnostics, and AI-assisted internal operations.
+
+## Typical Uses
+
+- Run controlled AI workflows for technical tasks
+- Inspect prompts, execution context, or model behavior
+- Support internal testing and operational troubleshooting
+- Work with developer-focused AI utilities and diagnostics
+
+## Access Notes
+
+- This area is typically restricted to superadmins or designated technical users
+- Actions here may affect internal tooling rather than standard CRM workflows
+- Changes should follow your tenant's governance and testing process
+
+## Best Practices
+
+✓ Use this module for controlled technical workflows only
+✓ Validate changes in a safe environment before broader rollout
+✓ Keep notes on prompt or tooling changes that affect behavior
+✓ Avoid using developer tools for routine end-user CRM work
+      `,
+    },
   ];
 
+  const accessibleSidebarPages = useMemo(() => {
+    const sidebarItems = [...sidebarNavItems, ...sidebarSecondaryNavItems];
+    return new Set(
+      sidebarItems
+        .filter((item) => hasPageAccess(user, item.href, selectedTenantId, moduleSettings))
+        .map((item) => item.href),
+    );
+  }, [selectedTenantId, moduleSettings, user]);
+
+  const permissionFilteredSections = documentationSections.filter((section) => {
+    if (!user) {
+      return !section.pageName && !section.pageNames && !section.adminOnly;
+    }
+    if (section.adminOnly) {
+      return isAdmin || isSuperadmin;
+    }
+
+    const pageNames = section.pageNames || (section.pageName ? [section.pageName] : []);
+    if (pageNames.length === 0) return true;
+
+    return pageNames.some((pageName) => {
+      if (pageName === 'Settings') {
+        return hasPageAccess(user, pageName, selectedTenantId, moduleSettings);
+      }
+
+      return accessibleSidebarPages.has(pageName);
+    });
+  });
+
   // Filter sections based on search
-  const filteredSections = documentationSections.filter((section) => {
+  const filteredSections = permissionFilteredSections.filter((section) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -2989,6 +3586,16 @@ If you're integrating with external tools:
       section.content.toLowerCase().includes(searchLower)
     );
   });
+
+  const activeSectionData = filteredSections.find((section) => section.id === activeSection);
+
+  useEffect(() => {
+    if (filteredSections.length === 0) return;
+    const activeSectionVisible = filteredSections.some((section) => section.id === activeSection);
+    if (!activeSectionVisible) {
+      setActiveSection(filteredSections[0].id);
+    }
+  }, [activeSection, filteredSections]);
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 sm:p-6 lg:p-8">
@@ -3008,6 +3615,36 @@ If you're integrating with external tools:
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              onClick={handlePrintAllSections}
+              variant="outline"
+              className="bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
+              disabled={filteredSections.length === 0}
+            >
+              <Library className="w-4 h-4 mr-2" />
+              Print All Visible
+            </Button>
+
+            <Button
+              onClick={handlePrintSection}
+              variant="outline"
+              className="bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
+              disabled={!activeSectionData}
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Print Section
+            </Button>
+
+            <Button
+              onClick={handleExportSectionPdf}
+              variant="outline"
+              className="bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700"
+              disabled={!activeSectionData}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Export Section PDF
+            </Button>
+
             {/* Download PDF Button */}
             <Button
               onClick={handleDownloadPDF}
@@ -3043,7 +3680,7 @@ If you're integrating with external tools:
 
         {/* Quick Links */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {documentationSections.slice(0, 12).map((section) => {
+          {filteredSections.map((section) => {
             const IconComponent = section.icon;
             return (
               <button
@@ -3100,13 +3737,25 @@ If you're integrating with external tools:
           <div className="lg:col-span-3">
             <Card className="bg-slate-800 border-slate-700">
               <CardContent className="p-6 sm:p-8">
-                {filteredSections.length === 0 ? (
+                {userLoading ? (
+                  <div className="text-center py-12">
+                    <Book className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <p className="text-slate-400">Loading documentation access...</p>
+                  </div>
+                ) : permissionFilteredSections.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Book className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <p className="text-slate-400">
+                      No documentation sections are available for your current access level.
+                    </p>
+                  </div>
+                ) : filteredSections.length === 0 ? (
                   <div className="text-center py-12">
                     <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
                     <p className="text-slate-400">No documentation found matching your search.</p>
                   </div>
                 ) : (
-                  <div className="prose prose-slate prose-invert max-w-none">
+                  <div ref={contentRef} className="prose prose-slate prose-invert max-w-none">
                     <ReactMarkdown
                       components={{
                         h1: ({ children }) => (
@@ -3169,7 +3818,7 @@ If you're integrating with external tools:
                         ),
                       }}
                     >
-                      {filteredSections.find((s) => s.id === activeSection)?.content || ''}
+                      {activeSectionData?.content || ''}
                     </ReactMarkdown>
                   </div>
                 )}

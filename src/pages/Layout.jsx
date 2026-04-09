@@ -1,6 +1,10 @@
 import '@/styles/layout-theme.css';
 import { logDev } from '@/utils/devLogger';
 import { isSuperAdmin, isAdminOrSuperAdmin, hasPageAccess } from '@/utils/permissions';
+import {
+  navItems as baseNavItems,
+  secondaryNavItems as baseSecondaryNavItems,
+} from '@/utils/navigationConfig';
 import SidebarContent from '@/components/layout/SidebarContent';
 import { useBranding } from '@/hooks/useBranding';
 import { useAiAvatarPositioning } from '@/hooks/useAiAvatarPositioning';
@@ -106,49 +110,47 @@ import { NetworkGlobe } from '../components/shared/NetworkGlobe';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiOptimizerProvider } from '../components/shared/ApiOptimizer';
 
-const navItems = [
-  { href: 'Dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: 'Contacts', icon: Users, label: 'Contacts' },
-  { href: 'Accounts', icon: Building2, label: 'Accounts' },
-  { href: 'Leads', icon: Target, label: 'Leads' }, // Changed icon to Target
-  { href: 'Opportunities', icon: TrendingUp, label: 'Opportunities' }, // Changed icon to TrendingUp
-  { href: 'Activities', icon: CheckSquare, label: 'Activities' },
-  { href: 'Communications', icon: Inbox, label: 'Communications' },
-  { href: 'Calendar', icon: Calendar, label: 'Calendar' },
-  { href: 'ConstructionProjects', icon: Kanban, label: 'Project Management' }, // Project management module
-  { href: 'Workers', icon: Users, label: 'Workers' }, // Contractors/temp labor management
-  { href: 'BizDevSources', icon: Database, label: 'Potential Leads' }, // Business development sources
-  { href: 'CashFlow', icon: DollarSign, label: 'Cash Flow' },
-  { href: 'DocumentProcessing', icon: FileText, label: 'Document Processing' },
-  {
-    href: 'DocumentManagement',
-    icon: FolderOpen,
-    label: 'Document Management',
-  },
-  { href: 'AICampaigns', icon: Megaphone, label: 'AI Campaigns' }, // Changed icon to Megaphone
-  { href: 'AISuggestions', icon: Sparkles, label: 'AI Suggestions' },
-  { href: 'Employees', icon: Users, label: 'Employees' }, // Changed icon to Users
-  { href: 'Reports', icon: BarChart3, label: 'Reports' },
-  { href: 'Integrations', icon: Plug, label: 'Integrations' }, // Changed icon to Plug
-  { href: 'Workflows', icon: Zap, label: 'Workflows' }, // NEW: Added Workflows
-  { href: 'PaymentPortal', icon: CreditCard, label: 'Payment Portal' },
-  { href: 'Utilities', icon: Wrench, label: 'Utilities' },
-  { href: 'ClientOnboarding', icon: UserPlus, label: 'Client Onboarding' }, // Changed icon to UserPlus
-];
+const primaryNavIconMap = {
+  Dashboard: LayoutDashboard,
+  Contacts: Users,
+  Accounts: Building2,
+  Leads: Target,
+  Opportunities: TrendingUp,
+  Activities: CheckSquare,
+  Communications: Inbox,
+  Calendar,
+  ConstructionProjects: Kanban,
+  Workers: Users,
+  BizDevSources: Database,
+  CashFlow: DollarSign,
+  DocumentProcessing: FileText,
+  DocumentManagement: FolderOpen,
+  AICampaigns: Megaphone,
+  AISuggestions: Sparkles,
+  Employees: Users,
+  Reports: BarChart3,
+  Integrations: Plug,
+  Workflows: Zap,
+  PaymentPortal: CreditCard,
+  Utilities: Wrench,
+  ClientOnboarding: UserPlus,
+};
 
-const secondaryNavItems = [
-  { href: 'Documentation', icon: BookOpen, label: 'Documentation' }, // Changed icon to BookOpen
-  {
-    href: 'DeveloperAI',
-    icon: Bot,
-    label: 'Developer AI',
-  },
-  {
-    href: 'ClientRequirements',
-    icon: ClipboardCheck,
-    label: 'Client Requirements',
-  }, // NEW: Added Client Requirements
-];
+const secondaryNavIconMap = {
+  Documentation: BookOpen,
+  DeveloperAI: Bot,
+  ClientRequirements: ClipboardCheck,
+};
+
+const navItems = baseNavItems.map((item) => ({
+  ...item,
+  icon: primaryNavIconMap[item.href],
+}));
+
+const secondaryNavItems = baseSecondaryNavItems.map((item) => ({
+  ...item,
+  icon: secondaryNavIconMap[item.href],
+}));
 
 const UserNav = ({ user, handleLogout, createPageUrl, compact = false }) => {
   const getUserDisplayName = () => {
@@ -2039,7 +2041,11 @@ function Layout({ children, currentPageName }) {
                       title={showLoginPassword ? 'Hide password' : 'Show password'}
                       className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-200 transition-colors"
                     >
-                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showLoginPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
