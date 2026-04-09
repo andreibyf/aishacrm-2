@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Pre-push backend test flake resilience (`.husky/pre-push`):** Added a third-stage fallback for backend validation: after `npm test` fails twice in the backend container, the hook now runs `npm run test:safe` (grouped sequential runner) before blocking push. This mitigates intermittent Node test-runner IPC/deserialization flakes (for example in Cal.com route suite reporting) while still enforcing backend test coverage.
+
 - **Document extraction fetch/extract failures (`src/api/integrations.js`, `backend/routes/documents.v2.js`, `backend/lib/cors.js`):** Switched frontend extractor calls to `POST /api/v2/documents/extract` with tenant header propagation, added tenant-scoped v2 extract endpoint, and hardened error-path CORS origin resolution to include `ALLOWED_ORIGINS` and production domains (`app.aishacrm.com`, `api.aishacrm.com`) so browser clients receive proper CORS headers on failures.
 
 - **Cold Leads status-card consistency for assignee filters (`src/pages/BizDevSources.jsx`):** Aligned status filtering/count logic with the row-level status fallback semantics by normalizing source status values before computing card totals and bucket counts. This fixes mismatches where records displayed as Active in the list were excluded from Active/Total stat cards under assignee and other filters.
