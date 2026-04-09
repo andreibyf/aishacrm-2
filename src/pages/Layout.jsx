@@ -38,6 +38,8 @@ import {
   Megaphone, // NEW: Added for AI Campaigns
   Menu,
   Moon,
+  Eye,
+  EyeOff,
   Plug, // NEW: Added for Integrations
   Settings,
   Sparkles, // AI Suggestions
@@ -274,6 +276,7 @@ function Layout({ children, currentPageName }) {
   // NEW: lazy-mount flags to reduce initial rate-limit bursts
   const [showNotificationsWidget, setShowNotificationsWidget] = React.useState(false);
   const [showFooterBrand, setShowFooterBrand] = React.useState(false);
+  const [showLoginPassword, setShowLoginPassword] = React.useState(false);
 
   // THEME: add theme state with persistence
   const [theme, setTheme] = React.useState('dark'); // Default to dark if nothing saved
@@ -2014,20 +2017,31 @@ function Layout({ children, currentPageName }) {
                   >
                     Password
                   </label>
-                  <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    required
-                    autoComplete="current-password"
-                    className="w-full px-4 py-3 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
-                    style={{
-                      background: 'rgba(30, 41, 59, 0.6)',
-                      border: '1px solid rgba(100, 116, 139, 0.3)',
-                      '--tw-ring-color': '#22d3ee',
-                    }}
-                    placeholder="Enter your password"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      id="password"
+                      name="password"
+                      required
+                      autoComplete="current-password"
+                      className="w-full px-4 py-3 pr-12 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition-colors"
+                      style={{
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        border: '1px solid rgba(100, 116, 139, 0.3)',
+                        '--tw-ring-color': '#22d3ee',
+                      }}
+                      placeholder="Enter your password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword((prev) => !prev)}
+                      aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                      title={showLoginPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
