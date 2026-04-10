@@ -1,15 +1,14 @@
-
-import { useState, useEffect } from "react";
-import { CashFlow } from "@/api/entities";
+import { useState, useEffect } from 'react';
+import { CashFlow } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
-import { getTenantFilter } from "../shared/tenantUtils";
-import { useTenant } from "../shared/tenantContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
-import { useLogger } from "../shared/Logger";
+import { getTenantFilter } from '../shared/tenantUtils';
+import { useTenant } from '../shared/tenantContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2 } from 'lucide-react';
+import { useLogger } from '../shared/Logger';
 
 // Local utility functions
 const sanitizeObject = (obj) => {
@@ -17,7 +16,7 @@ const sanitizeObject = (obj) => {
   try {
     return JSON.parse(JSON.stringify(obj));
   } catch (e) {
-    console.error("Sanitization failed:", e);
+    console.error('Sanitization failed:', e);
     return null;
   }
 };
@@ -34,21 +33,21 @@ const safeGet = (obj, path, defaultValue = null) => {
 
 export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
-    transaction_type: "income",
-    category: "",
-    amount: "",
+    transaction_type: 'income',
+    category: '',
+    amount: '',
     transaction_date: new Date().toISOString().split('T')[0],
-    description: "",
-    vendor_client: "",
-    related_account_id: "",
-    related_opportunity_id: "",
+    description: '',
+    vendor_client: '',
+    related_account_id: '',
+    related_opportunity_id: '',
     is_recurring: false,
-    recurrence_pattern: "",
-    status: "actual",
+    recurrence_pattern: '',
+    status: 'actual',
     tags: [],
-    tax_category: "unknown",
-    payment_method: "",
-    notes: ""
+    tax_category: 'unknown',
+    payment_method: '',
+    notes: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -56,31 +55,41 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
   const { selectedTenantId } = useTenant();
   const logger = useLogger();
 
-
   useEffect(() => {
     if (!transaction) return;
-    
+
     try {
       const sanitized = sanitizeObject(transaction);
       if (!sanitized) return;
 
-      setFormData(prev => {
+      setFormData((prev) => {
         const safeProps = [
-          'transaction_type', 'category', 'amount', 'transaction_date',
-          'description', 'vendor_client', 'related_account_id', 
-          'related_opportunity_id', 'is_recurring', 'recurrence_pattern',
-          'status', 'tags', 'tax_category', 'payment_method', 'notes'
+          'transaction_type',
+          'category',
+          'amount',
+          'transaction_date',
+          'description',
+          'vendor_client',
+          'related_account_id',
+          'related_opportunity_id',
+          'is_recurring',
+          'recurrence_pattern',
+          'status',
+          'tags',
+          'tax_category',
+          'payment_method',
+          'notes',
         ];
-        
+
         const updated = { ...prev };
-        
-        safeProps.forEach(prop => {
+
+        safeProps.forEach((prop) => {
           const value = safeGet(sanitized, prop);
           if (value !== undefined && value !== null) {
             updated[prop] = value;
           }
         });
-        
+
         return updated;
       });
     } catch (error) {
@@ -90,24 +99,25 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
 
   const categoryOptions = {
     income: [
-      { value: "sales_revenue", label: "Sales Revenue" },
-      { value: "recurring_revenue", label: "Recurring Revenue" },
-      { value: "refund", label: "Refund Received" },
-      { value: "other", label: "Other Income" }
+      { value: 'sales_revenue', label: 'Sales Revenue' },
+      { value: 'recurring_revenue', label: 'Recurring Revenue' },
+      { value: 'refund', label: 'Refund Received' },
+      { value: 'other', label: 'Other Income' },
     ],
     expense: [
-      { value: "operating_expense", label: "Operating Expense" },
-      { value: "marketing", label: "Marketing" },
-      { value: "equipment", label: "Equipment" },
-      { value: "supplies", label: "Supplies" },
-      { value: "utilities", label: "Utilities" },
-      { value: "rent", label: "Rent" },
-      { value: "payroll", label: "Payroll" },
-      { value: "professional_services", label: "Professional Services" },
-      { value: "travel", label: "Travel" },
-      { value: "meals", label: "Meals" },
-      { value: "other", label: "Other Expense" }
-    ]
+      { value: 'operating_expense', label: 'Operating Expense' },
+      { value: 'marketing', label: 'Marketing' },
+      { value: 'equipment', label: 'Equipment' },
+      { value: 'supplies', label: 'Supplies' },
+      { value: 'utilities', label: 'Utilities' },
+      { value: 'rent', label: 'Rent' },
+      { value: 'payroll', label: 'Payroll' },
+      { value: 'professional_services', label: 'Professional Services' },
+      { value: 'travel', label: 'Travel' },
+      { value: 'meals', label: 'Meals' },
+      { value: 'tax', label: 'Tax' },
+      { value: 'other', label: 'Other Expense' },
+    ],
   };
 
   const handleSubmit = async (e) => {
@@ -118,7 +128,7 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
       logger.info('Starting cash flow transaction save', 'CashFlowForm', {
         transactionType: formData.transaction_type,
         amount: formData.amount,
-        isEdit: !!transaction
+        isEdit: !!transaction,
       });
 
       const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
@@ -126,13 +136,15 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
         ...formData,
         amount: parseFloat(formData.amount),
         tenant_id: tenantFilter.tenant_id,
-        entry_method: "manual"
+        entry_method: 'manual',
       };
 
       const transId = safeGet(transaction, 'id');
       if (transId) {
         await CashFlow.update(transId, transactionData);
-        logger.info('Cash flow transaction updated successfully', 'CashFlowForm', { transactionId: transId });
+        logger.info('Cash flow transaction updated successfully', 'CashFlowForm', {
+          transactionId: transId,
+        });
       } else {
         await CashFlow.create(transactionData);
         logger.info('Cash flow transaction created successfully', 'CashFlowForm');
@@ -143,9 +155,9 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
       logger.error('Failed to save cash flow transaction', 'CashFlowForm', {
         error: error.message,
         stack: error.stack,
-        transactionData: formData
+        transactionData: formData,
       });
-      alert("Failed to save transaction: " + error.message);
+      alert('Failed to save transaction: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -156,11 +168,15 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="transaction_type" className="text-slate-200 font-medium">Transaction Type</Label>
+            <Label htmlFor="transaction_type" className="text-slate-200 font-medium">
+              Transaction Type
+            </Label>
             <select
               id="transaction_type"
               value={formData.transaction_type}
-              onChange={(e) => setFormData({...formData, transaction_type: e.target.value, category: ""})}
+              onChange={(e) =>
+                setFormData({ ...formData, transaction_type: e.target.value, category: '' })
+              }
               className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="income">Income</option>
@@ -169,16 +185,18 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category" className="text-slate-200 font-medium">Category</Label>
+            <Label htmlFor="category" className="text-slate-200 font-medium">
+              Category
+            </Label>
             <select
               id="category"
               value={formData.category}
-              onChange={(e) => setFormData({...formData, category: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
               required
             >
               <option value="">Select category</option>
-              {categoryOptions[formData.transaction_type]?.map(option => (
+              {categoryOptions[formData.transaction_type]?.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -187,13 +205,15 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount" className="text-slate-200 font-medium">Amount</Label>
+            <Label htmlFor="amount" className="text-slate-200 font-medium">
+              Amount
+            </Label>
             <Input
               id="amount"
               type="number"
               step="0.01"
               value={formData.amount}
-              onChange={(e) => setFormData({...formData, amount: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               placeholder="0.00"
               className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
               required
@@ -201,12 +221,14 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="transaction_date" className="text-slate-200 font-medium">Date</Label>
+            <Label htmlFor="transaction_date" className="text-slate-200 font-medium">
+              Date
+            </Label>
             <Input
               id="transaction_date"
               type="date"
               value={formData.transaction_date}
-              onChange={(e) => setFormData({...formData, transaction_date: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
               className="bg-slate-700 border-slate-600 text-slate-200"
               required
             />
@@ -214,11 +236,13 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="description" className="text-slate-200 font-medium">Description</Label>
+          <Label htmlFor="description" className="text-slate-200 font-medium">
+            Description
+          </Label>
           <Input
             id="description"
             value={formData.description}
-            onChange={(e) => setFormData({...formData, description: e.target.value})}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             placeholder="Enter transaction description"
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
             required
@@ -226,22 +250,26 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="vendor_client" className="text-slate-200 font-medium">Vendor/Client</Label>
+          <Label htmlFor="vendor_client" className="text-slate-200 font-medium">
+            Vendor/Client
+          </Label>
           <Input
             id="vendor_client"
             value={formData.vendor_client}
-            onChange={(e) => setFormData({...formData, vendor_client: e.target.value})}
+            onChange={(e) => setFormData({ ...formData, vendor_client: e.target.value })}
             placeholder="Enter vendor or client name"
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="payment_method" className="text-slate-200 font-medium">Payment Method</Label>
+          <Label htmlFor="payment_method" className="text-slate-200 font-medium">
+            Payment Method
+          </Label>
           <select
             id="payment_method"
-            value={formData.payment_method || ""}
-            onChange={(e) => setFormData({...formData, payment_method: e.target.value})}
+            value={formData.payment_method || ''}
+            onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
             className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <option value="">Select payment method</option>
@@ -254,11 +282,13 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="notes" className="text-slate-200 font-medium">Notes</Label>
+          <Label htmlFor="notes" className="text-slate-200 font-medium">
+            Notes
+          </Label>
           <Textarea
             id="notes"
             value={formData.notes}
-            onChange={(e) => setFormData({...formData, notes: e.target.value})}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Additional notes..."
             rows={3}
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
@@ -266,17 +296,17 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
-          <Button 
-            type="button" 
-            variant="outline" 
-            onClick={onCancel} 
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
             className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
           >
             Cancel
           </Button>
-          <Button 
-            type="submit" 
-            disabled={loading} 
+          <Button
+            type="submit"
+            disabled={loading}
             className="bg-green-600 hover:bg-green-700 text-white"
           >
             {loading ? (

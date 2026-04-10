@@ -11,10 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, UploadCloud, AlertCircle, CheckCircle, CreditCard, X } from 'lucide-react'; // Changed Contact to CreditCard, added X
 import { UploadFile, ExtractDataFromUploadedFile } from '@/api/integrations';
-import { Contact as ContactEntity } from '@/api/entities';
+import { Lead as LeadEntity } from '@/api/entities';
 import { useTenant } from '../shared/tenantContext';
 
-const contactSchema = {
+const businessCardSchema = {
   type: 'object',
   properties: {
     first_name: { type: 'string' },
@@ -77,11 +77,12 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
     setResult(null);
 
     try {
-      const { file_url } = await UploadFile({ file });
+      const { file_url } = await UploadFile({ file, tenant_id: tenantId });
 
       const extractionResult = await ExtractDataFromUploadedFile({
         file_url,
-        json_schema: contactSchema,
+        json_schema: businessCardSchema,
+        tenant_id: tenantId,
       });
 
       if (!extractionResult || extractionResult.status !== 'success' || !extractionResult.output) {
@@ -91,17 +92,35 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
             'Failed to extract data from the business card.',
         );
       }
-      const extractedData = {
-        ...extractionResult.output,
+
+      const extracted = extractionResult.output || {};
+      const leadData = {
+        first_name: extracted.first_name,
+        last_name: extracted.last_name,
+        email: extracted.email || null,
+        phone: extracted.phone || null,
+        company: extracted.company || null,
+        job_title: extracted.job_title || null,
+        address_1: extracted.address_1 || null,
+        city: extracted.city || null,
+        state: extracted.state || null,
+        zip: extracted.zip || null,
+        country: extracted.country || null,
         tenant_id: tenantId,
-        assigned_to: user.email,
-        processed_by_ai_doc: true,
-        ai_doc_source_type: 'business_card',
+        assigned_to: user.email || null,
+        source: 'business_card',
+        status: 'new',
+        metadata: {
+          ...(extracted.mobile ? { mobile: extracted.mobile } : {}),
+          ...(extracted.website ? { website: extracted.website } : {}),
+          processed_by_ai_doc: true,
+          ai_doc_source_type: 'business_card',
+        },
       };
-      const newContact = await ContactEntity.create(extractedData);
+      const newLead = await LeadEntity.create(leadData);
       setResult({
-        message: 'Successfully created contact!',
-        contact: newContact,
+        message: 'Successfully created lead!',
+        lead: newLead,
       });
     } catch (e) {
       setError(e.message || 'An unknown error occurred during processing.');
@@ -129,7 +148,7 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
           )}
         </CardTitle>
         <CardDescription className="text-slate-400">
-          Upload a business card image and extract contact information automatically.
+          Upload a business card image to automatically extract information and create a new lead.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-6">
@@ -161,16 +180,16 @@ export default function BusinessCardProcessor({ user, onCancel, onProcessingChan
               <p className="font-semibold text-green-300">{result.message}</p>
               <div className="text-sm text-slate-300 mt-1">
                 <p>
-                  <strong>Name:</strong> {result.contact.first_name} {result.contact.last_name}
+                  <strong>Name:</strong> {result.lead.first_name} {result.lead.last_name}
                 </p>
                 <p>
-                  <strong>Company:</strong> {result.contact.company}
+                  <strong>Company:</strong> {result.lead.company || 'N/A'}
                 </p>
                 <p>
-                  <strong>Email:</strong> {result.contact.email}
+                  <strong>Email:</strong> {result.lead.email || 'N/A'}
                 </p>
                 <p>
-                  <strong>Phone:</strong> {result.contact.phone}
+                  <strong>Phone:</strong> {result.lead.phone || 'N/A'}
                 </p>
               </div>
             </div>

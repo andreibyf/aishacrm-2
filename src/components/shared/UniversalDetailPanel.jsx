@@ -43,8 +43,11 @@ import {
   Star,
   Presentation,
   ClipboardCheck,
-  Loader2, // Added Loader2
-  Eye, // Added Eye
+  Loader2,
+  Eye,
+  ExternalLink,
+  Paperclip,
+  Trash,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Note, Activity, Contact } from '@/api/entities'; // Added Contact
@@ -89,6 +92,7 @@ export default function UniversalDetailPanel({
   // New states for related contacts
   const [relatedContacts, setRelatedContacts] = useState([]);
   const [relatedDataLoading, setRelatedDataLoading] = useState(false);
+  const [documents, setDocuments] = useState([]);
 
   // AI Summary state
   const [aiSummary, setAiSummary] = useState(null);
@@ -102,6 +106,28 @@ export default function UniversalDetailPanel({
     entityType === 'bizdev' || entityType === 'bizdev_source'
       ? 'bizdev_source'
       : entityType?.toLowerCase();
+
+  const loadDocuments = useCallback(async () => {
+    if (!entity) return;
+    try {
+      const tenantId = selectedTenantId || user?.tenant_id || entity.tenant_id;
+      const relatedType = relatedTypeForDb;
+      const backendUrl = getBackendUrl();
+      const url = `${backendUrl}/api/v2/documents?tenant_id=${tenantId}&related_type=${relatedType}&related_id=${entity.id}&limit=20`;
+      const res = await fetch(url, {
+        credentials: 'include',
+        headers: { 'x-tenant-id': tenantId },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDocuments(data.data?.documents || data.documents || []);
+      } else {
+        setDocuments([]);
+      }
+    } catch {
+      setDocuments([]);
+    }
+  }, [entity, relatedTypeForDb, selectedTenantId, user?.tenant_id]);
 
   const loadNotes = useCallback(async () => {
     if (!entity) return;
@@ -242,18 +268,19 @@ export default function UniversalDetailPanel({
     }
   }, [entity, relatedTypeForDb, selectedTenantId, user?.tenant_id]);
 
-  // Load notes and activities when panel opens or entity changes
+  // Load notes, activities, and documents when panel opens or entity changes
   useEffect(() => {
     if (open && entity) {
       loadNotes();
       loadActivities();
+      loadDocuments();
     }
     // Reset AI summary state when entity changes (including switching entities while open)
     setAiSummary(null);
     setAiSummaryUpdatedAt(null);
     setAiSummaryLoading(false);
     aiSummaryFetchedRef.current = null;
-  }, [open, entity?.id, loadNotes, loadActivities]);
+  }, [open, entity?.id, loadNotes, loadActivities, loadDocuments]);
 
   // Load AI summary when panel opens (skip for activity entity type — no profile)
   useEffect(() => {
@@ -1232,6 +1259,48 @@ export default function UniversalDetailPanel({
               profile={entity}
               tenantId={selectedTenantId || user?.tenant_id || entity.tenant_id}
             />
+          )}
+
+          {/* Documents Section */}
+          {entityType !== 'activity' && (
+            <div className="mt-4 px-1">
+              <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2 mb-2">
+                <Paperclip className="w-4 h-4 text-slate-400" />
+                Documents
+              </h3>
+              {documents.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No documents attached</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {documents.map((doc) => (
+                    <li key={doc.id} className="flex items-center gap-2 text-sm">
+                      <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      {doc.file_url ? (
+                        <a
+                          href={doc.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 flex items-center gap-1 truncate"
+                        >
+                          {doc.name || 'Document'}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-500 flex items-center gap-1 line-through">
+                          <Trash className="w-3 h-3 shrink-0" />
+                          {doc.name || 'Document'} (deleted)
+                        </span>
+                      )}
+                      {doc.created_at && (
+                        <span className="text-slate-600 text-xs shrink-0 ml-auto">
+                          {format(new Date(doc.created_at), 'MMM d, yyyy')}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {/* Notes & Activity Section - Replaced old NotesSection with new implementation */}

@@ -1,23 +1,57 @@
-import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, FolderOpen, Search, Trash2, Eye, RefreshCw, FileText, AlertCircle, History, ChevronDown, ChevronUp, User, Clock, MessageSquare } from "lucide-react";
-import { toast } from "sonner";
-import { DocumentationFile } from "@/api/entities";
-import { getTenantFilter } from "@/components/shared/tenantUtils";
-import { useTenant } from "@/components/shared/tenantContext";
-import { CreateFileSignedUrl } from "@/api/integrations";
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Loader2,
+  FolderOpen,
+  Search,
+  Trash2,
+  RefreshCw,
+  FileText,
+  AlertCircle,
+  History,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Clock,
+  MessageSquare,
+  ExternalLink,
+  Link2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser';
+import { getBackendUrl } from '@/api/backendUrl';
 import { format } from 'date-fns';
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useUser } from "../components/shared/useUser.js";
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import supabase from "@/lib/supabase.js";
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import supabase from '@/lib/supabase.js';
 
 export default function DocumentManagement() {
   const [documents, setDocuments] = useState([]);
@@ -31,7 +65,7 @@ export default function DocumentManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
   const [deletionReason, setDeletionReason] = useState('');
-  
+
   // Deletion history state
   const [deletionHistory, setDeletionHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -55,16 +89,40 @@ export default function DocumentManagement() {
 
   const loadDocuments = useCallback(async () => {
     if (!user) return;
-    
+
     setLoading(true);
     setError(null);
     try {
-      const filter = getTenantFilter(user, selectedTenantId);
-      const allDocs = await DocumentationFile.filter(filter, '-created_at');
-      setDocuments(allDocs);
+      const tenantId = selectedTenantId || user.tenant_id;
+      if (!tenantId) throw new Error('Tenant ID not found');
+
+      const base = getBackendUrl();
+      const res = await fetch(`${base}/api/v2/documents?tenant_id=${tenantId}&limit=100`, {
+        credentials: 'include',
+        headers: { 'x-tenant-id': tenantId },
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      const docs = data.data?.documents || data.documents || [];
+
+      const normalizedDocs = docs.map((doc) => ({
+        ...doc,
+        relatedEntityName:
+          doc.related_entity_name ||
+          (doc.related_id ? `#${String(doc.related_id).slice(0, 8)}` : null),
+        relatedType:
+          doc.related_entity_type_label ||
+          (doc.related_type
+            ? doc.related_type.charAt(0).toUpperCase() + doc.related_type.slice(1)
+            : null),
+      }));
+
+      setDocuments(normalizedDocs);
     } catch (error) {
-      console.error("Failed to load documents:", error);
-      setError("Failed to load documents. " + error.message);
+      console.error('Failed to load documents:', error);
+      setError('Failed to load documents. ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -78,7 +136,9 @@ export default function DocumentManagement() {
   const getAuthHeaders = async () => {
     const headers = { 'Content-Type': 'application/json' };
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
@@ -89,47 +149,51 @@ export default function DocumentManagement() {
   };
 
   // Load deletion history when section is opened
-  const loadDeletionHistory = useCallback(async (appendOffset = 0) => {
-    if (!user) return;
-    
-    const tenantId = selectedTenantId || user?.tenant_id;
-    if (!tenantId) return;
+  const loadDeletionHistory = useCallback(
+    async (appendOffset = 0) => {
+      if (!user) return;
 
-    setHistoryLoading(true);
-    setHistoryError(null);
-    try {
-      const headers = await getAuthHeaders();
-      const response = await fetch(
-        `${import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001'}/api/documentationfiles/deletion-history?tenant_id=${encodeURIComponent(tenantId)}&limit=${HISTORY_PAGE_SIZE}&offset=${appendOffset}`,
-        {
-          credentials: 'include',
-          headers
+      const tenantId = selectedTenantId || user?.tenant_id;
+      if (!tenantId) return;
+
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const headers = await getAuthHeaders();
+        const base = getBackendUrl();
+        const response = await fetch(
+          `${base}/api/v2/documents/deletion-history?tenant_id=${encodeURIComponent(tenantId)}&limit=${HISTORY_PAGE_SIZE}&offset=${appendOffset}`,
+          {
+            credentials: 'include',
+            headers,
+          },
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to load deletion history');
         }
-      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to load deletion history');
-      }
+        const result = await response.json();
+        const newData = result.data || [];
 
-      const result = await response.json();
-      const newData = result.data || [];
-      
-      if (appendOffset > 0) {
-        setDeletionHistory(prev => [...prev, ...newData]);
-      } else {
-        setDeletionHistory(newData);
+        if (appendOffset > 0) {
+          setDeletionHistory((prev) => [...prev, ...newData]);
+        } else {
+          setDeletionHistory(newData);
+        }
+
+        setHistoryHasMore(result.pagination?.hasMore || false);
+        setHistoryOffset(appendOffset + newData.length);
+      } catch (err) {
+        console.error('Failed to load deletion history:', err);
+        setHistoryError(err.message);
+      } finally {
+        setHistoryLoading(false);
       }
-      
-      setHistoryHasMore(result.pagination?.hasMore || false);
-      setHistoryOffset(appendOffset + newData.length);
-    } catch (err) {
-      console.error("Failed to load deletion history:", err);
-      setHistoryError(err.message);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [user, selectedTenantId]);
+    },
+    [user, selectedTenantId],
+  );
 
   // Load more history entries using current offset
   const loadMoreHistory = useCallback(() => {
@@ -145,16 +209,6 @@ export default function DocumentManagement() {
     }
   }, [historyOpen, loadDeletionHistory]);
 
-  const handlePreview = async (fileUri) => {
-    try {
-      const { signed_url } = await CreateFileSignedUrl({ file_uri: fileUri });
-      window.open(signed_url, '_blank');
-    } catch (error) {
-      console.error("Failed to get signed URL:", error);
-      toast.error("Failed to preview document. It might be private or temporary.");
-    }
-  };
-
   const openDeleteDialog = (doc) => {
     setDocumentToDelete(doc);
     setDeletionReason('');
@@ -163,26 +217,26 @@ export default function DocumentManagement() {
 
   const handleDelete = async () => {
     if (!documentToDelete) return;
-    
+
     if (!deletionReason.trim()) {
-      toast.error("Please provide a reason for deletion");
+      toast.error('Please provide a reason for deletion');
       return;
     }
-    
+
     setDeletingId(documentToDelete.id);
     try {
       // Use tenant from context (already available from useTenant hook at top level)
       const tenantId = selectedTenantId || user?.tenant_id;
-      
-      // Call backend documentationfiles API with reason parameter for audit trail
+
       const headers = await getAuthHeaders();
+      const base = getBackendUrl();
       const response = await fetch(
-        `${import.meta.env.VITE_AISHACRM_BACKEND_URL || 'http://localhost:4001'}/api/documentationfiles/${documentToDelete.id}?tenant_id=${encodeURIComponent(tenantId)}&reason=${encodeURIComponent(deletionReason.trim())}`,
+        `${base}/api/v2/documents/${documentToDelete.id}?tenant_id=${encodeURIComponent(tenantId)}&reason=${encodeURIComponent(deletionReason.trim())}`,
         {
           method: 'DELETE',
           credentials: 'include',
-          headers
-        }
+          headers,
+        },
       );
 
       if (!response.ok) {
@@ -191,33 +245,48 @@ export default function DocumentManagement() {
       }
 
       const result = await response.json();
-      
-      setDocuments(prev => prev.filter(doc => doc.id !== documentToDelete.id));
-      
+
+      setDocuments((prev) => prev.filter((doc) => doc.id !== documentToDelete.id));
+
       if (result.audit_logged) {
-        toast.success("Document deleted and audit logged successfully!");
+        toast.success('Document deleted and audit logged successfully!');
       } else {
-        toast.success("Document deleted successfully!");
+        toast.success('Document deleted successfully!');
       }
-      
+
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
       setDeletionReason('');
     } catch (error) {
-      console.error("Failed to delete document:", error);
-      toast.error(error.message || "Failed to delete document. Please try again.");
+      console.error('Failed to delete document:', error);
+      toast.error(error.message || 'Failed to delete document. Please try again.');
     } finally {
       setDeletingId(null);
     }
   };
 
-  const filteredDocuments = documents.filter(doc => {
-    const searchMatch = searchTerm.trim() === '' ||
-      doc.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.file_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredDocuments = documents.filter((doc) => {
+    const term = searchTerm.trim().toLowerCase();
+    const searchable = [
+      doc.name,
+      doc.title,
+      doc.file_name,
+      doc.filename,
+      doc.file_type,
+      doc.relatedEntityName,
+      doc.relatedType,
+      doc.related_type,
+      doc.file_url,
+      ...(Array.isArray(doc.tags) ? doc.tags : []),
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase());
 
-    const categoryMatch = filterCategory === 'all' || doc.category === filterCategory;
+    const searchMatch = term === '' || searchable.some((value) => value.includes(term));
+
+    const normalizedCategory =
+      doc.category || doc.metadata?.ai_classification || doc.aiContext?.classification || 'other';
+    const categoryMatch = filterCategory === 'all' || normalizedCategory === filterCategory;
 
     return searchMatch && categoryMatch;
   });
@@ -227,9 +296,7 @@ export default function DocumentManagement() {
       <div className="min-h-screen bg-slate-900 p-4 lg:p-8 space-y-4 lg:space-y-6">
         <Alert variant="destructive" className="bg-red-900/30 border-red-700/50">
           <AlertCircle className="h-4 w-4 text-red-400" />
-          <AlertDescription className="text-red-300">
-            {error}
-          </AlertDescription>
+          <AlertDescription className="text-red-300">{error}</AlertDescription>
         </Alert>
       </div>
     );
@@ -261,7 +328,7 @@ export default function DocumentManagement() {
           </Button>
         </div>
       </div>
-      
+
       <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
         <CardHeader className="border-b border-slate-700 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -287,8 +354,10 @@ export default function DocumentManagement() {
                 <SelectValue placeholder="Filter by category" />
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                {categories.map(cat => (
-                  <SelectItem key={cat.value} value={cat.value} className="hover:bg-slate-700">{cat.label}</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value} className="hover:bg-slate-700">
+                    {cat.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -300,7 +369,7 @@ export default function DocumentManagement() {
               <TableHeader>
                 <TableRow className="bg-slate-900/50 border-b border-slate-700">
                   <TableHead className="text-slate-300">Title</TableHead>
-                  <TableHead className="text-slate-300 hidden md:table-cell">Category</TableHead>
+                  <TableHead className="text-slate-300 hidden md:table-cell">Linked To</TableHead>
                   <TableHead className="text-slate-300 hidden lg:table-cell">File Type</TableHead>
                   <TableHead className="text-slate-300 hidden lg:table-cell">Uploaded</TableHead>
                   <TableHead className="text-right text-slate-300">Actions</TableHead>
@@ -318,37 +387,69 @@ export default function DocumentManagement() {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12">
                       <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-300 mb-2">No Documents Found</h3>
-                      <p className="text-slate-500">Try adjusting your search filters or upload documents through Document Processing.</p>
+                      <h3 className="text-lg font-semibold text-slate-300 mb-2">
+                        No Documents Found
+                      </h3>
+                      <p className="text-slate-500">
+                        Try adjusting your search filters or upload documents through Document
+                        Processing.
+                      </p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredDocuments.map(doc => (
-                    <TableRow key={doc.id} className="border-b border-slate-800 hover:bg-slate-700/50">
+                  filteredDocuments.map((doc) => (
+                    <TableRow
+                      key={doc.id}
+                      className="border-b border-slate-800 hover:bg-slate-700/50"
+                    >
                       <TableCell className="font-medium text-slate-200">
-                        {doc.title}
-                        <p className="text-xs text-slate-400">{doc.file_name}</p>
+                        {doc.name || doc.title}
+                        <p className="text-xs text-slate-400">{doc.file_name || doc.filename}</p>
                       </TableCell>
-                      <TableCell className="text-slate-300 hidden md:table-cell capitalize">{doc.category?.replace(/_/g, ' ')}</TableCell>
-                      <TableCell className="text-slate-300 hidden lg:table-cell">{doc.file_type}</TableCell>
+                      <TableCell className="text-slate-300 hidden md:table-cell">
+                        {doc.relatedEntityName ? (
+                          <div className="flex items-center gap-1">
+                            <Link2 className="w-3 h-3 text-slate-500" />
+                            <span>
+                              {doc.relatedType || ''}: <strong>{doc.relatedEntityName}</strong>
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic">Not linked</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-slate-300 hidden lg:table-cell">
-                        {doc.created_at && !isNaN(new Date(doc.created_at).getTime()) 
+                        {doc.file_type}
+                      </TableCell>
+                      <TableCell className="text-slate-300 hidden lg:table-cell">
+                        {doc.created_at && !isNaN(new Date(doc.created_at).getTime())
                           ? format(new Date(doc.created_at), 'MM/dd/yyyy')
                           : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
-                          <Button variant="ghost" size="icon" onClick={() => handlePreview(doc.file_uri)} title="Preview">
-                            <Eye className="w-4 h-4 text-slate-400" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            disabled={deletingId === doc.id} 
+                          {doc.file_url && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => window.open(doc.file_url, '_blank')}
+                              title="Download"
+                            >
+                              <ExternalLink className="w-4 h-4 text-blue-400" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={deletingId === doc.id}
                             title="Delete"
                             onClick={() => openDeleteDialog(doc)}
                           >
-                            {deletingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-red-500" />}
+                            {deletingId === doc.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            )}
                           </Button>
                         </div>
                       </TableCell>
@@ -363,151 +464,166 @@ export default function DocumentManagement() {
 
       {/* Deletion History Section - Visible to all authenticated users */}
       <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-          <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
-            <CollapsibleTrigger asChild>
-              <CardHeader className="border-b border-slate-700 cursor-pointer hover:bg-slate-700/50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 flex items-center justify-center rounded-full bg-amber-900/30 border border-amber-700/50">
-                      <History className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg text-slate-200 flex items-center gap-2">
-                        Deletion History
-                        <Badge variant="outline" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
-                          Audit Trail
-                        </Badge>
-                      </CardTitle>
-                      <CardDescription className="text-slate-400">
-                        View who deleted documents, when, and why
-                      </CardDescription>
-                    </div>
+        <Card className="shadow-lg border-0 bg-slate-800 border-slate-700">
+          <CollapsibleTrigger asChild>
+            <CardHeader className="border-b border-slate-700 cursor-pointer hover:bg-slate-700/50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 flex items-center justify-center rounded-full bg-amber-900/30 border border-amber-700/50">
+                    <History className="w-4 h-4 text-amber-400" />
                   </div>
-                  <Button variant="ghost" size="icon" className="text-slate-400">
-                    {historyOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                  </Button>
+                  <div>
+                    <CardTitle className="text-lg text-slate-200 flex items-center gap-2">
+                      Deletion History
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-slate-700 text-slate-300 border-slate-600"
+                      >
+                        Audit Trail
+                      </Badge>
+                    </CardTitle>
+                    <CardDescription className="text-slate-400">
+                      View who deleted documents, when, and why
+                    </CardDescription>
+                  </div>
                 </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            
-            <CollapsibleContent>
-              <CardContent className="p-0">
-                {historyLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-amber-400 mr-2" />
-                    <span className="text-slate-400">Loading deletion history...</span>
-                  </div>
-                ) : historyError ? (
-                  <div className="p-6">
-                    <Alert variant="destructive" className="bg-red-900/30 border-red-700/50">
-                      <AlertCircle className="h-4 w-4 text-red-400" />
-                      <AlertDescription className="text-red-300">
-                        {historyError}
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-                ) : deletionHistory.length === 0 ? (
-                  <div className="text-center py-12">
-                    <History className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-300 mb-2">No Deletion Records</h3>
-                    <p className="text-slate-500">No documents have been deleted yet.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-700">
-                    {deletionHistory.map((record) => (
-                      <div key={record.id} className="p-4 hover:bg-slate-700/30 transition-colors">
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                          {/* Document Info */}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <FileText className="w-4 h-4 text-slate-400" />
-                              <span className="font-medium text-slate-200">
-                                {record.document_name || 'Unknown Document'}
-                              </span>
-                              {record.document_type && (
-                                <Badge variant="outline" className="text-xs bg-slate-700/50 text-slate-400 border-slate-600">
-                                  {record.document_type}
-                                </Badge>
-                              )}
-                            </div>
-                            
-                            {/* Deletion Reason */}
-                            <div className="flex items-start gap-2 mt-2 ml-6">
-                              <MessageSquare className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-                              <p className="text-sm text-slate-300 italic">
-                                &quot;{record.deletion_reason || 'No reason provided'}&quot;
-                              </p>
-                            </div>
+                <Button variant="ghost" size="icon" className="text-slate-400">
+                  {historyOpen ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent>
+            <CardContent className="p-0">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-400 mr-2" />
+                  <span className="text-slate-400">Loading deletion history...</span>
+                </div>
+              ) : historyError ? (
+                <div className="p-6">
+                  <Alert variant="destructive" className="bg-red-900/30 border-red-700/50">
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                    <AlertDescription className="text-red-300">{historyError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : deletionHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-300 mb-2">No Deletion Records</h3>
+                  <p className="text-slate-500">No documents have been deleted yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-700">
+                  {deletionHistory.map((record) => (
+                    <div key={record.id} className="p-4 hover:bg-slate-700/30 transition-colors">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+                        {/* Document Info */}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <FileText className="w-4 h-4 text-slate-400" />
+                            <span className="font-medium text-slate-200">
+                              {record.document_name || 'Unknown Document'}
+                            </span>
+                            {record.document_type && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs bg-slate-700/50 text-slate-400 border-slate-600"
+                              >
+                                {record.document_type}
+                              </Badge>
+                            )}
                           </div>
-                          
-                          {/* User & Time Info */}
-                          <div className="flex flex-col gap-1 text-sm lg:text-right lg:min-w-[200px]">
-                            <div className="flex items-center gap-2 lg:justify-end">
-                              <User className="w-4 h-4 text-slate-400" />
-                              <span className="text-slate-300">{record.deleted_by?.name || record.deleted_by?.email || 'Unknown'}</span>
-                              {record.deleted_by?.role && (
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs ${
-                                    record.deleted_by.role === 'superadmin' 
-                                      ? 'bg-purple-900/30 text-purple-300 border-purple-700/50'
-                                      : record.deleted_by.role === 'admin'
+
+                          {/* Deletion Reason */}
+                          <div className="flex items-start gap-2 mt-2 ml-6">
+                            <MessageSquare className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm text-slate-300 italic">
+                              &quot;{record.deletion_reason || 'No reason provided'}&quot;
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* User & Time Info */}
+                        <div className="flex flex-col gap-1 text-sm lg:text-right lg:min-w-[200px]">
+                          <div className="flex items-center gap-2 lg:justify-end">
+                            <User className="w-4 h-4 text-slate-400" />
+                            <span className="text-slate-300">
+                              {record.deleted_by?.name || record.deleted_by?.email || 'Unknown'}
+                            </span>
+                            {record.deleted_by?.role && (
+                              <Badge
+                                variant="outline"
+                                className={`text-xs ${
+                                  record.deleted_by.role === 'superadmin'
+                                    ? 'bg-purple-900/30 text-purple-300 border-purple-700/50'
+                                    : record.deleted_by.role === 'admin'
                                       ? 'bg-blue-900/30 text-blue-300 border-blue-700/50'
                                       : 'bg-slate-700 text-slate-300 border-slate-600'
-                                  }`}
-                                >
-                                  {record.deleted_by.role}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 lg:justify-end text-slate-400">
-                              <Clock className="w-4 h-4" />
-                              <span>
-                                {record.deleted_at && !isNaN(new Date(record.deleted_at).getTime())
-                                  ? format(new Date(record.deleted_at), 'MMM d, yyyy h:mm a')
-                                  : 'Unknown time'}
-                              </span>
-                            </div>
+                                }`}
+                              >
+                                {record.deleted_by.role}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 lg:justify-end text-slate-400">
+                            <Clock className="w-4 h-4" />
+                            <span>
+                              {record.deleted_at && !isNaN(new Date(record.deleted_at).getTime())
+                                ? format(new Date(record.deleted_at), 'MMM d, yyyy h:mm a')
+                                : 'Unknown time'}
+                            </span>
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Load More button */}
-                {!historyLoading && historyHasMore && (
-                  <div className="p-4 border-t border-slate-700 flex justify-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={loadMoreHistory}
-                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
-                    >
-                      <History className="w-4 h-4 mr-2" />
-                      Load More
-                    </Button>
-                  </div>
-                )}
-                
-                {/* Refresh button */}
-                {!historyLoading && deletionHistory.length > 0 && (
-                  <div className={`p-4 ${historyHasMore ? '' : 'border-t border-slate-700'} flex justify-end`}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => { setHistoryOffset(0); loadDeletionHistory(0); }}
-                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Refresh History
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Load More button */}
+              {!historyLoading && historyHasMore && (
+                <div className="p-4 border-t border-slate-700 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadMoreHistory}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
+                  >
+                    <History className="w-4 h-4 mr-2" />
+                    Load More
+                  </Button>
+                </div>
+              )}
+
+              {/* Refresh button */}
+              {!historyLoading && deletionHistory.length > 0 && (
+                <div
+                  className={`p-4 ${historyHasMore ? '' : 'border-t border-slate-700'} flex justify-end`}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setHistoryOffset(0);
+                      loadDeletionHistory(0);
+                    }}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh History
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {/* Deletion Reason Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -515,10 +631,13 @@ export default function DocumentManagement() {
           <DialogHeader>
             <DialogTitle className="text-slate-100">Delete Document</DialogTitle>
             <DialogDescription className="text-slate-400">
-              You are about to delete: <span className="font-semibold text-slate-300">{documentToDelete?.title}</span>
+              You are about to delete:{' '}
+              <span className="font-semibold text-slate-300">
+                {documentToDelete?.name || documentToDelete?.title}
+              </span>
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-300">
@@ -535,11 +654,15 @@ export default function DocumentManagement() {
                 This will be recorded in the audit log along with your user details and timestamp.
               </p>
             </div>
-            
+
             {user && (
               <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
-                <p>Deleted by: <span className="text-slate-400">{user.email}</span></p>
-                <p>Role: <span className="text-slate-400 capitalize">{user.role}</span></p>
+                <p>
+                  Deleted by: <span className="text-slate-400">{user.email}</span>
+                </p>
+                <p>
+                  Role: <span className="text-slate-400 capitalize">{user.role}</span>
+                </p>
               </div>
             )}
           </div>

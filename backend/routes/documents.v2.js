@@ -18,11 +18,41 @@ import {
   selectLLMConfigForTenant,
   resolveLLMApiKey,
 } from '../lib/aiEngine/index.js';
+import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
 export default function createDocumentV2Routes(_pgPool) {
   const router = express.Router();
 
   router.use(validateTenantAccess);
+
+  function buildDocumentUrlAllowlist() {
+    const allowlist = ['*.supabase.co', 'supabase.co', 'supabase.com'];
+    const configured = String(process.env.DOCUMENT_FETCH_ALLOWED_DOMAINS || '')
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+    allowlist.push(...configured);
+
+    try {
+      const supabaseHost = new URL(process.env.SUPABASE_URL || '').hostname;
+      if (supabaseHost) allowlist.push(supabaseHost);
+    } catch {
+      // Ignore invalid SUPABASE_URL and continue with defaults.
+    }
+
+    return [...new Set(allowlist)];
+  }
+
+  function validateDocumentFileUrl(fileUrl) {
+    const validation = validateUrlAgainstWhitelist(fileUrl, buildDocumentUrlAllowlist());
+    if (!validation.valid) {
+      return {
+        valid: false,
+        message: validation.error || 'Invalid file_url',
+      };
+    }
+    return { valid: true };
+  }
 
   /**
    * Build AI context for a document
@@ -159,6 +189,92 @@ export default function createDocumentV2Routes(_pgPool) {
         _stub: true,
       };
     }
+  }
+
+  async function enrichDocumentsWithRelatedEntities(documents, tenantId) {
+    if (!Array.isArray(documents) || documents.length === 0) return [];
+
+    const supabase = getSupabaseClient();
+    const relatedByType = {
+      account: new Set(),
+      contact: new Set(),
+      lead: new Set(),
+    };
+
+    for (const doc of documents) {
+      if (doc?.related_type && doc?.related_id && relatedByType[doc.related_type]) {
+        relatedByType[doc.related_type].add(doc.related_id);
+      }
+    }
+
+    const accountIds = Array.from(relatedByType.account);
+    const contactIds = Array.from(relatedByType.contact);
+    const leadIds = Array.from(relatedByType.lead);
+
+    const [accountsResult, contactsResult, leadsResult] = await Promise.all([
+      accountIds.length
+        ? supabase
+            .from('accounts')
+            .select('id, name')
+            .eq('tenant_id', tenantId)
+            .in('id', accountIds)
+        : Promise.resolve({ data: [] }),
+      contactIds.length
+        ? supabase
+            .from('contacts')
+            .select('id, first_name, last_name, email')
+            .eq('tenant_id', tenantId)
+            .in('id', contactIds)
+        : Promise.resolve({ data: [] }),
+      leadIds.length
+        ? supabase
+            .from('leads')
+            .select('id, first_name, last_name, email')
+            .eq('tenant_id', tenantId)
+            .in('id', leadIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const accountMap = new Map(
+      (accountsResult.data || []).map((row) => [row.id, row.name || null]),
+    );
+    const contactMap = new Map(
+      (contactsResult.data || []).map((row) => [
+        row.id,
+        [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || null,
+      ]),
+    );
+    const leadMap = new Map(
+      (leadsResult.data || []).map((row) => [
+        row.id,
+        [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || null,
+      ]),
+    );
+
+    return documents.map((doc) => {
+      if (!doc.related_type || !doc.related_id) {
+        return { ...doc, related_entity_name: null, related_entity_type_label: null };
+      }
+
+      const relatedTypeLabel =
+        doc.related_type.charAt(0).toUpperCase() + String(doc.related_type).slice(1);
+      let relatedEntityName = null;
+
+      if (doc.related_type === 'account') {
+        relatedEntityName = accountMap.get(doc.related_id) || null;
+      } else if (doc.related_type === 'contact') {
+        relatedEntityName = contactMap.get(doc.related_id) || null;
+      } else if (doc.related_type === 'lead') {
+        relatedEntityName = leadMap.get(doc.related_id) || null;
+      }
+
+      return {
+        ...doc,
+        related_entity_name:
+          relatedEntityName || (doc.related_id ? `#${doc.related_id.slice(0, 8)}` : null),
+        related_entity_type_label: relatedTypeLabel,
+      };
+    });
   }
 
   /**
@@ -304,6 +420,14 @@ export default function createDocumentV2Routes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'file_url is required' });
       }
 
+      const fileUrlValidation = validateDocumentFileUrl(file_url);
+      if (!fileUrlValidation.valid) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid file_url: ${fileUrlValidation.message}`,
+        });
+      }
+
       const tenantId = req.tenant?.id || null;
       const { provider, model } = selectLLMConfigForTenant({
         capability: 'json_strict',
@@ -316,33 +440,108 @@ export default function createDocumentV2Routes(_pgPool) {
       const schemaDescription = json_schema
         ? `Extract the following fields: ${Object.keys(json_schema.properties || {}).join(', ')}. Return a valid JSON object only.`
         : 'Extract all visible text and data. Return a valid JSON object only.';
+      const hasTransactionsSchema = Boolean(json_schema?.properties?.transactions);
+      const extractionRules = hasTransactionsSchema
+        ? 'For transactions: include only real transaction rows. Do not return blank fields. Normalize dates to YYYY-MM-DD. Amount must be numeric and positive. transaction_type must be either income or expense.'
+        : 'Follow the schema exactly and do not return empty placeholder fields.';
+
+      // Download the file and pass as data URL to avoid provider-side fetch failures on signed URLs.
+      const fileResp = await fetch(file_url, { method: 'GET' });
+      if (!fileResp.ok) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Unable to access uploaded file (HTTP ${fileResp.status})`,
+        });
+      }
+
+      const contentType = (fileResp.headers.get('content-type') || '').toLowerCase();
+      const lowerUrl = String(file_url || '').toLowerCase();
+      const isPdf = contentType.includes('application/pdf') || lowerUrl.endsWith('.pdf');
+      const isImage = contentType.startsWith('image/');
+
+      if (!isImage && !isPdf) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Unsupported file type for AI extraction: ${contentType || 'unknown'}`,
+          details: 'Supported formats: PDF, PNG, JPG, WEBP.',
+        });
+      }
+
+      const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
+      const maxBytes = 15 * 1024 * 1024;
+      if (fileBuffer.length > maxBytes) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Uploaded image is too large for extraction',
+          details: 'Please use an image under 15MB.',
+        });
+      }
+
+      let messages;
+      if (isPdf) {
+        const pdfParseModule = await import('pdf-parse');
+        const pdfParse = pdfParseModule.default || pdfParseModule;
+        const parsed = await pdfParse(fileBuffer);
+        const extractedText = (parsed?.text || '').trim();
+
+        if (!extractedText) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Could not extract text from PDF',
+            details: 'Please upload a text-based PDF or a clearer scanned PDF.',
+          });
+        }
+
+        const truncatedText = extractedText.slice(0, 30000);
+        messages = [
+          {
+            role: 'user',
+            content:
+              `You are a data extraction assistant. Extract structured data from the provided document text.\n` +
+              `${schemaDescription}\n` +
+              `${extractionRules}\n` +
+              `Do not include markdown or explanation — respond with raw JSON only.\n\n` +
+              `Document text:\n${truncatedText}`,
+          },
+        ];
+      } else {
+        const imageDataUrl = `data:${contentType};base64,${fileBuffer.toString('base64')}`;
+        messages = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a data extraction assistant. Analyse the image and extract structured data that matches the requested schema.\n${schemaDescription}\n${extractionRules}\nDo not include markdown or explanation — respond with raw JSON only.`,
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageDataUrl },
+              },
+            ],
+          },
+        ];
+      }
 
       const result = await generateChatCompletion({
         provider,
         model,
         apiKey,
         temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `You are a data extraction assistant. Analyse the image and extract structured contact information.\n${schemaDescription}\nDo not include markdown or explanation — respond with raw JSON only.`,
-              },
-              {
-                type: 'image_url',
-                image_url: { url: file_url },
-              },
-            ],
-          },
-        ],
+        messages,
       });
 
       if (result.status !== 'success') {
-        return res
-          .status(502)
-          .json({ status: 'error', message: result.error || 'AI extraction failed' });
+        logger.warn('[documents.v2] AI extraction failed', {
+          provider,
+          model,
+          error: result.error,
+        });
+        return res.status(502).json({
+          status: 'error',
+          message: result.error || 'AI extraction failed',
+          details: result.error,
+        });
       }
 
       let output;
@@ -430,9 +629,14 @@ export default function createDocumentV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
+      const docsWithRelatedEntities = await enrichDocumentsWithRelatedEntities(
+        data || [],
+        tenant_id,
+      );
+
       // Build AI context for each document (batch for performance)
       const documents = await Promise.all(
-        (data || []).map(async (doc) => {
+        docsWithRelatedEntities.map(async (doc) => {
           const aiContext = await buildDocumentAiContext(doc, { lite: true });
           return { ...doc, aiContext };
         }),
@@ -460,10 +664,15 @@ export default function createDocumentV2Routes(_pgPool) {
    *     summary: Get document with full AI context
    *     tags: [documents-v2]
    */
-  router.get('/:id', cacheDetail('documents', 300), async (req, res) => {
+  router.get('/:id', cacheDetail('documents', 300), async (req, res, next) => {
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
+
+      // Allow the explicit /deletion-history route defined later to match.
+      if (id === 'deletion-history') {
+        return next('route');
+      }
 
       if (!tenant_id) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
@@ -510,9 +719,19 @@ export default function createDocumentV2Routes(_pgPool) {
       const { tenant_id, name, file_url, file_type, file_size, related_type, related_id, ...rest } =
         req.body;
 
-      if (!tenant_id) {
+      const resolvedTenantId = req.tenant?.id || tenant_id || req.query.tenant_id;
+
+      if (!resolvedTenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      if (tenant_id && req.tenant?.id && tenant_id !== req.tenant.id) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'tenant_id mismatch with authenticated tenant context',
+        });
+      }
+
       if (!name) {
         return res.status(400).json({ status: 'error', message: 'name is required' });
       }
@@ -523,14 +742,15 @@ export default function createDocumentV2Routes(_pgPool) {
       const classification = classifyDocument(name, file_type);
 
       const insertPayload = {
-        tenant_id,
+        tenant_id: resolvedTenantId,
         name,
-        file_url,
-        file_type,
-        file_size,
-        related_type,
-        related_id,
-        ...rest,
+        file_url: file_url || null,
+        file_type: file_type || null,
+        file_size: file_size ? parseInt(file_size, 10) : null,
+        related_type: related_type || null,
+        related_id: related_id || null,
+        description: rest.description || null,
+        storage_path: rest.storage_path || null,
         // Store classification in metadata
         metadata: {
           ...(rest.metadata || {}),

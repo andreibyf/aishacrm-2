@@ -160,15 +160,24 @@ export const GenerateImage = Core.GenerateImage;
  * @param {string} params.file_url - URL of the uploaded file
  * @param {Object} [params.json_schema] - JSON schema describing fields to extract
  */
-export const ExtractDataFromUploadedFile = async ({ file_url, json_schema } = {}) => {
+export const ExtractDataFromUploadedFile = async ({ file_url, json_schema, tenant_id } = {}) => {
   const backendUrl = getBackendUrl();
   try {
+    if (!file_url || typeof file_url !== 'string') {
+      return {
+        status: 'error',
+        error: 'Missing file URL for extraction. Please upload the file again.',
+      };
+    }
+
     // Keep tenant context explicit for v2 document APIs.
-    let tenantId = null;
+    let tenantId = tenant_id || null;
     try {
-      const urlTenant = new URL(window.location.href).searchParams.get('tenant');
-      const storedTenant = localStorage.getItem('selected_tenant_id');
-      tenantId = urlTenant || storedTenant || null;
+      if (!tenantId) {
+        const urlTenant = new URL(window.location.href).searchParams.get('tenant');
+        const storedTenant = localStorage.getItem('selected_tenant_id');
+        tenantId = urlTenant || storedTenant || null;
+      }
     } catch (err) {
       void err;
     }
@@ -182,11 +191,15 @@ export const ExtractDataFromUploadedFile = async ({ file_url, json_schema } = {}
       method: 'POST',
       credentials: 'include',
       headers,
-      body: JSON.stringify({ file_url, json_schema }),
+      body: JSON.stringify({ file_url, json_schema, tenant_id: tenantId || undefined }),
     });
     const data = await response.json();
     if (!response.ok) {
-      return { status: 'error', error: data.message || 'Extraction failed' };
+      return {
+        status: 'error',
+        error: data.message || 'Extraction failed',
+        details: data.details,
+      };
     }
     return data; // { status: 'success', output: {...} }
   } catch (error) {

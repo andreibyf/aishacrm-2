@@ -83,6 +83,15 @@ export default function createCashFlowRoutes(_pgPool) {
   const router = express.Router();
   const supabase = getSupabaseClient();
 
+  const normalizeCashFlowRecord = (row) => {
+    if (!row) return row;
+    return {
+      ...row,
+      transaction_type: row.transaction_type || row.type || null,
+      type: row.type || row.transaction_type || null,
+    };
+  };
+
   // Enforce tenant scoping and employee data scope consistently with other routes
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
@@ -108,7 +117,7 @@ export default function createCashFlowRoutes(_pgPool) {
         .order('transaction_date', { ascending: false });
 
       if (type) {
-        query = query.eq('transaction_type', type);
+        query = query.or(`type.eq.${type},transaction_type.eq.${type}`);
       }
 
       const { data, error, count } = await query.range(
@@ -118,7 +127,13 @@ export default function createCashFlowRoutes(_pgPool) {
 
       if (error) throw error;
 
-      res.json({ status: 'success', data: { cashflow: data || [], total: count || 0 } });
+      res.json({
+        status: 'success',
+        data: {
+          cashflow: (data || []).map(normalizeCashFlowRecord),
+          total: count || 0,
+        },
+      });
     } catch (error) {
       logger.error('Error fetching cash flow:', error);
       res.status(500).json({ status: 'error', message: error.message });
@@ -145,7 +160,7 @@ export default function createCashFlowRoutes(_pgPool) {
       // Safety check
       if (data.tenant_id !== tenant_id)
         return res.status(404).json({ status: 'error', message: 'Not found' });
-      res.json({ status: 'success', data: { cashflow: data } });
+      res.json({ status: 'success', data: { cashflow: normalizeCashFlowRecord(data) } });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
@@ -181,6 +196,7 @@ export default function createCashFlowRoutes(_pgPool) {
           tenant_id: resolvedTenantId,
           transaction_date: c.transaction_date,
           amount: c.amount,
+          type: transactionType,
           transaction_type: transactionType,
           category: c.category || null,
           description: c.description || null,
@@ -192,7 +208,11 @@ export default function createCashFlowRoutes(_pgPool) {
 
       if (error) throw error;
 
-      res.status(201).json({ status: 'success', message: 'Created', data: { cashflow: data } });
+      res.status(201).json({
+        status: 'success',
+        message: 'Created',
+        data: { cashflow: normalizeCashFlowRecord(data) },
+      });
 
       // After successful insert — fire PEP trigger (non-blocking)
       // Enrich with metadata fields so is_recurring and entry_method are accessible
@@ -222,6 +242,7 @@ export default function createCashFlowRoutes(_pgPool) {
       const allowed = [
         'transaction_date',
         'amount',
+        'type',
         'transaction_type',
         'category',
         'description',
@@ -234,6 +255,13 @@ export default function createCashFlowRoutes(_pgPool) {
           updatePayload[k] = v;
         }
       });
+
+      if (updatePayload.transaction_type && !updatePayload.type) {
+        updatePayload.type = updatePayload.transaction_type;
+      }
+      if (updatePayload.type && !updatePayload.transaction_type) {
+        updatePayload.transaction_type = updatePayload.type;
+      }
 
       if (Object.keys(updatePayload).length === 0) {
         return res.status(400).json({ status: 'error', message: 'No valid fields' });
@@ -250,7 +278,11 @@ export default function createCashFlowRoutes(_pgPool) {
       if (error) throw error;
       if (!data) return res.status(404).json({ status: 'error', message: 'Not found' });
 
-      res.json({ status: 'success', message: 'Updated', data: { cashflow: data } });
+      res.json({
+        status: 'success',
+        message: 'Updated',
+        data: { cashflow: normalizeCashFlowRecord(data) },
+      });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
     }
