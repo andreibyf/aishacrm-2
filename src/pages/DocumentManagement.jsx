@@ -107,61 +107,19 @@ export default function DocumentManagement() {
       const data = await res.json();
       const docs = data.data?.documents || data.documents || [];
 
-      // Enrich documents with entity information
-      const enrichedDocs = await Promise.all(
-        docs.map(async (doc) => {
-          if (!doc.related_type || !doc.related_id) {
-            return { ...doc, relatedEntityName: null };
-          }
+      const normalizedDocs = docs.map((doc) => ({
+        ...doc,
+        relatedEntityName:
+          doc.related_entity_name ||
+          (doc.related_id ? `#${String(doc.related_id).slice(0, 8)}` : null),
+        relatedType:
+          doc.related_entity_type_label ||
+          (doc.related_type
+            ? doc.related_type.charAt(0).toUpperCase() + doc.related_type.slice(1)
+            : null),
+      }));
 
-          try {
-            const typeMap = { contact: 'contacts', lead: 'leads', account: 'accounts' };
-            const entityCollection = typeMap[doc.related_type];
-            const endpoint = `${base}/api/v2/${entityCollection}/${doc.related_id}?tenant_id=${tenantId}`;
-
-            const entityRes = await fetch(endpoint, {
-              credentials: 'include',
-              headers: { 'x-tenant-id': tenantId },
-            });
-
-            if (entityRes.ok) {
-              const entityData = await entityRes.json();
-              const entity =
-                entityData.data?.lead ||
-                entityData.data?.contact ||
-                entityData.data?.account ||
-                entityData.data ||
-                entityData;
-              let name = null;
-
-              if (doc.related_type === 'account') {
-                name = entity.name;
-              } else {
-                name =
-                  [entity.first_name, entity.last_name].filter(Boolean).join(' ') || entity.email;
-              }
-
-              return {
-                ...doc,
-                relatedEntityName: name,
-                relatedType: doc.related_type.charAt(0).toUpperCase() + doc.related_type.slice(1),
-              };
-            }
-          } catch (e) {
-            console.warn(`Failed to fetch ${doc.related_type} ${doc.related_id}:`, e);
-          }
-
-          return {
-            ...doc,
-            relatedEntityName: doc.related_id ? `#${doc.related_id.slice(0, 8)}` : null,
-            relatedType: doc.related_type
-              ? doc.related_type.charAt(0).toUpperCase() + doc.related_type.slice(1)
-              : null,
-          };
-        }),
-      );
-
-      setDocuments(enrichedDocs);
+      setDocuments(normalizedDocs);
     } catch (error) {
       console.error('Failed to load documents:', error);
       setError('Failed to load documents. ' + error.message);

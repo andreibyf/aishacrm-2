@@ -191,6 +191,92 @@ export default function createDocumentV2Routes(_pgPool) {
     }
   }
 
+  async function enrichDocumentsWithRelatedEntities(documents, tenantId) {
+    if (!Array.isArray(documents) || documents.length === 0) return [];
+
+    const supabase = getSupabaseClient();
+    const relatedByType = {
+      account: new Set(),
+      contact: new Set(),
+      lead: new Set(),
+    };
+
+    for (const doc of documents) {
+      if (doc?.related_type && doc?.related_id && relatedByType[doc.related_type]) {
+        relatedByType[doc.related_type].add(doc.related_id);
+      }
+    }
+
+    const accountIds = Array.from(relatedByType.account);
+    const contactIds = Array.from(relatedByType.contact);
+    const leadIds = Array.from(relatedByType.lead);
+
+    const [accountsResult, contactsResult, leadsResult] = await Promise.all([
+      accountIds.length
+        ? supabase
+            .from('accounts')
+            .select('id, name')
+            .eq('tenant_id', tenantId)
+            .in('id', accountIds)
+        : Promise.resolve({ data: [] }),
+      contactIds.length
+        ? supabase
+            .from('contacts')
+            .select('id, first_name, last_name, email')
+            .eq('tenant_id', tenantId)
+            .in('id', contactIds)
+        : Promise.resolve({ data: [] }),
+      leadIds.length
+        ? supabase
+            .from('leads')
+            .select('id, first_name, last_name, email')
+            .eq('tenant_id', tenantId)
+            .in('id', leadIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const accountMap = new Map(
+      (accountsResult.data || []).map((row) => [row.id, row.name || null]),
+    );
+    const contactMap = new Map(
+      (contactsResult.data || []).map((row) => [
+        row.id,
+        [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || null,
+      ]),
+    );
+    const leadMap = new Map(
+      (leadsResult.data || []).map((row) => [
+        row.id,
+        [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || null,
+      ]),
+    );
+
+    return documents.map((doc) => {
+      if (!doc.related_type || !doc.related_id) {
+        return { ...doc, related_entity_name: null, related_entity_type_label: null };
+      }
+
+      const relatedTypeLabel =
+        doc.related_type.charAt(0).toUpperCase() + String(doc.related_type).slice(1);
+      let relatedEntityName = null;
+
+      if (doc.related_type === 'account') {
+        relatedEntityName = accountMap.get(doc.related_id) || null;
+      } else if (doc.related_type === 'contact') {
+        relatedEntityName = contactMap.get(doc.related_id) || null;
+      } else if (doc.related_type === 'lead') {
+        relatedEntityName = leadMap.get(doc.related_id) || null;
+      }
+
+      return {
+        ...doc,
+        related_entity_name:
+          relatedEntityName || (doc.related_id ? `#${doc.related_id.slice(0, 8)}` : null),
+        related_entity_type_label: relatedTypeLabel,
+      };
+    });
+  }
+
   /**
    * Classify document based on name and type
    */
@@ -543,9 +629,14 @@ export default function createDocumentV2Routes(_pgPool) {
       const { data, error, count } = await q;
       if (error) throw new Error(error.message);
 
+      const docsWithRelatedEntities = await enrichDocumentsWithRelatedEntities(
+        data || [],
+        tenant_id,
+      );
+
       // Build AI context for each document (batch for performance)
       const documents = await Promise.all(
-        (data || []).map(async (doc) => {
+        docsWithRelatedEntities.map(async (doc) => {
           const aiContext = await buildDocumentAiContext(doc, { lite: true });
           return { ...doc, aiContext };
         }),
