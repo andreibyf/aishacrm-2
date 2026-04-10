@@ -354,6 +354,10 @@ export default function LeadsPage() {
       clearCacheByKey('Lead');
       clearDashboardResultsCache();
       clearAllDashboardCaches();
+
+      // Use setTimeout to ensure state renders before refresh, preventing deleted row from reappearing
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
       await runMutationRefresh(
         () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
         { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
@@ -361,7 +365,12 @@ export default function LeadsPage() {
     } catch (error) {
       console.error('Failed to delete lead:', error);
       toast.error('Failed to delete lead');
-      await loadLeads(currentPage, pageSize);
+      // Reload to show current state (restore deleted row if deletion failed)
+      const deletedLead = leads.find((l) => l.id === id);
+      if (!deletedLead) {
+        // Already removed from state optimistically, reload to be sure
+        await loadLeads(currentPage, pageSize);
+      }
       await loadTotalStats();
     } finally {
       setDeletingId(null);

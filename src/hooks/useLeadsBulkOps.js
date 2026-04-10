@@ -178,6 +178,8 @@ export function useLeadsBulkOps({
         let successCount = 0;
         let failCount = 0;
         const idsToDelete = allLeadsToDelete.map((l) => l.id);
+        const deletedIdSet = new Set(); // Track all successfully deleted IDs
+
         for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
           const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
           try {
@@ -188,12 +190,8 @@ export function useLeadsBulkOps({
             const deletedInChunk = Math.max(0, Number(result?.deleted ?? chunk.length));
             successCount += deletedInChunk;
 
-            // Optimistically remove only when backend confirms full chunk deletion.
-            if (deletedInChunk === chunk.length) {
-              const deletedIds = new Set(chunk);
-              setLeads((prev) => prev.filter((l) => !deletedIds.has(l.id)));
-              setTotalItems((prev) => Math.max(0, prev - chunk.length));
-            }
+            // Track all deleted IDs - state update happens after loop completes
+            chunk.forEach((id) => deletedIdSet.add(id));
           } catch (err) {
             console.error('[Leads] Bulk delete chunk failed:', err);
             failCount += chunk.length;
@@ -206,6 +204,12 @@ export function useLeadsBulkOps({
 
         completeProgress();
 
+        // NOW remove all deleted leads from state (after all chunks complete)
+        if (deletedIdSet.size > 0) {
+          setLeads((prev) => prev.filter((l) => !deletedIdSet.has(l.id)));
+          setTotalItems((prev) => Math.max(0, prev - deletedIdSet.size));
+        }
+
         setSelectedLeads(new Set());
         setSelectAllMode(false);
 
@@ -217,6 +221,10 @@ export function useLeadsBulkOps({
         clearCacheByKey('Lead');
         clearDashboardResultsCache();
         clearAllDashboardCaches();
+
+        // Use setTimeout to ensure state renders before refresh
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
         await runMutationRefresh(() => Promise.all([loadLeads(1, pageSize), loadTotalStats()]), {
           passes: 3,
           initialDelayMs: 80,

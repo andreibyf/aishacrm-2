@@ -41,7 +41,7 @@ export default function OpportunitiesPage() {
   const { selectedTenantId } = useTenant();
   const { selectedEmail } = useEmployeeScope();
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
-  const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const { startProgress, updateProgress, completeProgress } = useProgress();
 
@@ -167,7 +167,7 @@ export default function OpportunitiesPage() {
 
   // --- Local handlers ---
 
-  const handleSave = async () => {
+  const handleSave = async (result = null) => {
     const wasCreating = !editingOpportunity;
     const editingId = editingOpportunity?.id || null;
 
@@ -175,9 +175,26 @@ export default function OpportunitiesPage() {
     setIsFormOpen(false);
     setEditingOpportunity(null);
 
+    // Optimistic update: patch the opportunity in-place so the list shows new data instantly
+    if (!wasCreating && editingId && result) {
+      const empName = employeesMap[result.assigned_to] || usersMap[result.assigned_to] || null;
+      setOpportunities((prev) =>
+        prev.map((o) =>
+          o.id === editingId
+            ? {
+                ...o,
+                ...result,
+                assigned_to_name: empName || result.assigned_to_name || o.assigned_to_name,
+              }
+            : o,
+        ),
+      );
+    }
+
     if (!wasCreating && editingId) setUpdatingId(editingId);
     try {
       if (wasCreating) setCurrentPage(1);
+      clearCache('Opportunity');
       clearCacheByKey('Opportunity');
       await runMutationRefresh(
         () =>
@@ -384,7 +401,7 @@ export default function OpportunitiesPage() {
             leads={leads}
             onSubmit={async (result) => {
               logDev('[Opportunities] Form submitted with result:', result);
-              await handleSave();
+              await handleSave(result);
             }}
             onCancel={() => {
               setIsFormOpen(false);

@@ -17,8 +17,11 @@ export function cacheList(module, ttl = 30) {
       return next();
     }
 
-    // Get tenant_id from query params first (explicit override), then fall back to authenticated user's tenant
-    const tenantId = req.query?.tenant_id || req.user?.tenant_id;
+    // Prefer the resolved canonical UUID from validateTenantAccess (req.tenant?.id).
+    // Falling back to req.query?.tenant_id risks using a text slug, which would
+    // produce a different cache key than the UUID used by invalidateCache, so
+    // mutations would never actually bust the cached GET response.
+    const tenantId = req.tenant?.id || req.query?.tenant_id || req.user?.tenant_id;
     if (!tenantId) {
       return next();
     }
@@ -80,8 +83,9 @@ export function cacheDetail(module, ttl = 60) {
       return next();
     }
 
-    // Get tenant_id from req.user (if validateTenant middleware was applied) or query params
-    const tenantId = req.user?.tenant_id || req.query?.tenant_id;
+    // Prefer the resolved canonical UUID from validateTenantAccess (req.tenant?.id).
+    // Falling back to slug-based identifiers would cause a key mismatch with invalidateCache.
+    const tenantId = req.tenant?.id || req.user?.tenant_id || req.query?.tenant_id;
     if (!tenantId) {
       return next();
     }
