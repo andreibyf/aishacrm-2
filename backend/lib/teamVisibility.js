@@ -44,6 +44,7 @@ import logger from './logger.js';
 // ─── In-memory cache (60s TTL) ───────────────────────────────────────────────
 const _cache = new Map();
 const CACHE_TTL_MS = 60_000;
+const SHARED_UNASSIGNED_WRITE = process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE !== 'false';
 
 function _cacheKey(userId, tenantId) {
   return `${userId}:${tenantId || 'global'}`;
@@ -161,9 +162,8 @@ export async function getVisibilityScope(user, supabase) {
     return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
   }
 
-  // Users with admin-level org permissions (settings or employees) also bypass
-  // This replaces the old role === 'admin' check with granular permissions
-  if (user.perm_settings || user.perm_employees) {
+  // User-authoritative admin precedence: tenant admin role OR admin-level perms bypass.
+  if (role === 'admin' || user.perm_settings || user.perm_employees) {
     return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
   }
 
@@ -231,7 +231,8 @@ export async function getVisibilityScope(user, supabase) {
     // ── Determine which teams the user has FULL R/W access to ──
     // Now using access_level from team_members table:
     //   'manage_team' → full R/W on that team's records
-    //   'view_team'   → read all team records, edit own only
+    //   'view_team'   → read all team records; in shared mode this can be
+    //                   elevated to collaboration writes via sharedTeamWriteIds
     //   'view_own'    → read and edit own records only
 
     const memberTeamIds = memberships.map((m) => m.team_id);
@@ -258,6 +259,10 @@ export async function getVisibilityScope(user, supabase) {
         return true;
       })
       .map((m) => m.team_id);
+
+    // Shared-mode collaboration writes are membership-derived and should not
+    // depend on org-wide team expansion query success.
+    const sharedTeamWriteIds = mode === 'shared' ? [...new Set(viewTeamIds)] : [];
 
     // For directors, also include child teams (one level of hierarchy)
     let allTeamIds = [...new Set([...memberTeamIds])];
@@ -295,8 +300,8 @@ export async function getVisibilityScope(user, supabase) {
           // Directors in shared mode: full R/W across entire org
           expandedFullAccessTeamIds = [...new Set(allTenantIds)];
         }
-        // Others keep fullAccessTeamIds = teams where they have manage_team
-        // (other teams = read + notes, enforced by getAccessLevel)
+
+        // Shared-mode team collaboration write IDs are derived from memberships above.
       }
     }
 
@@ -325,6 +330,7 @@ export async function getVisibilityScope(user, supabase) {
       teamIds: allTeamIds, // All teams visible (for list filtering)
       fullAccessTeamIds: expandedFullAccessTeamIds, // Teams with full R/W (for write permission checks)
       viewTeamIds, // Teams where user can see all records (view_team or manage_team)
+      sharedTeamWriteIds, // Shared mode: teams where collaboration grants full R/W
       employeeIds, // Employees visible (for dropdown scoping)
       mode,
       highestRole,
@@ -409,11 +415,16 @@ export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
   // Own record → always full R/W
   if (recordAssignedTo && recordAssignedTo === userId) return 'full';
 
-  // Unassigned record (no team) → managers/directors get full, members get read+notes
-  // Per handoff spec §3: managers can R/W unassigned, members get R + Add Notes
+  // Unassigned policy (explicit):
+  // - managers/directors/admin: full
+  // - shared mode + team member: full (unless disabled via env)
+  // - everyone else: read_only/read_notes based on permNotesAnywhere
   if (!recordTeamId) {
     const role = scope.highestRole;
     if (role === 'director' || role === 'manager' || role === 'admin') return 'full';
+    if (scope.mode === 'shared' && (scope.teamIds?.length || 0) > 0 && SHARED_UNASSIGNED_WRITE) {
+      return 'full';
+    }
     // Check if user can add notes anywhere
     return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
   }
@@ -423,6 +434,9 @@ export function getAccessLevel(scope, recordTeamId, recordAssignedTo, userId) {
 
   // Record is on one of user's view teams (view_team) → read + notes if permitted
   if (scope.viewTeamIds && scope.viewTeamIds.includes(recordTeamId)) {
+    if (scope.mode === 'shared' && scope.sharedTeamWriteIds?.includes(recordTeamId)) {
+      return 'full';
+    }
     return scope.permNotesAnywhere ? 'read_notes' : 'read_only';
   }
 

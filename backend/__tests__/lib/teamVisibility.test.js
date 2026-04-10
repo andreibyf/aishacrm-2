@@ -89,8 +89,19 @@ describe('teamVisibility — getVisibilityScope', () => {
     });
 
     it('admin with perm_settings=true gets bypass=true', async () => {
-      // Admin role now requires perm_settings or perm_employees to bypass
       const user = { id: 'u2', role: 'admin', tenant_id: 't1', perm_settings: true };
+      const scope = await getVisibilityScope(user, mockSupabase());
+      assert.strictEqual(scope.bypass, true);
+    });
+
+    it('admin role gets bypass even without granular perm flags', async () => {
+      const user = {
+        id: 'u2b',
+        role: 'admin',
+        tenant_id: 't1',
+        perm_settings: false,
+        perm_employees: false,
+      };
       const scope = await getVisibilityScope(user, mockSupabase());
       assert.strictEqual(scope.bypass, true);
     });
@@ -148,7 +159,15 @@ describe('teamVisibility — getVisibilityScope', () => {
         modulesettings: { data: { settings: { visibility_mode: 'hierarchical' } }, error: null },
         team_members: [
           {
-            data: [{ team_id: 'team1', role: 'member', access_level: 'view_own', user_id: 'auth-user-id', employee_id: 'emp-different-id' }],
+            data: [
+              {
+                team_id: 'team1',
+                role: 'member',
+                access_level: 'view_own',
+                user_id: 'auth-user-id',
+                employee_id: 'emp-different-id',
+              },
+            ],
             error: null,
           },
           {
@@ -177,7 +196,12 @@ describe('teamVisibility — getVisibilityScope', () => {
         },
         // First call: user's memberships; second call: all tenant teams; third call: all team members
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           {
             data: [{ employee_id: 'u1' }, { employee_id: 'u2' }, { employee_id: 'u3' }],
             error: null,
@@ -195,7 +219,14 @@ describe('teamVisibility — getVisibilityScope', () => {
       assert.ok(scope.employeeIds.includes('u3'));
       // Member with view_team: viewTeamIds includes team, but NOT fullAccessTeamIds
       assert.ok(scope.viewTeamIds.includes('team1'));
-      assert.ok(!scope.fullAccessTeamIds.includes('team1'), 'view_team members should NOT have full access');
+      assert.ok(
+        !scope.fullAccessTeamIds.includes('team1'),
+        'view_team members should NOT have full access',
+      );
+      assert.ok(
+        scope.sharedTeamWriteIds.includes('team1'),
+        'shared mode should enable team collaboration writes',
+      );
       // teamIds (visible) should include ALL tenant teams
       assert.ok(scope.teamIds.includes('team1'));
       assert.ok(scope.teamIds.includes('team2'));
@@ -246,7 +277,12 @@ describe('teamVisibility — getVisibilityScope', () => {
           error: null,
         },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           {
             data: [{ employee_id: 'u1' }, { employee_id: 'u2' }, { employee_id: 'u3' }],
             error: null,
@@ -263,7 +299,10 @@ describe('teamVisibility — getVisibilityScope', () => {
       assert.ok(scope.employeeIds.includes('u3'));
       // view_team: in viewTeamIds but NOT fullAccessTeamIds
       assert.ok(scope.viewTeamIds.includes('team1'));
-      assert.ok(!scope.fullAccessTeamIds.includes('team1'), 'view_team members should NOT have full access');
+      assert.ok(
+        !scope.fullAccessTeamIds.includes('team1'),
+        'view_team members should NOT have full access',
+      );
       // teamIds only includes own team (not all org)
       assert.deepStrictEqual(scope.teamIds, ['team1']);
     });
@@ -277,7 +316,12 @@ describe('teamVisibility — getVisibilityScope', () => {
           error: null,
         },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'manage_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'manage_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           {
             data: [{ employee_id: 'u1' }, { employee_id: 'u2' }, { employee_id: 'u3' }],
             error: null,
@@ -487,7 +531,12 @@ describe('teamVisibility — granular perm_* permissions', () => {
           error: null,
         },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_own', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_own', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           { data: [{ employee_id: 'u1' }, { employee_id: 'u2' }], error: null },
         ],
         teams: [{ data: [{ id: 'team1' }, { id: 'team2' }, { id: 'team3' }], error: null }],
@@ -515,7 +564,12 @@ describe('teamVisibility — granular perm_* permissions', () => {
           error: null,
         },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           { data: [{ employee_id: 'u1' }, { employee_id: 'u2' }], error: null },
         ],
       });
@@ -617,9 +671,7 @@ describe('teamVisibility — granular perm_* permissions', () => {
         modulesettings: { data: null, error: null },
         team_members: [
           {
-            data: [
-              { team_id: 'team1', role: 'manager', access_level: null, employee_id: 'u1' },
-            ],
+            data: [{ team_id: 'team1', role: 'manager', access_level: null, employee_id: 'u1' }],
             error: null,
           },
           { data: [{ employee_id: 'u1' }], error: null },
@@ -642,9 +694,7 @@ describe('teamVisibility — granular perm_* permissions', () => {
         modulesettings: { data: null, error: null },
         team_members: [
           {
-            data: [
-              { team_id: 'team1', role: 'member', access_level: null, employee_id: 'u1' },
-            ],
+            data: [{ team_id: 'team1', role: 'member', access_level: null, employee_id: 'u1' }],
             error: null,
           },
           { data: [{ employee_id: 'u1' }], error: null },
@@ -708,7 +758,12 @@ describe('teamVisibility — granular perm_* permissions', () => {
       const sb = mockSupabase({
         modulesettings: { data: null, error: null },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           { data: [{ employee_id: 'u1' }], error: null },
         ],
       });
@@ -728,7 +783,12 @@ describe('teamVisibility — granular perm_* permissions', () => {
       const sb = mockSupabase({
         modulesettings: { data: null, error: null },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           { data: [{ employee_id: 'u1' }], error: null },
         ],
       });
@@ -748,7 +808,12 @@ describe('teamVisibility — granular perm_* permissions', () => {
       const sb = mockSupabase({
         modulesettings: { data: null, error: null },
         team_members: [
-          { data: [{ team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' }], error: null },
+          {
+            data: [
+              { team_id: 'team1', role: 'member', access_level: 'view_team', employee_id: 'u1' },
+            ],
+            error: null,
+          },
           { data: [{ employee_id: 'u1' }], error: null },
         ],
       });
@@ -763,7 +828,14 @@ describe('teamVisibility — granular perm_* permissions', () => {
 
 describe('teamVisibility — getAccessLevel', () => {
   it('admin bypass always returns full', () => {
-    const scope = { bypass: true, mode: 'bypass', teamIds: [], fullAccessTeamIds: [], viewTeamIds: [], permNotesAnywhere: true };
+    const scope = {
+      bypass: true,
+      mode: 'bypass',
+      teamIds: [],
+      fullAccessTeamIds: [],
+      viewTeamIds: [],
+      permNotesAnywhere: true,
+    };
     assert.strictEqual(getAccessLevel(scope, 'team1', 'u2', 'u1'), 'full');
     assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'full');
   });
@@ -856,6 +928,50 @@ describe('teamVisibility — getAccessLevel', () => {
       permNotesAnywhere: true,
     };
     assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'read_notes');
+  });
+
+  it('unassigned record: shared mode team members get full', () => {
+    const scope = {
+      bypass: false,
+      mode: 'shared',
+      teamIds: ['team1'],
+      fullAccessTeamIds: [],
+      viewTeamIds: ['team1'],
+      sharedTeamWriteIds: ['team1'],
+      highestRole: 'member',
+      permNotesAnywhere: true,
+    };
+    assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'full');
+  });
+
+  it('unassigned record: shared mode full-write is disabled when env flag is false', async () => {
+    const original = process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE;
+    process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE = 'false';
+
+    try {
+      const { getAccessLevel: getAccessLevelFlagOff } = await import(
+        `../../lib/teamVisibility.js?sharedUnassignedWriteFlagOff=${Date.now()}`
+      );
+
+      const scope = {
+        bypass: false,
+        mode: 'shared',
+        teamIds: ['team1'],
+        fullAccessTeamIds: [],
+        viewTeamIds: ['team1'],
+        sharedTeamWriteIds: ['team1'],
+        highestRole: 'member',
+        permNotesAnywhere: true,
+      };
+
+      assert.strictEqual(getAccessLevelFlagOff(scope, null, null, 'u1'), 'read_notes');
+    } finally {
+      if (original === undefined) {
+        delete process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE;
+      } else {
+        process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE = original;
+      }
+    }
   });
 
   // ── New tests for perm_notes_anywhere ──────────────────────────────────
@@ -972,6 +1088,20 @@ describe('teamVisibility — getAccessLevel', () => {
       };
       // team99 is outside user's teams entirely
       assert.strictEqual(getAccessLevel(scope, 'team99', 'u99', 'u1'), 'none');
+    });
+
+    it('shared mode view_team record returns full when sharedTeamWriteIds includes team', () => {
+      const scope = {
+        bypass: false,
+        mode: 'shared',
+        teamIds: ['team1', 'team2'],
+        fullAccessTeamIds: ['team1'],
+        viewTeamIds: ['team1', 'team2'],
+        sharedTeamWriteIds: ['team2'],
+        highestRole: 'member',
+        permNotesAnywhere: true,
+      };
+      assert.strictEqual(getAccessLevel(scope, 'team2', 'u2', 'u1'), 'full');
     });
   });
 });
