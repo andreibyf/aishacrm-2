@@ -727,6 +727,9 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       // ── Two-tier write access check ──
       let previousAssignedTo = undefined;
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
       if (req.user) {
         const { data: current } = await supabase
           .from('bizdev_sources')

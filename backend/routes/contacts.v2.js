@@ -656,6 +656,10 @@ export default function createContactV2Routes(_pgPool) {
       }
       if (fetchErr) throw new Error(fetchErr.message);
 
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
       // Two-tier write access check
       if (req.user) {
         const scope = await getVisibilityScope(req.user, supabase);

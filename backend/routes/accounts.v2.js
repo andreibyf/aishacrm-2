@@ -705,6 +705,10 @@ export default function createAccountV2Routes(_pgPool) {
         return res.status(404).json({ status: 'error', message: 'Account not found' });
       }
 
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
       // Two-tier write access check
       if (req.user) {
         const scope = await getVisibilityScope(req.user, supabase);

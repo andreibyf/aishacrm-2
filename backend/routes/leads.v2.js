@@ -1211,6 +1211,10 @@ export default function createLeadsV2Routes() {
       let _currentRecord = null;
       let previousAssignedTo = undefined;
 
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
       if (req.user) {
         const { data: current } = await supabase
           .from('leads')
