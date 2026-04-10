@@ -1314,6 +1314,37 @@ export default function createBizDevSourceRoutes(pgPool) {
 
       const tenant_id = incomingTenantId;
 
+      // ── Two-tier write access check for archive ──
+      if (req.user) {
+        const { data: currentRecords, error: currentErr } = await supabase
+          .from('bizdev_sources')
+          .select('id, assigned_to, assigned_to_team')
+          .eq('tenant_id', tenant_id)
+          .in('id', bizdev_source_ids);
+
+        if (currentErr) throw new Error(currentErr.message);
+
+        if (currentRecords?.length) {
+          const scope = await getVisibilityScope(req.user, supabase);
+          const unauthorized = currentRecords.filter((record) => {
+            const access = getAccessLevel(
+              scope,
+              record.assigned_to_team,
+              record.assigned_to,
+              req.user.id,
+            );
+            return access !== 'full';
+          });
+
+          if (unauthorized.length > 0) {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to archive one or more selected records',
+            });
+          }
+        }
+      }
+
       // Update sources to mark as archived
       const placeholders = bizdev_source_ids.map((_, i) => `$${i + 2}`).join(',');
       const updateResult = await pgPool.query(
