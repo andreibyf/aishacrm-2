@@ -322,7 +322,13 @@ app.use(
 );
 app.use('/api/permissions', defaultLimiter, createPermissionRoutes(measuredPgPool));
 app.use('/api/testing', defaultLimiter, createTestingRoutes(measuredPgPool));
-app.use('/api/documents', defaultLimiter, createDocumentRoutes(measuredPgPool));
+app.use(
+  '/api/documents',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createDocumentRoutes(measuredPgPool),
+);
 app.use(
   '/api/documentationfiles',
   defaultLimiter,
@@ -423,7 +429,13 @@ app.use('/api/v2/reports', defaultLimiter, createReportsV2Routes(measuredPgPool)
 logger.debug('Mounting /api/v2/workflows routes (dev/internal)');
 app.use('/api/v2/workflows', defaultLimiter, createWorkflowV2Routes(measuredPgPool));
 logger.debug('Mounting /api/v2/documents routes (dev/internal)');
-app.use('/api/v2/documents', defaultLimiter, createDocumentV2Routes(measuredPgPool));
+app.use(
+  '/api/v2/documents',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createDocumentV2Routes(measuredPgPool),
+);
 logger.debug('Mounting /api/v2/communications routes (dev/internal)');
 app.use(
   '/api/v2/communications',

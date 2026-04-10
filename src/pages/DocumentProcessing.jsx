@@ -245,6 +245,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
 
     if (!value.trim()) {
       setLinkResults([]);
+      setLinkSearching(false);
       return;
     }
 
@@ -364,7 +365,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
       setUploadResult({
         success: true,
         message: successMsg,
-        documentId: docData.data?.id,
+        documentId: docData.data?.document?.id || docData.data?.id,
       });
 
       // Reset form
@@ -438,7 +439,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
             {/* Entity Search/Selection */}
             <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-3">
               <div className="relative">
-                <search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder={`Search ${entityType}s by name…`}

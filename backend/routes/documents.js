@@ -10,9 +10,39 @@ import {
   resolveLLMApiKey,
 } from '../lib/aiEngine/index.js';
 import logger from '../lib/logger.js';
+import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
 export default function createDocumentRoutes(_pgPool) {
   const router = express.Router();
+
+  function buildDocumentUrlAllowlist() {
+    const allowlist = ['*.supabase.co', 'supabase.co', 'supabase.com'];
+    const configured = String(process.env.DOCUMENT_FETCH_ALLOWED_DOMAINS || '')
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+    allowlist.push(...configured);
+
+    try {
+      const supabaseHost = new URL(process.env.SUPABASE_URL || '').hostname;
+      if (supabaseHost) allowlist.push(supabaseHost);
+    } catch {
+      // Ignore invalid SUPABASE_URL and continue with defaults.
+    }
+
+    return [...new Set(allowlist)];
+  }
+
+  function validateDocumentFileUrl(fileUrl) {
+    const validation = validateUrlAgainstWhitelist(fileUrl, buildDocumentUrlAllowlist());
+    if (!validation.valid) {
+      return {
+        valid: false,
+        message: validation.error || 'Invalid file_url',
+      };
+    }
+    return { valid: true };
+  }
 
   /**
    * @openapi
@@ -49,6 +79,14 @@ export default function createDocumentRoutes(_pgPool) {
 
       if (!file_url) {
         return res.status(400).json({ status: 'error', message: 'file_url is required' });
+      }
+
+      const fileUrlValidation = validateDocumentFileUrl(file_url);
+      if (!fileUrlValidation.valid) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid file_url: ${fileUrlValidation.message}`,
+        });
       }
 
       const tenantId = req.tenant?.id || null;
@@ -160,13 +198,11 @@ export default function createDocumentRoutes(_pgPool) {
           model,
           error: result.error,
         });
-        return res
-          .status(502)
-          .json({
-            status: 'error',
-            message: result.error || 'AI extraction failed',
-            details: result.error,
-          });
+        return res.status(502).json({
+          status: 'error',
+          message: result.error || 'AI extraction failed',
+          details: result.error,
+        });
       }
 
       let output;

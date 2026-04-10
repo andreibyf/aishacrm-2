@@ -18,11 +18,41 @@ import {
   selectLLMConfigForTenant,
   resolveLLMApiKey,
 } from '../lib/aiEngine/index.js';
+import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
 export default function createDocumentV2Routes(_pgPool) {
   const router = express.Router();
 
   router.use(validateTenantAccess);
+
+  function buildDocumentUrlAllowlist() {
+    const allowlist = ['*.supabase.co', 'supabase.co', 'supabase.com'];
+    const configured = String(process.env.DOCUMENT_FETCH_ALLOWED_DOMAINS || '')
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+    allowlist.push(...configured);
+
+    try {
+      const supabaseHost = new URL(process.env.SUPABASE_URL || '').hostname;
+      if (supabaseHost) allowlist.push(supabaseHost);
+    } catch {
+      // Ignore invalid SUPABASE_URL and continue with defaults.
+    }
+
+    return [...new Set(allowlist)];
+  }
+
+  function validateDocumentFileUrl(fileUrl) {
+    const validation = validateUrlAgainstWhitelist(fileUrl, buildDocumentUrlAllowlist());
+    if (!validation.valid) {
+      return {
+        valid: false,
+        message: validation.error || 'Invalid file_url',
+      };
+    }
+    return { valid: true };
+  }
 
   /**
    * Build AI context for a document
@@ -304,6 +334,14 @@ export default function createDocumentV2Routes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'file_url is required' });
       }
 
+      const fileUrlValidation = validateDocumentFileUrl(file_url);
+      if (!fileUrlValidation.valid) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Invalid file_url: ${fileUrlValidation.message}`,
+        });
+      }
+
       const tenantId = req.tenant?.id || null;
       const { provider, model } = selectLLMConfigForTenant({
         capability: 'json_strict',
@@ -413,13 +451,11 @@ export default function createDocumentV2Routes(_pgPool) {
           model,
           error: result.error,
         });
-        return res
-          .status(502)
-          .json({
-            status: 'error',
-            message: result.error || 'AI extraction failed',
-            details: result.error,
-          });
+        return res.status(502).json({
+          status: 'error',
+          message: result.error || 'AI extraction failed',
+          details: result.error,
+        });
       }
 
       let output;
@@ -592,9 +628,19 @@ export default function createDocumentV2Routes(_pgPool) {
       const { tenant_id, name, file_url, file_type, file_size, related_type, related_id, ...rest } =
         req.body;
 
-      if (!tenant_id) {
+      const resolvedTenantId = req.tenant?.id || tenant_id || req.query.tenant_id;
+
+      if (!resolvedTenantId) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
+
+      if (tenant_id && req.tenant?.id && tenant_id !== req.tenant.id) {
+        return res.status(403).json({
+          status: 'error',
+          message: 'tenant_id mismatch with authenticated tenant context',
+        });
+      }
+
       if (!name) {
         return res.status(400).json({ status: 'error', message: 'name is required' });
       }
@@ -605,7 +651,7 @@ export default function createDocumentV2Routes(_pgPool) {
       const classification = classifyDocument(name, file_type);
 
       const insertPayload = {
-        tenant_id,
+        tenant_id: resolvedTenantId,
         name,
         file_url: file_url || null,
         file_type: file_type || null,

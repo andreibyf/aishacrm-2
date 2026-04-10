@@ -674,7 +674,9 @@ export default function DocumentManagement() {
             <DialogTitle className="text-slate-100">Delete Document</DialogTitle>
             <DialogDescription className="text-slate-400">
               You are about to delete:{' '}
-              <span className="font-semibold text-slate-300">{documentToDelete?.title}</span>
+              <span className="font-semibold text-slate-300">
+                {documentToDelete?.name || documentToDelete?.title}
+              </span>
             </DialogDescription>
           </DialogHeader>
 
