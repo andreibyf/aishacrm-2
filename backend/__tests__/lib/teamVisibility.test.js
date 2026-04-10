@@ -944,6 +944,36 @@ describe('teamVisibility — getAccessLevel', () => {
     assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'full');
   });
 
+  it('unassigned record: shared mode full-write is disabled when env flag is false', async () => {
+    const original = process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE;
+    process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE = 'false';
+
+    try {
+      const { getAccessLevel: getAccessLevelFlagOff } = await import(
+        `../../lib/teamVisibility.js?sharedUnassignedWriteFlagOff=${Date.now()}`
+      );
+
+      const scope = {
+        bypass: false,
+        mode: 'shared',
+        teamIds: ['team1'],
+        fullAccessTeamIds: [],
+        viewTeamIds: ['team1'],
+        sharedTeamWriteIds: ['team1'],
+        highestRole: 'member',
+        permNotesAnywhere: true,
+      };
+
+      assert.strictEqual(getAccessLevelFlagOff(scope, null, null, 'u1'), 'read_notes');
+    } finally {
+      if (original === undefined) {
+        delete process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE;
+      } else {
+        process.env.TEAM_VISIBILITY_SHARED_UNASSIGNED_WRITE = original;
+      }
+    }
+  });
+
   // ── New tests for perm_notes_anywhere ──────────────────────────────────
 
   describe('permNotesAnywhere=false returns read_only instead of read_notes', () => {

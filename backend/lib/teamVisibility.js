@@ -231,7 +231,8 @@ export async function getVisibilityScope(user, supabase) {
     // ── Determine which teams the user has FULL R/W access to ──
     // Now using access_level from team_members table:
     //   'manage_team' → full R/W on that team's records
-    //   'view_team'   → read all team records, edit own only
+    //   'view_team'   → read all team records; in shared mode this can be
+    //                   elevated to collaboration writes via sharedTeamWriteIds
     //   'view_own'    → read and edit own records only
 
     const memberTeamIds = memberships.map((m) => m.team_id);
@@ -259,6 +260,10 @@ export async function getVisibilityScope(user, supabase) {
       })
       .map((m) => m.team_id);
 
+    // Shared-mode collaboration writes are membership-derived and should not
+    // depend on org-wide team expansion query success.
+    const sharedTeamWriteIds = mode === 'shared' ? [...new Set(viewTeamIds)] : [];
+
     // For directors, also include child teams (one level of hierarchy)
     let allTeamIds = [...new Set([...memberTeamIds])];
     if (isDirector) {
@@ -279,7 +284,6 @@ export async function getVisibilityScope(user, supabase) {
     // ── Shared mode OR perm_all_records: expand visibility to entire organization ──
     const hasOrgWideRead = mode === 'shared' || user.perm_all_records;
     let expandedFullAccessTeamIds = [...fullAccessTeamIds];
-    let sharedTeamWriteIds = [];
 
     if (hasOrgWideRead) {
       const { data: allTenantTeams, error: atErr } = await supabase
@@ -297,11 +301,7 @@ export async function getVisibilityScope(user, supabase) {
           expandedFullAccessTeamIds = [...new Set(allTenantIds)];
         }
 
-        // Shared-mode team collaboration: users can fully collaborate within teams
-        // where they have at least view_team access.
-        if (mode === 'shared') {
-          sharedTeamWriteIds = [...new Set(viewTeamIds)];
-        }
+        // Shared-mode team collaboration write IDs are derived from memberships above.
       }
     }
 
