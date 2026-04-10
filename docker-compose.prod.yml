@@ -149,7 +149,7 @@ services:
 
   # Event Bus (Redpanda/Kafka)
   redpanda:
-    image: redpandadata/redpanda:stable-local
+    image: redpandadata/redpanda:23.2.15
     container_name: aishacrm-redpanda
     restart: unless-stopped
     command:
