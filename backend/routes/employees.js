@@ -1139,17 +1139,41 @@ export default function createEmployeeRoutes(_pgPool) {
     async (req, res) => {
       try {
         const { id } = req.params;
-        const tenant_id = req.body.tenant_id || req.query.tenant_id;
+        const requestedTenantId = req.body.tenant_id || req.query.tenant_id || null;
+
+        const requesterRole = (req.user?.role || '').toLowerCase();
+        const isSuperScopedRequester =
+          requesterRole === 'superadmin' || req.user?.service_role === true;
+        const canSyncPermissions =
+          requesterRole === 'admin' || isSuperScopedRequester || req.user?.perm_employees === true;
+
+        const authenticatedTenantId = req.tenant?.id || req.user?.tenant_id || null;
+
+        if (!isSuperScopedRequester) {
+          if (!authenticatedTenantId) {
+            return res.status(403).json({
+              status: 'error',
+              success: false,
+              error: 'Forbidden: authenticated tenant scope is required',
+            });
+          }
+
+          if (requestedTenantId && requestedTenantId !== authenticatedTenantId) {
+            return res.status(403).json({
+              status: 'error',
+              success: false,
+              error: 'Forbidden: tenant scope mismatch',
+            });
+          }
+        }
+
+        const tenant_id = isSuperScopedRequester
+          ? requestedTenantId || authenticatedTenantId
+          : authenticatedTenantId;
 
         if (!tenant_id) {
           return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
         }
-
-        const requesterRole = (req.user?.role || '').toLowerCase();
-        const canSyncPermissions =
-          requesterRole === 'admin' ||
-          requesterRole === 'superadmin' ||
-          req.user?.perm_employees === true;
 
         if (!canSyncPermissions) {
           return res.status(403).json({
@@ -1246,8 +1270,11 @@ export default function createEmployeeRoutes(_pgPool) {
         return res.json({
           status: 'success',
           success: true,
-          message: 'Permissions synced successfully',
-          data: { user_id: user.id, role: user.role },
+          message: 'User link metadata synced successfully',
+          data: {
+            user_id: user.id,
+            metadata_synced_at: updatedEmpMeta.permissions_synced_at,
+          },
         });
       } catch (err) {
         logger.error('[Employees POST /:id/sync-permissions] Error:', err.message);
