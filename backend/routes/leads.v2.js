@@ -1356,11 +1356,29 @@ export default function createLeadsV2Routes() {
    */
   router.post('/bulk-delete', async (req, res) => {
     try {
-      const { tenant_id, ids } = req.body || {};
-
-      if (!tenant_id) {
-        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      if (!req.user) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
       }
+
+      const { tenant_id, ids } = req.body || {};
+      const requestTenantId = req.tenant?.id;
+      const userTenantId = req.user.tenant_id || req.user.tenant_uuid;
+      const isSuperadmin = req.user.role === 'superadmin' || req.user.is_superadmin;
+
+      const effectiveTenantId = requestTenantId || userTenantId || tenant_id;
+      if (!effectiveTenantId) {
+        return res.status(400).json({ status: 'error', message: 'Tenant context is missing' });
+      }
+
+      if (tenant_id && !isSuperadmin) {
+        const allowedTenant = requestTenantId || userTenantId;
+        if (allowedTenant && tenant_id !== allowedTenant) {
+          return res
+            .status(403)
+            .json({ status: 'error', message: 'tenant_id does not match authenticated tenant' });
+        }
+      }
+
       if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ status: 'error', message: 'ids must be a non-empty array' });
       }
@@ -1375,7 +1393,7 @@ export default function createLeadsV2Routes() {
         const { data: currentRecords, error: currentErr } = await supabase
           .from('leads')
           .select('id, assigned_to, assigned_to_team')
-          .eq('tenant_id', tenant_id)
+          .eq('tenant_id', effectiveTenantId)
           .in('id', ids);
 
         if (currentErr) throw new Error(currentErr.message);
@@ -1406,7 +1424,7 @@ export default function createLeadsV2Routes() {
       const { error, count } = await supabase
         .from('leads')
         .delete({ count: 'exact' })
-        .eq('tenant_id', tenant_id)
+        .eq('tenant_id', effectiveTenantId)
         .in('id', ids);
 
       const elapsed = Date.now() - startMs;
@@ -1415,7 +1433,7 @@ export default function createLeadsV2Routes() {
       if (error) throw new Error(error.message);
 
       // Invalidate cache before responding so the next GET returns fresh data
-      await invalidateTenantAndDashboardCache(tenant_id, 'leads');
+      await invalidateTenantAndDashboardCache(effectiveTenantId, 'leads');
 
       res.json({
         status: 'success',

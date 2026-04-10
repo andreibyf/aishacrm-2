@@ -445,5 +445,7 @@ describe('bulkAssign validation (unit)', () => {
     assert.match(source, /leads:\s*'lead'/);
     assert.match(source, /contacts:\s*'contact'/);
     assert.match(source, /accounts:\s*'account'/);
+    assert.match(source, /opportunities:\s*'opportunity'/);
+    assert.match(source, /activities:\s*'activity'/);
   });
 });
