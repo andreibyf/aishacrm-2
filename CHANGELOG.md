@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Template picker load failure (`src/api/functions.js`, `src/api/emailTemplates.js`, `src/components/ai/EmailTemplatePicker.jsx`):** Exported `getAuthorizationHeader()` from `src/api/functions.js` so dynamic imports in email template API helpers resolve correctly. This fixes `Failed to load templates: o is not a function` in production when opening Draft from Template.
+- **Template picker regression test coverage (`src/api/functions.test.js`):** Added a unit test that asserts `getAuthorizationHeader` is exported from `src/api/functions.js`, preventing future regressions where dynamic API helpers fail at runtime due to a missing export.
+
 - **LiteLLM container not deploying to production VPS (`.github/workflows/docker-release.yml`):** Added `litellm` to the Docker Compose `up` command and added `docker pull` + image tagging for the LiteLLM image in the production deployment script. Previously, the LiteLLM image was built and pushed to GHCR on every release tag but was never actually deployed to the VPS because the deployment script only started `frontend`, `backend`, and `aisha-comms` services.
 
 ### Added

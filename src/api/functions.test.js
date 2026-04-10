@@ -7,20 +7,27 @@ import { describe, test, expect } from 'vitest';
 describe('[PLATFORM] functions.js exports', () => {
   test('core function exports are defined via proxy', async () => {
     const functions = await import('./functions');
-    
+
     // Verify AI-related function exports
     expect(functions.aiToken).toBeDefined();
     expect(typeof functions.aiToken).toBe('function');
-    
+
     expect(functions.aiRun).toBeDefined();
     expect(typeof functions.aiRun).toBe('function');
-    
+
     // Verify voice function export
     expect(functions.voiceCommand).toBeDefined();
     expect(typeof functions.voiceCommand).toBe('function');
-    
+
     // Verify data functions
     expect(functions.checkDataVolume).toBeDefined();
     expect(typeof functions.checkDataVolume).toBe('function');
+  });
+
+  test('getAuthorizationHeader is exported for dynamic API helpers', async () => {
+    const functions = await import('./functions');
+
+    expect(functions.getAuthorizationHeader).toBeDefined();
+    expect(typeof functions.getAuthorizationHeader).toBe('function');
   });
 });

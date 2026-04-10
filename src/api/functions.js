@@ -7,7 +7,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
  * Get Supabase access token for Authorization header
  * This allows cross-domain API requests to authenticate even when cookies are domain-locked
  */
-async function getAuthorizationHeader() {
+export async function getAuthorizationHeader() {
   if (!isSupabaseConfigured()) return null;
 
   try {
@@ -670,7 +670,11 @@ const createFunctionProxy = (functionName) => {
       if (functionName === 'cleanupTestRecords') {
         try {
           const BACKEND_URL = getBackendUrl();
-          const tenantId = args[0]?.tenant_id || localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
+          const tenantId =
+            args[0]?.tenant_id ||
+            localStorage.getItem('selected_tenant_id') ||
+            localStorage.getItem('tenant_id') ||
+            '';
           const authHeader = await getAuthorizationHeader();
           const headers = { 'Content-Type': 'application/json' };
           if (authHeader) headers['Authorization'] = authHeader;
