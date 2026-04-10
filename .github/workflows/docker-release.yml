@@ -28,14 +28,6 @@ jobs:
             context: ./braid-mcp-node-server
             dockerfile: ./braid-mcp-node-server/Dockerfile
             image: ghcr.io/${{ github.repository }}-mcp
-          - service: office-viz
-            context: addons/agent-office/services/office-viz
-            dockerfile: addons/agent-office/services/office-viz/Dockerfile
-            image: ghcr.io/${{ github.repository }}-office-viz
-          - service: telemetry-sidecar
-            context: addons/agent-office/services/telemetry-sidecar
-            dockerfile: addons/agent-office/services/telemetry-sidecar/Dockerfile
-            image: ghcr.io/${{ github.repository }}-telemetry-sidecar
           - service: litellm
             context: .
             dockerfile: ./litellm/Dockerfile
@@ -510,15 +502,11 @@ jobs:
             run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG
             run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG
             run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG
-            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG
-            run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG
             # Tag as latest locally
             phase "Tagging pulled images as latest"
             docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-backend:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
             docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
-            docker tag ghcr.io/andreibyf/aishacrm-2-office-viz:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-office-viz:latest
-            docker tag ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:$VERSION_TAG ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
 
             # Remove VITE_APP_BUILD_VERSION from .env so container uses baked-in /app/VERSION
             # (Version is already baked into Docker image during build via Dockerfile)
@@ -540,7 +528,7 @@ jobs:
             # NOTE: n8n is optional - use --profile workflows to include it
             # Frontend and backend run directly on ports 4000 and 4001 (no proxy)
             phase "Recreating main production services"
-            run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend aisha-comms kafka telemetry-sidecar office-viz
+            run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans frontend backend aisha-comms
             # Cal.com scheduling stack — update if already running, skip if not yet started
             # Data is safe: calcom_db_data volume is never removed by this workflow
             # Inject Cal.com secrets — calcom/calcom-db are plain images with no Doppler CLI; they read from .env

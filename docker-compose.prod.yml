@@ -69,17 +69,14 @@ services:
       - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
       - LITELLM_BASE_URL=http://litellm:4000
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      # Telemetry -> shared volume for office-viz sidecar
-      - TELEMETRY_ENABLED=true
-      - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
+      # Office visualization disabled in production
+      - TELEMETRY_ENABLED=false
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    volumes:
-      - aisha_telemetry:/telemetry
     networks:
       - default
       - aishanet
@@ -146,94 +143,6 @@ services:
   # It must be on the 'aishanet' external network to be reachable by backend
   # Container name: braid-mcp-server (or aishacrm-mcp if using legacy setup)
   # Backend connects via BRAID_MCP_URL environment variable
-
-  # Event Bus (Kafka)
-  kafka:
-    image: confluentinc/cp-kafka:7.5.4
-    container_name: aishacrm-kafka
-    restart: unless-stopped
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_LOG_RETENTION_HOURS: 168
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server kafka:9092 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
-    networks:
-      - aishanet
-
-  # Zookeeper (required for Kafka)
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.4
-    container_name: aishacrm-zookeeper
-    restart: unless-stopped
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_SYNC_LIMIT: 2
-      ZOOKEEPER_INIT_LIMIT: 5
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - aishanet
-
-  # Telemetry Sidecar - Ships events to Kafka
-  telemetry-sidecar:
-    image: ghcr.io/andreibyf/aishacrm-2-telemetry-sidecar:latest
-    container_name: aishacrm-telemetry-sidecar
-    restart: unless-stopped
-    environment:
-      - TELEMETRY_INPUT_PATH=/telemetry/telemetry.ndjson
-      - BUS_TYPE=kafka
-      - KAFKA_BROKERS=kafka:9092
-      - KAFKA_TOPIC=aisha.events.v1
-      - HEALTH_PORT=4101
-    volumes:
-      - aisha_telemetry:/telemetry
-    depends_on:
-      kafka:
-        condition: service_healthy
-    networks:
-      - aishanet
-
-  # Office Viz - Real-time event visualization
-  office-viz:
-    image: ghcr.io/andreibyf/aishacrm-2-office-viz:latest
-    container_name: aishacrm-office-viz
-    restart: unless-stopped
-    environment:
-      - PORT=4010
-      - BUS_TYPE=kafka
-      - KAFKA_BROKERS=kafka:9092
-      - KAFKA_TOPIC=aisha.events.v1
-      - MAX_EVENTS_IN_MEMORY=5000
-      - OFFICE_VIZ_TOKEN=${OFFICE_VIZ_TOKEN}
-      - ENABLE_DEMO_ENDPOINTS=false
-    ports:
-      - "4010:4010"
-    depends_on:
-      telemetry-sidecar:
-        condition: service_started
-    networks:
-      - aishanet
 
   # Frontend
   frontend:
@@ -401,12 +310,6 @@ volumes:
   redis_cache_data:
     driver: local
   n8n_data:
-    driver: local
-  kafka_data:
-    driver: local
-  zookeeper_data:
-    driver: local
-  aisha_telemetry:
     driver: local
   calcom_db_data:
     driver: local
