@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import UserTemplateSelector from './UserTemplateSelector';
 import {
   Table,
   TableBody,
@@ -933,6 +934,8 @@ export default function EnhancedUserManagement() {
   const [viewingUser, setViewingUser] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardMode, setWizardMode] = useState('edit'); // 'create' or 'edit'
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -1147,6 +1150,25 @@ export default function EnhancedUserManagement() {
 
   const refreshUsers = () => {
     loadData({ cacheBust: true });
+  };
+
+  const handleTemplateSelect = (template) => {
+    setSelectedTemplate(template);
+    setShowTemplateSelector(false);
+    setEditingUser(null);
+    setEditingUserTeamMemberships([]);
+    setWizardMode('create');
+    setWizardOpen(true);
+  };
+
+  const handleTemplateSelectorCancel = () => {
+    setShowTemplateSelector(false);
+    // Open wizard without template (blank form)
+    setSelectedTemplate(null);
+    setEditingUser(null);
+    setEditingUserTeamMemberships([]);
+    setWizardMode('create');
+    setWizardOpen(true);
   };
 
   const copyToClipboard = (text, label) => {
@@ -1512,6 +1534,11 @@ export default function EnhancedUserManagement() {
 
   return (
     <div className="space-y-6">
+      <UserTemplateSelector
+        open={showTemplateSelector}
+        onSelectTemplate={handleTemplateSelect}
+        onCancel={handleTemplateSelectorCancel}
+      />
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -1523,10 +1550,7 @@ export default function EnhancedUserManagement() {
             </div>
             <Button
               onClick={() => {
-                setEditingUser(null);
-                setEditingUserTeamMemberships([]);
-                setWizardMode('create');
-                setWizardOpen(true);
+                setShowTemplateSelector(true);
               }}
               className="bg-blue-600 hover:bg-blue-700"
             >

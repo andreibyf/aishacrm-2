@@ -1,50 +1,74 @@
-# AiSHA CRM – Backend Field Parity Bugfix Plan
+# AiSHA CRM – Permission Hardening & Optimistic UX Plan
 
-## Current Goal
+**🎉 PLAN COMPLETE ✅ (April 9, 2026)**
 
-**Status:** Completed ✅ (December 1, 2025)
-
-Type: bugfix  
-Title: Fix backend/ frontend field mismatch and propagate to dependent components
-
-Description:  
-The frontend allows entry of several fields (e.g., phone, job_title, metadata, secondary contact data, notes). In testing, some of these values are:
-
-- Sent in POST/PUT payloads but missing from GET/list responses, or
-- Present in the DB but stripped by backend serialization, or
-- Missing when consumed by dashboards, AI snapshot endpoints, Braid tools, or reports.
-
-This is a **critical data integrity bug**. The goal is:
-
-1. Restore 1:1 field parity between UI forms, backend APIs, and DB schema.
-2. Audit and fix downstream components that rely on these entities (dashboards, AI snapshot, Braid/MCP tools, exports, reports) so they see the same field set.
-
-No new features. No UI redesign.
+All 8 phases (Waves 1–7 + followup) have been successfully completed, tested, and merged to `main`.
 
 ---
 
-## Execution Rules (Critical)
+## Completion Summary
 
-Mode: BUGFIX ONLY
+| Wave         | Title                                            | PR   | Status    |
+| ------------ | ------------------------------------------------ | ---- | --------- |
+| **Wave 1**   | User-first permissions + employee sync hardening | #487 | ✅ Merged |
+| **Wave 2**   | Team visibility policy normalization             | #488 | ✅ Merged |
+| **Wave 3**   | Route parity hardening (write guards)            | #489 | ✅ Merged |
+| **Wave 4**   | Bulk-delete auth hardening                       | #490 | ✅ Merged |
+| **Wave 5**   | Bulk-assign canonical mappings                   | #490 | ✅ Merged |
+| **Wave 6**   | Archive guard hardening                          | #491 | ✅ Merged |
+| **Wave 7**   | Promote guard race-condition fix                 | #492 | ✅ Merged |
+| **Followup** | Optimistic cache hardening + UI indicators       | #493 | ✅ Merged |
 
-Do NOT:
+**Final State:**
 
-- Redesign entity models or API shapes.
-- Add new business logic unrelated to field parity.
-- Refactor unrelated modules (auth, realtime, AI orchestration, n8n, etc.).
-
-Allowed:
-
-- Add missing fields to SELECT/INSERT/UPDATE/RETURNING.
-- Fix serializers/DTOs so all existing UI fields round-trip.
-- Update downstream consumers (dashboards, AI snapshot, Braid tools, exports) to include the same fields.
-- Add minimal migrations **only if** a field used by the UI truly has no DB column.
-
-Every fix must be covered by at least one test (unit or integration) where practical.
+- All 8 phases tested and validated via regression suites.
+- All review comments addressed and threads resolved.
+- All PRs merged to `main` by April 10, 2026.
+- Local work branches deleted.
+- Repository ready for next phase of development.
 
 ---
 
-## Active Tasks
+## What Was Done
+
+### Authorization & Permissions (Waves 1–3, 7)
+
+- ✅ Fixed user role/permission persistence in admin flows
+- ✅ Normalized team visibility policies (admin bypass, shared mode write access)
+- ✅ Hardened write routes to enforce `read_only` access checks
+- ✅ Locked promote authorization to transaction-scoped row evaluation
+
+### Bulk Operations Hardening (Waves 4–5)
+
+- ✅ Added per-record team-visibility enforcement to bulk-delete
+- ✅ Fixed bulk-assign history canonical mapping for BizDev sources
+- ✅ Added regression tests for bulk operation guards
+
+### Archive Operations (Wave 6)
+
+- ✅ Added per-record team-visibility enforcement to archive endpoints
+- ✅ Reject mixed/unauthorized archive batches
+
+### Frontend UX & Caching (Followup)
+
+- ✅ Fixed optimistic delete accounting for partial-chunk failures
+- ✅ Added row operation indicators with status feedback
+- ✅ Improved post-mutation consistency with smart refresh logic
+- ✅ Removed production diagnostic/mutation artifacts from tmp/
+
+### Testing & Regression Coverage
+
+- ✅ Added comprehensive backend test suites across all waves
+- ✅ Full regression validation after each PR
+- ✅ Pre-push hook with fallback safe-run for Node test-runner flakes
+
+---
+
+## Historical Reference (Do Not Use)
+
+The sections below contain archived phase documentation and may be outdated. This plan has been closed.
+
+### Archived: Active Tasks
 
 ### BUG-DEP-IMPORT-001 – Prevent missing import paths in backend image
 
@@ -61,10 +85,13 @@ Ensure backend containers fail fast if any runtime import points to a file path 
 **Steps:**
 
 1. Docker packaging:
-  - Copy `shared/` into backend image.
-  - Add a build-time verification for `shared/contracts/agents.js`.
+
+- Copy `shared/` into backend image.
+- Add a build-time verification for `shared/contracts/agents.js`.
+
 2. CI guard:
-  - Add a static scan step that fails if backend runtime code imports repo-root paths not in the allowlist.
+
+- Add a static scan step that fails if backend runtime code imports repo-root paths not in the allowlist.
 
 **Acceptance:**
 
@@ -226,9 +253,9 @@ Lock in field parity for core entities and downstream consumers.
 
 ## Status
 
-- BUG-BE-FIELDS-001: Complete ✅ (December 1, 2025)  
-- BUG-BE-FIELDS-002: Complete ✅ (December 1, 2025)  
-- BUG-BE-FIELDS-003: Complete ✅ (December 1, 2025)  
+- BUG-BE-FIELDS-001: Complete ✅ (December 1, 2025)
+- BUG-BE-FIELDS-002: Complete ✅ (December 1, 2025)
+- BUG-BE-FIELDS-003: Complete ✅ (December 1, 2025)
 
 ---
 
@@ -239,6 +266,7 @@ The field parity remediation wave is closed. Future changes to this section shou
 **Phase 2 Conversational Interface: COMPLETE ✅ (December 2, 2025)**
 
 All 10 tasks (2.1 → 2.10) are finished. The conversational AI sidebar is fully functional with:
+
 - Intent detection engine + context-aware suggestions
 - Conversational forms + smart validation
 - Voice input (STT) + voice output (TTS)
@@ -248,24 +276,14 @@ All 10 tasks (2.1 → 2.10) are finished. The conversational AI sidebar is fully
 **Next Phase:** Phase 3 — Autonomous Operations (proactive suggestions, autonomous actions, predictive models)
 
 Always read:
+
 1. `.github/copilot-instructions.md`
 2. `orchestra/ARCHITECTURE.md`
 3. `orchestra/CONVENTIONS.md`
 4. `orchestra/phases/PHASE_2_CONVERSATIONAL_INTERFACE.md` (completed reference)
 5. `orchestra/phases/PHASE_3_AUTONOMOUS_OPERATIONS.md` (next phase)
 
-
-
-
-
-
-
-
-
-
-
 # AiSHA CRM – Phase 2C Plan (Hands-Free Voice Chat)
-
 
 ## Goal
 
@@ -323,6 +341,7 @@ Scope: **Add continuous, hands-free voice conversation with AiSHA using OpenAI R
   - Existing REST-based STT/TTS (Phase 2C); this becomes the fallback path.
 
 Non-Goals (for this phase):
+
 - No autonomous write/apply mode.
 - No per-tenant custom voice yet (single default voice is fine).
 - No mobile app work; browser only.
@@ -558,8 +577,6 @@ Scope: **Fix Activities list filters so `Scheduled` only returns the expected sc
 
 ## Completed Goals
 
-
-
 ### PH2C-VOICE-001 – Auto-Send Voice Transcripts
 
 **Status:** Complete ✅ (validated via `useSpeechInput` + `AiSidebar.voice` vitest suites)  
@@ -568,9 +585,11 @@ Scope: **Fix Activities list filters so `Scheduled` only returns the expected sc
 **Problem**
 
 Current behavior:
+
 - Mic → STT → transcript draft → user must manually review + press Send.
 
 Target behavior:
+
 - Mic → STT → **final transcript is immediately sent** as a message.
 - User sees their voice message appear in the sidebar like any typed message.
 
@@ -687,15 +706,11 @@ Automated:
 
 ## Status
 
-- PH2C-VOICE-001: Active (Phase 2C kicked off Dec 1, 2025)  
-- PH2C-VOICE-002: Complete ✅  
+- PH2C-VOICE-001: Active (Phase 2C kicked off Dec 1, 2025)
+- PH2C-VOICE-002: Complete ✅
 - PH2C-VOICE-003: Complete ✅
 
-
-
-
-
-# Phase 2C – Speech Layer (Voice Input + Output) 
+# Phase 2C – Speech Layer (Voice Input + Output)
 
 Type: feature  
 Title: Add safe voice input/output to AiSHA assistant sidebar
@@ -724,19 +739,20 @@ You MAY:
 - Add small UX tweaks in the sidebar to support voice (icons, labels, hints).
 
 Every voice command must:
+
 1. Be transcribed to visible text.
 2. Go through `processChatCommand` (Phase 2B pipeline).
 3. Respect existing routing + safety logic.
 
 ---
 
-```
+````
 
 ### PH2C-SPEECH-001 – Voice Input (STT) Integration
 
 Area: Frontend only (AiSidebar + AI hooks)
 
-Goal:  
+Goal:
 Allow users to press and hold (or click) a microphone button to record audio, send it to STT, then inject the transcribed text into the sidebar input box.
 
 Steps:
@@ -771,7 +787,7 @@ Acceptance:
 
 Area: Frontend + small backend proxy for ElevenLabs
 
-Goal:  
+Goal:
 Let users optionally listen to AiSHA’s responses using ElevenLabs.
 
 Steps:
@@ -814,7 +830,7 @@ Acceptance:
 
 Area: Frontend (AiSidebar + hooks) + minimal backend validation
 
-Goal:  
+Goal:
 Ensure voice interaction remains safe, predictable, and doesn’t accidentally trigger risky commands.
 
 Steps:
@@ -871,9 +887,9 @@ Automated:
 
 ## Status
 
-- PH2C-SPEECH-001: Not started  
-- PH2C-SPEECH-002: Not started  
-- PH2C-SPEECH-003: Not started  
+- PH2C-SPEECH-001: Not started
+- PH2C-SPEECH-002: Not started
+- PH2C-SPEECH-003: Not started
 
 ---
 
@@ -995,10 +1011,10 @@ Deferred:
 
 ## Current Goal
 
-Type: feature (internal)  
+Type: feature (internal)
 Title: Promote Braid MCP + OpenAI into the official AiSHA “Brain” layer
 
-Description:  
+Description:
 We already have OpenAI integrated with the Braid MCP server and CRM CRUD tools (no delete). The goal of this phase is to:
 
 - Understand the goal in docs/AI_BRAIN.md
@@ -1128,11 +1144,11 @@ Every change must:
 
 ### BUG-AI-001 – Fix Braid snapshot tool tenant propagation
 
-**Status**: Complete ✅ (v2.0.1, December 1, 2025)  
-**Priority**: Medium  
+**Status**: Complete ✅ (v2.0.1, December 1, 2025)
+**Priority**: Medium
 **Area**: AI Routes / Braid Tool Integration
 
-**Goal**:  
+**Goal**:
 Fix `/api/ai/snapshot-internal` endpoint to properly resolve tenant context so Braid tools can fetch CRM data.
 
 **Resolution Summary**:
@@ -1182,8 +1198,8 @@ Fix `/api/ai/snapshot-internal` endpoint to properly resolve tenant context so B
 
 ### BUG-CRUD-001 – Auth failures for CRUD health tests (Contacts, Leads, Accounts, Lists)
 
-Status: Complete ✅  
-Priority: High  
+Status: Complete ✅
+Priority: High
 Area: Core API – Contacts / Leads / Accounts / Listing
 
 Symptoms (from automated tests):
@@ -1232,10 +1248,10 @@ Resolution (Completed):
 
 ## Current Goal
 
-Type: bugfix  
+Type: bugfix
 Title: Stabilize core API reliability and MCP/Braid integrations
 
-Description:  
+Description:
 Focus on fixing critical platform health issues detected in Settings/health tests:
 - Core tenant/employee/leads APIs failing (fetch errors, auth errors).
 - Braid MCP server and n8n integrations unreachable.
@@ -1273,7 +1289,7 @@ Every change must:
 ### BUG-UI-001 – Fix Blocked IPs page crash
 
 **Status**: Complete ✅
-**Priority**: High  
+**Priority**: High
 **Area**: Frontend / Settings / Security Monitor
 
 **Goal**:
@@ -1308,8 +1324,8 @@ Fix crash when navigating to Blocked IPs tab in Security Monitor settings page.
 
 ### BUG-PROD-002 – Diagnose and fix production backend fetch failures
 
-**Status**: Complete ✅  
-**Priority**: Critical  
+**Status**: Complete ✅
+**Priority**: Critical
 **Area**: Production Backend / Database Connectivity
 
 **Goal**:
@@ -1410,12 +1426,12 @@ Refactor `backend/server.js` to reduce complexity and improve maintainability by
 
 ### BUG-PROD-001 – Settings page authentication failure (Production only)
 
-**Status**: Resolved ✅  
-**Priority**: Critical  
-**Area**: Settings API / Authentication  
+**Status**: Resolved ✅
+**Priority**: Critical
+**Area**: Settings API / Authentication
 **Completion**: November 27, 2025
 
-**Goal**:  
+**Goal**:
 Investigate Settings page error in production returning "Authentication required" instead of module settings.
 
 **Investigation Results**:
@@ -1427,7 +1443,7 @@ Investigate Settings page error in production returning "Authentication required
 **Root Cause**:
 - Initial report of HTML parse error was either:
   - Transient during Cloudflare Tunnel setup
-  - Cached frontend build issue  
+  - Cached frontend build issue
   - Specific auth state now resolved
 - Current behavior: API routing works correctly, returning proper JSON
 - 401 "Authentication required" is expected for unauthenticated/expired sessions
@@ -1443,17 +1459,20 @@ Investigate Settings page error in production returning "Authentication required
     - hostname: app.aishacrm.com
       service: http://localhost:4000
     - service: http_status:404
-  ```
+````
+
 - Settings page already handles 401 errors gracefully via `callBackendAPI` error handling
 
 **Verification**:
+
 ```bash
 curl https://app.aishacrm.com/api/modulesettings?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46
 # Returns: {"status":"error","message":"Authentication required"}
 ```
 
 **Outcome**: Bug closed - routing works, authentication expected behavior.
-   - Check if issue is specific to `/settings` or affects other routes
+
+- Check if issue is specific to `/settings` or affects other routes
 
 3. **Resolution Phase**:
    - Fix nginx configuration if routing issue
@@ -1462,6 +1481,7 @@ curl https://app.aishacrm.com/api/modulesettings?tenant_id=a11dfb63-4b18-4eb8-87
    - Test fix in staging before production deploy
 
 **Acceptance Criteria**:
+
 - Settings page loads in production without JSON parse error
 - API calls return proper JSON responses, not HTML
 - Dev and production behavior is consistent
@@ -1479,11 +1499,13 @@ curl https://app.aishacrm.com/api/modulesettings?tenant_id=a11dfb63-4b18-4eb8-87
 Resolve the missing `synchealth` table error that is blocking the sync health monitoring endpoint.
 
 **Symptoms**:
+
 - Endpoint: `GET /api/synchealths?tenant_id=a11dfb63-4b18-4eb8-872e-747af2e37c46`
 - Error: `Could not find the table 'public.synchealth' in the schema cache`
 - Complete failure of sync health monitoring functionality
 
 **Tasks**:
+
 1. **Investigation Phase**:
    - Search for synchealth table migration files in `backend/migrations/`
    - Check if table exists in local/dev Supabase database
@@ -1497,6 +1519,7 @@ Resolve the missing `synchealth` table error that is blocking the sync health mo
    - Test endpoint after table creation
 
 **Acceptance Criteria**:
+
 - `GET /api/synchealths` returns data or empty array (not schema error)
 - Table visible in Supabase Table Editor
 - RLS policies enforce tenant isolation
@@ -1508,10 +1531,9 @@ Resolve the missing `synchealth` table error that is blocking the sync health mo
 
 When using Claude, Copilot, or orchestrator:
 
-1. Read `.github/copilot-instructions.md`.  
-2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.  
+1. Read `.github/copilot-instructions.md`.
+2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.
 3. Read this PLAN and select the highest-priority Active task:
-
    - Start with **BUG-API-001A (diagnostic)**.
 
 4. For the selected task:
@@ -1522,20 +1544,22 @@ When using Claude, Copilot, or orchestrator:
 
 ---
 
-
 ## Completed Tasks
 
 ### BRAIN-001 – Document the AI Brain
+
 Status: Complete ✅  
 Area: Architecture / Docs  
 Summary: Added `docs/AI_BRAIN.md` defining implementation (OpenAI + Braid MCP + read/create/update tools), input schema (tenant_id, user_id, task_type, context, mode) and output schema (summary, insights, proposed_actions, requires_confirmation). Pending optional cross-link in `ARCHITECTURE.md`.
 
 ### BRAIN-002 – Implement aiBrain module (wrapper around MCP)
+
 Status: Complete ✅  
 Area: Backend  
 Summary: Implemented `backend/lib/aiBrain.js` with `runTask({ tenantId, userId, taskType, context, mode })`. Enforces Phase 1 policies (no delete, no autonomous apply). Centralizes tool invocation; UUID validation and tenant resolution via canonical resolver.
 
 ### BRAIN-003 – Add internal API endpoint for Brain experiments
+
 Status: Complete ✅  
 Area: Backend API  
 Summary: Added protected `POST /api/ai/brain-test` endpoint in `backend/routes/ai.js` requiring `X-Internal-AI-Key`. Routes requests through `aiBrain.runTask` and returns structured Brain output for controlled internal testing.
@@ -1552,12 +1576,14 @@ Comprehensive fixes for security monitoring, container health checks, IDR functi
 Sub-Tasks Completed:
 
 **A) MCP/N8N Container Health Check False Negatives**
+
 - Fixed system.js using wrong service name (`braid-mcp-node-server` vs `mcp`)
 - Updated mcpNodeCandidates priority to match Docker Compose service name
 - Result: MCP shows Code 200 instead of false Code 0
 - File: `backend/routes/system.js` (lines 137-145)
 
 **B) IDR Dashboard Blocked IPs Display**
+
 - Fixed missing `await` in security.js causing Promise to be returned instead of data
 - Added comprehensive blocked IPs UI to InternalPerformanceDashboard.jsx
 - Implemented unblock functionality with admin controls
@@ -1565,12 +1591,14 @@ Sub-Tasks Completed:
 - Files: `backend/routes/security.js` (line 272), InternalPerformanceDashboard.jsx, .env
 
 **C) False Positive Bulk Extraction Alerts**
+
 - Fixed IDR triggering high-severity alerts for high limits with empty results
 - Implemented two-tier blocking: 1000-4999 (warn), 5000+ (block)
 - Downgraded severity: security_alert→warning, high→medium
 - File: `backend/middleware/intrusionDetection.js` (lines 594-630)
 
 **D) External Threat Intelligence Integration**
+
 - Added GreyNoise Community API (free, no key): scanner/bot identification
 - Added AbuseIPDB API (1000/day free): abuse confidence scores
 - Implemented threat score boosting (+50 malicious, +30 high abuse)
@@ -1578,11 +1606,13 @@ Sub-Tasks Completed:
 - File: `backend/routes/security.js` (lines 1-110, 405-525)
 
 **E) Duplicate "Security" Tabs Renamed**
+
 - Renamed "Security" → "Auth & Access" (Lock, purple)
 - Renamed "Security" → "Intrusion Detection" (Shield, red)
 - File: `src/pages/Settings.jsx` (lines 165, 178)
 
 Acceptance (All Met):
+
 - ✅ Container health checks accurate
 - ✅ Blocked IPs visible and manageable in dashboard
 - ✅ False positive alerts eliminated
@@ -1592,7 +1622,6 @@ Acceptance (All Met):
 Builds: Backend 4x (18-30s), Frontend 2x (45-110s)
 
 ---
-
 
 ### 1) BUG-API-001A – Diagnose tenant/employee fetch failures
 
@@ -1604,6 +1633,7 @@ Goal:
 Find out why `GET /api/tenants/<tenant-id>` and `GET /api/employees?tenant_id=<tenant-id>` are failing with `TypeError: fetch failed` for user `abyfield@4vdataconsulting.com`.
 
 Steps:
+
 1. Reproduce the failure path:
    - Same tenant ID: `a11dfb63-4b18-4eb8-872e-747af2e37c46`.
    - Same or similar user context.
@@ -1618,10 +1648,12 @@ Steps:
    - Misconfigured base URL?
 
 Scope:
+
 - Diagnostics only (logging, tracing).
 - No behavior changes yet.
 
 Acceptance:
+
 - Clear root cause explanation for the fetch failures.
 - List of exact files/services to be changed in the fix phase BUG-API-001B.
 
@@ -1638,6 +1670,7 @@ Goal:
 Implement minimal changes so that tenant and employee endpoints no longer produce `TypeError: fetch failed`, and instead behave like normal authenticated/unauthenticated HTTP endpoints.
 
 Steps:
+
 1. Apply connectivity/config fixes identified in BUG-API-001A:
    - Correct base URL, host, or protocol if required.
    - Fix any reverse proxy or container networking issues.
@@ -1647,10 +1680,12 @@ Steps:
 3. Remove any temporary debug-only logging not needed for normal operation.
 
 Scope:
+
 - Only relevant backend/API config and caller logic for tenants/employees.
 - No broad auth system redesign.
 
 Acceptance:
+
 - No `TypeError: fetch failed` for the monitored endpoints under normal operation.
 - Health checks for tenant/employee endpoints pass consistently.
 
@@ -1666,11 +1701,13 @@ Goal:
 Ensure that `GET /api/leads?tenant_id=<tenant-id>` behaves consistently with other authenticated endpoints and does not return `Authentication required` for valid sessions.
 
 Resolution:
+
 - Authentication issue resolved as part of BUG-API-001B fixes
 - New issue discovered: generateUniqueId console warnings in production
 - See BUG-API-003 for follow-up
 
 Steps:
+
 1. Compare auth middleware for:
    - `/api/leads`
    - `/api/tenants`
@@ -1683,10 +1720,12 @@ Steps:
    - Do NOT weaken security; only correct false negative auth decisions.
 
 Scope:
+
 - Leads endpoint handler(s).
 - Any specific auth middleware/guards applied to leads.
 
 Acceptance:
+
 - Leads endpoint returns data for authenticated, properly-permitted users.
 - Unauthorized access still returns `Authentication required` or appropriate code.
 - Monitoring no longer shows auth warnings for valid sessions.
@@ -1704,6 +1743,7 @@ Goal:
 Stop console warnings in production: "Function 'generateUniqueId' not available. Use backend routes."
 
 Resolution:
+
 - Created POST /api/utils/generate-unique-id endpoint
 - Generates format: L-YYYYMMDD-RANDOM (e.g., L-20251126-6BD0C6)
 - Updated src/api/functions.js to call backend in production
@@ -1711,11 +1751,13 @@ Resolution:
 - No console warnings when creating entities
 
 Files Changed:
+
 - backend/routes/utils.js: Added generate-unique-id endpoint
 - src/api/functions.js: Added production mode handler for generateUniqueId
 - orchestra/PLAN.md: Documented issue and resolution
 
 Testing:
+
 - Backend endpoint verified with curl
 - Frontend build successful
 - Local Docker containers tested
@@ -1733,6 +1775,7 @@ Goal:
 Make `mcp-node`, `n8n-proxy`, and `n8n` reachable again and restore MCP test suite to a passing or mostly-passing state.
 
 Resolution:
+
 - Production compose uses internal service URL `http://mcp:8000` for backend (`BRAID_MCP_URL`, `MCP_NODE_HEALTH_URL`).
 - Backend `/api/mcp/health-proxy` fixed with timeout, payload validation, and multi-candidate attempts. Enhanced diagnostics added.
 - GitHub Actions deployment injects `GITHUB_TOKEN` to prod `.env`; MCP container recreated when token is present.
@@ -1740,6 +1783,7 @@ Resolution:
 - Direct prod curl to `/api/mcp/health-proxy` returns `reachable: true`, `url: http://mcp:8000/health`, low latency.
 
 Acceptance:
+
 - MCP and n8n containers healthy under `docker compose ps`.
 - MCP health suite and monitor green; health-proxy reachable with diagnostics.
 
@@ -1755,6 +1799,7 @@ Goal:
 Stop flapping/repeated attempts for `POST /api/github-issues/create-health-issue` and make health issue creation idempotent and reliable.
 
 Resolution:
+
 - **Idempotency:** Generate hash key from incident context (env, type, component, severity, error signature). Redis-backed with 24h TTL prevents duplicate issues for same incident.
 - **Retry Logic:** Exponential backoff with 30% jitter for transient GitHub API failures (rate limits, network errors). Skips retries on client errors (except 429).
 - **Suppression Logging:** Logs duplicate detections with existing issue reference. Returns `suppressed: true` response with existing issue URL.
@@ -1762,9 +1807,11 @@ Resolution:
 - **Validation:** Tested locally; ready for production deployment via tag.
 
 Files Changed:
+
 - `backend/routes/github-issues.js`: Added `getRedisClient`, `generateIdempotencyKey`, `checkIdempotency`, `recordIssueCreation`, `retryWithBackoff` functions; integrated into create-health-issue endpoint.
 
 Acceptance:
+
 - ✅ No repeated bursts of `create-health-issue` calls for the same event (dedupe via Redis).
 - ✅ Transient failures retry automatically with backoff/jitter.
 - ✅ Suppressed duplicates logged clearly with existing issue reference.
@@ -1781,14 +1828,17 @@ Goal:
 Improve tenant resolution cache effectiveness so that repeated tenant lookups benefit from caching without breaking correctness.
 
 Resolution:
+
 - **Root Cause:** `backend/routes/ai.js` had duplicate tenant resolution logic with local `tenantLookupCache` (80 lines). AI routes (handling most tenant traffic) bypassed canonical resolver completely, resulting in 0% cache hit ratio.
 - **Fix:** Removed duplicate implementation; replaced with calls to `resolveCanonicalTenant()` from `tenantCanonicalResolver.js`.
 - **Impact:** All tenant resolution now flows through single canonical cache with TTL (300s prod). Reduced code duplication (~65 lines removed). Cache hit ratio expected to improve from 0% to 50%+ under normal load.
 
 Files Changed:
+
 - `backend/routes/ai.js`: Import canonical resolver; replace `resolveTenantRecord()` with wrapper calling `resolveCanonicalTenant()`; remove `tenantLookupCache` Map and `UUID_PATTERN` constant.
 
 Acceptance:
+
 - ✅ `tenant_resolve_cache_hit_ratio` moves above 0 under normal usage.
 - ✅ No incorrect tenant resolution due to cache.
 - ✅ Single source of truth for tenant resolution across all routes.
@@ -1807,24 +1857,29 @@ Eliminate incorrect dashboard counts showing phantom data when tables are empty,
 Resolution:
 
 **v1.0.93 - Cache Key Isolation:**
+
 - **Root Cause:** Dashboard bundle cache used `'GLOBAL'` fallback when `tenant_id` was missing, causing cross-tenant cache leakage. One tenant's cached data returned to another tenant.
 - **Fix:** Removed `'GLOBAL'` fallback; required explicit `tenant_id` parameter for cache keys. Each tenant now has isolated cache entry.
 - **Side Effect:** Broke superadmin "All Clients Global" view (sent `null` tenant_id, rejected by backend).
 
 **v1.0.94 - Superadmin Regression Fix:**
+
 - **Root Cause:** v1.0.93 was too restrictive - rejected `null` tenant_id, breaking legitimate superadmin global aggregation view.
 - **Fix:** Allow `null` tenant_id but use distinct `'SUPERADMIN_GLOBAL'` cache key. Maintains tenant isolation while enabling global view.
 - **Impact:** Both single-tenant and global views work correctly with proper cache separation.
 
 **v1.0.95 - Phantom Count Fix:**
+
 - **Root Cause:** PostgreSQL `count: 'planned'` uses statistical estimates that don't update immediately after DELETE operations, showing phantom counts (e.g., "67 activities" when table empty).
 - **Fix:** Changed all dashboard count queries to use `count: 'exact'` instead of `'planned'` estimates. Added `bust_cache=true` query parameter for testing.
 - **Impact:** Dashboard now shows accurate counts reflecting actual database rows. No more phantom data from stale statistics.
 
 Files Changed:
+
 - `backend/routes/reports.js`: Cache key logic (effectiveTenantKey), count mode changed from 'planned' to 'exact', added cache bust parameter, simplified new leads and activities queries.
 
 Acceptance:
+
 - ✅ Dashboard shows 0 counts when tables are empty (no phantom data).
 - ✅ Each tenant has isolated cache (no cross-tenant data leakage).
 - ✅ Superadmin global view works without errors.
@@ -1845,6 +1900,7 @@ Add Workflows module to Module Settings and ensure it's properly integrated with
 Resolution:
 
 **Implementation:**
+
 - Added "Workflows" module definition to `ModuleManager.jsx` defaultModules array with:
   - Module ID: `workflows`
   - Icon: Workflow (lucide-react)
@@ -1854,16 +1910,19 @@ Resolution:
 - Verified Workflows navigation item already exists in Layout.jsx navItems
 
 **How It Works:**
+
 1. Superadmin enables/disables Workflows module in Settings → Module Settings
 2. Module setting controls visibility of Workflows menu item via hasPageAccess() → moduleMapping check
 3. User-level Navigation Permissions (User Management) can further restrict access per user
 4. Both controls work together: Module must be enabled AND user must have navigation permission
 
 Files Changed:
+
 - `src/components/shared/ModuleManager.jsx`: Added Workflow icon import and workflows module definition
 - `src/pages/Layout.jsx`: Added `Workflows: 'workflows'` to moduleMapping object
 
 Acceptance:
+
 - ✅ Workflows module appears in Settings → Module Settings
 - ✅ Module can be enabled/disabled per tenant
 - ✅ Module setting controls navigation menu visibility via hasPageAccess
@@ -1875,6 +1934,7 @@ Acceptance:
 ## Testing & Validation Requirements
 
 Manual:
+
 - Re-run Settings / health tests for:
   - Tenants, employees, and leads endpoints.
   - MCP/Braid and n8n integrations.
@@ -1882,6 +1942,7 @@ Manual:
 - Confirm no `fetch failed` or bogus `Authentication required` where they shouldn’t appear.
 
 Automated / Monitoring:
+
 - API error rate drops significantly from ~10%.
 - MCP test suite moves from 0/12 to majority passing (target: all green).
 - GitHub health reporter calls are well-behaved and deduplicated.
@@ -1914,6 +1975,7 @@ Goal:
 Determine why the Dashboard fails to load for an authenticated user and why calls to `/api/modulesettings?tenant_id=<tenant>` return `{"status":"error","message":"Authentication required"}` despite valid Supabase user and tenant context.
 
 Steps:
+
 1. Reproduce:
    - Log in with an affected user.
    - Allow tenant auto-selection to occur.
@@ -1930,11 +1992,13 @@ Steps:
    - Is tenant scoping causing an auth failure?
 
 Scope:
+
 - Diagnostic only.
 - You may add temporary logging.
 - Do not implement fixes yet.
 
 Acceptance:
+
 - Clear, documented root cause for the “Authentication required” response for dashboard module settings.
 - List of exact files to be modified in the fix phase (BUG-DASH-001B).
 
@@ -1947,12 +2011,14 @@ Status: Completed (P1)
 Area: Dashboard / Backend API / Auth
 
 Dependencies:
+
 - BUG-DASH-001A (root cause identified).
 
 Goal:  
 Implement the smallest viable change that allows a properly authenticated user, with a valid tenant, to successfully load Dashboard module settings and render the Dashboard.
 
 Steps:
+
 1. Fix the auth mismatch:
    - Ensure the frontend sends the correct auth token/cookie on dashboard/module settings requests.
    - Ensure the backend validates the same token/cookie used for other authenticated endpoints.
@@ -1964,16 +2030,19 @@ Steps:
 3. Remove any temporary logging added during diagnosis.
 
 Scope:
+
 - Only the backend auth handling for dashboard/module settings.
 - Only the frontend request and guard logic that interacts with those endpoints.
 - No broader auth system redesign.
 
 Acceptance:
+
 - Authenticated user with valid tenant loads Dashboard successfully.
 - Module settings calls no longer return “Authentication required” for valid sessions.
 - No regression in other authenticated routes.
 
 Verification:
+
 - Frontend `callBackendAPI` attaches Supabase bearer + credentials; backend auth middleware supports publishable key fallback.
 - Local, dev Docker, and staging verified; production tag `v1.0.66` published.
 
@@ -1989,6 +2058,7 @@ Goal:
 Reduce the time it takes for dashboard cards and stats to appear after page load, without changing the meaning of any metrics.
 
 Steps:
+
 1. Measure current behavior:
    - Identify which API endpoints are called for dashboard stats.
    - Determine whether calls are sequential or redundant.
@@ -2001,16 +2071,19 @@ Steps:
    - Ensure components subscribe to shared data where appropriate instead of re-fetching.
 
 Scope:
+
 - Backend: only dashboard-related endpoints and queries.
 - Frontend: only dashboard data-fetching components/hooks.
 - No changes to metric definitions or visibility rules.
 
 Acceptance:
+
 - Noticeable reduction in time-to-display for dashboard cards/statistics.
 - No incorrect or cross-tenant data shown.
 - No increased error rates or auth issues from optimization changes.
 
 Verification:
+
 - Backend: `/api/reports/dashboard-bundle` aggregated response with cache (≈60s TTL), exact small-count fallback.
 - Frontend: bundle-first render; background hydration; animations disabled; widgets memoized.
 - DB: indexes applied via `077_dashboard_indexes.sql`; usage confirmed with EXPLAIN ANALYZE.
@@ -2020,6 +2093,7 @@ Verification:
 ## Testing & Validation Requirements
 
 Manual:
+
 - For BUG-DASH-001:
   - Log in as an affected user, select tenant, open Dashboard.
   - Confirm the Dashboard actually loads and does not get stuck due to “Authentication required”.
@@ -2028,12 +2102,14 @@ Manual:
   - Confirm metrics match expected values.
 
 Automated:
+
 - Add/extend tests for:
   - Auth checks on dashboard/module settings endpoints.
   - Basic dashboard data retrieval flows.
 - Performance tests where feasible (e.g. request counts, execution time metrics).
 
 Environment:
+
 - Validate both:
   - Local dev
   - The deployed environment where the problem was observed (Docker / cloud).
@@ -2052,10 +2128,9 @@ Environment:
 
 When using Claude, Copilot, or any AI assistant:
 
-1. Read `.github/copilot-instructions.md` and comply fully.  
-2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.  
+1. Read `.github/copilot-instructions.md` and comply fully.
+2. Read `orchestra/ARCHITECTURE.md` and `orchestra/CONVENTIONS.md`.
 3. Read this PLAN and identify the highest priority task:
-
    - Start with **BUG-DASH-001A (diagnostic)**.
    - Do not work on BUG-DASH-001B until diagnosis is clear.
    - Do not work on BUG-DASH-002 until BUG-DASH-001A/B are completed or explicitly paused.
@@ -2081,11 +2156,13 @@ Goal:
 Enable the in-app notifications feature (Bell icon panel) in production by creating the required database table and RLS policies.
 
 Context:
+
 - Notifications table exists in migrations but not yet created in production Supabase database
 - Feature currently gracefully fails with suppressed console warnings (v1.0.79)
 - Non-critical feature - app works fine without it
 
 Steps:
+
 1. Run migration `001_init.sql` (lines 76-85) to create notifications table in production Supabase
 2. Add `created_date` column and sync trigger (from migration 002)
 3. Enable RLS policies via migration `061_consolidate_rls_notifications.sql`
@@ -2093,6 +2170,7 @@ Steps:
 5. Test Bell icon functionality in production app
 
 Scope:
+
 - Database only (no code changes required)
 - Migrations already exist in `backend/migrations/`
 - Feature code already deployed and working in v1.0.79+
@@ -2110,20 +2188,23 @@ Goal:
 Add AI-driven workflow steps with MCP-first executors and provider stubs for OpenAI, Anthropic, and Gemini. Nodes: `ai_classify_opportunity_stage`, `ai_generate_email`, `ai_enrich_account`, `ai_route_activity`.
 
 Context:
+
 - Frontend Node Library entries added; configuration UI placeholders added (provider/model/prompt/context fields).
 - Backend workflow executor requires MCP-backed handlers plus provider stubs and output variable population.
 - Must remain tenant-safe and auditable; outputs stored in `context.variables` and execution logs.
 
 Acceptance Criteria:
+
 - Backend executors implement MCP-first logic with graceful fallbacks; provider stubs return deterministic outputs for tests.
 - Outputs available via variables: `ai_stage`, `ai_email`, `ai_enrichment`, `ai_route`.
 - Timeouts and error handling added; no SSRF or external network calls outside MCP/provider SDKs.
 - Minimal, localized changes; no impact on existing CRUD nodes.
 
 Steps:
-1. Add executor cases for AI nodes in `backend/routes/workflows.js` (MCP-first, stub providers).  
-2. Expose configuration fields in `WorkflowBuilder.jsx` for provider/model/prompt/context where relevant.  
-3. Add unit tests for deterministic stubs and variable propagation.  
+
+1. Add executor cases for AI nodes in `backend/routes/workflows.js` (MCP-first, stub providers).
+2. Expose configuration fields in `WorkflowBuilder.jsx` for provider/model/prompt/context where relevant.
+3. Add unit tests for deterministic stubs and variable propagation.
 4. Document usage in `docs/workflows/ai-nodes.md` (short guide).
 
 ---
@@ -2140,16 +2221,19 @@ Steps:
 Add HTTP caching middleware to detail/GET-by-ID endpoints (leads, contacts, accounts, opportunities, activities) so repeated views of the same record are served from redis-cache instead of hitting Supabase repeatedly.
 
 **Problem:**
+
 - Only list endpoints (`GET /api/leads`) are cached (3-min TTL)
 - Detail endpoints (`GET /api/leads/:id`) hit Supabase every time, even if user views same lead twice
 - Detail panels slide in frequently, causing redundant queries
 
 **Solution:**
+
 - Add `cacheDetail('leads', 300)` middleware to detail routes (5-min TTL, longer than lists)
 - Apply to: Leads, Contacts, Accounts, Opportunities, Activities
 - Invalidate on POST/PUT/DELETE (existing `invalidateCache()` already handles this)
 
 **Files to modify:**
+
 - `backend/routes/leads.js` – Add cache to `GET /:id`
 - `backend/routes/contacts.v2.js` – Add cache to `GET /:id`
 - `backend/routes/accounts.v2.js` – Add cache to `GET /:id`
@@ -2158,6 +2242,7 @@ Add HTTP caching middleware to detail/GET-by-ID endpoints (leads, contacts, acco
 - `backend/lib/cacheMiddleware.js` – Add `cacheDetail()` helper (similar to `cacheList()`)
 
 **Acceptance:**
+
 - Repeated `GET /leads/:id` calls within 5 minutes return cached results
 - Response time drops 80-90% for detail views
 - Tests confirm cache invalidation on mutations
@@ -2176,20 +2261,24 @@ Add HTTP caching middleware to detail/GET-by-ID endpoints (leads, contacts, acco
 Add proper `Cache-Control` headers to API responses so browsers and edge CDNs can cache GET responses, reducing backend load further.
 
 **Problem:**
+
 - Redis caches at server level, but browser/CDN don't cache (missing headers)
 - Each user request regenerates response even if identical to previous user
 
 **Solution:**
+
 - Add `Cache-Control: public, max-age=180` for list endpoints
 - Add `Cache-Control: public, max-age=300` for detail endpoints
 - Add `Cache-Control: private, max-age=600` for user-specific data (settings, profile)
 - Add `Vary: Accept-Encoding` to allow gzip compression caching
 
 **Files to modify:**
+
 - `backend/lib/cacheMiddleware.js` – Set headers in `cacheList()` and new `cacheDetail()` functions
 - Or add as separate middleware: `backend/lib/httpCacheHeaders.js`
 
 **Acceptance:**
+
 - Response headers include `Cache-Control: public, max-age=X`
 - Browser DevTools Network tab shows cached responses (status 304)
 - Performance audit shows improved caching score
@@ -2208,6 +2297,7 @@ Add proper `Cache-Control` headers to API responses so browsers and edge CDNs ca
 Activities count cache (currently 30s TTL) is too aggressive for a frequently-mutating dataset. Make it smarter by invalidating only the specific count cache key when an activity changes, instead of invalidating entire module.
 
 **Problem:**
+
 - Activities are created/deleted frequently (e.g., "Call completed", "Email sent")
 - 30s TTL means stale counts for activities
 - If TTL is reduced to 15s, redis is hit more often (defeats purpose)
@@ -2215,14 +2305,17 @@ Activities count cache (currently 30s TTL) is too aggressive for a frequently-mu
 **Current approach:** Activities mutations call `cacheManager.invalidateTenant(tenantId, 'activities')` which clears ALL activity cache
 
 **Better approach:**
+
 - When activity is created/updated/deleted, invalidate ONLY the counts key: `tenant:${tenantId}:activities:counts`
 - Keep list pagination cache for 180s (not touched by mutations)
 
 **Files to modify:**
+
 - `backend/routes/activities.js` – Refine invalidation to target count key vs full module
 - `backend/lib/cacheMiddleware.js` – Add `invalidateCacheByKey()` helper for granular invalidation
 
 **Acceptance:**
+
 - Activity mutations only invalidate `activities:counts`, not full list cache
 - Stats refresh in <5s after mutation (vs 30s TTL wait)
 - List pagination unaffected and remains cached for 3 mins
@@ -2241,11 +2334,13 @@ Activities count cache (currently 30s TTL) is too aggressive for a frequently-mu
 Create a debug endpoint (`GET /api/admin/cache-stats`) to monitor redis-cache performance: hit rate, memory usage, key count, and top-hit keys.
 
 **Problem:**
+
 - No visibility into cache effectiveness
 - Can't tell if optimizations working or if keys being invalidated too often
 - Admin/devops can't troubleshoot performance issues
 
 **Solution:**
+
 - New endpoint: `GET /api/admin/cache-stats` (requires admin auth)
 - Returns:
   ```json
@@ -2262,10 +2357,12 @@ Create a debug endpoint (`GET /api/admin/cache-stats`) to monitor redis-cache pe
   ```
 
 **Files to modify:**
+
 - `backend/routes/admin.js` – Add new stats endpoint
 - Or `backend/lib/cacheManager.js` – Expose `getStats()` method (already exists, just wire it up)
 
 **Acceptance:**
+
 - Endpoint returns cache health metrics
 - Can identify which tenants/modules consume most cache
 - Helps validate performance improvements
@@ -2281,19 +2378,23 @@ Create a debug endpoint (`GET /api/admin/cache-stats`) to monitor redis-cache pe
 **Area:** Backend – Code Cleanup
 
 **Problem:**
+
 - `backend/lib/cacheManager.js` has fancy `getOrFetch()` and `invalidateTenant()` methods
 - None of it is actually used; only `cacheMiddleware.js` is active
 - Dead code creates confusion
 
 **Solution:**
+
 - Either consolidate `cacheManager.js` into `cacheMiddleware.js` (move reusable functions)
 - Or remove it entirely and keep only the middleware pattern (simpler)
 
 **Files to modify/delete:**
+
 - `backend/lib/cacheManager.js` – Review, consolidate or remove
 - Update any imports if consolidating
 
 **Acceptance:**
+
 - No unused cache classes in codebase
 - Clear single pattern for caching (middleware-based)
 
@@ -2309,15 +2410,18 @@ Create a debug endpoint (`GET /api/admin/cache-stats`) to monitor redis-cache pe
 
 **Goal:**  
 Create `docs/CACHE_STRATEGY.md` documenting:
+
 - Which endpoints are cached and for how long
 - Invalidation strategy per entity
 - How to test cache effectiveness
 - When to adjust TTLs
 
 **Files to create:**
+
 - `docs/CACHE_STRATEGY.md`
 
 **Acceptance:**
+
 - New dev can quickly understand cache architecture
 - TTL decisions are documented and defensible
 - Includes examples and troubleshooting
@@ -2351,23 +2455,28 @@ Create `docs/CACHE_STRATEGY.md` documenting:
 User requested detail panels (Leads, Contacts, Activities, Accounts) slide in at 50% screen width instead of full width. Attempted fix via Tailwind classes and inline styles did not visually apply. Root cause appears to be Radix UI SheetContent variant constraints (`sm:max-w-sm`) or internal style override behavior.
 
 **Scope:**
+
 - Component: `src/components/shared/UniversalDetailPanel.jsx` (lines 573-577)
 - Affects: All entity detail panels (shared wrapper)
 - Issue: CSS specificity / Radix UI override not responding to `className="!w-1/2 !max-w-none"` or `style={{ width: '50%' }}`
 
 **Attempted Approaches:**
+
 1. Basic Tailwind width override (`sm:w-1/2`)
 2. Tailwind with !important flags (`!w-1/2 !max-w-none`)
 3. Inline style attribute (`style={{ width: '50%' }}`)
+
 - All three builds deployed successfully; visual width remained unchanged
 
 **Next Steps (if revisited):**
+
 - Inspect browser DevTools computed styles to confirm what CSS is actually applied
 - Check if Radix UI SheetPrimitive internally overrides inline styles
 - Consider wrapping SheetContent in a container with enforced width, or modifying `sheet.jsx` sheetVariants directly (last resort)
 - Explore Radix UI documentation for width configuration props beyond className
 
 **Notes:**
+
 - This is cosmetic/UX polish, not a functional bug
 - Defer until higher-priority issues resolved
 - Document in case similar CSS override issues arise elsewhere
@@ -2386,12 +2495,14 @@ User requested detail panels (Leads, Contacts, Activities, Accounts) slide in at
 The legacy AI Agent module (`src/components/agents/AgentChat.jsx`) and related navigation items are superseded by the unified AiSHA Executive Assistant (`AiSidebar.jsx`). This module should be deprecated and eventually removed.
 
 **Scope:**
+
 - `src/components/agents/AgentChat.jsx` – 826 lines, separate chat UI
 - `src/pages/Layout.jsx` lines 125-130 – "AI Agent" in secondaryNavItems
 - `src/components/agents/` folder – Legacy agent components
 - Navigation permissions for "Agent" page
 
 **Tasks:**
+
 1. Add deprecation notice to AgentChat.jsx
 2. Hide "AI Agent" nav item from non-superadmin users
 3. Migrate any unique functionality to AiSidebar
@@ -2400,12 +2511,13 @@ The legacy AI Agent module (`src/components/agents/AgentChat.jsx`) and related n
 6. Archive components to `archive/unused-components/`
 
 **Acceptance Criteria:**
+
 - No user-facing "AI Agent" menu item in production
 - All assistant functionality available via AiSHA sidebar
 - Legacy code archived (not deleted) for reference
 - No console errors or broken routes
 
 **Notes:**
+
 - Phase 4 only updated avatar paths in legacy module for visual consistency
 - Full removal deferred to avoid scope creep during cutover
-
