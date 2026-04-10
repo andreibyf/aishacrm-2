@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **LiteLLM container not deploying to production VPS (`.github/workflows/docker-release.yml`):** Added `litellm` to the Docker Compose `up` command and added `docker pull` + image tagging for the LiteLLM image in the production deployment script. Previously, the LiteLLM image was built and pushed to GHCR on every release tag but was never actually deployed to the VPS because the deployment script only started `frontend`, `backend`, and `aisha-comms` services.
+
 ### Added
 
 - **LiteLLM container in production (`docker-compose.prod.yml`, `.github/workflows/docker-release.yml`):** Added `litellm` service using `ghcr.io/andreibyf/aishacrm-2-litellm:latest` with Doppler runtime injection (`prd_prd`); added `LITELLM_ENABLED`, `LITELLM_BASE_URL`, and `LITELLM_MASTER_KEY` to the backend service; added `litellm` to the CI build matrix so the image is built and pushed on every tag release; added `litellm_config.yaml` to the SCP deploy step so the config file is deployed to the VPS.
