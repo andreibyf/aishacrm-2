@@ -1,13 +1,38 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
 import { TestFactory } from '../helpers/test-entity-factory.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-access';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 // In CI, run only if explicitly enabled
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
+const HAS_SUPABASE_ADMIN = Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY);
 
 const createdIds = [];
+const createdUserIds = [];
+const supabase = HAS_SUPABASE_ADMIN
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } })
+  : null;
+
+function createAuthCookie({
+  sub = randomUUID(),
+  email,
+  role = 'employee',
+  tenant_id = TENANT_ID,
+  expiresIn = '1h',
+} = {}) {
+  const token = jwt.sign({ sub, email, role, tenant_id }, JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn,
+  });
+  return `aisha_access=${token}`;
+}
 
 async function createEmployee(payload) {
   const res = await fetch(`${BASE_URL}/api/employees`, {
@@ -51,6 +76,9 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
       } catch {
         /* ignore */
       }
+    }
+    if (supabase && createdUserIds.length > 0) {
+      await supabase.from('users').delete().in('id', createdUserIds);
     }
   });
 
@@ -395,6 +423,144 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
 
       // Expects 404 for non-existent employee, or 403 if auth/tenant validation fails first
       assert.ok([403, 404].includes(res.status), `expected 403 or 404, got ${res.status}`);
+    });
+  });
+
+  describe('POST /api/employees/:id/sync-permissions', () => {
+    test('returns 403 for authenticated users without sync permission', async () => {
+      const cookie = createAuthCookie({
+        email: `sync-basic-${Date.now()}@example.com`,
+        role: 'employee',
+        tenant_id: TENANT_ID,
+      });
+
+      const res = await fetch(`${BASE_URL}/api/employees/${randomUUID()}/sync-permissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        body: JSON.stringify({ tenant_id: TENANT_ID }),
+      });
+
+      assert.equal(res.status, 403, 'expected 403 for authenticated non-admin user');
+      const json = await res.json();
+      assert.equal(json.status, 'error');
+    });
+
+    test('returns 403 when an admin forges a different tenant_id', async () => {
+      const cookie = createAuthCookie({
+        email: `sync-admin-${Date.now()}@example.com`,
+        role: 'admin',
+        tenant_id: TENANT_ID,
+      });
+
+      const forgedTenantId = randomUUID();
+      const res = await fetch(`${BASE_URL}/api/employees/${randomUUID()}/sync-permissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        body: JSON.stringify({ tenant_id: forgedTenantId }),
+      });
+
+      assert.equal(res.status, 403, 'expected 403 for forged tenant scope');
+      const json = await res.json();
+      assert.equal(json.status, 'error');
+      assert.match(json.error || '', /tenant scope mismatch/i);
+    });
+
+    test('returns 200 and syncs only link metadata for an authorized admin', async () => {
+      if (!supabase) {
+        console.warn(
+          '[SKIP] Supabase admin credentials not set — skipping sync-permissions success test',
+        );
+        return;
+      }
+
+      const timestamp = Date.now();
+      const linkedUserEmail = `sync-linked-${timestamp}@example.com`;
+
+      const { data: linkedUser, error: userErr } = await supabase
+        .from('users')
+        .insert({
+          email: linkedUserEmail,
+          first_name: 'Linked',
+          last_name: 'User',
+          tenant_id: TENANT_ID,
+          role: 'employee',
+          status: 'active',
+          metadata: {},
+        })
+        .select('id,email,metadata')
+        .single();
+
+      assert.ok(!userErr, `should create linked user: ${userErr?.message}`);
+      createdUserIds.push(linkedUser.id);
+
+      const employeePayload = TestFactory.employee({
+        first_name: 'Sync',
+        last_name: 'Employee',
+        email: `sync-employee-${timestamp}@example.com`,
+        role: 'Sales Rep',
+        status: 'active',
+        tenant_id: TENANT_ID,
+        metadata: { user_email: linkedUserEmail },
+      });
+
+      const { data: employee, error: employeeErr } = await supabase
+        .from('employees')
+        .insert(employeePayload)
+        .select('id,metadata,tenant_id')
+        .single();
+
+      assert.ok(!employeeErr, `should create linked employee: ${employeeErr?.message}`);
+      createdIds.push(employee.id);
+
+      const cookie = createAuthCookie({
+        email: `sync-authorized-${timestamp}@example.com`,
+        role: 'admin',
+        tenant_id: TENANT_ID,
+      });
+
+      const res = await fetch(`${BASE_URL}/api/employees/${employee.id}/sync-permissions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        body: JSON.stringify({ tenant_id: TENANT_ID }),
+      });
+
+      assert.equal(res.status, 200, 'expected 200 for authorized sync');
+      const json = await res.json();
+      assert.equal(json.status, 'success');
+      assert.equal(json.message, 'User link metadata synced successfully');
+      assert.equal(json.data?.user_id, linkedUser.id);
+      assert.ok(json.data?.metadata_synced_at, 'response should include metadata sync timestamp');
+
+      const { data: updatedUser, error: updatedUserErr } = await supabase
+        .from('users')
+        .select('role,metadata')
+        .eq('id', linkedUser.id)
+        .single();
+      assert.ok(!updatedUserErr, `should fetch updated user: ${updatedUserErr?.message}`);
+      assert.equal(updatedUser.role, 'employee', 'sync should not overwrite user authority');
+      assert.equal(updatedUser.metadata?.employee_id, employee.id);
+      assert.equal(updatedUser.metadata?.employee_role, employeePayload.role);
+
+      const { data: updatedEmployee, error: updatedEmployeeErr } = await supabase
+        .from('employees')
+        .select('metadata')
+        .eq('id', employee.id)
+        .single();
+      assert.ok(
+        !updatedEmployeeErr,
+        `should fetch updated employee: ${updatedEmployeeErr?.message}`,
+      );
+      assert.ok(updatedEmployee.metadata?.permissions_synced_at);
+      assert.equal(updatedEmployee.metadata?.user_role, 'employee');
     });
   });
 });

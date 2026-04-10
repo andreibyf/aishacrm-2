@@ -12,10 +12,10 @@ class CacheManager {
     this.client = null;
     this.connected = false;
     this.defaultTTL = {
-      list: 30, // 30 seconds for list data (reduced from 180s - app perf improved)
-      detail: 60, // 1 minute for detail views (reduced from 300s)
-      count: 120, // 2 minutes for counts (reduced from 600s)
-      settings: 1800, // 30 minutes for settings (unchanged - rarely mutated)
+      list: 180, // 3 minutes for list data (restored from 30s - backend mutations invalidate affected cache entries/tenant caches)
+      detail: 300, // 5 minutes for detail views (restored from 60s; backend invalidation still handles freshness after mutations)
+      count: 600, // 10 minutes for counts (restored from 120s; backend invalidation clears stale cache after writes)
+      settings: 1800, // 30 minutes for settings (unchanged - rarely mutated, and backend invalidation covers updates)
     };
   }
 

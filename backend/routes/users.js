@@ -20,6 +20,7 @@ import {
 import { createAuditLog, getUserEmailFromRequest, getClientIP } from '../lib/auditLogger.js';
 import logger from '../lib/logger.js';
 import { redactEmail, summarizeRowsForLog, toSafeErrorMeta } from '../lib/logger.js';
+import { clearVisibilityCache } from '../lib/teamVisibility.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
@@ -2171,6 +2172,10 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
 
       // Expand metadata to top-level properties
       const updatedUser = expandUserMetadata(data);
+
+      if (tableName === 'users') {
+        clearVisibilityCache(updatedUser.id);
+      }
 
       // Create audit log for user update
       try {

@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **User-first permission persistence + employee sync hardening (`src/components/settings/EnhancedUserManagement.jsx`, `backend/routes/employees.js`, `backend/routes/users.js`):** Fixed admin edit flow to persist granular `perm_*` columns (`perm_notes_anywhere`, `perm_all_records`, `perm_reports`, `perm_employees`, `perm_settings`) in the final `User.update` payload; removed role mutation from employee permission sync paths so employee sync no longer overwrites user authority; added authorization guard on `POST /api/employees/:id/sync-permissions`; and clear visibility cache after relevant user updates so permission changes apply immediately.
+
+- **Dashboard cache TTL alignment (`backend/routes/reports.js`, `backend/lib/cacheManager.js`, `src/api/dashboardCache.js`):** Increased dashboard bundle Redis TTL from 120s to 300s, restored Redis list/detail/count TTLs to 180s/300s/600s, and updated frontend stale-state reporting to treat entries older than 10 minutes as stale. The surrounding code comments now describe the actual invalidation and stale-reporting behavior without overstating warm-cache guarantees.
 - **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
 
 ### Fixed
