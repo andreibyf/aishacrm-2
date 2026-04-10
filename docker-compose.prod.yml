@@ -149,7 +149,7 @@ services:
 
   # Event Bus (Redpanda/Kafka)
   redpanda:
-    image: redpandadata/redpanda:latest
+    image: redpandadata/redpanda:stable-local
     container_name: aishacrm-redpanda
     restart: unless-stopped
     command:
@@ -172,7 +172,7 @@ services:
     volumes:
       - redpanda_data:/var/lib/redpanda/data
     healthcheck:
-      test: ["CMD", "rpk", "cluster", "health"]
+      test: ["CMD-SHELL", "rpk cluster health --format json 2>/dev/null | grep -q '\"is_healthy\":true'"]
       interval: 10s
       timeout: 5s
       retries: 6
