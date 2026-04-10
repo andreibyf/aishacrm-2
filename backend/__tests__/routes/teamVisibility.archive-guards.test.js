@@ -5,7 +5,12 @@ import path from 'node:path';
 
 describe('team visibility archive guards', () => {
   it('bizdev archive enforces full-access record checks', () => {
-    const bizdevRoutePath = path.resolve(process.cwd(), 'backend/routes/bizdevsources.js');
+    const pathCandidates = [
+      path.resolve(process.cwd(), 'backend/routes/bizdevsources.js'),
+      path.resolve(process.cwd(), 'routes/bizdevsources.js'),
+    ];
+    const bizdevRoutePath = pathCandidates.find((p) => fs.existsSync(p));
+    assert.ok(bizdevRoutePath, 'bizdevsources.js should exist in expected path candidates');
     const source = fs.readFileSync(bizdevRoutePath, 'utf8');
 
     assert.match(

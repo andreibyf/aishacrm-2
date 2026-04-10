@@ -438,7 +438,12 @@ describe('bulkAssign validation (unit)', () => {
   });
 
   test('uses canonical assignment_history entity_type mapping', () => {
-    const bulkAssignPath = path.resolve(process.cwd(), 'backend/lib/bulkAssign.js');
+    const bulkAssignPathCandidates = [
+      path.resolve(process.cwd(), 'backend/lib/bulkAssign.js'),
+      path.resolve(process.cwd(), 'lib/bulkAssign.js'),
+    ];
+    const bulkAssignPath = bulkAssignPathCandidates.find((p) => fs.existsSync(p));
+    assert.ok(bulkAssignPath, 'bulkAssign.js should exist in expected path candidates');
     const source = fs.readFileSync(bulkAssignPath, 'utf8');
 
     assert.match(source, /bizdev_sources:\s*'bizdev_source'/);

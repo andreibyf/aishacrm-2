@@ -5,7 +5,12 @@ import path from 'node:path';
 
 describe('team visibility bulk delete guards', () => {
   it('leads bulk-delete enforces full-access record checks', () => {
-    const leadsRoutePath = path.resolve(process.cwd(), 'backend/routes/leads.v2.js');
+    const pathCandidates = [
+      path.resolve(process.cwd(), 'backend/routes/leads.v2.js'),
+      path.resolve(process.cwd(), 'routes/leads.v2.js'),
+    ];
+    const leadsRoutePath = pathCandidates.find((p) => fs.existsSync(p));
+    assert.ok(leadsRoutePath, 'leads.v2.js should exist in expected path candidates');
     const source = fs.readFileSync(leadsRoutePath, 'utf8');
 
     assert.match(
