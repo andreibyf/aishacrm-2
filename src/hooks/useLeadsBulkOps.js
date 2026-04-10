@@ -190,8 +190,12 @@ export function useLeadsBulkOps({
             const deletedInChunk = Math.max(0, Number(result?.deleted ?? chunk.length));
             successCount += deletedInChunk;
 
-            // Track all deleted IDs - state update happens after loop completes
-            chunk.forEach((id) => deletedIdSet.add(id));
+            if (deletedInChunk === chunk.length) {
+              // Track full-chunk successes only; partial chunks cannot be mapped safely.
+              chunk.forEach((id) => deletedIdSet.add(id));
+            } else {
+              failCount += Math.max(0, chunk.length - deletedInChunk);
+            }
           } catch (err) {
             console.error('[Leads] Bulk delete chunk failed:', err);
             failCount += chunk.length;
@@ -551,6 +555,7 @@ export function useLeadsBulkOps({
 
         setSelectedLeads(new Set());
         setSelectAllMode(false);
+
         clearCache('Lead');
         clearCacheByKey('Lead');
         await runMutationRefresh(
