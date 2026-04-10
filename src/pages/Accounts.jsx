@@ -39,7 +39,7 @@ export default function AccountsPage() {
   const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const { selectedEmail } = useEmployeeScope();
-  const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const loadingToast = useLoadingToast();
 
   // Local UI state
@@ -120,6 +120,7 @@ export default function AccountsPage() {
     loadingToast,
     accountsLabel,
     cachedRequest,
+    clearCache,
     clearCacheByKey,
     setCurrentPage,
   });
@@ -150,7 +151,7 @@ export default function AccountsPage() {
 
   // --- Local handlers ---
 
-  const handleSave = async () => {
+  const handleSave = async (result = null) => {
     const wasEditing = !!editingAccount;
     const editingId = editingAccount?.id || null;
 
@@ -158,8 +159,14 @@ export default function AccountsPage() {
     setIsFormOpen(false);
     setEditingAccount(null);
 
+    // Optimistic update: patch the account in-place so the list shows new data instantly
+    if (wasEditing && editingId && result) {
+      setAccounts((prev) => prev.map((a) => (a.id === editingId ? { ...a, ...result } : a)));
+    }
+
     if (wasEditing && editingId) setUpdatingId(editingId);
     try {
+      clearCache('Account');
       clearCacheByKey('Account');
       await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
         passes: 3,
@@ -351,8 +358,8 @@ export default function AccountsPage() {
               </DialogHeader>
               <AccountForm
                 account={editingAccount}
-                onSubmit={async (_result) => {
-                  await handleSave();
+                onSubmit={async (result) => {
+                  await handleSave(result);
                 }}
                 onCancel={() => {
                   setIsFormOpen(false);

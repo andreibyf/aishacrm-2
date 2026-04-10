@@ -40,7 +40,7 @@ export default function ContactsPage() {
   const { user } = useUser();
   const { selectedTenantId } = useTenant();
   const { selectedEmail } = useEmployeeScope();
-  const { cachedRequest, clearCacheByKey } = useApiManager();
+  const { cachedRequest, clearCache, clearCacheByKey } = useApiManager();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
   const { startProgress, updateProgress, completeProgress } = useProgress();
   const logger = useLogger();
@@ -190,14 +190,38 @@ export default function ContactsPage() {
   };
 
   const handleUpdate = async (result) => {
-    if (result?.id) setUpdatingId(result.id);
+    const savedId = result?.id || null;
+
+    // Close form immediately — don't make user wait for background reload
+    setIsFormOpen(false);
+    setEditingContact(null);
+
+    // Optimistic update: patch the contact in-place so the list shows new data instantly
+    if (savedId) {
+      const emp = employeeMap.get(result.assigned_to);
+      const empName = emp ? `${emp.first_name} ${emp.last_name}` : null;
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === savedId
+            ? {
+                ...c,
+                ...result,
+                assigned_to_name: empName || result.assigned_to_name || c.assigned_to_name,
+              }
+            : c,
+        ),
+      );
+    }
+
+    logger.info('Contact updated by form', 'ContactsPage', {
+      contactId: result?.id,
+      contactName: `${result?.first_name} ${result?.last_name}`,
+    });
+
+    // Background reload — show "Updating..." on the row while this runs
+    if (savedId) setUpdatingId(savedId);
     try {
-      logger.info('Contact updated by form', 'ContactsPage', {
-        contactId: result?.id,
-        contactName: `${result?.first_name} ${result?.last_name}`,
-      });
-      setIsFormOpen(false);
-      setEditingContact(null);
+      clearCache('Contact');
       clearCacheByKey('Contact');
       await runMutationRefresh(
         () => Promise.all([loadContacts(), loadTotalStats(), refreshAccounts()]),

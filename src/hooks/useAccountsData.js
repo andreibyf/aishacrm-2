@@ -33,6 +33,7 @@ export function useAccountsData({
   loadingToast,
   accountsLabel,
   cachedRequest,
+  clearCache,
   clearCacheByKey,
   setCurrentPage,
 }) {
@@ -385,13 +386,14 @@ export function useAccountsData({
   useEffect(() => {
     const handleEntityModified = async (event) => {
       if (event.detail?.entity === 'Account') {
+        clearCache('Account');
         clearCacheByKey('Account');
         await Promise.all([loadAccounts(), loadTotalStats()]);
       }
     };
     window.addEventListener('entity-modified', handleEntityModified);
     return () => window.removeEventListener('entity-modified', handleEntityModified);
-  }, [clearCacheByKey, loadAccounts, loadTotalStats]);
+  }, [clearCache, clearCacheByKey, loadAccounts, loadTotalStats]);
 
   // Pagination handlers
   const handlePageChange = useCallback(
