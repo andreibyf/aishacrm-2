@@ -989,6 +989,13 @@ export default function createBizDevSourceRoutes(pgPool) {
           return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
         }
 
+        // Prepare user visibility scope up front, but defer record-based access
+        // until after SELECT ... FOR UPDATE so authz uses locked assignment state.
+        let visibilityScope = null;
+        if (req.user) {
+          visibilityScope = await getVisibilityScope(req.user, supabase);
+        }
+
         if (supportsTx) {
           client = await pgPool.connect();
         } else {
@@ -1009,6 +1016,25 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
 
         const bizdevSource = sourceResult.rows[0];
+
+        // ── Two-tier write access check for promote (locked row) ──
+        if (req.user) {
+          const access = getAccessLevel(
+            visibilityScope,
+            bizdevSource.assigned_to_team,
+            bizdevSource.assigned_to,
+            req.user.id,
+          );
+
+          if (access !== 'full') {
+            if (supportsTx) await client.query('ROLLBACK').catch(() => {});
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to promote this record',
+            });
+          }
+        }
+
         logger.debug('[Promote] BizDev Source fetched:', {
           company_name: bizdevSource.company_name,
           contact_person: bizdevSource.contact_person,
