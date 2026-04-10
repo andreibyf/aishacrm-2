@@ -163,7 +163,9 @@ export async function bulkAssign({
     leads: 'lead',
     contacts: 'contact',
     accounts: 'account',
-    bizdev_sources: 'bizdevsource',
+    opportunities: 'opportunity',
+    activities: 'activity',
+    bizdev_sources: 'bizdev_source',
   };
   try {
     const historyRows = writableIds.map((recordId) => {

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Wave 5 bulk-assign assignment-history canonical mapping (`backend/lib/bulkAssign.js`, `backend/__tests__/routes/bulkAssign.test.js`):** Fixed `TABLE_TO_ENTITY` mapping for bulk assignment history so BizDev bulk assignments use canonical `entity_type='bizdev_source'` (instead of non-standard `bizdevsource`) and added explicit canonical mappings for `opportunity`/`activity` parity. Added regression assertions to lock canonical mapping keys and prevent future history query mismatches.
+
+- **Wave 4 bulk-delete permission hardening (`backend/routes/leads.v2.js`, `backend/__tests__/routes/teamVisibility.bulk-delete-guards.test.js`):** Added per-record team-visibility enforcement to `POST /api/v2/leads/bulk-delete` so records are only deletable when `getAccessLevel(...)` is `full` for every selected lead. The endpoint now rejects bulk deletions that include unauthorized records, closing a parity gap where bulk delete bypassed route-level write checks. Added a regression test to lock the guard logic in place.
+
 - **Wave 3 route-parity hardening for team visibility write access (`backend/routes/leads.v2.js`, `backend/routes/contacts.v2.js`, `backend/routes/accounts.v2.js`, `backend/routes/opportunities.v2.js`, `backend/routes/activities.v2.js`, `backend/routes/bizdevsources.js`, `backend/__tests__/routes/teamVisibility.write-guards.test.js`):** Standardized update-route authorization to explicitly deny `read_only` access across all team-scoped entity routes, preventing non-note write operations from slipping through when `perm_notes_anywhere` is false. Added a regression test that enforces presence of the `read_only` write guard and consistent denial messaging across all covered routes.
 
 - **Wave 2 team visibility policy normalization (`backend/lib/teamVisibility.js`, `backend/__tests__/lib/teamVisibility.test.js`):** Restored user-authoritative admin precedence by treating tenant `admin` role as bypass (alongside `perm_settings`/`perm_employees`), added explicit unassigned-record policy for shared mode team members, and introduced shared-team collaboration write resolution (`sharedTeamWriteIds`) so `view_team` memberships in shared mode can perform full team writes. Expanded unit coverage for admin-role bypass, shared unassigned full access, and shared team write-path access-level outcomes.
@@ -25,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LiteLLM container integration refactor (v6.1.0 target):** Introduced LiteLLM client wiring and route/service integration updates across `backend/lib/aiEngine/llmClient.js`, `backend/lib/aiEngine/litellmClient.js`, `backend/routes/aiSummary.js`, `backend/routes/mcp.js`, and `backend/services/workflowExecutionService.js`; added container/runtime assets in `docker-compose.yml`, `litellm/`, and `litellm_config.yaml`.
 
 ### Fixed
+
+- **Wave 4 bulk-delete auth/tenant hardening follow-up (`backend/routes/leads.v2.js`):** `POST /api/v2/leads/bulk-delete` now fails closed for unauthenticated callers, derives tenant scope from authenticated context (`req.tenant.id` / `req.user.tenant_id`) instead of trusting request body input, and rejects body tenant mismatches for non-superadmins. This closes a cross-tenant delete path in non-enforced auth contexts.
 
 - **Pre-push backend test flake resilience (`.husky/pre-push`):** Added a third-stage fallback for backend validation: after `npm test` fails twice in the backend container, the hook now runs `npm run test:safe` (grouped sequential runner) before blocking push. This mitigates intermittent Node test-runner IPC/deserialization flakes (for example in Cal.com route suite reporting) while still enforcing backend test coverage.
 

@@ -13,6 +13,8 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { authPost, authGet, authDelete } from '../helpers/auth.js';
 import { TestFactory } from '../helpers/test-entity-factory.js';
 import { TENANT_ID } from '../testConstants.js';
@@ -433,5 +435,17 @@ describe('bulkAssign validation (unit)', () => {
     });
     assert.ok(result.errors.length > 0);
     assert.ok(result.errors[0].includes('assigned_to'));
+  });
+
+  test('uses canonical assignment_history entity_type mapping', () => {
+    const bulkAssignPath = path.resolve(process.cwd(), 'backend/lib/bulkAssign.js');
+    const source = fs.readFileSync(bulkAssignPath, 'utf8');
+
+    assert.match(source, /bizdev_sources:\s*'bizdev_source'/);
+    assert.match(source, /leads:\s*'lead'/);
+    assert.match(source, /contacts:\s*'contact'/);
+    assert.match(source, /accounts:\s*'account'/);
+    assert.match(source, /opportunities:\s*'opportunity'/);
+    assert.match(source, /activities:\s*'activity'/);
   });
 });
