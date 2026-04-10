@@ -1,12 +1,6 @@
-import { useCallback, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useCallback, useState, useRef } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   AlertCircle,
   CreditCard,
@@ -14,14 +8,16 @@ import {
   FolderOpen,
   Upload,
   X,
-} from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import BusinessCardProcessor from "../components/documents/BusinessCardProcessor";
-import DocumentExtractor from "../components/documents/DocumentExtractor";
-import ProcessingHistory from "../components/documents/ProcessingHistory";
-import CashFlowExtractor from "../components/documents/CashFlowExtractor"; // New import
-import { ArrowRightLeft } from "lucide-react"; // New icon import
-import { useUser } from "../components/shared/useUser.js";
+  Loader2,
+  Search,
+} from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import BusinessCardProcessor from '../components/documents/BusinessCardProcessor';
+import DocumentExtractor from '../components/documents/DocumentExtractor';
+import ProcessingHistory from '../components/documents/ProcessingHistory';
+import CashFlowExtractor from '../components/documents/CashFlowExtractor'; // New import
+import { ArrowRightLeft } from 'lucide-react'; // New icon import
+import { useUser } from '../components/shared/useUser.js';
 
 export default function DocumentProcessing() {
   const [activeProcessor, setActiveProcessor] = useState(null);
@@ -50,8 +46,7 @@ export default function DocumentProcessing() {
             Document Processing
           </h1>
           <p className="text-slate-400 mt-1 text-sm lg:text-base">
-            Process business cards and documents with AI, or upload files for
-            storage.
+            Process business cards and documents with AI, or upload files for storage.
           </p>
         </div>
 
@@ -72,8 +67,8 @@ export default function DocumentProcessing() {
           <Alert className="bg-blue-900/30 border-blue-700/50">
             <AlertCircle className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-300">
-              Choose between AI-powered extraction (which analyzes and extracts
-              data) or simple storage upload (no processing).
+              Choose between AI-powered extraction (which analyzes and extracts data) or simple
+              storage upload (no processing).
             </AlertDescription>
           </Alert>
 
@@ -94,8 +89,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor("business-card");
-                    setUploadMode("extract");
+                    setActiveProcessor('business-card');
+                    setUploadMode('extract');
                   }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                 >
@@ -121,8 +116,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor("document-extractor");
-                    setUploadMode("extract");
+                    setActiveProcessor('document-extractor');
+                    setUploadMode('extract');
                   }}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
@@ -148,8 +143,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor("cash-flow");
-                    setUploadMode("extract");
+                    setActiveProcessor('cash-flow');
+                    setUploadMode('extract');
                   }}
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                 >
@@ -175,8 +170,8 @@ export default function DocumentProcessing() {
               <CardContent>
                 <Button
                   onClick={() => {
-                    setActiveProcessor("storage-only");
-                    setUploadMode("storage");
+                    setActiveProcessor('storage-only');
+                    setUploadMode('storage');
                   }}
                   className="w-full bg-purple-600 hover:bg-purple-700 text-white"
                 >
@@ -190,7 +185,7 @@ export default function DocumentProcessing() {
       )}
 
       {/* Active Processor */}
-      {activeProcessor === "business-card" && (
+      {activeProcessor === 'business-card' && (
         <BusinessCardProcessor
           user={currentUser}
           onCancel={handleCancel}
@@ -198,14 +193,14 @@ export default function DocumentProcessing() {
         />
       )}
 
-      {activeProcessor === "document-extractor" && (
+      {activeProcessor === 'document-extractor' && (
         <DocumentExtractor
           onCancel={handleCancel}
           onProcessingChange={handleProcessingStateChange}
         />
       )}
 
-      {activeProcessor === "cash-flow" && (
+      {activeProcessor === 'cash-flow' && (
         <CashFlowExtractor
           user={currentUser}
           onCancel={handleCancel}
@@ -213,17 +208,12 @@ export default function DocumentProcessing() {
         />
       )}
 
-      {activeProcessor === "storage-only" && (
-        <StorageUploader
-          onCancel={handleCancel}
-          onProcessingChange={handleProcessingStateChange}
-        />
+      {activeProcessor === 'storage-only' && (
+        <StorageUploader onCancel={handleCancel} onProcessingChange={handleProcessingStateChange} />
       )}
 
       {/* Processing History */}
-      {!activeProcessor && !isProcessing && (
-        <ProcessingHistory user={currentUser} />
-      )}
+      {!activeProcessor && !isProcessing && <ProcessingHistory user={currentUser} />}
     </div>
   );
 }
@@ -235,86 +225,161 @@ function StorageUploader({ onCancel, onProcessingChange }) {
   const [uploadResult, setUploadResult] = useState(null);
   const { user: currentUser } = useUser();
 
+  // Entity linking state
+  const [entityType, setEntityType] = useState('Lead');
+  const [linkSearch, setLinkSearch] = useState('');
+  const [linkResults, setLinkResults] = useState([]);
+  const [linkSearching, setLinkSearching] = useState(false);
+  const [linkedEntity, setLinkedEntity] = useState(null);
+  const searchDebounce = useRef(null);
+
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
     setSelectedFile(file);
     setUploadResult(null);
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      console.error("[StorageUploader] No file selected");
+  const handleLinkSearchChange = async (value) => {
+    setLinkSearch(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+
+    if (!value.trim()) {
+      setLinkResults([]);
       return;
     }
 
-    console.log("[StorageUploader] Starting upload:", {
+    setLinkSearching(true);
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const { getBackendUrl } = await import('@/api/backendUrl');
+        const base = getBackendUrl();
+        const tenantId = currentUser?.tenant_id;
+        const typeMap = { Contact: 'contacts', Lead: 'leads', Account: 'accounts' };
+        const endpoint = `${base}/api/${typeMap[entityType]}/search?q=${encodeURIComponent(value)}&tenant_id=${tenantId}&limit=10`;
+
+        const res = await fetch(endpoint, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          // Each entity type returns differently shaped results
+          const results =
+            data.data?.leads || data.data?.contacts || data.data?.accounts || data.data || [];
+          setLinkResults(results);
+        }
+      } catch (e) {
+        console.error('Search error:', e);
+      } finally {
+        setLinkSearching(false);
+      }
+    }, 300);
+  };
+
+  const getEntityDisplayName = (row) => {
+    if (entityType === 'Account') return row.name || 'Unnamed Account';
+    return [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || 'Unnamed';
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      console.error('[StorageUploader] No file selected');
+      return;
+    }
+
+    console.log('[StorageUploader] Starting upload:', {
       fileName: selectedFile.name,
       fileSize: selectedFile.size,
       fileType: selectedFile.type,
-      currentUser: currentUser ? {
-        email: currentUser.email,
-        tenant_id: currentUser.tenant_id
-      } : null
+      linkedEntity: linkedEntity ? getEntityDisplayName(linkedEntity) : 'None',
+      currentUser: currentUser
+        ? {
+            email: currentUser.email,
+            tenant_id: currentUser.tenant_id,
+          }
+        : null,
     });
 
     setUploading(true);
     onProcessingChange(true);
 
     try {
-      const { UploadFile } = await import("@/api/integrations");
-      const { DocumentationFile } = await import("@/api/entities");
+      const { UploadFile } = await import('@/api/integrations');
+      const { getBackendUrl } = await import('@/api/backendUrl');
 
       // Current user provided by global context
       if (!currentUser) {
-        throw new Error("User not loaded");
+        throw new Error('User not loaded');
       }
 
-      console.log("[StorageUploader] Calling UploadFile API...");
-      
+      console.log('[StorageUploader] Calling UploadFile API...');
+
       // Upload file to storage
-      const uploadResult = await UploadFile({ 
+      const uploadResult = await UploadFile({
         file: selectedFile,
-        tenant_id: currentUser.tenant_id 
+        tenant_id: currentUser.tenant_id,
       });
 
-      console.log("[StorageUploader] UploadFile result:", uploadResult);
+      console.log('[StorageUploader] UploadFile result:', uploadResult);
 
       if (!uploadResult.file_url) {
-        throw new Error("File upload failed - no URL returned");
+        throw new Error('File upload failed - no URL returned');
       }
 
-      console.log("[StorageUploader] Creating DocumentationFile record...");
+      console.log('[StorageUploader] Creating document record...');
 
-      // Create document record for storage
-      const documentRecord = await DocumentationFile.create({
-        title: selectedFile.name,
-        filename: selectedFile.name,
-        filepath: uploadResult.filename, // Storage path from upload
-        file_uri: uploadResult.file_url,  // Public/signed URL
-        filesize: selectedFile.size,
-        mimetype: selectedFile.type,
-        category: "other",
+      // Create document record in documents table (optionally linked to entity)
+      const typeMap = { Contact: 'contact', Lead: 'lead', Account: 'account' };
+      const body = {
         tenant_id: currentUser.tenant_id,
-        tags: ["storage-upload"],
-        uploaded_by: currentUser.email || currentUser.username,
+        name: selectedFile.name,
+        file_url: uploadResult.file_url,
+        file_type: selectedFile.type || null,
+        file_size: selectedFile.size || null,
+      };
+
+      // Add entity link if one was selected
+      if (linkedEntity) {
+        body.related_type = typeMap[entityType];
+        body.related_id = linkedEntity.id;
+      }
+
+      const base = getBackendUrl();
+      const res = await fetch(`${base}/api/v2/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
       });
 
-      console.log("[StorageUploader] Document record created:", documentRecord.id);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to save document');
+      }
+
+      const docData = await res.json();
+      console.log('[StorageUploader] Document record created:', docData);
+
+      const successMsg = linkedEntity
+        ? `Document linked to ${entityType}!`
+        : 'Document stored successfully!';
 
       setUploadResult({
         success: true,
-        message: "Document uploaded successfully for storage!",
-        documentId: documentRecord.id,
+        message: successMsg,
+        documentId: docData.data?.id,
       });
+
+      // Reset form
+      setSelectedFile(null);
+      setLinkedEntity(null);
+      setLinkSearch('');
     } catch (error) {
-      console.error("[StorageUploader] Upload error:", error);
-      console.error("[StorageUploader] Error stack:", error.stack);
+      console.error('[StorageUploader] Upload error:', error);
+      console.error('[StorageUploader] Error stack:', error.stack);
       setUploadResult({
         success: false,
         message: `Upload failed: ${error.message}`,
       });
     } finally {
-      console.log("[StorageUploader] Upload process complete");
+      console.log('[StorageUploader] Upload process complete');
       setUploading(false);
       onProcessingChange(false);
     }
@@ -337,13 +402,90 @@ function StorageUploader({ onCancel, onProcessingChange }) {
           </Button>
         </CardTitle>
         <CardDescription className="text-slate-400">
-          Upload documents to store them without any AI processing or data
-          extraction.
+          Upload documents to store them without any AI processing or data extraction.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!uploadResult && (
           <>
+            {/* Entity Type Selection */}
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-slate-200">
+                Link Document To <span className="text-slate-400 text-xs">(Optional)</span>
+              </label>
+              <div className="flex gap-2">
+                {['Lead', 'Contact', 'Account'].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setEntityType(type);
+                      setLinkedEntity(null);
+                      setLinkSearch('');
+                      setLinkResults([]);
+                    }}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      entityType === type
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Entity Search/Selection */}
+            <div className="rounded-lg border border-slate-600 bg-slate-900/40 p-4 space-y-3">
+              <div className="relative">
+                <search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={`Search ${entityType}s by name…`}
+                  value={linkedEntity ? getEntityDisplayName(linkedEntity) : linkSearch}
+                  onChange={(e) => !linkedEntity && handleLinkSearchChange(e.target.value)}
+                  disabled={!!linkedEntity}
+                  className="w-full pl-8 pr-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-slate-200 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
+                />
+                {linkSearching && (
+                  <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 text-slate-400 animate-spin" />
+                )}
+              </div>
+
+              {linkResults.length > 0 && !linkedEntity && (
+                <ul className="rounded-md border border-slate-600 bg-slate-800 divide-y divide-slate-700 overflow-hidden">
+                  {linkResults.map((row) => (
+                    <li
+                      key={row.id}
+                      className="px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 cursor-pointer"
+                      onClick={() => {
+                        setLinkedEntity(row);
+                        setLinkSearch('');
+                        setLinkResults([]);
+                      }}
+                    >
+                      {getEntityDisplayName(row)}
+                      {row.email && (
+                        <span className="text-slate-500 text-xs ml-2">— {row.email}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {linkedEntity && (
+                <div className="flex items-center justify-between p-2 bg-green-900/20 border border-green-700/50 rounded text-sm">
+                  <span className="text-green-300">✓ {getEntityDisplayName(linkedEntity)}</span>
+                  <button
+                    onClick={() => setLinkedEntity(null)}
+                    className="text-slate-400 hover:text-slate-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center">
               <input
                 type="file"
@@ -367,8 +509,8 @@ function StorageUploader({ onCancel, onProcessingChange }) {
               <Alert className="bg-slate-700 border-slate-600">
                 <FileText className="h-4 w-4 text-slate-400" />
                 <AlertDescription className="text-slate-300">
-                  Selected: <strong>{selectedFile.name}</strong>{" "}
-                  ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  Selected: <strong>{selectedFile.name}</strong> (
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                 </AlertDescription>
               </Alert>
             )}
@@ -379,7 +521,7 @@ function StorageUploader({ onCancel, onProcessingChange }) {
                 disabled={!selectedFile || uploading}
                 className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
               >
-                {uploading ? "Uploading..." : "Upload for Storage"}
+                {uploading ? 'Uploading...' : 'Upload for Storage'}
               </Button>
               <Button
                 variant="outline"
@@ -394,20 +536,16 @@ function StorageUploader({ onCancel, onProcessingChange }) {
 
         {uploadResult && (
           <Alert
-            className={uploadResult.success
-              ? "bg-green-900/30 border-green-700/50"
-              : "bg-red-900/30 border-red-700/50"}
+            className={
+              uploadResult.success
+                ? 'bg-green-900/30 border-green-700/50'
+                : 'bg-red-900/30 border-red-700/50'
+            }
           >
             <AlertCircle
-              className={`h-4 w-4 ${
-                uploadResult.success ? "text-green-400" : "text-red-400"
-              }`}
+              className={`h-4 w-4 ${uploadResult.success ? 'text-green-400' : 'text-red-400'}`}
             />
-            <AlertDescription
-              className={uploadResult.success
-                ? "text-green-300"
-                : "text-red-300"}
-            >
+            <AlertDescription className={uploadResult.success ? 'text-green-300' : 'text-red-300'}>
               {uploadResult.message}
             </AlertDescription>
           </Alert>

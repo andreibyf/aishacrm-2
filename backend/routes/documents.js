@@ -9,6 +9,7 @@ import {
   selectLLMConfigForTenant,
   resolveLLMApiKey,
 } from '../lib/aiEngine/index.js';
+import logger from '../lib/logger.js';
 
 export default function createDocumentRoutes(_pgPool) {
   const router = express.Router();
@@ -63,33 +64,109 @@ export default function createDocumentRoutes(_pgPool) {
       const schemaDescription = json_schema
         ? `Extract the following fields: ${Object.keys(json_schema.properties || {}).join(', ')}. Return a valid JSON object only.`
         : 'Extract all visible text and data. Return a valid JSON object only.';
+      const hasTransactionsSchema = Boolean(json_schema?.properties?.transactions);
+      const extractionRules = hasTransactionsSchema
+        ? 'For transactions: include only real transaction rows. Do not return blank fields. Normalize dates to YYYY-MM-DD. Amount must be numeric and positive. transaction_type must be either income or expense.'
+        : 'Follow the schema exactly and do not return empty placeholder fields.';
+
+      const fileResp = await fetch(file_url, { method: 'GET' });
+      if (!fileResp.ok) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Unable to access uploaded file (HTTP ${fileResp.status})`,
+        });
+      }
+
+      const contentType = (fileResp.headers.get('content-type') || '').toLowerCase();
+      const lowerUrl = String(file_url || '').toLowerCase();
+      const isPdf = contentType.includes('application/pdf') || lowerUrl.endsWith('.pdf');
+      const isImage = contentType.startsWith('image/');
+
+      if (!isImage && !isPdf) {
+        return res.status(400).json({
+          status: 'error',
+          message: `Unsupported file type for AI extraction: ${contentType || 'unknown'}`,
+          details: 'Supported formats: PDF, PNG, JPG, WEBP.',
+        });
+      }
+
+      const fileBuffer = Buffer.from(await fileResp.arrayBuffer());
+      const maxBytes = 15 * 1024 * 1024;
+      if (fileBuffer.length > maxBytes) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Uploaded image is too large for extraction',
+          details: 'Please use an image under 15MB.',
+        });
+      }
+
+      let messages;
+      if (isPdf) {
+        const pdfParseModule = await import('pdf-parse');
+        const pdfParse = pdfParseModule.default || pdfParseModule;
+        const parsed = await pdfParse(fileBuffer);
+        const extractedText = (parsed?.text || '').trim();
+
+        if (!extractedText) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Could not extract text from PDF',
+            details: 'Please upload a text-based PDF or a clearer scanned PDF.',
+          });
+        }
+
+        const truncatedText = extractedText.slice(0, 30000);
+        messages = [
+          {
+            role: 'user',
+            content:
+              `You are a data extraction assistant. Extract structured data from the provided document text.\n` +
+              `${schemaDescription}\n` +
+              `${extractionRules}\n` +
+              `Do not include markdown or explanation — respond with raw JSON only.\n\n` +
+              `Document text:\n${truncatedText}`,
+          },
+        ];
+      } else {
+        const imageDataUrl = `data:${contentType};base64,${fileBuffer.toString('base64')}`;
+        messages = [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a data extraction assistant. Analyse the image and extract structured data that matches the requested schema.\n${schemaDescription}\n${extractionRules}\nDo not include markdown or explanation — respond with raw JSON only.`,
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageDataUrl },
+              },
+            ],
+          },
+        ];
+      }
 
       const result = await generateChatCompletion({
         provider,
         model,
         apiKey,
         temperature: 0,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `You are a data extraction assistant. Analyse the image and extract structured contact information.\n${schemaDescription}\nDo not include markdown or explanation — respond with raw JSON only.`,
-              },
-              {
-                type: 'image_url',
-                image_url: { url: file_url },
-              },
-            ],
-          },
-        ],
+        messages,
       });
 
       if (result.status !== 'success') {
+        logger.warn('[documents] AI extraction failed', {
+          provider,
+          model,
+          error: result.error,
+        });
         return res
           .status(502)
-          .json({ status: 'error', message: result.error || 'AI extraction failed' });
+          .json({
+            status: 'error',
+            message: result.error || 'AI extraction failed',
+            details: result.error,
+          });
       }
 
       let output;

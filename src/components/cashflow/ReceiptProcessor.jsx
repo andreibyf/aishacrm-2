@@ -1,17 +1,28 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Upload, Camera, FileImage, Loader2, CheckCircle, AlertCircle, 
-  DollarSign, Calendar, Building, Tag, Wand2 
-} from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { UploadFile } from "@/api/integrations";
-import { ExtractDataFromUploadedFile } from "@/api/integrations";
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Upload,
+  Camera,
+  FileImage,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  DollarSign,
+  Calendar,
+  Building,
+  Tag,
+  Wand2,
+} from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { UploadFile } from '@/api/integrations';
+import { ExtractDataFromUploadedFile } from '@/api/integrations';
+import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser.js';
 
 export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
   const [step, setStep] = useState('upload'); // upload, processing, review, complete
@@ -20,35 +31,37 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState(null);
   const [aiSuggestions, setAiSuggestions] = useState(null);
+  const { selectedTenantId } = useTenant();
+  const { user: currentUser } = useUser();
 
   // Receipt extraction schema
   const receiptSchema = {
-    type: "object",
+    type: 'object',
     properties: {
-      merchant_name: { type: "string", description: "Name of the business/merchant" },
-      total_amount: { type: "number", description: "Total amount paid" },
-      transaction_date: { type: "string", description: "Date of transaction (YYYY-MM-DD format)" },
-      description: { type: "string", description: "Description of purchase/service" },
-      items: { 
-        type: "array", 
-        items: { 
-          type: "object", 
+      merchant_name: { type: 'string', description: 'Name of the business/merchant' },
+      total_amount: { type: 'number', description: 'Total amount paid' },
+      transaction_date: { type: 'string', description: 'Date of transaction (YYYY-MM-DD format)' },
+      description: { type: 'string', description: 'Description of purchase/service' },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
           properties: {
-            name: { type: "string" },
-            quantity: { type: "number" },
-            price: { type: "number" }
-          }
+            name: { type: 'string' },
+            quantity: { type: 'number' },
+            price: { type: 'number' },
+          },
         },
-        description: "Individual items purchased" 
+        description: 'Individual items purchased',
       },
-      payment_method: { type: "string", description: "Method of payment (cash, card, etc.)" },
-      tax_amount: { type: "number", description: "Tax amount if visible" },
-      category_hints: { 
-        type: "array", 
-        items: { type: "string" },
-        description: "Keywords that might help categorize this expense" 
-      }
-    }
+      payment_method: { type: 'string', description: 'Method of payment (cash, card, etc.)' },
+      tax_amount: { type: 'number', description: 'Tax amount if visible' },
+      category_hints: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Keywords that might help categorize this expense',
+      },
+    },
   };
 
   const handleFileChange = (e) => {
@@ -59,7 +72,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
         setError('Please select an image file (JPG, PNG, etc.)');
         return;
       }
-      
+
       // Validate file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
         setError('File size must be less than 10MB');
@@ -79,9 +92,17 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
     setError(null);
 
     try {
+      const tenantId =
+        currentUser?.role === 'superadmin'
+          ? selectedTenantId
+          : currentUser?.tenant_uuid || currentUser?.tenant_id;
+      if (!tenantId) {
+        throw new Error('Please select a tenant before extracting receipt data.');
+      }
+
       // Upload the file
-      const uploadResult = await UploadFile({ file });
-      
+      const uploadResult = await UploadFile({ file, tenant_id: tenantId });
+
       if (!uploadResult.file_url) {
         throw new Error('Failed to upload file');
       }
@@ -89,7 +110,8 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
       // Extract data using AI
       const extractResult = await ExtractDataFromUploadedFile({
         file_url: uploadResult.file_url,
-        json_schema: receiptSchema
+        json_schema: receiptSchema,
+        tenant_id: tenantId,
       });
 
       if (extractResult.status !== 'success') {
@@ -97,14 +119,13 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
       }
 
       const extracted = extractResult.output;
-      
+
       // Generate AI suggestions for categorization
       const suggestions = await generateCategorySuggestions(extracted);
-      
+
       setExtractedData(extracted);
       setAiSuggestions(suggestions);
       setStep('review');
-
     } catch (error) {
       console.error('Error processing receipt:', error);
       setError(error.message);
@@ -120,9 +141,12 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
       const context = [
         data.merchant_name,
         data.description,
-        ...(data.items?.map(item => item.name) || []),
-        ...(data.category_hints || [])
-      ].filter(Boolean).join(' ').toLowerCase();
+        ...(data.items?.map((item) => item.name) || []),
+        ...(data.category_hints || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
 
       // Simple rule-based categorization (can be enhanced with AI later)
       const categoryRules = {
@@ -133,7 +157,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
         meals: ['restaurant', 'food', 'coffee', 'lunch', 'dinner', 'cafe'],
         equipment: ['computer', 'laptop', 'software', 'hardware', 'tech'],
         rent: ['rent', 'lease', 'property', 'real estate'],
-        payroll: ['payroll', 'salary', 'wages', 'employment']
+        payroll: ['payroll', 'salary', 'wages', 'employment'],
       };
 
       let suggestedCategory = 'operating_expense'; // default
@@ -141,9 +165,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
 
       // Check each category for matches
       for (const [category, keywords] of Object.entries(categoryRules)) {
-        const matches = keywords.filter(keyword => context.includes(keyword));
+        const matches = keywords.filter((keyword) => context.includes(keyword));
         const categoryConfidence = matches.length / keywords.length;
-        
+
         if (categoryConfidence > confidence) {
           confidence = categoryConfidence;
           suggestedCategory = category;
@@ -153,15 +177,14 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
       return {
         category: suggestedCategory,
         confidence: Math.min(confidence * 100, 95), // Cap at 95%
-        reasoning: `Based on merchant "${data.merchant_name}" and transaction details`
+        reasoning: `Based on merchant "${data.merchant_name}" and transaction details`,
       };
-
     } catch (error) {
       console.error('Error generating suggestions:', error);
       return {
         category: 'operating_expense',
         confidence: 30,
-        reasoning: 'Default categorization'
+        reasoning: 'Default categorization',
       };
     }
   };
@@ -178,10 +201,10 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
       description: extractedData.description || `Purchase from ${extractedData.merchant_name}`,
       vendor_client: extractedData.merchant_name || '',
       payment_method: extractedData.payment_method?.toLowerCase() || '',
-      notes: `Extracted from receipt. Items: ${extractedData.items?.map(i => i.name).join(', ') || 'N/A'}`,
+      notes: `Extracted from receipt. Items: ${extractedData.items?.map((i) => i.name).join(', ') || 'N/A'}`,
       entry_method: 'document_extracted',
       processed_by_ai: true,
-      tax_category: extractedData.tax_amount ? 'deductible' : 'unknown'
+      tax_category: extractedData.tax_amount ? 'deductible' : 'unknown',
     };
 
     onTransactionExtracted(transactionData);
@@ -194,7 +217,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
         <CardContent className="p-12 text-center">
           <Loader2 className="w-16 h-16 animate-spin mx-auto mb-6 text-blue-600" />
           <h3 className="text-xl font-semibold mb-2">Processing Receipt</h3>
-          <p className="text-slate-600 mb-4">AI is extracting transaction data from your receipt...</p>
+          <p className="text-slate-600 mb-4">
+            AI is extracting transaction data from your receipt...
+          </p>
           <div className="space-y-2 text-sm text-slate-500">
             <p>✅ Image uploaded successfully</p>
             <p>🔍 Analyzing receipt content...</p>
@@ -220,8 +245,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
           <Alert className="bg-blue-50 border-blue-200">
             <Wand2 className="w-4 h-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
-              <strong>AI Suggestion:</strong> Categorized as &quot;{aiSuggestions?.category?.replace(/_/g, ' ')}&quot; 
-              with {Math.round(aiSuggestions?.confidence || 0)}% confidence. {aiSuggestions?.reasoning}
+              <strong>AI Suggestion:</strong> Categorized as &quot;
+              {aiSuggestions?.category?.replace(/_/g, ' ')}&quot; with{' '}
+              {Math.round(aiSuggestions?.confidence || 0)}% confidence. {aiSuggestions?.reasoning}
             </AlertDescription>
           </Alert>
 
@@ -233,11 +259,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
                   <Building className="w-4 h-4" />
                   Merchant
                 </Label>
-                <Input 
-                  value={extractedData.merchant_name || ''} 
-                  readOnly 
-                  className="bg-slate-50"
-                />
+                <Input value={extractedData.merchant_name || ''} readOnly className="bg-slate-50" />
               </div>
 
               <div>
@@ -245,9 +267,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
                   <DollarSign className="w-4 h-4" />
                   Amount
                 </Label>
-                <Input 
-                  value={`$${extractedData.total_amount?.toFixed(2) || '0.00'}`} 
-                  readOnly 
+                <Input
+                  value={`$${extractedData.total_amount?.toFixed(2) || '0.00'}`}
+                  readOnly
                   className="bg-slate-50"
                 />
               </div>
@@ -257,9 +279,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
                   <Calendar className="w-4 h-4" />
                   Date
                 </Label>
-                <Input 
-                  value={extractedData.transaction_date || ''} 
-                  readOnly 
+                <Input
+                  value={extractedData.transaction_date || ''}
+                  readOnly
                   className="bg-slate-50"
                 />
               </div>
@@ -279,9 +301,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
             <div className="space-y-4">
               <div>
                 <Label>Description</Label>
-                <Textarea 
-                  value={extractedData.description || ''} 
-                  readOnly 
+                <Textarea
+                  value={extractedData.description || ''}
+                  readOnly
                   className="bg-slate-50 h-20"
                 />
               </div>
@@ -303,11 +325,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
               {extractedData.payment_method && (
                 <div>
                   <Label>Payment Method</Label>
-                  <Input 
-                    value={extractedData.payment_method} 
-                    readOnly 
-                    className="bg-slate-50"
-                  />
+                  <Input value={extractedData.payment_method} readOnly className="bg-slate-50" />
                 </div>
               )}
             </div>
@@ -322,7 +340,10 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
               <Button variant="outline" onClick={() => setStep('upload')}>
                 Try Different Image
               </Button>
-              <Button onClick={handleConfirmTransaction} className="bg-green-600 hover:bg-green-700">
+              <Button
+                onClick={handleConfirmTransaction}
+                className="bg-green-600 hover:bg-green-700"
+              >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Create Transaction
               </Button>
@@ -339,7 +360,9 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
         <CardContent className="p-12 text-center">
           <CheckCircle className="w-16 h-16 mx-auto mb-6 text-green-600" />
           <h3 className="text-xl font-semibold mb-2 text-green-800">Transaction Created!</h3>
-          <p className="text-slate-600 mb-6">Your receipt has been processed and added to your cash flow.</p>
+          <p className="text-slate-600 mb-6">
+            Your receipt has been processed and added to your cash flow.
+          </p>
           <Button onClick={onCancel} className="bg-green-600 hover:bg-green-700">
             Done
           </Button>
@@ -361,8 +384,8 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
         <Alert>
           <FileImage className="w-4 h-4" />
           <AlertDescription>
-            Upload a clear photo of your receipt or invoice. AI will automatically extract the amount, 
-            merchant, date, and suggest the best category for your cash flow tracking.
+            Upload a clear photo of your receipt or invoice. AI will automatically extract the
+            amount, merchant, date, and suggest the best category for your cash flow tracking.
           </AlertDescription>
         </Alert>
 
@@ -379,9 +402,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
               <FileImage className="w-16 h-16 mx-auto text-green-600" />
               <div>
                 <p className="font-medium">{file.name}</p>
-                <p className="text-sm text-slate-500">
-                  {(file.size / 1024 / 1024).toFixed(1)} MB
-                </p>
+                <p className="text-sm text-slate-500">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
               </div>
               <Button onClick={processReceipt} disabled={processing} className="w-full">
                 {processing ? (
@@ -404,12 +425,7 @@ export default function ReceiptProcessor({ onTransactionExtracted, onCancel }) {
                 <p className="text-lg font-medium">Choose receipt or invoice image</p>
                 <p className="text-slate-500">PNG, JPG up to 10MB</p>
               </div>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="w-full"
-              />
+              <Input type="file" accept="image/*" onChange={handleFileChange} className="w-full" />
             </div>
           )}
         </div>
