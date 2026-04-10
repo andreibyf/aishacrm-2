@@ -24,6 +24,32 @@ import { clearVisibilityCache } from '../lib/teamVisibility.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
+
+  const requesterRole = (req) => String(req?.user?.role || '').toLowerCase();
+
+  const ensureSuperadminRoleAssignmentAllowed = ({ req, res, requestedRole, endpoint }) => {
+    const targetRole = String(requestedRole || '').toLowerCase();
+    if (targetRole !== 'superadmin') return false;
+
+    if (requesterRole(req) !== 'superadmin') {
+      logger.warn(
+        {
+          endpoint,
+          requesterRole: requesterRole(req) || 'anonymous',
+          requesterEmail: redactEmail(req?.user?.email || ''),
+        },
+        '[Users] Blocked superadmin role assignment by non-superadmin requester',
+      );
+      res.status(403).json({
+        status: 'error',
+        code: 'SUPERADMIN_ASSIGNMENT_FORBIDDEN',
+        message: 'Only superadmins can assign or create superadmin users.',
+      });
+      return true;
+    }
+
+    return false;
+  };
   /**
    * @openapi
    * /api/users:
@@ -1183,6 +1209,17 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         perm_settings,
       } = req.body;
 
+      if (
+        ensureSuperadminRoleAssignmentAllowed({
+          req,
+          res,
+          requestedRole: role,
+          endpoint: 'POST /api/users/invite',
+        })
+      ) {
+        return;
+      }
+
       // Parse full_name into first/last
       const nameParts = (full_name || '').trim().split(/\s+/);
       const first_name = nameParts[0] || '';
@@ -1433,6 +1470,17 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         metadata,
         ...otherFields
       } = req.body;
+
+      if (
+        ensureSuperadminRoleAssignmentAllowed({
+          req,
+          res,
+          requestedRole: role,
+          endpoint: 'POST /api/users',
+        })
+      ) {
+        return;
+      }
 
       // 🔒 CRITICAL: Block E2E test user creation that pollutes production login
       // These test patterns MUST NOT be created in the production database
@@ -1985,6 +2033,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         nav_permissions, // JSONB column on users table
         ...otherFields // Capture any unknown fields
       } = req.body;
+
+      if (
+        ensureSuperadminRoleAssignmentAllowed({
+          req,
+          res,
+          requestedRole: role,
+          endpoint: 'PUT /api/users/:id',
+        })
+      ) {
+        return;
+      }
+
       // Resolve tenant_id consistently: body → query → middleware-resolved tenant
       const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
 

@@ -283,6 +283,7 @@ const DEFAULT_NAV_PERMISSIONS = {
  *   onCancel: function - called on cancel
  *   availableTeams: array - teams to show in step 2
  *   existingTeamMemberships: array - current memberships for edit mode
+ *   template: object|null - optional create template preset from UserTemplateSelector
  */
 export default function UserFormWizard({
   open = false,
@@ -294,6 +295,7 @@ export default function UserFormWizard({
   onCancel,
   availableTeams = [],
   existingTeamMemberships = [],
+  template = null,
 }) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -302,6 +304,43 @@ export default function UserFormWizard({
   // Determine if this is create or edit mode
   const isEdit = mode === 'edit' || (mode === undefined && !!user?.id);
   const isCreate = !isEdit;
+
+  const buildTemplateNavPermissions = (templateConfig) => {
+    if (!templateConfig?.navModules?.length) return { ...DEFAULT_NAV_PERMISSIONS };
+
+    const nav = Object.keys(DEFAULT_NAV_PERMISSIONS).reduce((acc, key) => {
+      acc[key] = false;
+      return acc;
+    }, {});
+
+    templateConfig.navModules.forEach((key) => {
+      if (key in nav) nav[key] = true;
+    });
+
+    return nav;
+  };
+
+  const buildCreateFormFromTemplate = (templateConfig) => {
+    const isAdminTemplate = ['admin', 'superadmin'].includes(templateConfig?.role);
+
+    return {
+      full_name: '',
+      email: '',
+      tenant_id: currentUser?.tenant_id || null,
+      platform_role: isAdminTemplate ? templateConfig.role : 'user',
+      employee_role: isAdminTemplate ? 'director' : templateConfig?.role || 'employee',
+      is_active: true,
+      teams: {},
+      default_team_access_level: templateConfig?.teamAccessLevel || 'view_own',
+      perm_notes_anywhere: !!templateConfig?.permissions?.perm_notes_anywhere,
+      perm_all_records: !!templateConfig?.permissions?.perm_all_records,
+      perm_reports: !!templateConfig?.permissions?.perm_reports,
+      perm_employees: !!templateConfig?.permissions?.perm_employees,
+      perm_settings: !!templateConfig?.permissions?.perm_settings,
+      nav_permissions: buildTemplateNavPermissions(templateConfig),
+      password: '',
+    };
+  };
 
   // Form state
   const [form, setForm] = useState({
@@ -315,6 +354,7 @@ export default function UserFormWizard({
 
     // Teams: { [teamId]: { selected: bool, access_level: string } }
     teams: {},
+    default_team_access_level: 'view_own',
 
     // Org-wide permissions
     perm_notes_anywhere: true,
@@ -361,6 +401,7 @@ export default function UserFormWizard({
         employee_role: user.employee_role || 'employee',
         is_active: user.is_active !== false,
         teams: teamsObj,
+        default_team_access_level: 'view_own',
         perm_notes_anywhere: user.perm_notes_anywhere ?? true,
         perm_all_records: user.perm_all_records ?? false,
         perm_reports: user.perm_reports ?? false,
@@ -371,24 +412,30 @@ export default function UserFormWizard({
       });
     } else {
       // Create mode - reset to defaults
-      setForm({
-        full_name: '',
-        email: '',
-        tenant_id: currentUser?.tenant_id || null,
-        employee_role: 'employee',
-        is_active: true,
-        teams: {},
-        perm_notes_anywhere: true,
-        perm_all_records: false,
-        perm_reports: false,
-        perm_employees: false,
-        perm_settings: false,
-        nav_permissions: { ...DEFAULT_NAV_PERMISSIONS },
-        password: '',
-      });
+      if (template) {
+        setForm(buildCreateFormFromTemplate(template));
+      } else {
+        setForm({
+          full_name: '',
+          email: '',
+          tenant_id: currentUser?.tenant_id || null,
+          platform_role: 'user',
+          employee_role: 'employee',
+          is_active: true,
+          teams: {},
+          default_team_access_level: 'view_own',
+          perm_notes_anywhere: true,
+          perm_all_records: false,
+          perm_reports: false,
+          perm_employees: false,
+          perm_settings: false,
+          nav_permissions: { ...DEFAULT_NAV_PERMISSIONS },
+          password: '',
+        });
+      }
     }
     setStep(0);
-  }, [open, user, isEdit, existingTeamMemberships, currentUser?.tenant_id]);
+  }, [open, user, isEdit, existingTeamMemberships, currentUser?.tenant_id, template]);
 
   // Auto-sync nav permissions with org-wide permissions
   useEffect(() => {
@@ -454,7 +501,7 @@ export default function UserFormWizard({
         ...prev.teams,
         [teamId]: {
           selected: !prev.teams[teamId]?.selected,
-          access_level: prev.teams[teamId]?.access_level || 'view_own',
+          access_level: prev.teams[teamId]?.access_level || prev.default_team_access_level,
         },
       },
     }));
@@ -720,19 +767,19 @@ export default function UserFormWizard({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-hidden bg-slate-800 border-slate-700 text-slate-200">
         <DialogHeader>
-          <DialogTitle className="text-slate-100">
+          <DialogTitle className="text-xl text-slate-100">
             {isEdit ? 'Edit User' : 'Add New User'}
           </DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="text-sm text-slate-400">
             {STEPS[step].label} — Step {step + 1} of {STEPS.length}
           </DialogDescription>
         </DialogHeader>
 
         <StepIndicator />
 
-        <div className="min-h-[400px]">
+        <div className="min-h-[400px] max-h-[58vh] overflow-y-auto pr-1">
           {/* Step 0: Identity */}
           {step === 0 && (
             <div className="space-y-6">
@@ -758,19 +805,19 @@ export default function UserFormWizard({
                     placeholder="user@company.com"
                     className={`bg-slate-900 border-slate-600 ${isEdit ? 'text-slate-400' : 'text-slate-200'}`}
                   />
-                  {isEdit && <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>}
+                  {isEdit && <p className="text-sm text-slate-500 mt-1">Email cannot be changed</p>}
                 </div>
 
                 {/* System IDs - edit mode only */}
                 {isEdit && user?.id && (
                   <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-2">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                    <p className="text-sm text-slate-500 uppercase tracking-wide">
                       System Identifiers
                     </p>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-400">User ID:</span>
                       <div className="flex items-center gap-2">
-                        <code className="text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
+                        <code className="text-sm text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
                           {user.id}
                         </code>
                         <button
@@ -790,7 +837,7 @@ export default function UserFormWizard({
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-slate-400">Employee ID:</span>
                         <div className="flex items-center gap-2">
-                          <code className="text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
+                          <code className="text-sm text-slate-300 bg-slate-800 px-2 py-0.5 rounded font-mono">
                             {user.metadata.employee_id}
                           </code>
                           <button
@@ -839,7 +886,7 @@ export default function UserFormWizard({
                     className="bg-slate-900 border-slate-600 text-slate-200"
                   />
                   {isCreate && (
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-sm text-slate-500 mt-1">
                       Minimum 8 characters with uppercase, lowercase, number, and special character
                     </p>
                   )}
@@ -889,13 +936,13 @@ export default function UserFormWizard({
                         <SelectItem value="user">
                           <div className="flex flex-col">
                             <span className="font-semibold">User</span>
-                            <span className="text-xs text-slate-400">Standard CRM access</span>
+                            <span className="text-sm text-slate-400">Standard CRM access</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="admin">
                           <div className="flex flex-col">
                             <span className="font-semibold">Tenant Admin</span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-sm text-slate-400">
                               Can manage users and settings for their tenant
                             </span>
                           </div>
@@ -903,21 +950,21 @@ export default function UserFormWizard({
                         <SelectItem value="superadmin">
                           <div className="flex flex-col">
                             <span className="font-semibold">Super Admin</span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-sm text-slate-400">
                               Full system access across all tenants
                             </span>
                           </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-sm text-slate-500 mt-1">
                       Controls system-level access. Tenant Admin can manage their own tenant only.
                     </p>
                   </div>
                 )}
 
                 {/* CRM Role — hidden for superadmin/admin platform roles */}
-                {(!form.platform_role || form.platform_role === 'user') && (
+                {form.platform_role !== 'admin' && form.platform_role !== 'superadmin' && (
                   <div>
                     <Label htmlFor="employee_role" className="text-slate-200">
                       CRM Role
@@ -935,7 +982,7 @@ export default function UserFormWizard({
                         <SelectItem value="director">Director</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-sm text-slate-500 mt-1">
                       Controls default data visibility scope
                     </p>
                   </div>
@@ -999,7 +1046,7 @@ export default function UserFormWizard({
                       />
                       <label
                         htmlFor="wizard-select-all-teams"
-                        className="text-xs text-slate-400 cursor-pointer select-none"
+                        className="text-sm text-slate-400 cursor-pointer select-none"
                       >
                         {availableTeams.every((t) => form.teams[t.id]?.selected) &&
                         availableTeams.length > 0
@@ -1013,7 +1060,7 @@ export default function UserFormWizard({
                         variant="destructive"
                         onClick={handleDeleteSelectedTeams}
                         disabled={deletingTeams}
-                        className="h-7 px-2 text-xs bg-red-700 hover:bg-red-600"
+                        className="h-7 px-2 text-sm bg-red-700 hover:bg-red-600"
                       >
                         {deletingTeams ? (
                           <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -1059,7 +1106,7 @@ export default function UserFormWizard({
                         {/* Access level options - shown when selected */}
                         {isSelected && (
                           <div className="px-4 pb-4 pt-2 border-t border-slate-700/50">
-                            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                            <div className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
                               Access Level
                             </div>
                             <div className="space-y-2">
@@ -1090,7 +1137,7 @@ export default function UserFormWizard({
                                     <div className="text-sm font-medium text-slate-200">
                                       {level.label}
                                     </div>
-                                    <div className="text-xs text-slate-400">{level.desc}</div>
+                                    <div className="text-sm text-slate-400">{level.desc}</div>
                                   </div>
                                 </div>
                               ))}
@@ -1205,13 +1252,13 @@ export default function UserFormWizard({
                           {autoForced && (
                             <Badge
                               variant="outline"
-                              className="text-xs bg-green-500/10 text-green-400 border-green-500/30"
+                              className="text-sm bg-green-500/10 text-green-400 border-green-500/30"
                             >
                               Auto
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 truncate">{module.description}</p>
+                        <p className="text-sm text-slate-500 truncate">{module.description}</p>
                       </div>
                       <Switch
                         checked={isEnabled}
@@ -1229,7 +1276,7 @@ export default function UserFormWizard({
                     Modules marked{' '}
                     <Badge
                       variant="outline"
-                      className="text-xs bg-green-500/10 text-green-400 border-green-500/30 mx-1"
+                      className="text-sm bg-green-500/10 text-green-400 border-green-500/30 mx-1"
                     >
                       Auto
                     </Badge>
@@ -1255,7 +1302,7 @@ export default function UserFormWizard({
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-semibold text-blue-300 uppercase tracking-wide">
+                  <span className="text-sm font-semibold text-blue-300 uppercase tracking-wide">
                     In Plain English
                   </span>
                 </div>
@@ -1335,7 +1382,7 @@ export default function UserFormWizard({
                       <Badge
                         key={m.key}
                         variant="outline"
-                        className="text-xs bg-slate-800 text-slate-300 border-slate-600"
+                        className="text-sm bg-slate-800 text-slate-300 border-slate-600"
                       >
                         {m.label}
                       </Badge>
@@ -1424,7 +1471,7 @@ function PermissionCard({ icon, title, description, checked, onChange }) {
 function SummarySection({ title, children }) {
   return (
     <div>
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+      <div className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
         {title}
       </div>
       <div className="space-y-1">{children}</div>

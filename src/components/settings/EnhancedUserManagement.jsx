@@ -1931,6 +1931,7 @@ export default function EnhancedUserManagement() {
         open={wizardOpen}
         user={editingUser}
         mode={wizardMode}
+        template={wizardMode === 'create' ? selectedTemplate : null}
         tenants={allTenants}
         currentUser={currentUser}
         availableTeams={availableTeams}
@@ -1941,11 +1942,13 @@ export default function EnhancedUserManagement() {
             setWizardOpen(false);
             setEditingUser(null);
             setEditingUserTeamMemberships([]);
+            setSelectedTemplate(null);
             await loadData({ cacheBust: true });
           } else {
             // For edit mode, use existing handler
             await handleSaveUser(userId, data);
             setWizardOpen(false);
+            setSelectedTemplate(null);
           }
         }}
         onCancel={() => {
@@ -1958,6 +1961,7 @@ export default function EnhancedUserManagement() {
           editingUserRef.current = null;
           setEditingUser(null);
           setEditingUserTeamMemberships([]);
+          setSelectedTemplate(null);
         }}
       />
 
@@ -1970,6 +1974,7 @@ export default function EnhancedUserManagement() {
           editingUserRef.current = user;
           setEditingUser(user);
           setWizardMode('edit');
+          setSelectedTemplate(null);
           setWizardOpen(true);
         }}
       />
