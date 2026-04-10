@@ -22,6 +22,12 @@ describe('team visibility promote guards', () => {
 
     assert.match(
       source,
+      /router\.post\([\s\S]*'\/:id\/promote'[\s\S]*FOR UPDATE[\s\S]*getAccessLevel\([\s\S]*bizdevSource\.assigned_to_team[\s\S]*bizdevSource\.assigned_to/,
+      'promote should evaluate access from locked row assignment state',
+    );
+
+    assert.match(
+      source,
       /router\.post\([\s\S]*'\/:id\/promote'[\s\S]*access !== 'full'/,
       'promote should reject records without full write access',
     );

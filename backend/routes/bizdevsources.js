@@ -986,35 +986,11 @@ export default function createBizDevSourceRoutes(pgPool) {
           return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
         }
 
-        // ── Two-tier write access check for promote ──
+        // Prepare user visibility scope up front, but defer record-based access
+        // until after SELECT ... FOR UPDATE so authz uses locked assignment state.
+        let visibilityScope = null;
         if (req.user) {
-          const { data: currentRecord, error: currentErr } = await supabase
-            .from('bizdev_sources')
-            .select('id, assigned_to, assigned_to_team')
-            .eq('id', id)
-            .eq('tenant_id', tenant_id)
-            .maybeSingle();
-
-          if (currentErr) throw new Error(currentErr.message);
-
-          if (!currentRecord) {
-            return res.status(404).json({ status: 'error', message: 'BizDev source not found' });
-          }
-
-          const scope = await getVisibilityScope(req.user, supabase);
-          const access = getAccessLevel(
-            scope,
-            currentRecord.assigned_to_team,
-            currentRecord.assigned_to,
-            req.user.id,
-          );
-
-          if (access !== 'full') {
-            return res.status(403).json({
-              status: 'error',
-              message: 'You do not have permission to promote this record',
-            });
-          }
+          visibilityScope = await getVisibilityScope(req.user, supabase);
         }
 
         if (supportsTx) {
@@ -1037,6 +1013,25 @@ export default function createBizDevSourceRoutes(pgPool) {
         }
 
         const bizdevSource = sourceResult.rows[0];
+
+        // ── Two-tier write access check for promote (locked row) ──
+        if (req.user) {
+          const access = getAccessLevel(
+            visibilityScope,
+            bizdevSource.assigned_to_team,
+            bizdevSource.assigned_to,
+            req.user.id,
+          );
+
+          if (access !== 'full') {
+            if (supportsTx) await client.query('ROLLBACK').catch(() => {});
+            return res.status(403).json({
+              status: 'error',
+              message: 'You do not have permission to promote this record',
+            });
+          }
+        }
+
         logger.debug('[Promote] BizDev Source fetched:', {
           company_name: bizdevSource.company_name,
           contact_person: bizdevSource.contact_person,
