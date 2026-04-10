@@ -1211,6 +1211,10 @@ export default function createLeadsV2Routes() {
       let _currentRecord = null;
       let previousAssignedTo = undefined;
 
+      if (!req.user?.id) {
+        return res.status(401).json({ status: 'error', message: 'Authentication required' });
+      }
+
       if (req.user) {
         const { data: current } = await supabase
           .from('leads')
@@ -1233,6 +1237,12 @@ export default function createLeadsV2Routes() {
           return res
             .status(403)
             .json({ status: 'error', message: 'You do not have access to this record' });
+        }
+        if (access === 'read_only') {
+          return res.status(403).json({
+            status: 'error',
+            message: 'This record is read-only for your access level',
+          });
         }
         if (access === 'read_notes' && !isNotesOnlyUpdate(payload)) {
           return res.status(403).json({
