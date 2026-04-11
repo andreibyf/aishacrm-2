@@ -51,7 +51,9 @@ export async function validateTenantAccess(req, res, next) {
     (req.body && req.body.tenant_id) ||
     req.query.tenant_id ||
     req.params.tenant_id ||
-    req.params.tenantId; // Support both snake_case and camelCase
+    req.params.tenantId ||
+    req.headers['x-tenant-id'] ||
+    req.headers['x-tenant']; // Support both snake_case/camelCase and tenant headers
 
   // Resolve canonical tenant if an identifier was provided
   if (requestedTenantId) {

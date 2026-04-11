@@ -12,6 +12,7 @@ import { fetchEmailTemplates } from '@/api/emailTemplates';
  */
 export default function EmailTemplatePicker({
   entityType,
+  tenantId,
   onSelect,
   onCancel,
   isLoading: externalLoading,
@@ -28,7 +29,7 @@ export default function EmailTemplatePicker({
     setLoading(true);
     setError(null);
 
-    fetchEmailTemplates({ entityType })
+    fetchEmailTemplates({ entityType, tenantId })
       .then((data) => {
         if (!cancelled) setTemplates(data);
       })
@@ -42,7 +43,7 @@ export default function EmailTemplatePicker({
     return () => {
       cancelled = true;
     };
-  }, [entityType]);
+  }, [entityType, tenantId]);
 
   const handleSelectTemplate = (template) => {
     setSelected(template);
@@ -138,19 +139,10 @@ export default function EmailTemplatePicker({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onCancel}
-            disabled={externalLoading}
-          >
+          <Button size="sm" variant="outline" onClick={onCancel} disabled={externalLoading}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={externalLoading}
-          >
+          <Button size="sm" onClick={handleSubmit} disabled={externalLoading}>
             {externalLoading ? (
               <>
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

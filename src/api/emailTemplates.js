@@ -3,12 +3,27 @@
  */
 import { getBackendUrl } from '@/api/backendUrl';
 
-async function getHeaders() {
+function resolveTenantId(tenantIdOverride) {
+  if (tenantIdOverride) return String(tenantIdOverride);
+  if (typeof window !== 'undefined') {
+    try {
+      const urlTenant = new URL(window.location.href).searchParams.get('tenant');
+      if (urlTenant) return urlTenant;
+    } catch {
+      // ignore URL parse errors in non-browser contexts
+    }
+  }
+
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
+  }
+
+  return '';
+}
+
+async function getHeaders(tenantIdOverride) {
   const headers = { 'Content-Type': 'application/json' };
-  const tenantId =
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id')
-      : '';
+  const tenantId = resolveTenantId(tenantIdOverride);
   if (tenantId) headers['x-tenant-id'] = tenantId;
 
   // Dynamic import to avoid circular dependency
@@ -18,14 +33,14 @@ async function getHeaders() {
   return headers;
 }
 
-export async function fetchEmailTemplates({ category, entityType } = {}) {
+export async function fetchEmailTemplates({ category, entityType, tenantId } = {}) {
   const url = new URL(`${getBackendUrl()}/api/v2/email-templates`);
   if (category) url.searchParams.set('category', category);
   if (entityType) url.searchParams.set('entity_type', entityType);
 
   const resp = await fetch(url.toString(), {
     method: 'GET',
-    headers: await getHeaders(),
+    headers: await getHeaders(tenantId),
     credentials: 'include',
   });
   const json = await resp.json();
@@ -91,7 +106,7 @@ export async function draftFromTemplate({
 }) {
   const resp = await fetch(`${getBackendUrl()}/api/ai/draft-from-template`, {
     method: 'POST',
-    headers: await getHeaders(),
+    headers: await getHeaders(tenantId),
     credentials: 'include',
     body: JSON.stringify({
       tenant_id: tenantId,

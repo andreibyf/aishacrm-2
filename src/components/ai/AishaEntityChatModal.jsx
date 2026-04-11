@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, CheckCircle2, Circle, Clock, ExternalLink, FileText } from 'lucide-react';
+import { Loader2, Send, CheckCircle2, Circle, Clock, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
 import { processChatEmailDraft } from '@/api/functions';
@@ -56,16 +57,6 @@ export default function AishaEntityChatModal({
   // Use selectedTenantId (for superadmins) or fallback to user's tenant_id (for tenant admins)
   const tenantId = tenantIdProp || selectedTenantId || user?.tenant_id;
   const pollIntervalRef = useRef(null);
-
-  const getOfficeVizUrl = () => {
-    const base =
-      window.location.hostname === 'app.aishacrm.com'
-        ? 'https://backoffice.aishacrm.com'
-        : `${window.location.protocol}//${window.location.hostname}:4010`;
-    return base;
-  };
-
-  const openOffice = () => window.open(getOfficeVizUrl(), '_blank', 'noopener');
 
   // Reset state when modal opens
   useEffect(() => {
@@ -285,6 +276,9 @@ export default function AishaEntityChatModal({
             <span className="text-xl">✨</span>
             Assign AiSHA a Task
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Use AiSHA to run tasks or draft emails for the selected CRM record.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
@@ -292,6 +286,7 @@ export default function AishaEntityChatModal({
             showTemplatePicker ? (
               <EmailTemplatePicker
                 entityType={entityType}
+                tenantId={tenantId}
                 onSelect={handleTemplateSelect}
                 onCancel={() => setShowTemplatePicker(false)}
                 isLoading={isLoading}

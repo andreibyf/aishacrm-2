@@ -452,6 +452,7 @@ app.use(
   '/api/v2/email-templates',
   defaultLimiter,
   authenticateRequest,
+  validateTenantAccess,
   createEmailTemplateRoutes(measuredPgPool),
 );
 app.use('/api/notifications', defaultLimiter, createNotificationRoutes(measuredPgPool));
