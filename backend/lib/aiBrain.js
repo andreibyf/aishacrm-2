@@ -38,7 +38,9 @@ function buildSystemPrompt(params, tenant) {
       ? 'Read-only mode: Only data retrieval is allowed.'
       : params.mode === 'propose_actions'
         ? 'Propose-actions mode: You may suggest create/update actions but MUST NOT execute them.'
-        : 'Apply mode requested, but Phase 1 forbids autonomous execution.';
+        : params.mode === 'generate_content'
+          ? 'Generate-content mode: Produce high-quality content only. Do not call tools.'
+          : 'Apply mode requested, but Phase 1 forbids autonomous execution.';
   const contextSummary = JSON.stringify(params.context ?? {}, null, 2);
   return (
     `${getBraidSystemPrompt()}\n\n` +
@@ -174,7 +176,46 @@ export async function runTask(params) {
     const startTime = Date.now();
     let completion;
 
-    if (llmConfig.provider === 'anthropic') {
+    if (params.mode === 'generate_content') {
+      // Content generation should use the shared client so LiteLLM routing is respected.
+      const result = await generateChatCompletion({
+        provider: llmConfig.provider,
+        model: llmConfig.model,
+        messages: brainMessages,
+        temperature: 0.5,
+        apiKey,
+        tenantId: tenant.uuid,
+      });
+      const durationMs = Date.now() - startTime;
+
+      logLLMActivity({
+        tenantId: tenant.uuid,
+        capability,
+        provider: llmConfig.provider,
+        model: llmConfig.model,
+        nodeId: `aiBrain:${params.taskType}:${params.mode}`,
+        status: result.status === 'success' ? 'success' : 'error',
+        durationMs,
+        usage: result.raw?.usage || null,
+      });
+
+      if (result.status !== 'success') {
+        throw new BrainError(result.error || 'Content generation failed', 500);
+      }
+
+      completion = {
+        model: llmConfig.model,
+        usage: result.raw?.usage || null,
+        choices: [
+          {
+            message: {
+              content: result.content || '',
+              tool_calls: [],
+            },
+          },
+        ],
+      };
+    } else if (llmConfig.provider === 'anthropic') {
       // TODO: Add tool calling support for Anthropic provider
       // Currently, the multi-provider client's generateChatCompletion()
       // doesn't support passing tools to Anthropic. This means read_only
@@ -331,6 +372,10 @@ export async function runTask(params) {
   }
 }
 async function resolveAllowedTools(mode) {
+  if (mode === 'generate_content') {
+    return new Set();
+  }
+
   const registry = await getToolRegistrySnapshot();
   const allowed = new Set();
   for (const [toolName, config] of Object.entries(registry)) {

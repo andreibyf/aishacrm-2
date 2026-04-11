@@ -21,6 +21,31 @@ import {
   createAiEmailDraftNotification,
 } from './aiEmailDraftingSupport.js';
 import logger from '../lib/logger.js';
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+
+function isMissingColumnError(error, columnName) {
+  const message = String(error?.message || error || '');
+  const normalized = message.toLowerCase();
+  const col = String(columnName || '').toLowerCase();
+  return (
+    message.includes(`email_template.${columnName} does not exist`) ||
+    message.includes(`column "${columnName}" of relation "email_template" does not exist`) ||
+    (normalized.includes('does not exist') && normalized.includes(col)) ||
+    (normalized.includes('schema cache') && normalized.includes(col))
+  );
+}
+
+function normalizeLegacyTemplateShape(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    subject_template: row.subject_template || row.subject || '',
+    body_prompt: row.body_prompt || row.body || '',
+    entity_types: row.entity_types || null,
+    variables: Array.isArray(row.variables) ? row.variables : [],
+    is_active: row.is_active !== undefined ? row.is_active : true,
+  };
+}
 
 /**
  * Build variable context from CRM entity for automatic substitution.
@@ -116,16 +141,73 @@ export async function generateTemplateDrivenEmailDraft(
     conversationId,
     user,
   },
-  { supabase = getSupabaseClient(), executeSendEmailAction } = {},
+  {
+    supabase = getSupabaseClient(),
+    executeSendEmailAction,
+    resolveTenantIdentifier = resolveCanonicalTenant,
+  } = {},
 ) {
   // 1. Load the template
-  const { data: template, error: templateError } = await supabase
-    .from('email_template')
-    .select('*')
-    .or(`tenant_id.eq.${tenantId},is_system.eq.true`)
-    .eq('id', templateId)
-    .eq('is_active', true)
-    .maybeSingle();
+  const lookupModern = async () => {
+    return supabase
+      .from('email_template')
+      .select('*')
+      .or(`tenant_id.eq.${tenantId},is_system.eq.true`)
+      .eq('id', templateId)
+      .eq('is_active', true)
+      .maybeSingle();
+  };
+
+  const lookupLegacyByTenant = async (tenantValue) => {
+    if (!tenantValue) return { data: null, error: null };
+    return supabase
+      .from('email_template')
+      .select('*')
+      .eq('id', templateId)
+      .eq('tenant_id', tenantValue)
+      .maybeSingle();
+  };
+
+  let { data: template, error: templateError } = await lookupModern();
+
+  const requiresLegacyFallback =
+    templateError &&
+    (isMissingColumnError(templateError, 'is_system') ||
+      isMissingColumnError(templateError, 'is_active') ||
+      isMissingColumnError(templateError, 'subject_template') ||
+      isMissingColumnError(templateError, 'body_prompt'));
+
+  if (requiresLegacyFallback) {
+    logger.warn('[templateEmailDraftService] Falling back to legacy template lookup');
+
+    let legacy = await lookupLegacyByTenant(tenantId);
+    if (!legacy.data) {
+      try {
+        const resolvedTenant = await resolveTenantIdentifier(tenantId);
+        const fallbackSlug = resolvedTenant?.slug;
+        if (fallbackSlug && fallbackSlug !== tenantId) {
+          const bySlug = await lookupLegacyByTenant(fallbackSlug);
+          if (bySlug.error) {
+            templateError = bySlug.error;
+          } else {
+            legacy = bySlug;
+          }
+        }
+      } catch (resolveErr) {
+        logger.warn(
+          '[templateEmailDraftService] Failed to resolve canonical tenant slug for legacy fallback:',
+          resolveErr?.message || resolveErr,
+        );
+      }
+    }
+
+    if (!legacy.error && legacy.data) {
+      template = normalizeLegacyTemplateShape(legacy.data);
+      templateError = null;
+    } else if (legacy.error) {
+      templateError = legacy.error;
+    }
+  }
 
   if (templateError) {
     throw buildServiceError(500, 'template_lookup_failed', templateError.message);

@@ -5,6 +5,7 @@ import { generateTemplateDrivenEmailDraft } from '../../services/templateEmailDr
 
 function createSupabaseStub({
   template = null,
+  emailTemplateResponses = null,
   relatedEntities = {},
   notes = [],
   links = [],
@@ -18,39 +19,77 @@ function createSupabaseStub({
   };
 
   const notesTable = {
-    select() { return this; },
-    eq() { return this; },
-    order() { return this; },
-    limit() { return Promise.resolve({ data: notes, error: null }); },
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    order() {
+      return this;
+    },
+    limit() {
+      return Promise.resolve({ data: notes, error: null });
+    },
   };
 
   const linksTable = {
-    select() { return this; },
-    eq() { return this; },
-    limit() { return Promise.resolve({ data: links, error: null }); },
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    limit() {
+      return Promise.resolve({ data: links, error: null });
+    },
   };
 
   const messagesTable = {
-    select() { return this; },
-    eq() { return this; },
-    in() { return this; },
-    order() { return this; },
-    limit() { return Promise.resolve({ data: messages, error: null }); },
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    in() {
+      return this;
+    },
+    order() {
+      return this;
+    },
+    limit() {
+      return Promise.resolve({ data: messages, error: null });
+    },
   };
 
   const notificationsTable = {
-    insert(payload) { calls.notifications.push(payload); return this; },
-    select() { return this; },
+    insert(payload) {
+      calls.notifications.push(payload);
+      return this;
+    },
+    select() {
+      return this;
+    },
     async single() {
       return { data: { id: `notification-${calls.notifications.length}` }, error: null };
     },
   };
 
   const emailTemplateTable = {
-    select() { return this; },
-    or() { return this; },
-    eq() { return this; },
+    select() {
+      return this;
+    },
+    or() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
     async maybeSingle() {
+      if (Array.isArray(emailTemplateResponses) && emailTemplateResponses.length > 0) {
+        return emailTemplateResponses.shift();
+      }
       return { data: template, error: null };
     },
   };
@@ -65,8 +104,12 @@ function createSupabaseStub({
       if (table === 'notifications') return notificationsTable;
       if (['leads', 'contacts', 'accounts', 'opportunities', 'bizdev_sources'].includes(table)) {
         return {
-          select() { return this; },
-          eq() { return this; },
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
           async maybeSingle() {
             return { data: relatedEntities[table] || null, error: null };
           },
@@ -104,7 +147,13 @@ const TEMPLATE = {
     'Write a professional follow-up email to {{first_name}} at {{company}}. Topic: {{meeting_topic}}. Tone: warm but professional.',
   entity_types: ['lead', 'contact'],
   variables: [
-    { name: 'meeting_topic', type: 'text', description: 'Meeting topic', required: false, default: 'our recent discussion' },
+    {
+      name: 'meeting_topic',
+      type: 'text',
+      description: 'Meeting topic',
+      required: false,
+      default: 'our recent discussion',
+    },
   ],
   is_system: true,
   is_active: true,
@@ -241,9 +290,7 @@ test('rejects when template not found', async () => {
 test('rejects missing required variables', async () => {
   const templateWithRequired = {
     ...TEMPLATE,
-    variables: [
-      { name: 'deal_size', type: 'text', description: 'Deal size', required: true },
-    ],
+    variables: [{ name: 'deal_size', type: 'text', description: 'Deal size', required: true }],
   };
 
   const supabase = createSupabaseStub({
@@ -330,4 +377,62 @@ test('auto-resolves CRM entity fields as variables (first_name, company, sender_
   // Body prompt uses auto-resolved {{company}}
   const bodyPrompt = supabase.calls.executeSendEmailAction[0].body_prompt;
   assert.ok(bodyPrompt.includes('Acme Corp'));
+});
+
+test('legacy template fallback prefers canonical slug over user tenant_id', async () => {
+  const legacyTemplate = {
+    id: 'tpl-legacy-1',
+    tenant_id: 'target-tenant-slug',
+    name: 'Legacy Follow-Up',
+    subject: 'Legacy subject for {{first_name}}',
+    body: 'Legacy body for {{first_name}} at {{company}}',
+    type: 'follow_up',
+    variables: [],
+  };
+
+  const supabase = createSupabaseStub({
+    emailTemplateResponses: [
+      {
+        data: null,
+        error: { message: 'column "is_system" of relation "email_template" does not exist' },
+      },
+      { data: null, error: null },
+      { data: legacyTemplate, error: null },
+    ],
+    relatedEntities: { leads: ENTITY },
+  });
+
+  const resolvedTenantCalls = [];
+  const result = await generateTemplateDrivenEmailDraft(
+    {
+      tenantId: 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
+      templateId: 'tpl-legacy-1',
+      entityType: 'lead',
+      entityId: 'lead-001',
+      user: {
+        id: 'user-001',
+        first_name: 'Bob',
+        last_name: 'Jones',
+        email: 'bob@example.com',
+        tenant_id: 'superadmin-home-tenant',
+      },
+    },
+    {
+      supabase,
+      executeSendEmailAction: createExecuteSendEmailAction(supabase.calls),
+      resolveTenantIdentifier: async (identifier) => {
+        resolvedTenantCalls.push(identifier);
+        return {
+          uuid: identifier,
+          slug: 'target-tenant-slug',
+          found: true,
+          source: 'test',
+        };
+      },
+    },
+  );
+
+  assert.equal(resolvedTenantCalls.length, 1);
+  assert.equal(result.template.id, 'tpl-legacy-1');
+  assert.equal(result.subject, 'Legacy subject for Alice');
 });

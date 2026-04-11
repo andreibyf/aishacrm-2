@@ -68,6 +68,28 @@ function buildEntitySelectColumns(entityType) {
   return 'id, first_name, last_name, company, email, assigned_to, assigned_to_name, assigned_to_team';
 }
 
+function buildEntityFallbackSelectColumns(entityType) {
+  if (entityType === 'account') return 'id, name, email, assigned_to';
+  if (entityType === 'opportunity') return 'id, name, contact_id, lead_id, assigned_to';
+  if (entityType === 'contact') return 'id, first_name, last_name, email, assigned_to';
+  return 'id, first_name, last_name, company, email, assigned_to';
+}
+
+function isMissingColumnError(error, columnName) {
+  const message = String(error?.message || error || '');
+  const normalized = message.toLowerCase();
+  const col = String(columnName || '').toLowerCase();
+  return (
+    message.includes(`column ${columnName} does not exist`) ||
+    message.includes(`column "${columnName}" does not exist`) ||
+    message.includes(`does not exist: ${columnName}`) ||
+    // Handles variants like "column leads.assigned_to_name does not exist"
+    (normalized.includes('does not exist') && normalized.includes(col)) ||
+    // Handles PostgREST schema cache style errors
+    (normalized.includes('schema cache') && normalized.includes(col))
+  );
+}
+
 async function loadEntityEmailById(supabase, tenantId, entityType, entityId) {
   const tableName = buildEntityTableName(entityType);
   if (!tableName || !entityId) return null;
@@ -123,11 +145,37 @@ export async function loadRelatedEntityContext(supabase, activityLike) {
     .eq('id', activityLike.related_id)
     .maybeSingle();
 
+  let entityResult = result;
   if (result.error) {
-    throw buildServiceError(500, 'ai_email_related_lookup_failed', result.error.message);
+    const canFallback =
+      isMissingColumnError(result.error, 'assigned_to_name') ||
+      isMissingColumnError(result.error, 'assigned_to_team') ||
+      isMissingColumnError(result.error, 'company') ||
+      isMissingColumnError(result.error, 'accounts');
+
+    if (!canFallback) {
+      throw buildServiceError(500, 'ai_email_related_lookup_failed', result.error.message);
+    }
+
+    logger.warn('[aiEmailDraftingSupport] Related entity lookup falling back to legacy columns', {
+      tableName,
+      entityType: normalizedEntityType,
+      reason: result.error.message,
+    });
+
+    entityResult = await supabase
+      .from(tableName)
+      .select(buildEntityFallbackSelectColumns(normalizedEntityType))
+      .eq('tenant_id', activityLike.tenant_id)
+      .eq('id', activityLike.related_id)
+      .maybeSingle();
+
+    if (entityResult.error) {
+      throw buildServiceError(500, 'ai_email_related_lookup_failed', entityResult.error.message);
+    }
   }
 
-  const entity = result.data || null;
+  const entity = entityResult.data || null;
   return {
     recipientEmail: await resolveRelatedRecipientEmail(supabase, activityLike, entity),
     entity,

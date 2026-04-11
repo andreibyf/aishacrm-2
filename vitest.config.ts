@@ -184,7 +184,11 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
-          include: ['src/__tests__/integrations.test.js', 'src/api/functions.test.js'],
+          include: [
+            'src/__tests__/integrations.test.js',
+            'src/api/functions.test.js',
+            'src/api/emailTemplates.test.js',
+          ],
         },
         resolve: sharedResolve,
       },
