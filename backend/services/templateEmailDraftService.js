@@ -21,6 +21,7 @@ import {
   createAiEmailDraftNotification,
 } from './aiEmailDraftingSupport.js';
 import logger from '../lib/logger.js';
+import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 
 function isMissingColumnError(error, columnName) {
   const message = String(error?.message || error || '');
@@ -140,7 +141,11 @@ export async function generateTemplateDrivenEmailDraft(
     conversationId,
     user,
   },
-  { supabase = getSupabaseClient(), executeSendEmailAction } = {},
+  {
+    supabase = getSupabaseClient(),
+    executeSendEmailAction,
+    resolveTenantIdentifier = resolveCanonicalTenant,
+  } = {},
 ) {
   // 1. Load the template
   const lookupModern = async () => {
@@ -176,12 +181,23 @@ export async function generateTemplateDrivenEmailDraft(
     logger.warn('[templateEmailDraftService] Falling back to legacy template lookup');
 
     let legacy = await lookupLegacyByTenant(tenantId);
-    if (!legacy.data && user?.tenant_id && user.tenant_id !== tenantId) {
-      const bySlug = await lookupLegacyByTenant(user.tenant_id);
-      if (bySlug.error) {
-        templateError = bySlug.error;
-      } else {
-        legacy = bySlug;
+    if (!legacy.data) {
+      try {
+        const resolvedTenant = await resolveTenantIdentifier(tenantId);
+        const fallbackSlug = resolvedTenant?.slug;
+        if (fallbackSlug && fallbackSlug !== tenantId) {
+          const bySlug = await lookupLegacyByTenant(fallbackSlug);
+          if (bySlug.error) {
+            templateError = bySlug.error;
+          } else {
+            legacy = bySlug;
+          }
+        }
+      } catch (resolveErr) {
+        logger.warn(
+          '[templateEmailDraftService] Failed to resolve canonical tenant slug for legacy fallback:',
+          resolveErr?.message || resolveErr,
+        );
       }
     }
 

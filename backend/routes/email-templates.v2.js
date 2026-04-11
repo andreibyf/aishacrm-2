@@ -99,7 +99,8 @@ function validateTemplatePayload(body) {
   return errors;
 }
 
-export default function createEmailTemplateRoutes(_pgPool) {
+export default function createEmailTemplateRoutes(_pgPool, deps = {}) {
+  const getSupabase = deps.getSupabaseClient || getSupabaseClient;
   const router = express.Router();
 
   // GET /api/v2/email-templates — List templates
@@ -110,7 +111,7 @@ export default function createEmailTemplateRoutes(_pgPool) {
       if (!tenantId) return res.status(400).json({ status: 'error', message: 'Tenant required' });
 
       const { category, entity_type, is_active = 'true' } = req.query;
-      const supabase = getSupabaseClient();
+      const supabase = getSupabase();
 
       const applyFilters = (query) => {
         let filtered = query;
@@ -241,7 +242,7 @@ export default function createEmailTemplateRoutes(_pgPool) {
       if (!tenantId) return res.status(400).json({ status: 'error', message: 'Tenant required' });
 
       const { id } = req.params;
-      const supabase = getSupabaseClient();
+      const supabase = getSupabase();
 
       const { data, error } = await supabase
         .from('email_template')
@@ -271,7 +272,7 @@ export default function createEmailTemplateRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: errors.join('; ') });
       }
 
-      const supabase = getSupabaseClient();
+      const supabase = getSupabase();
 
       const insertPayload = {
         tenant_id: tenantId,
@@ -315,7 +316,7 @@ export default function createEmailTemplateRoutes(_pgPool) {
       if (!tenantId) return res.status(400).json({ status: 'error', message: 'Tenant required' });
 
       const { id } = req.params;
-      const supabase = getSupabaseClient();
+      const supabase = getSupabase();
 
       // Verify it's a tenant-owned template (not system)
       const { data: existing, error: lookupError } = await supabase
@@ -341,12 +342,10 @@ export default function createEmailTemplateRoutes(_pgPool) {
         updateFields.description = req.body.description?.trim() || null;
       if (req.body.category !== undefined) {
         if (!ALLOWED_CATEGORIES.includes(req.body.category)) {
-          return res
-            .status(400)
-            .json({
-              status: 'error',
-              message: `category must be one of: ${ALLOWED_CATEGORIES.join(', ')}`,
-            });
+          return res.status(400).json({
+            status: 'error',
+            message: `category must be one of: ${ALLOWED_CATEGORIES.join(', ')}`,
+          });
         }
         updateFields.category = req.body.category;
       }
@@ -398,7 +397,7 @@ export default function createEmailTemplateRoutes(_pgPool) {
       if (!tenantId) return res.status(400).json({ status: 'error', message: 'Tenant required' });
 
       const { id } = req.params;
-      const supabase = getSupabaseClient();
+      const supabase = getSupabase();
 
       // Verify ownership and not system
       const { data: existing, error: lookupError } = await supabase

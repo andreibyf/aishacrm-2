@@ -1,6 +1,11 @@
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import logger from '../lib/logger.js';
 
+function normalizeTenantIdentifier(value) {
+  const candidate = Array.isArray(value) ? value.find((v) => typeof v === 'string') : value;
+  return typeof candidate === 'string' ? candidate.trim() : candidate;
+}
+
 /**
  * Tenant Validation Middleware
  *
@@ -47,13 +52,15 @@ export async function validateTenantAccess(req, res, next) {
   // Get tenant_id from various request sources
   // Guard req.body access — it may be undefined on GET requests or when
   // body-parser middleware hasn't run (e.g. in tests without a JSON body).
-  const requestedTenantId =
+  const requestedTenantIdRaw =
     (req.body && req.body.tenant_id) ||
     req.query.tenant_id ||
     req.params.tenant_id ||
     req.params.tenantId ||
     req.headers['x-tenant-id'] ||
     req.headers['x-tenant']; // Support both snake_case/camelCase and tenant headers
+
+  const requestedTenantId = normalizeTenantIdentifier(requestedTenantIdRaw);
 
   // Resolve canonical tenant if an identifier was provided
   if (requestedTenantId) {
