@@ -28,10 +28,15 @@ ENV NODE_ENV=production
 # Create non-root user for security
 RUN addgroup -S app && adduser -S app -G app
 
+# Docker Desktop commonly mounts docker.sock as root:root (0660). Add app user to
+# root group so non-root runtime can perform read-only container diagnostics.
+RUN addgroup app root
+
 # Install Chromium for Puppeteer PDF generation + Doppler CLI for runtime secret injection
+# + docker-cli for container health/status diagnostics via mounted Docker socket.
 RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key' -O /etc/apk/keys/cli@doppler-8004D9FF50437357.rsa.pub && \
     echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
-    apk add doppler wget chromium nss freetype harfbuzz ca-certificates ttf-freefont
+    apk add doppler docker-cli wget chromium nss freetype harfbuzz ca-certificates ttf-freefont
 
 # Tell Puppeteer to use system Chromium instead of downloading its own
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser

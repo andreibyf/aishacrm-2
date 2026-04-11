@@ -51,6 +51,184 @@ async function isRunningInDocker() {
   }
 }
 
+function normalizeContainerHealth(rawStatus = '') {
+  const status = String(rawStatus).toLowerCase();
+  if (status.includes('unhealthy')) return 'unhealthy';
+  if (status.includes('healthy')) return 'healthy';
+  return 'unknown';
+}
+
+function normalizeContainerState(rawStatus = '') {
+  const status = String(rawStatus).toLowerCase();
+  if (status.startsWith('up')) return 'running';
+  if (status.startsWith('exited')) return 'exited';
+  if (status.startsWith('created')) return 'created';
+  if (status.includes('restarting')) return 'restarting';
+  if (status.includes('paused')) return 'paused';
+  if (status.includes('dead')) return 'dead';
+  return 'unknown';
+}
+
+function parseDockerComposeJsonLines(rawOutput) {
+  const trimmed = (rawOutput || '').trim();
+  if (!trimmed) return [];
+
+  if (trimmed.startsWith('[')) {
+    const arr = JSON.parse(trimmed);
+    return Array.isArray(arr) ? arr : [];
+  }
+
+  return trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+async function getContainerSnapshot() {
+  const snapshot = {
+    available: false,
+    source: 'none',
+    reason: null,
+    containers: [],
+  };
+
+  try {
+    const { stdout } = await execAsync('docker compose ps --format json', {
+      timeout: 4000,
+      maxBuffer: 1024 * 1024,
+    });
+
+    const records = parseDockerComposeJsonLines(stdout);
+    snapshot.available = true;
+    snapshot.source = 'docker compose ps';
+    snapshot.containers = records.map((record) => ({
+      name: record.Name || record.Service || 'unknown',
+      service: record.Service || null,
+      state: normalizeContainerState(record.State || record.Status),
+      status: record.Status || record.State || 'unknown',
+      health: normalizeContainerHealth(record.Status || ''),
+    }));
+    return snapshot;
+  } catch {
+    // Fallback to docker ps -a for environments without compose integration.
+  }
+
+  try {
+    const { stdout } = await execAsync('docker ps -a --format "{{.Names}}|{{.Status}}"', {
+      timeout: 4000,
+      maxBuffer: 1024 * 1024,
+    });
+
+    const lines = (stdout || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    snapshot.available = true;
+    snapshot.source = 'docker ps -a';
+    snapshot.containers = lines.map((line) => {
+      const [name, ...statusParts] = line.split('|');
+      const status = statusParts.join('|').trim();
+      return {
+        name: name || 'unknown',
+        service: null,
+        state: normalizeContainerState(status),
+        status: status || 'unknown',
+        health: normalizeContainerHealth(status),
+      };
+    });
+    return snapshot;
+  } catch (err) {
+    snapshot.reason = err.message || 'docker CLI unavailable';
+    return snapshot;
+  }
+}
+
+/**
+ * Probe a URL with a short timeout. Returns 'reachable', 'http_NNN', or 'unreachable'.
+ * @param {string} url
+ * @param {number} [timeoutMs=2000]
+ */
+async function probeUrl(url, timeoutMs = 2000) {
+  try {
+    const fetchModule = await import('node-fetch');
+    const fetch = fetchModule.default || fetchModule;
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok ? 'reachable' : `http_${res.status}`;
+  } catch {
+    return 'unreachable';
+  }
+}
+
+/**
+ * Gather AI infrastructure status: active provider, configured providers,
+ * LiteLLM gateway, Ollama local LLM, and Braid MCP node-server health.
+ */
+async function getAiInfrastructureStatus() {
+  const litellmBaseUrl = (process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '');
+  const ollamaBaseUrl = process.env.LOCAL_LLM_BASE_URL || null;
+  const braidMcpUrl = (process.env.BRAID_MCP_URL || 'http://braid-mcp-server:8000').replace(
+    /\/$/,
+    '',
+  );
+
+  const result = {
+    activeProvider: process.env.LLM_PROVIDER || 'openai',
+    developerAiModel: process.env.DEVELOPER_AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
+    providers: {
+      openai: {
+        configured: !!process.env.OPENAI_API_KEY,
+        baseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+      },
+      anthropic: {
+        configured: !!process.env.ANTHROPIC_API_KEY,
+      },
+      groq: {
+        configured: !!process.env.GROQ_API_KEY,
+      },
+      local: {
+        configured: !!(ollamaBaseUrl || process.env.LOCAL_LLM_API_KEY),
+        baseUrl: ollamaBaseUrl || null,
+      },
+    },
+    litellm: {
+      enabled: process.env.LITELLM_ENABLED === 'true',
+      baseUrl: litellmBaseUrl,
+      health: 'unknown',
+    },
+    ollama: {
+      baseUrl: ollamaBaseUrl,
+      health: 'unknown',
+    },
+    braidMcp: {
+      url: braidMcpUrl,
+      health: 'unknown',
+    },
+  };
+
+  // LiteLLM health probe
+  if (result.litellm.enabled) {
+    result.litellm.health = await probeUrl(`${litellmBaseUrl}/health/liveliness`);
+  } else {
+    result.litellm.health = 'disabled';
+  }
+
+  // Ollama health probe (strip /v1 suffix to get base Ollama API root)
+  if (ollamaBaseUrl) {
+    const ollamaRoot = ollamaBaseUrl.replace(/\/v1\/?$/, '');
+    result.ollama.health = await probeUrl(`${ollamaRoot}/api/version`);
+  } else {
+    result.ollama.health = 'not_configured';
+  }
+
+  // Braid MCP health probe
+  const braidHealthUrl = process.env.MCP_NODE_HEALTH_URL || `${braidMcpUrl}/health`;
+  result.braidMcp.health = await probeUrl(braidHealthUrl);
+
+  return result;
+}
+
 /**
  * Get comprehensive execution context for Developer AI self-awareness
  * This tells Developer AI exactly where and how it's running
@@ -59,28 +237,36 @@ async function getExecutionContext() {
   const isDocker = await isRunningInDocker();
   const nodeEnv = process.env.NODE_ENV || 'development';
   const isProduction = nodeEnv === 'production';
-  
+
   // Memory stats (use RSS for actual memory, not misleading heap%)
   const memUsage = process.memoryUsage();
   const rssInMB = Math.round(memUsage.rss / (1024 * 1024));
   const heapUsedMB = Math.round(memUsage.heapUsed / (1024 * 1024));
   const heapTotalMB = Math.round(memUsage.heapTotal / (1024 * 1024));
-  
+
   // Uptime
   const uptimeSeconds = Math.floor(process.uptime());
-  const uptimeFormatted = uptimeSeconds >= 3600
-    ? `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
-    : uptimeSeconds >= 60
-      ? `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`
-      : `${uptimeSeconds}s`;
+  const uptimeFormatted =
+    uptimeSeconds >= 3600
+      ? `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
+      : uptimeSeconds >= 60
+        ? `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`
+        : `${uptimeSeconds}s`;
 
   // Redis connectivity check
   let redisStatus = { memory: 'unknown', cache: 'unknown' };
   try {
-    const { isRedisReady } = await import('./memoryClient.js');
-    redisStatus.memory = isRedisReady() ? 'connected' : 'disconnected';
-  } catch { /* Redis memory not available */ }
-  
+    const memoryClient = await import('./memoryClient.js');
+    if (typeof memoryClient.isMemoryAvailable === 'function') {
+      redisStatus.memory = memoryClient.isMemoryAvailable() ? 'connected' : 'disconnected';
+    } else if (typeof memoryClient.isRedisReady === 'function') {
+      // Backward-compatible fallback for older memory client versions.
+      redisStatus.memory = memoryClient.isRedisReady() ? 'connected' : 'disconnected';
+    }
+  } catch {
+    /* Redis memory not available */
+  }
+
   try {
     const { getCacheStats } = await import('./cacheMiddleware.js');
     const cacheStats = await getCacheStats();
@@ -88,7 +274,9 @@ async function getExecutionContext() {
     if (cacheStats?.keyCount !== undefined) {
       redisStatus.cacheKeys = cacheStats.keyCount;
     }
-  } catch { /* Cache stats not available */ }
+  } catch {
+    /* Cache stats not available */
+  }
 
   // Database connectivity (quick check)
   let dbStatus = 'unknown';
@@ -104,42 +292,48 @@ async function getExecutionContext() {
   // Port configuration
   const internalPort = process.env.PORT || 3001;
   const externalPort = isDocker ? 4001 : internalPort;
+  const containerSnapshot = await getContainerSnapshot();
+  const aiInfrastructure = await getAiInfrastructureStatus();
 
   // Docker-specific context
-  const dockerContext = isDocker ? {
-    containerized: true,
-    containerName: process.env.HOSTNAME || 'aishacrm-backend',
-    internalApiUrl: `http://localhost:${internalPort}`,
-    externalApiUrl: `http://localhost:${externalPort}`,
-    logAccess: 'Use system_logs table or run `docker logs` from HOST machine',
-    fileSystemAccess: 'Full read/write within /app',
-    dockerCLI: 'NOT AVAILABLE - running inside container',
-  } : {
-    containerized: false,
-    apiUrl: `http://localhost:${internalPort}`,
-    logAccess: 'Direct file access or process stdout',
-    fileSystemAccess: 'Full access',
-    dockerCLI: 'Available if Docker is installed on host',
-  };
+  const dockerContext = isDocker
+    ? {
+        containerized: true,
+        containerName: process.env.HOSTNAME || 'aishacrm-backend',
+        internalApiUrl: `http://localhost:${internalPort}`,
+        externalApiUrl: `http://localhost:${externalPort}`,
+        logAccess: 'Use system_logs table or run `docker logs` from HOST machine',
+        fileSystemAccess: 'Full read/write within /app',
+        dockerCLI: 'NOT AVAILABLE - running inside container',
+      }
+    : {
+        containerized: false,
+        apiUrl: `http://localhost:${internalPort}`,
+        logAccess: 'Direct file access or process stdout',
+        fileSystemAccess: 'Full access',
+        dockerCLI: 'Available if Docker is installed on host',
+      };
 
   // Production-specific warnings
-  const productionContext = isProduction ? {
-    environment: 'PRODUCTION',
-    warnings: [
-      'File writes may not persist (ephemeral filesystem)',
-      'Be cautious with database mutations',
-    ],
-    // In production, Developer AI should rely on the system_logs table for log access.
-    // Platform logging dashboards (Railway, Render, etc.) are for human operators,
-    // not for this AI assistant to redirect users to.
-    logsAccess: isDocker
-      ? 'system_logs table (primary source); platform dashboard is secondary for humans'
-      : 'system_logs table via database; platform dashboard may also exist',
-  } : {
-    environment: nodeEnv.toUpperCase(),
-    warnings: [],
-    logsAccess: isDocker ? 'system_logs table or docker logs from host' : 'Console output',
-  };
+  const productionContext = isProduction
+    ? {
+        environment: 'PRODUCTION',
+        warnings: [
+          'File writes may not persist (ephemeral filesystem)',
+          'Be cautious with database mutations',
+        ],
+        // In production, Developer AI should rely on the system_logs table for log access.
+        // Platform logging dashboards (Railway, Render, etc.) are for human operators,
+        // not for this AI assistant to redirect users to.
+        logsAccess: isDocker
+          ? 'system_logs table (primary source); platform dashboard is secondary for humans'
+          : 'system_logs table via database; platform dashboard may also exist',
+      }
+    : {
+        environment: nodeEnv.toUpperCase(),
+        warnings: [],
+        logsAccess: isDocker ? 'system_logs table or docker logs from host' : 'Console output',
+      };
 
   return {
     timestamp: new Date().toISOString(),
@@ -163,10 +357,14 @@ async function getExecutionContext() {
       redisCache: redisStatus.cache,
       cacheKeyCount: redisStatus.cacheKeys,
     },
+    containers: containerSnapshot,
+    aiInfrastructure,
     ports: {
       internal: internalPort,
       external: externalPort,
-      note: isDocker ? 'Internal port for self-checks, external for outside access' : 'Same port for all access',
+      note: isDocker
+        ? 'Internal port for self-checks, external for outside access'
+        : 'Same port for all access',
     },
     docker: dockerContext,
     production: productionContext,
@@ -188,7 +386,7 @@ async function getExecutionContext() {
 async function getExecutionContextSummary() {
   try {
     const ctx = await getExecutionContext();
-    
+
     return `
 ## 🖥️ EXECUTION CONTEXT (Self-Awareness)
 
@@ -202,6 +400,39 @@ async function getExecutionContextSummary() {
 - Redis Memory: ${ctx.connectivity.redisMemory}
 - Redis Cache: ${ctx.connectivity.redisCache}${ctx.connectivity.cacheKeyCount !== undefined ? ` (${ctx.connectivity.cacheKeyCount} keys)` : ''}
 
+**AI Infrastructure:**
+- Active LLM provider: **${ctx.aiInfrastructure.activeProvider}** | Developer AI model: **${ctx.aiInfrastructure.developerAiModel}**
+- Configured providers: ${
+      Object.entries(ctx.aiInfrastructure.providers)
+        .filter(([, v]) => v.configured)
+        .map(([k]) => k)
+        .join(', ') || 'none'
+    }
+- LiteLLM gateway: ${ctx.aiInfrastructure.litellm.health === 'reachable' ? '✅' : ctx.aiInfrastructure.litellm.health === 'disabled' ? '⚫' : '❌'} ${ctx.aiInfrastructure.litellm.health} (${ctx.aiInfrastructure.litellm.baseUrl})
+- Ollama / local LLM: ${ctx.aiInfrastructure.ollama.health === 'reachable' ? '✅' : ctx.aiInfrastructure.ollama.health === 'not_configured' ? '⚫' : '❌'} ${ctx.aiInfrastructure.ollama.health}${ctx.aiInfrastructure.ollama.baseUrl ? ` (${ctx.aiInfrastructure.ollama.baseUrl})` : ''}
+- Braid MCP server: ${ctx.aiInfrastructure.braidMcp.health === 'reachable' ? '✅' : '❌'} ${ctx.aiInfrastructure.braidMcp.health} (${ctx.aiInfrastructure.braidMcp.url})
+
+**Containers:**
+${(() => {
+  if (!ctx.containers.available) {
+    return `- Status: unavailable (${ctx.containers.reason || 'docker CLI not reachable from this runtime'})`;
+  }
+  const core = ctx.containers.containers.filter((c) => c.name.startsWith('aishacrm-'));
+  const braid = ctx.containers.containers.filter((c) => c.name.startsWith('braid-mcp'));
+  const other = ctx.containers.containers.filter(
+    (c) => !c.name.startsWith('aishacrm-') && !c.name.startsWith('braid-mcp'),
+  );
+  const fmt = (c) =>
+    `  - ${c.name}: ${c.state}${c.health !== 'unknown' ? ` (${c.health})` : ''} [${c.status}]`;
+  const sections = [];
+  if (core.length)
+    sections.push(`_Core AiSHA stack (${core.length}):_\n${core.map(fmt).join('\n')}`);
+  if (braid.length) sections.push(`_Braid MCP (${braid.length}):_\n${braid.map(fmt).join('\n')}`);
+  if (other.length)
+    sections.push(`_Other / host containers (${other.length}):_\n${other.map(fmt).join('\n')}`);
+  return `- Source: ${ctx.containers.source}\n` + sections.join('\n');
+})()}
+
 **Port Configuration:**
 - Internal (for self-checks): ${ctx.ports.internal}
 - External (for clients): ${ctx.ports.external}
@@ -213,10 +444,10 @@ async function getExecutionContextSummary() {
 - ✅ Access logs via: ${ctx.capabilities.logMethod}
 
 **What I CANNOT do:**
-${ctx.docker.containerized ? '- ❌ Run docker CLI commands (I\'m inside the container)\n- ❌ Access host filesystem outside /app' : ''}
+${ctx.docker.containerized ? "- ❌ Run docker CLI commands (I'm inside the container)\n- ❌ Access host filesystem outside /app" : ''}
 ${ctx.production.environment === 'PRODUCTION' ? '- ❌ Rely on file persistence (ephemeral FS)\n- ❌ Access logs via docker (use platform dashboard)' : ''}
 
-${ctx.production.warnings.length > 0 ? '**⚠️ Environment Warnings:**\n' + ctx.production.warnings.map(w => `- ${w}`).join('\n') : ''}
+${ctx.production.warnings.length > 0 ? '**⚠️ Environment Warnings:**\n' + ctx.production.warnings.map((w) => `- ${w}`).join('\n') : ''}
 `;
   } catch (error) {
     console.warn('[Developer AI] Failed to get execution context:', error.message);
@@ -228,7 +459,7 @@ ${ctx.production.warnings.length > 0 ? '**⚠️ Environment Warnings:**\n' + ct
 const ALLOWED_PATHS = [
   '/app/backend',
   '/app/braid-llm-kit',
-  '/app/src',  // Frontend source (if mounted)
+  '/app/src', // Frontend source (if mounted)
 ];
 
 const FORBIDDEN_PATTERNS = [
@@ -255,7 +486,8 @@ function escapeShellArg(arg) {
 const DEVELOPER_TOOLS = [
   {
     name: 'read_file',
-    description: 'Read the contents of a file from the codebase. Use this to understand existing code before making changes.',
+    description:
+      'Read the contents of a file from the codebase. Use this to understand existing code before making changes.',
     input_schema: {
       type: 'object',
       properties: {
@@ -277,7 +509,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'list_directory',
-    description: 'List files and directories in a path. Use this to explore the codebase structure.',
+    description:
+      'List files and directories in a path. Use this to explore the codebase structure.',
     input_schema: {
       type: 'object',
       properties: {
@@ -295,7 +528,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'search_code',
-    description: 'Search for a pattern in the codebase using grep. Returns matching lines with context.',
+    description:
+      'Search for a pattern in the codebase using grep. Returns matching lines with context.',
     input_schema: {
       type: 'object',
       properties: {
@@ -321,7 +555,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'read_logs',
-    description: 'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies. Use since_minutes to filter to only recent logs (recommended for health checks).',
+    description:
+      'Read application logs from the container. Use analyze_patterns=true to auto-detect recurring errors, performance issues, and anomalies. Use since_minutes to filter to only recent logs (recommended for health checks).',
     input_schema: {
       type: 'object',
       properties: {
@@ -340,11 +575,13 @@ const DEVELOPER_TOOLS = [
         },
         analyze_patterns: {
           type: 'boolean',
-          description: 'Auto-analyze logs for recurring errors, performance degradation, and security issues',
+          description:
+            'Auto-analyze logs for recurring errors, performance degradation, and security issues',
         },
         since_minutes: {
           type: 'integer',
-          description: 'Only return logs from the last N minutes. Recommended: 15-30 for health checks to avoid stale issues. Default: null (no time filter)',
+          description:
+            'Only return logs from the last N minutes. Recommended: 15-30 for health checks to avoid stale issues. Default: null (no time filter)',
         },
       },
       required: ['log_type'],
@@ -366,7 +603,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'propose_change',
-    description: 'Propose a code change. This generates a diff that the superadmin can review and apply.',
+    description:
+      'Propose a code change. This generates a diff that the superadmin can review and apply.',
     input_schema: {
       type: 'object',
       properties: {
@@ -392,7 +630,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'write_file',
-    description: 'Write content to a file. This will REPLACE the entire file content. Requires user approval. Use propose_change for targeted edits.',
+    description:
+      'Write content to a file. This will REPLACE the entire file content. Requires user approval. Use propose_change for targeted edits.',
     input_schema: {
       type: 'object',
       properties: {
@@ -436,17 +675,20 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'run_command',
-    description: 'Execute a shell command in the container. Safe commands (npm run lint, npm test, etc.) are auto-approved. Other commands require user approval.',
+    description:
+      'Execute a shell command in the container. Safe commands (npm run lint, npm test, etc.) are auto-approved. Other commands require user approval.',
     input_schema: {
       type: 'object',
       properties: {
         command: {
           type: 'string',
-          description: 'The command to execute (e.g., "npm run lint", "npm test backend/lib/test.js")',
+          description:
+            'The command to execute (e.g., "npm run lint", "npm test backend/lib/test.js")',
         },
         working_directory: {
           type: 'string',
-          description: 'Optional: Directory to run the command in, relative to /app (default: /app)',
+          description:
+            'Optional: Directory to run the command in, relative to /app (default: /app)',
         },
         reason: {
           type: 'string',
@@ -458,7 +700,8 @@ const DEVELOPER_TOOLS = [
   },
   {
     name: 'apply_patch',
-    description: 'Apply a unified diff patch to modify multiple files. REQUIRES APPROVAL. Use this for batch code changes across multiple files.',
+    description:
+      'Apply a unified diff patch to modify multiple files. REQUIRES APPROVAL. Use this for batch code changes across multiple files.',
     input_schema: {
       type: 'object',
       properties: {
@@ -492,15 +735,18 @@ Use this to troubleshoot AiSHA behavior before users encounter issues.`,
       properties: {
         message: {
           type: 'string',
-          description: 'The test message to send to AiSHA (e.g., "Show me all leads" or "Create an activity for John")',
+          description:
+            'The test message to send to AiSHA (e.g., "Show me all leads" or "Create an activity for John")',
         },
         tenant_id: {
           type: 'string',
-          description: 'Optional: Tenant ID to test with (default: uses a test tenant or first available tenant)',
+          description:
+            'Optional: Tenant ID to test with (default: uses a test tenant or first available tenant)',
         },
         include_tool_details: {
           type: 'boolean',
-          description: 'If true, include detailed information about tool calls and their results (default: true)',
+          description:
+            'If true, include detailed information about tool calls and their results (default: true)',
         },
         conversation_id: {
           type: 'string',
@@ -526,7 +772,8 @@ Use this to understand my environment before making assumptions about log access
       properties: {
         include_connectivity_check: {
           type: 'boolean',
-          description: 'If true, verify database and Redis connectivity in real-time (adds ~100ms latency). Default: true',
+          description:
+            'If true, verify database and Redis connectivity in real-time (adds ~100ms latency). Default: true',
         },
       },
       required: [],
@@ -536,7 +783,7 @@ Use this to understand my environment before making assumptions about log access
 
 // Convert Anthropic tool format to OpenAI format
 function convertToolsToOpenAI(anthropicTools) {
-  return anthropicTools.map(tool => ({
+  return anthropicTools.map((tool) => ({
     type: 'function',
     function: {
       name: tool.name,
@@ -551,31 +798,33 @@ const DEVELOPER_TOOLS_OPENAI = convertToolsToOpenAI(DEVELOPER_TOOLS);
 // Security check for file paths
 function isPathAllowed(filePath) {
   const normalizedPath = path.normalize(filePath);
-  
+
   // Check for forbidden patterns
   for (const pattern of FORBIDDEN_PATTERNS) {
     if (normalizedPath.toLowerCase().includes(pattern)) {
       return false;
     }
   }
-  
+
   // Check if within allowed directories
   const fullPath = path.join('/app', normalizedPath);
-  return ALLOWED_PATHS.some(allowed => fullPath.startsWith(allowed));
+  return ALLOWED_PATHS.some((allowed) => fullPath.startsWith(allowed));
 }
 
 // Tool implementations
 async function readFile({ file_path, start_line, end_line }) {
   if (!isPathAllowed(file_path)) {
-    return { error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns` };
+    return {
+      error: `Access denied: ${file_path} is not in an allowed directory or contains forbidden patterns`,
+    };
   }
-  
+
   const fullPath = path.join('/app', file_path);
-  
+
   try {
     const content = await fs.readFile(fullPath, 'utf-8');
     const lines = content.split('\n');
-    
+
     if (start_line || end_line) {
       const start = (start_line || 1) - 1;
       const end = end_line || lines.length;
@@ -587,17 +836,20 @@ async function readFile({ file_path, start_line, end_line }) {
         content: selectedLines.map((line, i) => `${start + i + 1}: ${line}`).join('\n'),
       };
     }
-    
+
     // For large files, truncate
     if (lines.length > 500) {
       return {
         file: file_path,
         total_lines: lines.length,
         note: 'File truncated to first 500 lines. Use start_line/end_line to view specific sections.',
-        content: lines.slice(0, 500).map((line, i) => `${i + 1}: ${line}`).join('\n'),
+        content: lines
+          .slice(0, 500)
+          .map((line, i) => `${i + 1}: ${line}`)
+          .join('\n'),
       };
     }
-    
+
     return {
       file: file_path,
       total_lines: lines.length,
@@ -612,13 +864,13 @@ async function listDirectory({ dir_path, recursive }) {
   if (!isPathAllowed(dir_path)) {
     return { error: `Access denied: ${dir_path} is not in an allowed directory` };
   }
-  
+
   const fullPath = path.join('/app', dir_path);
-  
+
   try {
     const entries = await fs.readdir(fullPath, { withFileTypes: true });
     const result = [];
-    
+
     for (const entry of entries) {
       const entryPath = path.join(dir_path, entry.name);
       const item = {
@@ -626,24 +878,33 @@ async function listDirectory({ dir_path, recursive }) {
         type: entry.isDirectory() ? 'directory' : 'file',
         path: entryPath,
       };
-      
+
       if (entry.isFile()) {
         try {
           const stats = await fs.stat(path.join(fullPath, entry.name));
           item.size = stats.size;
-        } catch { /* ignore stat errors */ }
+        } catch {
+          /* ignore stat errors */
+        }
       }
-      
-      if (recursive && entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+
+      if (
+        recursive &&
+        entry.isDirectory() &&
+        !entry.name.startsWith('.') &&
+        entry.name !== 'node_modules'
+      ) {
         try {
           const subEntries = await fs.readdir(path.join(fullPath, entry.name));
           item.children_count = subEntries.length;
-        } catch { /* ignore readdir errors */ }
+        } catch {
+          /* ignore readdir errors */
+        }
       }
-      
+
       result.push(item);
     }
-    
+
     return {
       directory: dir_path,
       entries: result.sort((a, b) => {
@@ -660,9 +921,9 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   if (!isPathAllowed(directory)) {
     return { error: `Access denied: ${directory} is not in an allowed directory` };
   }
-  
+
   const fullPath = path.join('/app', directory);
-  
+
   // Sanitize inputs to prevent shell injection (CWE-78)
   const safePattern = escapeShellArg(pattern);
   const safeFilePattern = escapeShellArg(file_pattern || '*.js');
@@ -671,29 +932,35 @@ async function searchCode({ pattern, directory = 'backend', file_pattern, case_i
   try {
     let cmd = `grep -rn${case_insensitive ? 'i' : ''} --include=${safeFilePattern} ${safePattern} ${safeFullPath} 2>/dev/null | head -50`;
     const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024 });
-    
+
     if (!stdout.trim()) {
       return { pattern, directory, matches: [], message: 'No matches found' };
     }
-    
-    const matches = stdout.trim().split('\n').map(line => {
-      const match = line.match(/^(.+?):(\d+):(.*)$/);
-      if (match) {
-        return {
-          file: match[1].replace('/app/', ''),
-          line: parseInt(match[2]),
-          content: match[3].trim(),
-        };
-      }
-      return { raw: line };
-    });
-    
+
+    const matches = stdout
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const match = line.match(/^(.+?):(\d+):(.*)$/);
+        if (match) {
+          return {
+            file: match[1].replace('/app/', ''),
+            line: parseInt(match[2]),
+            content: match[3].trim(),
+          };
+        }
+        return { raw: line };
+      });
+
     return {
       pattern,
       directory,
       matches,
       total_shown: matches.length,
-      note: matches.length >= 50 ? 'Results limited to 50 matches. Narrow your search for more specific results.' : undefined,
+      note:
+        matches.length >= 50
+          ? 'Results limited to 50 matches. Narrow your search for more specific results.'
+          : undefined,
     };
   } catch (error) {
     return { error: `Search failed: ${error.message}` };
@@ -777,12 +1044,10 @@ export async function readLogs({
 
       // Format logs for display
       const formattedLogs = logs
-        .map(
-          (log) => {
-            const category = log?.metadata?.category || log?.source || 'general';
-            return `[${log.created_at}] [${log.level || 'info'}] ${category}: ${log.message}`;
-          },
-        )
+        .map((log) => {
+          const category = log?.metadata?.category || log?.source || 'general';
+          return `[${log.created_at}] [${log.level || 'info'}] ${category}: ${log.message}`;
+        })
         .join('\n');
 
       const result = {
