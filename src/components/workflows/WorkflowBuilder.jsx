@@ -3826,8 +3826,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     // Validate that Create Lead nodes have field mappings configured
     const createLeadNode = nodes.find((n) => n.type === 'create_lead');
     if (createLeadNode) {
-      const fieldMappings = createLeadNode.data?.field_mappings || [];
+      const fieldMappings = createLeadNode.config?.field_mappings || [];
       if (fieldMappings.length === 0) {
+        console.error('[WorkflowBuilder] BLOCKED: Create Lead has no field mappings');
         toast({
           title: 'Configuration required',
           description:
@@ -3836,13 +3837,18 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         });
         return;
       }
+      console.log(
+        '[WorkflowBuilder] Create Lead validation passed, mappings:',
+        fieldMappings.length,
+      );
     }
 
     // Validate that Update Lead nodes have field mappings configured
     const updateLeadNode = nodes.find((n) => n.type === 'update_lead');
     if (updateLeadNode) {
-      const fieldMappings = updateLeadNode.data?.field_mappings || [];
+      const fieldMappings = updateLeadNode.config?.field_mappings || [];
       if (fieldMappings.length === 0) {
+        console.error('[WorkflowBuilder] BLOCKED: Update Lead has no field mappings');
         toast({
           title: 'Configuration required',
           description:
@@ -3851,6 +3857,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         });
         return;
       }
+      console.log(
+        '[WorkflowBuilder] Update Lead validation passed, mappings:',
+        fieldMappings.length,
+      );
     }
 
     if (!user) {
