@@ -498,6 +498,293 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     return Object.keys(testPayload);
   };
 
+  // Generate output preview for a node
+  const generateNodeOutputPreview = (node) => {
+    if (!node) return null;
+
+    switch (node.type) {
+      case 'webhook_trigger':
+        if (!testPayload) {
+          return {
+            description:
+              'No webhook data captured yet. Use "Wait for Real Webhook" or "Use Sample Payload".',
+            fields: [],
+            example: null,
+          };
+        }
+        return {
+          description: 'Webhook payload data available to downstream nodes',
+          fields: Object.keys(testPayload),
+          example: testPayload,
+        };
+
+      case 'find_lead':
+        return {
+          description: 'Lead data if found, otherwise empty',
+          fields: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'phone',
+            'company',
+            'status',
+            'score',
+            'job_title',
+            'source',
+            'next_action',
+            'notes',
+            'created_at',
+            'updated_at',
+          ],
+          example: testPayload
+            ? {
+                id: 'lead_uuid',
+                first_name: testPayload.first_name || 'John',
+                last_name: testPayload.last_name || 'Doe',
+                email: testPayload.email || 'john@example.com',
+                phone: testPayload.phone || '+1234567890',
+                company: testPayload.company || 'Example Corp',
+                status: 'new',
+                score: null,
+                job_title: testPayload.job_title || null,
+                source: testPayload.source || null,
+                created_at: '2024-01-01T00:00:00Z',
+                updated_at: '2024-01-01T00:00:00Z',
+              }
+            : null,
+        };
+
+      case 'create_lead':
+        const createMappings = node.config?.field_mappings || [];
+        const createFields = createMappings.map((m) => m.lead_field).filter(Boolean);
+        const createExample = {};
+        if (testPayload && createMappings.length > 0) {
+          createMappings.forEach((mapping) => {
+            if (mapping.lead_field && mapping.webhook_field) {
+              createExample[mapping.lead_field] =
+                testPayload[mapping.webhook_field] || `{{${mapping.webhook_field}}}`;
+            }
+          });
+        }
+        return {
+          description: 'Newly created lead with mapped fields',
+          fields: ['id', ...createFields, 'created_at', 'updated_at'],
+          example:
+            Object.keys(createExample).length > 0
+              ? { id: 'new_lead_uuid', ...createExample, created_at: '2024-01-01T00:00:00Z' }
+              : null,
+        };
+
+      case 'update_lead':
+        const updateMappings = node.config?.field_mappings || [];
+        const updateFields = updateMappings.map((m) => m.lead_field).filter(Boolean);
+        const updateExample = {};
+        if (testPayload && updateMappings.length > 0) {
+          updateMappings.forEach((mapping) => {
+            if (mapping.lead_field && mapping.webhook_field) {
+              updateExample[mapping.lead_field] =
+                testPayload[mapping.webhook_field] || `{{${mapping.webhook_field}}}`;
+            }
+          });
+        }
+        return {
+          description: 'Updated lead with modified fields',
+          fields: ['id', ...updateFields, 'updated_at'],
+          example:
+            Object.keys(updateExample).length > 0
+              ? { id: 'lead_uuid', ...updateExample, updated_at: '2024-01-01T00:00:00Z' }
+              : null,
+        };
+
+      case 'find_contact':
+        return {
+          description: 'Contact data if found',
+          fields: [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'phone',
+            'title',
+            'department',
+            'account_id',
+            'created_at',
+          ],
+          example: null,
+        };
+
+      case 'update_contact':
+        return {
+          description: 'Updated contact data',
+          fields: ['id', 'first_name', 'last_name', 'email', 'phone', 'title', 'updated_at'],
+          example: null,
+        };
+
+      case 'find_account':
+        return {
+          description: 'Account data if found',
+          fields: ['id', 'name', 'website', 'industry', 'size', 'phone', 'created_at'],
+          example: null,
+        };
+
+      case 'update_account':
+        return {
+          description: 'Updated account data',
+          fields: ['id', 'name', 'website', 'industry', 'size', 'updated_at'],
+          example: null,
+        };
+
+      case 'create_opportunity':
+        return {
+          description: 'Newly created opportunity',
+          fields: ['id', 'name', 'amount', 'stage', 'close_date', 'account_id', 'created_at'],
+          example: null,
+        };
+
+      case 'update_opportunity':
+        return {
+          description: 'Updated opportunity data',
+          fields: ['id', 'name', 'amount', 'stage', 'close_date', 'updated_at'],
+          example: null,
+        };
+
+      case 'create_activity':
+        return {
+          description: 'Newly created activity',
+          fields: ['id', 'type', 'subject', 'description', 'due_date', 'created_at'],
+          example: null,
+        };
+
+      case 'http_request':
+        return {
+          description: 'HTTP response data',
+          fields: ['status', 'headers', 'body', 'data'],
+          example: {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+            body: '{"success": true}',
+            data: { success: true },
+          },
+        };
+
+      case 'ai_classify_opportunity_stage':
+        return {
+          description: 'AI-classified opportunity stage',
+          fields: ['stage', 'confidence', 'reasoning'],
+          example: {
+            stage: 'qualification',
+            confidence: 0.85,
+            reasoning: 'Based on conversation context...',
+          },
+        };
+
+      case 'ai_generate_email':
+        return {
+          description: 'AI-generated email content',
+          fields: ['subject', 'body', 'tone'],
+          example: {
+            subject: 'Follow up on our conversation',
+            body: 'Hi John,\n\nThank you for...',
+            tone: 'professional',
+          },
+        };
+
+      case 'ai_enrich_account':
+        return {
+          description: 'Enriched account data from AI',
+          fields: ['industry', 'size', 'description', 'technologies', 'social_links'],
+          example: null,
+        };
+
+      case 'ai_route_activity':
+        return {
+          description: 'AI routing decision',
+          fields: ['assigned_to', 'priority', 'reasoning'],
+          example: null,
+        };
+
+      case 'pep_query':
+        return {
+          description: 'Query results from PEP (Plain English Programming)',
+          fields: ['results', 'count', 'query'],
+          example: null,
+        };
+
+      case 'send_email':
+        return {
+          description: 'Email send status',
+          fields: ['sent', 'message_id', 'error'],
+          example: { sent: true, message_id: 'msg_12345', error: null },
+        };
+
+      case 'initiate_call':
+        return {
+          description: 'Call initiation status',
+          fields: ['call_id', 'status', 'started_at'],
+          example: null,
+        };
+
+      case 'condition':
+        return {
+          description: 'Condition evaluation result',
+          fields: ['matched', 'branch_taken'],
+          example: { matched: true, branch_taken: 'true_branch' },
+        };
+
+      case 'care_trigger':
+        return {
+          description: 'CARE workflow data',
+          fields: ['entity_type', 'entity_id', 'event_type'],
+          example: null,
+        };
+
+      default:
+        return null;
+    }
+  };
+
+  // Render output preview section
+  const renderOutputPreview = (node) => {
+    const preview = generateNodeOutputPreview(node);
+    if (!preview) return null;
+
+    return (
+      <div className="mt-4 border-t border-slate-700 pt-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-4 h-4 text-purple-400" />
+          <Label className="text-slate-200">Output Preview</Label>
+        </div>
+        <p className="text-xs text-slate-400 mb-2">{preview.description}</p>
+
+        {preview.fields.length > 0 && (
+          <div className="bg-slate-950 border border-slate-700 rounded p-3">
+            <div className="text-xs text-slate-500 mb-1">Available fields:</div>
+            <div className="flex flex-wrap gap-1">
+              {preview.fields.map((field) => (
+                <span
+                  key={field}
+                  className="px-2 py-1 bg-purple-900/30 text-purple-300 rounded text-xs"
+                >
+                  {field}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {preview.example && (
+          <div className="mt-2 bg-slate-950 border border-slate-700 rounded p-3">
+            <div className="text-xs text-slate-500 mb-1">Example output:</div>
+            <pre className="text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(preview.example, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderNodeConfig = (node) => {
     if (!node) return null;
 
@@ -717,6 +1004,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 </p>
               </div>
             )}
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -777,6 +1065,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Use {'{{field_name}}'} to reference webhook data
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -888,6 +1177,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -997,6 +1287,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -1704,6 +1995,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 nodes.
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -1938,6 +2230,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <li>Trigger another workflow: POST to any webhook</li>
               </ul>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -1984,6 +2277,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               This queues an email as an Activity with type &quot;email&quot;. Delivery handling can
               be wired later.
             </p>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2076,6 +2370,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 points.
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2138,6 +2433,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Use {'{{field_name}}'} to reference webhook data
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2247,6 +2543,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2308,6 +2605,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Use {'{{field_name}}'} to reference webhook data
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2414,6 +2712,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2523,6 +2822,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2631,6 +2931,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Add Mapping
               </Button>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2704,6 +3005,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 </SelectContent>
               </Select>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2756,6 +3058,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 {'{{ai_stage.confidence}}'}
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2797,6 +3100,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 {'{{ai_email.body}}'}
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2837,6 +3141,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Output stored in {'{{ai_enrichment}}'} (e.g., website, industry, size)
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2878,6 +3183,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 {'{{priority}}'}
               </p>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
@@ -2967,6 +3273,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 <li>Second connection = FALSE path (condition fails)</li>
               </ul>
             </div>
+            {renderOutputPreview(node)}
           </div>
         );
 
