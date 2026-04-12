@@ -3797,7 +3797,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   };
 
   const handleSave = async () => {
+    console.log('[WorkflowBuilder] ========== SAVE STARTED ==========');
+    console.log('[WorkflowBuilder] Name:', name);
+    console.log('[WorkflowBuilder] Nodes count:', nodes.length);
+    console.log('[WorkflowBuilder] User:', user);
+    console.log('[WorkflowBuilder] User tenant_id:', user?.tenant_id);
+
     if (!name.trim()) {
+      console.error('[WorkflowBuilder] BLOCKED: No name');
       toast({
         title: 'Name required',
         description: 'Please enter a workflow name',
@@ -3807,6 +3814,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     }
 
     if (nodes.length === 0) {
+      console.error('[WorkflowBuilder] BLOCKED: No nodes');
       toast({
         title: 'Nodes required',
         description: 'Add at least one node to your workflow',
@@ -3815,7 +3823,39 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       return;
     }
 
+    // Validate that Create Lead nodes have field mappings configured
+    const createLeadNode = nodes.find((n) => n.type === 'create_lead');
+    if (createLeadNode) {
+      const fieldMappings = createLeadNode.data?.field_mappings || [];
+      if (fieldMappings.length === 0) {
+        toast({
+          title: 'Configuration required',
+          description:
+            'Create Lead node requires at least one field mapping. Click the node and add mappings.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    // Validate that Update Lead nodes have field mappings configured
+    const updateLeadNode = nodes.find((n) => n.type === 'update_lead');
+    if (updateLeadNode) {
+      const fieldMappings = updateLeadNode.data?.field_mappings || [];
+      if (fieldMappings.length === 0) {
+        toast({
+          title: 'Configuration required',
+          description:
+            'Update Lead node requires at least one field mapping. Click the node and add mappings.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     if (!user) {
+      console.error('[WorkflowBuilder] BLOCKED: No user context loaded');
+      console.error('[WorkflowBuilder] user object:', user);
       toast({
         title: 'User error',
         description: 'User not loaded. Please try again.',
@@ -3824,13 +3864,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       return;
     }
 
+    console.log('[WorkflowBuilder] User validation passed');
     setSaving(true);
     try {
       // Resolve tenant id with robust fallbacks
       let tenantId = user?.tenant_id ?? null;
+      console.log('[WorkflowBuilder] Initial tenantId from user:', tenantId);
+
       try {
         if (!tenantId && typeof window !== 'undefined') {
           const selected = localStorage.getItem('selected_tenant_id');
+          console.log('[WorkflowBuilder] localStorage selected_tenant_id:', selected);
           if (selected) tenantId = selected;
         }
       } catch {
@@ -3838,10 +3882,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       }
       if (!tenantId && import.meta.env.DEV) {
         // Dev fallback to seeded tenant
+        console.log('[WorkflowBuilder] DEV mode: using fallback tenant');
         tenantId = '6cb4c008-4847-426a-9a2e-918ad70e7b69';
       }
 
+      console.log('[WorkflowBuilder] Final resolved tenantId:', tenantId);
+
       if (!tenantId) {
+        console.error('[WorkflowBuilder] BLOCKED: No tenant ID after resolution');
         toast({
           title: 'Tenant required',
           description: 'No tenant selected. Please choose a tenant and try again.',
@@ -3892,8 +3940,11 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
       }
 
       toast({ title: 'Workflow saved', description: 'Workflow saved successfully' });
+      console.log('[WorkflowBuilder] ========== SAVE COMPLETED ==========');
+      console.log('[WorkflowBuilder] Calling onSave() to close modal');
       onSave();
     } catch (error) {
+      console.error('[WorkflowBuilder] ========== SAVE FAILED ==========');
       console.error('Failed to save workflow:', error);
       toast({
         title: 'Save failed',
