@@ -54,6 +54,7 @@ import { useUser } from '../components/shared/useUser.js';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 /**
  * Shared helper — avoids duplicating the updatedFilter logic in both
@@ -621,14 +622,17 @@ export default function BizDevSourcesPage() {
     setDeletingId(source.id);
     try {
       await BizDevSource.delete(source.id);
-
-      // Optimistic UI: remove immediately so user sees instant feedback
-      setSources((prev) => prev.filter((s) => s.id !== source.id));
-      toast.success(`${bizdevSourceLabel} deleted successfully`);
-
-      // Background refresh to sync with server
       clearCacheByKey('BizDevSource');
-      handleRefresh();
+
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
+      await runMutationRefresh(() => handleRefresh(), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
+
+      toast.success(`${bizdevSourceLabel} deleted successfully`);
+      setDeletingId(null);
     } catch (error) {
       if (logError) {
         logError(handleApiError('Delete BizDev Source', error));
@@ -636,7 +640,6 @@ export default function BizDevSourcesPage() {
       toast.error(`Failed to delete ${bizdevSourceLabel.toLowerCase()}`);
       // Reload on error to ensure consistency
       handleRefresh();
-    } finally {
       setDeletingId(null);
     }
   };

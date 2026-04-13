@@ -194,15 +194,17 @@ export default function AccountsPage() {
     setDeletingId(id);
     try {
       await Account.delete(id);
-      setAccounts((prev) => prev.filter((a) => a.id !== id));
-      setTotalItems((prev) => Math.max(0, prev - 1));
-      toast.success('Account deleted successfully');
       clearCacheByKey('Account');
+
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
       await runMutationRefresh(() => Promise.all([loadAccounts(), loadTotalStats()]), {
         passes: 3,
         initialDelayMs: 80,
         stepDelayMs: 160,
       });
+
+      toast.success('Account deleted successfully');
+      setDeletingId(null);
     } catch (error) {
       console.error('Failed to delete account:', error);
       const errorMsg =
@@ -210,7 +212,6 @@ export default function AccountsPage() {
       toast.error(errorMsg);
       await loadAccounts();
       await loadTotalStats();
-    } finally {
       setDeletingId(null);
     }
   };

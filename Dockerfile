@@ -33,9 +33,13 @@ RUN NODE_OPTIONS=--max-old-space-size=512 npm ci --include=dev --legacy-peer-dep
 # Copy source code
 COPY . .
 
+# Ensure clean build (remove any residual dist folder)
+RUN rm -rf dist/
+
 # Build the app with increased memory limit
 ENV NODE_OPTIONS=--max-old-space-size=2048
-RUN npm run build:ci && \
+RUN echo "Building with VITE_CALCOM_URL=$VITE_CALCOM_URL" && \
+    npm run build:ci && \
     if grep -R -n --include='*.js' --include='*.html' --include='*.css' "localhost:3002" dist/assets dist/index.html; then \
       echo "ERROR: production dist contains localhost:3002. Set VITE_CALCOM_URL to a production scheduler URL."; \
       exit 1; \

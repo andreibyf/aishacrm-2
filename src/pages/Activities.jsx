@@ -36,6 +36,7 @@ import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useActivitiesData } from '@/hooks/useActivitiesData';
 import { useActivitiesBulkOps } from '@/hooks/useActivitiesBulkOps';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function ActivitiesPage() {
   const { plural: activitiesLabel, singular: activityLabel } = useEntityLabel('activities');
@@ -204,19 +205,22 @@ export default function ActivitiesPage() {
     setDeletingId(id);
     try {
       await Activity.delete(id);
-      setActivities((prev) => prev.filter((a) => a.id !== id));
-      setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
-      toast.success('Activity deleted successfully');
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
       clearCache('');
       clearCacheByKey('Activity');
-      await loadActivities(currentPage, pageSize);
+
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
+      await runMutationRefresh(() => loadActivities(currentPage, pageSize), {
+        passes: 3,
+        initialDelayMs: 80,
+        stepDelayMs: 160,
+      });
+
+      toast.success('Activity deleted successfully');
+      setDeletingId(null);
     } catch (error) {
       console.error('Failed to delete activity:', error);
       toast.error('Failed to delete activity');
       await loadActivities(currentPage, pageSize);
-    } finally {
       setDeletingId(null);
     }
   };

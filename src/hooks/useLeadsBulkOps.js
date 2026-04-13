@@ -5,6 +5,16 @@ import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 // [2026-03-07 Cursor] — extracted from Leads.jsx (PR #331)
 
+const LEADS_FORCE_FRESH_UNTIL_KEY = 'leads_force_fresh_until';
+
+const markLeadsForceFresh = (ms = 60_000) => {
+  try {
+    sessionStorage.setItem(LEADS_FORCE_FRESH_UNTIL_KEY, String(Date.now() + ms));
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 /**
  * useLeadsBulkOps hook - Manages bulk operations for leads
  *
@@ -226,14 +236,20 @@ export function useLeadsBulkOps({
         clearDashboardResultsCache();
         clearAllDashboardCaches();
 
+        // Keep next loads cache-busted briefly so a browser refresh won't show stale list totals.
+        markLeadsForceFresh();
+
         // Use setTimeout to ensure state renders before refresh
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        await runMutationRefresh(() => Promise.all([loadLeads(1, pageSize), loadTotalStats()]), {
-          passes: 3,
-          initialDelayMs: 80,
-          stepDelayMs: 160,
-        });
+        await runMutationRefresh(
+          () => Promise.all([loadLeads(1, pageSize, { forceFresh: true }), loadTotalStats()]),
+          {
+            passes: 3,
+            initialDelayMs: 80,
+            stepDelayMs: 160,
+          },
+        );
       } catch (error) {
         completeProgress();
         console.error('Failed to delete leads:', error);
@@ -311,8 +327,13 @@ export function useLeadsBulkOps({
         clearCacheByKey('Lead');
         clearDashboardResultsCache();
         clearAllDashboardCaches();
+
+        // Keep next loads cache-busted briefly so a browser refresh won't show stale list totals.
+        markLeadsForceFresh();
+
         await runMutationRefresh(
-          () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
+          () =>
+            Promise.all([loadLeads(currentPage, pageSize, { forceFresh: true }), loadTotalStats()]),
           { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
         );
       } catch (error) {

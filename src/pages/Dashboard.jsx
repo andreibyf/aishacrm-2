@@ -300,11 +300,10 @@ export default function DashboardPage() {
     }
 
     const loadStats = async (attempt = 0, forceRefresh = false) => {
-      if (!forceRefresh) {
-        setLoading(true);
-      } else {
+      if (forceRefresh) {
         setRefreshing(true);
       }
+
       try {
         const tenantFilter = getTenantFilter();
 
@@ -423,6 +422,9 @@ export default function DashboardPage() {
             return;
           }
         }
+
+        // No cache available - show loading skeleton while fetching
+        setLoading(true);
 
         logger.info('Loading dashboard data', 'Dashboard', {
           userId: user.email,
