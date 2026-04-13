@@ -240,12 +240,20 @@ async function initializeRedisAdapter() {
       if (subClient) {
         await subClient.disconnect();
       }
-    } catch {}
+    } catch (disconnectErr) {
+      logger.debug('[WebSocket] Failed disconnect for Redis sub client during adapter init cleanup', {
+        err: disconnectErr?.message,
+      });
+    }
     try {
       if (pubClient) {
         await pubClient.disconnect();
       }
-    } catch {}
+    } catch (disconnectErr) {
+      logger.debug('[WebSocket] Failed disconnect for Redis pub client during adapter init cleanup', {
+        err: disconnectErr?.message,
+      });
+    }
     logger.warn('Failed to initialize Redis adapter, running in single-instance mode:', err);
   }
 }
