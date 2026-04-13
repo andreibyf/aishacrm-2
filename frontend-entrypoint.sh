@@ -19,9 +19,34 @@ DOCKER_VITE_OPENREPLAY_DASHBOARD_URL="${VITE_OPENREPLAY_DASHBOARD_URL}"
 # Fetch secrets from Doppler if token is available
 if [ -n "$DOPPLER_TOKEN" ]; then
   echo "Fetching frontend secrets from Doppler..."
-  # Export Doppler secrets as environment variables
-  # Use doppler run with --command to set env vars in the current shell context
-  eval "$(doppler secrets download --no-file --format env --token $DOPPLER_TOKEN --project ${DOPPLER_PROJECT:-aishacrm} --config ${DOPPLER_CONFIG:-prd_prd})"
+  # Pull only required keys explicitly.
+  # This avoids eval/parsing failures when any unrelated secret contains shell-sensitive characters.
+  set_secret_from_doppler() {
+    key="$1"
+    value="$(doppler secrets get "$key" --plain --token "$DOPPLER_TOKEN" --project "${DOPPLER_PROJECT:-aishacrm}" --config "${DOPPLER_CONFIG:-prd_prd}" 2>/dev/null || true)"
+    if [ -n "$value" ]; then
+      export "${key}=${value}"
+      return 0
+    fi
+    return 1
+  }
+
+  # Core browser/runtime values
+  set_secret_from_doppler "VITE_SUPABASE_URL" || true
+  set_secret_from_doppler "VITE_SUPABASE_ANON_KEY" || true
+  set_secret_from_doppler "VITE_SUPABASE_PUBLISHABLE_KEY" || true
+  set_secret_from_doppler "VITE_AISHACRM_BACKEND_URL" || true
+  set_secret_from_doppler "VITE_SYSTEM_TENANT_ID" || true
+  set_secret_from_doppler "VITE_CALCOM_URL" || true
+
+  # OpenReplay runtime values (optional)
+  set_secret_from_doppler "VITE_OPENREPLAY_PROJECT_KEY" || true
+  set_secret_from_doppler "VITE_OPENREPLAY_INGEST_POINT" || true
+  set_secret_from_doppler "VITE_OPENREPLAY_DASHBOARD_URL" || true
+
+  # Misc optional runtime tuning
+  set_secret_from_doppler "VITE_USER_HEARTBEAT_INTERVAL_MS" || true
+
   echo "Doppler secrets loaded successfully"
 else
   echo "WARNING: DOPPLER_TOKEN not set, using environment variables directly"

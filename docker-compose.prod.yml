@@ -50,7 +50,7 @@ services:
       - "127.0.0.1:4001:3001"
     environment:
       # Doppler injects secrets at runtime via backend entrypoint (doppler run)
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
@@ -95,7 +95,7 @@ services:
         condition: service_healthy
     command: ["npm", "run", "worker:communications"]
     environment:
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
@@ -124,7 +124,7 @@ services:
     container_name: aishacrm-litellm
     restart: unless-stopped
     environment:
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
     volumes:
@@ -156,7 +156,7 @@ services:
       - "4000:3000"  # External port 4000 maps to internal 3000
     environment:
       # Doppler injects secrets at runtime via frontend entrypoint
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       # Browser-facing runtime overrides (must be host-reachable values)

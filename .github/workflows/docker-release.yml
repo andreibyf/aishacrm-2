@@ -687,8 +687,33 @@ jobs:
             docker ps --filter "name=aishacrm" --format "table {{.Names}}\t{{.Status}}"
             docker ps --filter "name=braid-mcp" --format "table {{.Names}}\t{{.Status}}"
 
-            # Verify frontend version
-            docker exec aishacrm-frontend cat /app/dist/env-config.js | grep VITE_APP_BUILD_VERSION || true
+            # Verify frontend runtime env injection (must include valid Supabase credentials)
+            phase "Validating frontend runtime env-config.js"
+            docker exec aishacrm-frontend node -e '
+              const fs = require("fs");
+              const raw = fs.readFileSync("/app/dist/env-config.js", "utf8");
+              const start = raw.indexOf("{");
+              const end = raw.lastIndexOf("}");
+              if (start === -1 || end === -1 || end <= start) {
+                console.error("env-config.js missing runtime object");
+                process.exit(1);
+              }
+              const env = JSON.parse(raw.slice(start, end + 1));
+              const issues = [];
+              if (!env.VITE_SUPABASE_URL || env.VITE_SUPABASE_URL.includes("placeholder.supabase.co")) {
+                issues.push("VITE_SUPABASE_URL");
+              }
+              const publicKey = env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY;
+              if (!publicKey || publicKey.includes(".placeholder")) {
+                issues.push("VITE_SUPABASE_PUBLISHABLE_KEY/ANON_KEY");
+              }
+              if (issues.length) {
+                console.error("Invalid frontend runtime env:", issues.join(", "));
+                process.exit(1);
+              }
+              console.log("Frontend runtime env verified");
+              console.log("VITE_APP_BUILD_VERSION:", env.VITE_APP_BUILD_VERSION || "missing");
+            '
 
       - name: Deployment summary
         run: |
