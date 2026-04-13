@@ -224,20 +224,20 @@ export default function OpportunitiesPage() {
     setDeletingId(id);
     try {
       await Opportunity.delete(id);
-      setOpportunities((prev) => prev.filter((o) => o.id !== id));
-      setTotalItems((prev) => (prev > 0 ? prev - 1 : 0));
-      toast.success('Opportunity deleted successfully');
-
       clearCacheByKey('Opportunity');
+
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
       await runMutationRefresh(
         () => Promise.all([loadOpportunities(currentPage, pageSize), loadTotalStats()]),
         { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
       );
+
+      toast.success('Opportunity deleted successfully');
+      setDeletingId(null);
     } catch (error) {
       console.error('Failed to delete opportunity:', error);
       toast.error('Failed to delete opportunity');
       await loadOpportunities(currentPage, pageSize);
-    } finally {
       setDeletingId(null);
     }
   };

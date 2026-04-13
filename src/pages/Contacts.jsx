@@ -244,21 +244,21 @@ export default function ContactsPage() {
     setDeletingId(id);
     try {
       await Contact.delete(id);
-      setContacts((prev) => prev.filter((c) => c.id !== id));
-      setTotalItems((prev) => Math.max(0, prev - 1));
-      toast.success('Contact deleted successfully');
       clearCacheByKey('Contact');
+
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
       await runMutationRefresh(() => Promise.all([loadContacts(), loadTotalStats()]), {
         passes: 3,
         initialDelayMs: 80,
         stepDelayMs: 160,
       });
+
+      toast.success('Contact deleted successfully');
+      setDeletingId(null);
     } catch (error) {
       console.error('Error deleting contact:', error);
       toast.error('Failed to delete contact');
-      loadContacts();
-      loadTotalStats();
-    } finally {
+      await Promise.allSettled([loadContacts(), loadTotalStats()]);
       setDeletingId(null);
     }
   };

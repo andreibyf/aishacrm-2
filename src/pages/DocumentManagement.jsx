@@ -52,6 +52,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import supabase from '@/lib/supabase.js';
+import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function DocumentManagement() {
   const [documents, setDocuments] = useState([]);
@@ -254,13 +255,19 @@ export default function DocumentManagement() {
         toast.success('Document deleted successfully!');
       }
 
+      // Ensure UI stays in "Deleting..." state during any background refresh
+      await runMutationRefresh(
+        () => Promise.resolve(), // Document list already updated optimistically
+        { passes: 2, initialDelayMs: 80, stepDelayMs: 160 },
+      );
+
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
       setDeletionReason('');
+      setDeletingId(null);
     } catch (error) {
       console.error('Failed to delete document:', error);
       toast.error(error.message || 'Failed to delete document. Please try again.');
-    } finally {
       setDeletingId(null);
     }
   };

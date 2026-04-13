@@ -344,35 +344,26 @@ export default function LeadsPage() {
     try {
       await Lead.delete(id);
 
-      // Optimistic UI: remove immediately so user sees instant feedback
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      setTotalItems((prev) => Math.max(0, prev - 1));
-      toast.success('Lead deleted successfully');
-
       // Clear all caches so dashboard and lead lists show fresh data
       clearCache('Lead');
       clearCacheByKey('Lead');
       clearDashboardResultsCache();
       clearAllDashboardCaches();
 
-      // Use setTimeout to ensure state renders before refresh, preventing deleted row from reappearing
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
+      // Wait for refresh to confirm deletion before removing "Deleting..." indicator
       await runMutationRefresh(
         () => Promise.all([loadLeads(currentPage, pageSize), loadTotalStats()]),
         { passes: 3, initialDelayMs: 80, stepDelayMs: 160 },
       );
+
+      toast.success('Lead deleted successfully');
+      setDeletingId(null);
     } catch (error) {
       console.error('Failed to delete lead:', error);
       toast.error('Failed to delete lead');
-      // Reload to show current state (restore deleted row if deletion failed)
-      const deletedLead = leads.find((l) => l.id === id);
-      if (!deletedLead) {
-        // Already removed from state optimistically, reload to be sure
-        await loadLeads(currentPage, pageSize);
-      }
+      // Reload to show current state
+      await loadLeads(currentPage, pageSize);
       await loadTotalStats();
-    } finally {
       setDeletingId(null);
     }
   };

@@ -5,6 +5,26 @@ import { toast } from 'sonner';
 
 // Extracted from Leads.jsx into dedicated hook for leads data management (PR #330)
 
+const LEADS_FORCE_FRESH_UNTIL_KEY = 'leads_force_fresh_until';
+
+const getForceFreshUntil = () => {
+  try {
+    const raw = sessionStorage.getItem(LEADS_FORCE_FRESH_UNTIL_KEY);
+    const value = Number(raw || 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const clearForceFreshFlag = () => {
+  try {
+    sessionStorage.removeItem(LEADS_FORCE_FRESH_UNTIL_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 /**
  * useLeadsData hook - Manages all data fetching for the Leads page
  *
@@ -345,7 +365,7 @@ export function useLeadsData({
 
   // Main data loading function with pagination and age filtering
   const loadLeads = useCallback(
-    async (page = 1, size = 25) => {
+    async (page = 1, size = 25, options = {}) => {
       if (!user) return;
 
       loadingToast.showLoading();
@@ -429,10 +449,16 @@ export function useLeadsData({
         const fetchLimit = useBackendPagination ? size : Math.min(500, size * 5);
         const fetchOffset = useBackendPagination ? (page - 1) * size : 0;
 
+        // Force a cache bypass for mutation follow-up loads (including hard refresh right after delete).
+        const forceFreshFromOptions = !!options.forceFresh;
+        const forceFreshFromSession = getForceFreshUntil() > Date.now();
+        const forceFresh = forceFreshFromOptions || forceFreshFromSession;
+
         currentFilter = {
           ...currentFilter,
           limit: fetchLimit,
           offset: fetchOffset,
+          ...(forceFresh ? { cache_bust: Date.now() } : {}),
         };
 
         const sortString = sortDirection === 'desc' ? `-${sortField}` : sortField;
@@ -530,6 +556,10 @@ export function useLeadsData({
         setLeads(paginatedLeads);
         setTotalItems(estimatedTotal);
         setCurrentPage(page);
+
+        if (forceFreshFromSession) {
+          clearForceFreshFlag();
+        }
         // Use inline stats from list response when present (filter-scoped: assigned_to, etc.)
         if (response._stats && typeof response._stats === 'object') {
           setTotalStats({

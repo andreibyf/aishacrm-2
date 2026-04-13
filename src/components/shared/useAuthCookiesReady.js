@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 // Simple hook that polls for auth cookies (aisha_access) to appear.
 // Prevents premature API calls immediately after login before browser processes Set-Cookie.
 export function useAuthCookiesReady(options = {}) {
-  const { pollIntervalMs = 100, maxWaitMs = 4000 } = options;
+  const { pollIntervalMs = 50, maxWaitMs = 800 } = options;
   const [ready, setReady] = useState(false);
   const [checkedAtLeastOnce, setCheckedAtLeastOnce] = useState(false);
 
@@ -11,11 +11,32 @@ export function useAuthCookiesReady(options = {}) {
     let cancelled = false;
     const start = Date.now();
 
+    const hasAuthSignal = () => {
+      if (typeof document !== 'undefined' && /aisha_access=/.test(document.cookie)) {
+        return true;
+      }
+
+      // Some environments use non-cookie auth persistence; treat these as ready.
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const token = localStorage.getItem('token');
+          const supabaseAccess = localStorage.getItem('supabase_access_token');
+          const supabaseAuth = localStorage.getItem('supabase.auth.token');
+          if (token || supabaseAccess || supabaseAuth) {
+            return true;
+          }
+        }
+      } catch {
+        // Ignore storage access errors and continue polling.
+      }
+
+      return false;
+    };
+
     const check = () => {
       if (cancelled) return;
-      const hasCookie = typeof document !== 'undefined' && /aisha_access=/.test(document.cookie);
       setCheckedAtLeastOnce(true);
-      if (hasCookie) {
+      if (hasAuthSignal()) {
         setReady(true);
         return; // stop polling
       }
