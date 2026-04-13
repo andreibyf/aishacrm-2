@@ -4,12 +4,14 @@ import { BACKEND_URL } from '@/api/core/httpClient';
 import { useSocket } from './useSocket';
 
 const SYNC_TTL_MS = 30 * 60 * 1000;
+let fallbackSyncCounter = 0;
 
 function generateSyncSessionId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  fallbackSyncCounter += 1;
+  return `sync-${Date.now()}-${fallbackSyncCounter}`;
 }
 
 /**
@@ -84,21 +86,21 @@ export function useImpersonationNavigationSync() {
       }
     };
 
-      const onNavigation = (data) => {
-        const active = activeSyncRef.current;
-        if (!active || !data?.syncSessionId || !data?.path) return;
-        if (active.syncSessionId !== data.syncSessionId) return;
-        if (active.expiresAt <= Date.now()) {
-          activeSyncRef.current = null;
-          return;
-        }
+    const onNavigation = (data) => {
+      const active = activeSyncRef.current;
+      if (!active || !data?.syncSessionId || !data?.path) return;
+      if (active.syncSessionId !== data.syncSessionId) return;
+      if (active.expiresAt <= Date.now()) {
+        activeSyncRef.current = null;
+        return;
+      }
 
-        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        if (data.path === currentPath) return;
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (data.path === currentPath) return;
 
-        ignoreNextEmitRef.current = true;
-        navigate(data.path);
-      };
+      ignoreNextEmitRef.current = true;
+      navigate(data.path);
+    };
 
     socket.on('impersonation_sync_started', onSyncStarted);
     socket.on('impersonation_sync_stopped', onSyncStopped);

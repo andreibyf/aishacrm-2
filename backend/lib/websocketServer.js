@@ -119,12 +119,11 @@ export function init(httpServer) {
 
       // Store user context in socket
       socket.userId = user.id;
-      socket.userEmail = user.email;
       socket.userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email;
       socket.tenantId = user.tenant_id;
       socket.userRole = user.role;
 
-      logger.info(`WebSocket authenticated: ${user.email} (tenant: ${user.tenant_id})`);
+      logger.info(`WebSocket authenticated: user=${user.id}, tenant=${user.tenant_id}`);
       next();
     } catch (err) {
       logger.error('WebSocket authentication error:', err);
@@ -189,9 +188,10 @@ export function init(httpServer) {
     });
 
     // Disconnect handler
-    socket.on('disconnect', (reason) => {
+    socket.on('disconnect', async (reason) => {
       logger.info(`WebSocket disconnected: user=${socket.userId}, reason=${reason}`);
       handleUserOffline(socket);
+      await cleanupSupportTelemetry(socket);
     });
 
     // Error handler
@@ -357,14 +357,27 @@ function emitFrictionAlert(socket, alertType, details = {}) {
     tenantId: socket.tenantId,
     userId: socket.userId,
     userName: socket.userName,
-    userEmail: socket.userEmail,
-    userRole: socket.userRole,
     timestamp: now,
     ...details,
   };
 
-  // Broadcast to tenant room so support dashboards/agents can react.
+  // Broadcast non-sensitive alert metadata tenant-wide.
   io.to(`tenant:${socket.tenantId}`).emit('support_friction_alert', payload);
+}
+
+async function cleanupSupportTelemetry(socket) {
+  if (!io || !socket?.userId || !socket?.tenantId) return;
+  try {
+    const remainingUserSockets = await io.in(`user:${socket.userId}`).fetchSockets();
+    if (remainingUserSockets.length > 0) return;
+    supportTelemetryByUser.delete(`${socket.tenantId}:${socket.userId}`);
+  } catch (err) {
+    logger.debug('[WebSocket] Failed to cleanup support telemetry state', {
+      userId: socket.userId,
+      tenantId: socket.tenantId,
+      err: err?.message,
+    });
+  }
 }
 
 function shouldTriggerAlert(state, alertType, nowMs) {

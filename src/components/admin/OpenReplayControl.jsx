@@ -153,8 +153,8 @@ export function OpenReplayControl({ targetUser }) {
           {/* Security Note */}
           <Alert>
             <AlertDescription className="text-xs">
-              <strong>🔒 Security:</strong> Only superadmins can view sessions. All activity is logged
-              for audit purposes. Sessions are automatically recorded per OpenReplay configuration.
+              <strong>🔒 Security:</strong> Only superadmins can view sessions. Sessions are
+              automatically recorded per OpenReplay configuration.
             </AlertDescription>
           </Alert>
         </div>

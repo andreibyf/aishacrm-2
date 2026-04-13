@@ -13,8 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **OpenReplay self-hosted defaults (`.env.example`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Switched project guidance from cloud-first to self-hosted-first for AiSHA deployments. Added default self-hosted dashboard/ingest sample values (`https://replay.aishacrm.com`) and updated setup documentation to prioritize CI/CD deployment flow.
 
-- **Activity Feed Removed:** Removed real-time activity feed from Dashboard sidebar (Phase 4 reversed). Co-browsing/remote control via OpenReplay Assist provides the required support functionality without cluttering the main CRM interface. WebSocket infrastructure remains in place for other feature use.
-
 - **Dashboard cache-first loading optimization (`src/pages/Dashboard.jsx`):** Moved cache check before `setLoading(true)` so cached data displays instantly without skeleton loaders. When cache exists, dashboard now shows data immediately with background refresh, eliminating the "obvious loading time" for repeat visits. Loading skeleton only appears when no cache is available (first visit or after cache expiration).
 
 - **Dashboard/widget auth readiness optimization (`src/components/shared/useAuthCookiesReady.js`):** Reduced auth-cookie fallback wait from 4000ms to 800ms and added non-cookie auth signal detection (`token`, `supabase_access_token`, `supabase.auth.token`) so dashboard stats and widgets do not stall for ~4s when cookies are not readable in the browser environment.
@@ -37,9 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - WebSocket server with JWT authentication via cookies
   - Redis pub/sub adapter for multi-instance scaling (`REDIS_MEMORY_URL`)
   - Tenant-isolated rooms (users only see activity from their tenant)
-  - Activity events: page views, entity mutations (create/update/delete), user presence (online/offline)
-  - Real-time activity feed component in Dashboard sidebar showing last 50 events
-  - Auto-scroll to newest events, user filter (All/My Activity)
+  - Activity events and support interaction telemetry
+  - Friction detection/alert events for support workflows
   - Installed: `socket.io`, `@socket.io/redis-adapter` (backend), `socket.io-client` (frontend)
   - Modified: `backend/server.js` (WebSocket initialization)
 
@@ -48,20 +45,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests navigation permissions (`nav_permissions` JSONB), granular `perm_*` flags, permission restoration after exit
   - Confirms middleware (`backend/middleware/authenticate.js`) does DB lookup for impersonated sessions
   - Ensures `/api/auth/me` returns target user's permissions during impersonation
-
-### Added
-
-- **OpenReplay Integration (Phase 3):** Replaced CoBrowse.io with open-source session replay + co-browsing (`src/hooks/useOpenReplay.js`, `src/hooks/useOpenReplayTracking.js`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`)
-  - ✅ **MIT Licensed** - Truly free and open-source (11.9k GitHub stars)
-  - ✅ **Session Replay** - Record full user sessions with DevTools context
-  - ✅ **Co-browsing (Assist)** - Live screen sharing with remote control
-  - ✅ **Privacy Controls** - Data sanitization and masking
-  - ✅ **Self-Hosted or Cloud** - Deploy on your infrastructure or use OpenReplay Cloud
-  - ✅ **Enterprise Proven** - Used by Amazon, Uber, NVIDIA, Mercedes, Deel
-  - Integrated with User Management ("View Session" button next to "Login As")
-  - Environment variables: `VITE_OPENREPLAY_PROJECT_KEY`, `VITE_OPENREPLAY_INGEST_POINT`, `VITE_OPENREPLAY_DASHBOARD_URL`
-  - Added OpenReplay configuration section to `.env.example` with setup instructions
-  - See [OPENREPLAY_SETUP_GUIDE.md](docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md) for setup instructions
 
 ### Removed
 
@@ -1327,3 +1310,4 @@ See `orchestra/PLAN.md` for detailed history of bugfixes and features.
 ---
 
 _This changelog was created as part of Phase 4 closure on December 4, 2025._
+

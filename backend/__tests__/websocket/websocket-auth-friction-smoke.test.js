@@ -148,6 +148,8 @@ test('websocket auth + support friction alert smoke', async (t) => {
     assert.equal(alert.userId, selectedUser.id);
     assert.equal(alert.tenantId, selectedUser.tenant_id);
     assert.equal(alert.path, '/contacts');
+    assert.equal('userEmail' in alert, false);
+    assert.equal('userRole' in alert, false);
   } finally {
     if (socket) {
       socket.disconnect();
