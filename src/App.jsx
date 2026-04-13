@@ -1,17 +1,21 @@
 import './App.css'
 import Pages from "@/pages/index.jsx"
 import { Toaster } from "sonner"
+import { useOpenReplayTracking } from '@/hooks/useOpenReplayTracking';
 
 function App() {
+  // Initialize OpenReplay for co-browsing/session replay
+  useOpenReplayTracking();
+
   // Add debug logging
   if (import.meta.env.DEV) {
     console.log('[App] Rendering App component');
   }
-  
+
   return (
     <>
       <Pages />
-      <Toaster 
+      <Toaster
         position="top-center"
         theme="dark"
         richColors
@@ -28,7 +32,7 @@ function App() {
         }}
       />
     </>
-  )
+  );
 }
 
 export default App

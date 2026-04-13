@@ -34,6 +34,9 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 // Import secure CORS helper
 import { setCorsHeaders, isAllowedOrigin } from './lib/cors.js';
 
+// Import WebSocket server
+import websocketServer from './lib/websocketServer.js';
+
 // Load environment variables
 // Try .env.local first (for local development), then fall back to .env
 dotenv.config({ path: '.env.local' });
@@ -761,6 +764,9 @@ async function logRecoveryIfGap() {
 
 // Start server
 const server = createServer(app);
+
+// Initialize WebSocket server for real-time activity feed
+websocketServer.init(server);
 
 // Extend HTTP server timeout to accommodate slow local LLM inference (Ollama on CPU).
 // Default Node.js socket timeout is 0 (no timeout) but proxies/load balancers

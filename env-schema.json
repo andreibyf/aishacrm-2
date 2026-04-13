@@ -238,6 +238,12 @@
           "sensitive": true,
           "required": false,
           "description": "Emergency IDR unblock secret"
+        },
+        "SUPPORT_INTELLIGENCE_ENABLED": {
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "Enable websocket friction detection and support_friction_alert events"
         }
       }
     },
@@ -374,6 +380,24 @@
           "type": "string",
           "format": "uri",
           "required": false
+        },
+        "VITE_OPENREPLAY_PROJECT_KEY": {
+          "type": "string",
+          "sensitive": false,
+          "required": false,
+          "description": "OpenReplay project key for session replay and co-browsing (optional)"
+        },
+        "VITE_OPENREPLAY_INGEST_POINT": {
+          "type": "string",
+          "format": "uri",
+          "required": false,
+          "description": "OpenReplay ingest point URL (optional, defaults to cloud if not specified)"
+        },
+        "VITE_OPENREPLAY_DASHBOARD_URL": {
+          "type": "string",
+          "format": "uri",
+          "required": false,
+          "description": "OpenReplay dashboard URL for viewing sessions (optional, defaults to https://app.openreplay.com)"
         }
       }
     }

@@ -78,6 +78,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { OpenReplayControl } from '@/components/admin/OpenReplayControl';
+import { SupportFrictionIndicator } from '@/components/admin/SupportFrictionIndicator';
 import { Lock } from 'lucide-react';
 
 const UserFormModal = ({ user, tenants, currentUser, onSave, onCancel, moduleSettings = [] }) => {
@@ -1343,54 +1345,6 @@ export default function EnhancedUserManagement() {
     }
   };
 
-  // Handler for impersonating a user (superadmin only)
-  const handleImpersonate = async (user) => {
-    if (currentUser?.role !== 'superadmin') {
-      toast.error('Only superadmins can impersonate users');
-      return;
-    }
-    if (user.role === 'superadmin') {
-      toast.error('Cannot impersonate other superadmins');
-      return;
-    }
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/impersonate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ user_id: user.id }),
-      });
-
-      let result = {};
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        try {
-          result = await response.json();
-        } catch (parseError) {
-          console.error('Failed to parse impersonate response as JSON:', parseError);
-        }
-      } else {
-        try {
-          const text = await response.text();
-          console.error('Received non-JSON response from impersonate endpoint:', text);
-        } catch {
-          // ignore read error
-        }
-      }
-
-      if (response.ok && result.status === 'success') {
-        toast.success(result.message || `Now viewing as ${user.email}`);
-        // Force full page reload to reset all state with new user context
-        window.location.href = '/';
-      } else {
-        toast.error(result.message || 'Failed to impersonate user');
-      }
-    } catch (error) {
-      console.error('Error impersonating user:', error);
-      toast.error(`Failed to impersonate: ${error.message}`);
-    }
-  };
-
   // --- Bulk selection ---
   const toggleSelection = (id) => {
     const next = new Set(selectedUsers);
@@ -1548,15 +1502,18 @@ export default function EnhancedUserManagement() {
                 Manage user accounts, roles, and permissions
               </CardDescription>
             </div>
-            <Button
-              onClick={() => {
-                setShowTemplateSelector(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add User
-            </Button>
+            <div className="flex items-center gap-2">
+              {currentUser?.role === 'superadmin' && <SupportFrictionIndicator />}
+              <Button
+                onClick={() => {
+                  setShowTemplateSelector(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
@@ -1902,18 +1859,12 @@ export default function EnhancedUserManagement() {
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
-                            {/* Impersonate button - superadmin only, not for other superadmins */}
+                            {/* Assist session access - superadmin only, not for other superadmins */}
                             {currentUser?.role === 'superadmin' && user.role !== 'superadmin' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                type="button"
-                                onClick={() => handleImpersonate(user)}
-                                className="bg-amber-700 border-amber-600 text-amber-100 hover:bg-amber-600"
-                                title={`Login as ${user.email}`}
-                              >
-                                Login As
-                              </Button>
+                              <>
+                                {/* OpenReplay assist control - superadmin only */}
+                                <OpenReplayControl targetUser={user} />
+                              </>
                             )}
                           </div>
                         </TableCell>
