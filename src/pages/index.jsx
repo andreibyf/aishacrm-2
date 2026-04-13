@@ -6,6 +6,7 @@ import ForgotPasswordPage from './ForgotPassword.jsx';
 import AcceptInvitePage from './AcceptInvite.jsx';
 import Layout from './Layout.jsx';
 import { TenantProvider } from '@/components/shared/tenantContext';
+import { useImpersonationNavigationSync } from '@/hooks/useImpersonationNavigationSync';
 
 const PAGES = {
   Dashboard: lazy(() => import('./Dashboard')),
@@ -71,6 +72,9 @@ function _getCurrentPage(url) {
 function PagesContent() {
   const location = useLocation();
   const currentPage = _getCurrentPage(location.pathname);
+
+  // Keep impersonated admin and real user sessions in route sync while impersonation is active.
+  useImpersonationNavigationSync();
 
   // Public routes that don't require Layout/authentication
   return (

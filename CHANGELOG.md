@@ -9,6 +9,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **OpenReplay self-hosted defaults (`.env.example`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Switched project guidance from cloud-first to self-hosted-first for AiSHA deployments. Added default self-hosted dashboard/ingest sample values (`https://replay.aishacrm.com`) and updated setup documentation to prioritize CI/CD deployment flow.
+
+- **Dashboard cache-first loading optimization (`src/pages/Dashboard.jsx`):** Moved cache check before `setLoading(true)` so cached data displays instantly without skeleton loaders. When cache exists, dashboard now shows data immediately with background refresh, eliminating the "obvious loading time" for repeat visits. Loading skeleton only appears when no cache is available (first visit or after cache expiration).
+
+- **Dashboard/widget auth readiness optimization (`src/components/shared/useAuthCookiesReady.js`):** Reduced auth-cookie fallback wait from 4000ms to 800ms and added non-cookie auth signal detection (`token`, `supabase_access_token`, `supabase.auth.token`) so dashboard stats and widgets do not stall for ~4s when cookies are not readable in the browser environment.
+
+- **OpenReplay impersonation action visibility (`src/hooks/useOpenReplay.js`, `src/hooks/useOpenReplayTracking.js`):** Enabled OpenReplay Assist plugin integration and added lightweight client-side interaction event tracking (`navigation`, `ui_click`, throttled `mouse_move`) so superadmins can observe user actions during live support sessions. This improves visibility for "what user did" while co-browsing/impersonation workflows are active.
+
+- **True impersonation route mirroring (`backend/lib/websocketServer.js`, `src/hooks/useImpersonationNavigationSync.js`, `src/pages/index.jsx`, `src/hooks/useSocket.js`):** Added bidirectional route synchronization between impersonated admin session and the real user session using WebSocket user-room relays (`impersonation_sync_start`, `impersonation_nav`, `impersonation_sync_stop`). When impersonation is active, page navigation in either session now mirrors to the other session in near real time.
+
+- **Assist-first user management UX (`src/components/settings/EnhancedUserManagement.jsx`, `src/components/admin/OpenReplayControl.jsx`):** Removed the `Login As` impersonation action from User Management and promoted OpenReplay as the primary support workflow. Session action labels now use assist language (`Start Assist`, `Start Assist Session`) with guidance focused on live support and control request flow.
+
+- **AI co-browse intelligence layer (Phase 1) (`backend/lib/websocketServer.js`, `src/hooks/useImpersonationNavigationSync.js`):** Added real-time support telemetry ingestion (`support_interaction`) and server-side friction detection with cooldown controls. Initial detectors include `rage_click` (rapid repeated clicks) and `stuck_user` (long dwell + repeated click attempts). Alerts are broadcast as `support_friction_alert` events to the tenant room and interactions are appended to Redis memory event stream (`support-intelligence`) for downstream AI orchestration.
+
+- **Support intelligence staged rollout + visibility (`backend/lib/websocketServer.js`, `backend/__tests__/websocket/support-intelligence-detectors.test.js`, `src/components/admin/SupportFrictionIndicator.jsx`, `src/components/settings/EnhancedUserManagement.jsx`):** Added `SUPPORT_INTELLIGENCE_ENABLED` env gating for friction detection/alert emission, added focused backend detector tests for threshold/cooldown behavior (`rage_click`, `stuck_user`), and surfaced a real-time superadmin alert indicator in User Management for immediate `support_friction_alert` visibility.
+
+### Added
+
+- **OpenReplay infrastructure CI/CD (`.github/workflows/openreplay-selfhosted-deploy.yml`, `scripts/deploy/openreplay/install-openreplay.sh`, `docs/admin-guides/OPENREPLAY_SELF_HOSTED_CICD.md`):** Added a dedicated workflow-dispatch pipeline to deploy self-hosted OpenReplay to VPS via Doppler-managed SSH credentials, plus a non-interactive host installer wrapper and runbook. This completes the missing infrastructure layer that was previously outside repo automation.
+
+- **Co-browsing with OpenReplay (Phase 3):** Integrated OpenReplay session replay and live co-browsing (Assist mode) for remote support, debugging, and user training. Supports remote mouse control similar to Zoom's "take control" feature - admin can view user's session live and take over cursor to demonstrate actions (`src/hooks/useOpenReplay.js`, `src/hooks/useOpenReplayTracking.js`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`, `.env.example`)
+  - WebSocket server with JWT authentication via cookies
+  - Redis pub/sub adapter for multi-instance scaling (`REDIS_MEMORY_URL`)
+  - Tenant-isolated rooms (users only see activity from their tenant)
+  - Activity events and support interaction telemetry
+  - Friction detection/alert events for support workflows
+  - Installed: `socket.io`, `@socket.io/redis-adapter` (backend), `socket.io-client` (frontend)
+  - Modified: `backend/server.js` (WebSocket initialization)
+
+- **Impersonation Permission Validation Test (Phase 2):** Created comprehensive test suite for impersonation accuracy (`backend/__tests__/auth/impersonation-permissions.test.js`)
+  - Validates impersonation loads target user's exact permissions from database
+  - Tests navigation permissions (`nav_permissions` JSONB), granular `perm_*` flags, permission restoration after exit
+  - Confirms middleware (`backend/middleware/authenticate.js`) does DB lookup for impersonated sessions
+  - Ensures `/api/auth/me` returns target user's permissions during impersonation
+
+### Removed
+
+- **CoBrowse.io Integration:** Removed paid third-party service that required enterprise license
+  - Deleted: `src/hooks/useCoBrowse.js`, `src/components/admin/CoBrowseControl.jsx`, `docs/admin-guides/COBROWSE_SETUP_GUIDE.md`
+  - CoBrowse.io Enterprise Self-Hosting requires paid license and private Docker registry access
+  - Removed `canObserveUser()` function from `src/utils/permissions.js`
+  - Removed `VITE_COBROWSE_LICENSE_KEY` from `env-schema.json`
+  - **Replaced with:** OpenReplay (open-source, MIT licensed, feature-complete alternative)
+
+### Fixed
+
+- **Leads bulk-delete stale refresh regression (`src/hooks/useLeadsBulkOps.js`, `src/hooks/useLeadsData.js`):** Fixed intermittent count rollback after bulk delete (for example 130 -> 105 -> browser refresh shows 130 -> later 105). Bulk delete now marks a short-lived force-fresh window and post-mutation lead loads include a cache-bust query parameter so immediate reloads bypass stale list cache. The force-fresh flag auto-clears after a successful fresh load.
+
+- **Delete UI Feedback Timing (Phase 1):** Fixed race condition causing "Deleting..." indicator to disappear before records are removed from UI (`src/pages/Contacts.jsx`, `src/pages/Accounts.jsx`, `src/pages/Leads.jsx`, `src/pages/Opportunities.jsx`, `src/pages/Activities.jsx`, `src/pages/BizDevSources.jsx`, `src/pages/DocumentManagement.jsx`)
+  - Moved `setDeletingId(null)` from `finally` block to after `await runMutationRefresh()` completes
+  - Removed `setTimeout(0)` workaround from Leads.jsx (line 359)
+  - Removed `setTimeout(100)` workaround from Activities.jsx
+  - Added missing `runMutationRefresh` imports to Activities, BizDevSources, DocumentManagement
+  - Ensures loading state persists until data refresh confirms deletion (~720ms gap eliminated)
+  - Applied to all 7 entity types for consistent delete UX
+
+- **Docker Build Cal.com URL Reference:** Fixed production build failure caused by `localhost:3002` references in compiled assets (`vite.config.ts`, `Dockerfile`)
+  - Added `VITE_CALCOM_URL` to vite.config.ts `define` section with production-safe default (`https://scheduler.aishacrm.com`)
+  - Added explicit `rm -rf dist/` before build in Dockerfile to ensure clean build environment
+  - Added build-time echo to verify VITE_CALCOM_URL value during Docker build
+  - Ensures Dockerfile's `localhost:3002` grep check passes during `npm run build:ci`
+  - Prevents build args from being silently ignored when environment variable is not set
+  - Frontend-entrypoint.sh continues to inject runtime Cal.com URL from container environment
+
+- **WebSocket Dependencies:** Fixed Docker build failure in WebSocket integration (`src/hooks/useSocket.js`, `src/utils/activityTracker.js`)
+  - Removed `js-cookie` dependency that wasn't in package.json
+  - Replaced with native `document.cookie` parsing (consistent with existing codebase patterns like `useTokenRefresh.js`)
+  - Added `getCookie()` helper function in both files using regex pattern matching
+  - Prevents Rollup import resolution errors during Vite production build
+
 ### Fixed
 
 - **Developer AI AI infrastructure reporting (`backend/lib/developerAI.js`):** Added `getAiInfrastructureStatus()` which probes LiteLLM, Ollama, and Braid MCP health endpoints and reads environment variables for configured providers (OpenAI/Anthropic/Groq/local) and the active LLM provider. The execution context summary now renders an **AI Infrastructure** section with ✅/❌ health indicators and active-provider/model display. Container list is also categorized into _Core AiSHA stack_ (`aishacrm-*`), _Braid MCP_ (`braid-mcp-*`), and _Other/host containers_ to improve readability.
@@ -33,6 +105,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Template picker load failure (`src/api/functions.js`, `src/api/emailTemplates.js`, `src/components/ai/EmailTemplatePicker.jsx`):** Exported `getAuthorizationHeader()` from `src/api/functions.js` so dynamic imports in email template API helpers resolve correctly. This fixes `Failed to load templates: o is not a function` in production when opening Draft from Template.
 - **Template picker regression test coverage (`src/api/functions.test.js`):** Added a unit test that asserts `getAuthorizationHeader` is exported from `src/api/functions.js`, preventing future regressions where dynamic API helpers fail at runtime due to a missing export.
+
+- **Router context error for tracking hooks (`src/App.jsx`, `src/pages/index.jsx`):** Moved `useOpenReplayTracking()` from Router-dependent TrackingInitializer back to App.jsx root level (does not require Router context as it only uses basic React hooks).
+
+- **Delete UI race condition causing record reappearance (Phase 1 fix):** Removed optimistic UI updates from delete handlers that were causing records to reappear after successful deletion. Delete operations now keep the "Deleting..." indicator visible until `runMutationRefresh` confirms the record is gone from the database. This fixes the issue where:
+  1. User clicks delete → "Deleting..." appears
+  2. API call succeeds and record is deleted from database
+  3. Optimistic update removed record from UI table
+  4. Cached/stale data reloaded and record reappeared
+  5. Second delete attempt failed with "Failed to delete" because record was already deleted
+  
+  Updated 6 entity files: `src/pages/Leads.jsx`, `src/pages/Contacts.jsx`, `src/pages/Accounts.jsx`, `src/pages/Opportunities.jsx`, `src/pages/Activities.jsx`, `src/pages/BizDevSources.jsx`
+
+- **WebSocket server Supabase import (`backend/lib/websocketServer.js`):** Fixed backend crash `Cannot find module '/app/lib/supabaseAdmin.js'` by changing import from non-existent `supabaseAdmin.js` to `getSupabaseAdmin()` from `supabaseFactory.js`. WebSocket server now implements secure JWT token verification and is available for WebSocket features.
 - **Template tenant-header regression tests (`src/api/emailTemplates.test.js`, `vitest.config.ts`):** Added integration tests that verify template fetch requests include `x-tenant-id` from explicit tenant selection and URL fallback, and included the test file in the integrations project suite.
 
 - **LiteLLM container not deploying to production VPS (`.github/workflows/docker-release.yml`):** Added `litellm` to the Docker Compose `up` command and added `docker pull` + image tagging for the LiteLLM image in the production deployment script. Previously, the LiteLLM image was built and pushed to GHCR on every release tag but was never actually deployed to the VPS because the deployment script only started `frontend`, `backend`, and `aisha-comms` services.
@@ -1225,3 +1310,4 @@ See `orchestra/PLAN.md` for detailed history of bugfixes and features.
 ---
 
 _This changelog was created as part of Phase 4 closure on December 4, 2025._
+

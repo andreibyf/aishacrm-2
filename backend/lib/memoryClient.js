@@ -34,7 +34,14 @@ export async function initMemoryClient(redisUrl = process.env.REDIS_MEMORY_URL |
   }
 
   try {
-    redisClient = createClient({ url: redisUrl });
+    redisClient = createClient({
+      url: redisUrl,
+      socket: {
+        // Keep tests/dev from hanging when Redis is unreachable.
+        connectTimeout: 2000,
+        reconnectStrategy: () => false,
+      },
+    });
     
     redisClient.on('error', (err) => {
       logger.error({ err }, '[MemoryClient] Redis connection error');

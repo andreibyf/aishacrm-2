@@ -1,0 +1,137 @@
+name: OpenReplay Self-Hosted Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (maps to Doppler config)
+        required: true
+        type: choice
+        options:
+          - dev_personal
+          - prd_prd
+      openreplay_domain:
+        description: Public DNS name for OpenReplay (for example replay.aishacrm.com)
+        required: true
+        type: string
+      dns_public:
+        description: Is domain public DNS? (y/n)
+        required: true
+        default: "y"
+        type: choice
+        options:
+          - "y"
+          - "n"
+      openreplay_branch:
+        description: OpenReplay git branch/tag to install
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-openreplay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Validate workflow inputs
+        run: |
+          set -euo pipefail
+          domain='${{ inputs.openreplay_domain }}'
+          branch='${{ inputs.openreplay_branch }}'
+          dns_public='${{ inputs.dns_public }}'
+
+          if [[ ! "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "Invalid openreplay_domain: '$domain'"
+            exit 1
+          fi
+
+          if [[ ! "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "Invalid openreplay_branch: '$branch'"
+            exit 1
+          fi
+
+          if [[ "$dns_public" != "y" && "$dns_public" != "n" ]]; then
+            echo "Invalid dns_public: '$dns_public'"
+            exit 1
+          fi
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1
+
+      - name: Fetch VPS credentials from Doppler
+        id: doppler
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+
+          require_secret() {
+            local key="$1"
+            local value
+            value=$(doppler secrets get "$key" --plain 2>/dev/null || true)
+            if [[ -z "$value" ]]; then
+              echo "Missing required Doppler secret: $key"
+              exit 1
+            fi
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          }
+
+          require_secret PROD_VPS_HOST
+          require_secret PROD_VPS_USER
+          require_secret PROD_VPS_PORT
+
+          echo "PROD_VPS_SSH_KEY<<EOF" >> "$GITHUB_OUTPUT"
+          doppler secrets get PROD_VPS_SSH_KEY --plain >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Copy OpenReplay installer wrapper to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ steps.doppler.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler.outputs.PROD_VPS_PORT }}
+          source: scripts/deploy/openreplay/install-openreplay.sh
+          target: /tmp/aishacrm-openreplay
+          strip_components: 0
+
+      - name: Execute OpenReplay installer on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.doppler.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler.outputs.PROD_VPS_PORT }}
+          command_timeout: 35m
+          script: |
+            set -euo pipefail
+            chmod +x /tmp/aishacrm-openreplay/scripts/deploy/openreplay/install-openreplay.sh
+
+            OPENREPLAY_DOMAIN='${{ inputs.openreplay_domain }}' \
+            OPENREPLAY_DNS_PUBLIC='${{ inputs.dns_public }}' \
+            OPENREPLAY_BRANCH='${{ inputs.openreplay_branch }}' \
+            OPENREPLAY_INSTALL_DIR='/opt/openreplay' \
+            /tmp/aishacrm-openreplay/scripts/deploy/openreplay/install-openreplay.sh
+
+            sudo docker ps --format 'table {{.Names}}\t{{.Status}}' | grep -i openreplay || true
+
+      - name: Summary
+        run: |
+          echo "### OpenReplay Self-Hosted Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Domain: https://${{ inputs.openreplay_domain }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ inputs.openreplay_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Set these in Doppler for AiSHA frontend:" >> $GITHUB_STEP_SUMMARY
+          echo "- VITE_OPENREPLAY_DASHBOARD_URL=https://${{ inputs.openreplay_domain }}" >> $GITHUB_STEP_SUMMARY
+          echo "- VITE_OPENREPLAY_INGEST_POINT=https://${{ inputs.openreplay_domain }}/ingest" >> $GITHUB_STEP_SUMMARY
+          echo "- VITE_OPENREPLAY_PROJECT_KEY=<project key from OpenReplay dashboard>" >> $GITHUB_STEP_SUMMARY
