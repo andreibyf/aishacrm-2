@@ -10,13 +10,7 @@ import {
   DialogTrigger,
 } from '../ui/dialog';
 import { Alert, AlertDescription } from '../ui/alert';
-
-const getRuntimeEnv = (key) => {
-  if (typeof window !== 'undefined' && window._env_) {
-    return window._env_[key];
-  }
-  return import.meta.env[key];
-};
+import { getRuntimeEnv } from '@/utils/runtimeEnv';
 
 /**
  * OpenReplay Control Component

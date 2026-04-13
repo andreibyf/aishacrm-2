@@ -1,13 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Tracker from '@openreplay/tracker';
 import trackerAssist from '@openreplay/tracker-assist';
-
-const getRuntimeEnv = (key) => {
-  if (typeof window !== 'undefined' && window._env_) {
-    return window._env_[key];
-  }
-  return import.meta.env[key];
-};
+import { getRuntimeEnv, shouldDisableSecureMode } from '@/utils/runtimeEnv';
 
 /**
  * OpenReplay Session Replay & Co-browsing Hook
@@ -31,11 +25,6 @@ export function useOpenReplay() {
   useEffect(() => {
     const projectKey = getRuntimeEnv('VITE_OPENREPLAY_PROJECT_KEY');
     const ingestPoint = getRuntimeEnv('VITE_OPENREPLAY_INGEST_POINT');
-    const isLocalhostHttp =
-      typeof window !== 'undefined' &&
-      window.location?.protocol === 'http:' &&
-      (window.location?.hostname === 'localhost' || window.location?.hostname === '127.0.0.1');
-
     // Skip initialization if no project key configured
     if (!projectKey) {
       console.info('[OpenReplay] No project key configured - session replay disabled');
@@ -48,7 +37,7 @@ export function useOpenReplay() {
         projectKey,
         ingestPoint: ingestPoint || undefined, // Use default cloud if not specified
         // Docker local uses a production build on http://localhost, so allow insecure mode there too.
-        __DISABLE_SECURE_MODE: Boolean(import.meta.env.DEV || isLocalhostHttp),
+        __DISABLE_SECURE_MODE: shouldDisableSecureMode(),
       });
 
       // Enable Assist plugin for live co-browsing (cursor visibility + remote control workflow)
