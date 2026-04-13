@@ -162,6 +162,9 @@ services:
       # Browser-facing runtime overrides (must be host-reachable values)
       - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-https://api.aishacrm.com}
       - VITE_CALCOM_URL=${VITE_CALCOM_URL:-https://scheduler.aishacrm.com}
+      - VITE_OPENREPLAY_PROJECT_KEY=${VITE_OPENREPLAY_PROJECT_KEY:-}
+      - VITE_OPENREPLAY_INGEST_POINT=${VITE_OPENREPLAY_INGEST_POINT:-}
+      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-https://replay.aishacrm.com}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
