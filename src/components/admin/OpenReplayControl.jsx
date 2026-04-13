@@ -11,6 +11,13 @@ import {
 } from '../ui/dialog';
 import { Alert, AlertDescription } from '../ui/alert';
 
+const getRuntimeEnv = (key) => {
+  if (typeof window !== 'undefined' && window._env_) {
+    return window._env_[key];
+  }
+  return import.meta.env[key];
+};
+
 /**
  * OpenReplay Control Component
  * 
@@ -25,7 +32,7 @@ export function OpenReplayControl({ targetUser }) {
   const [isOpen, setIsOpen] = useState(false);
 
   // OpenReplay dashboard URL (configured via environment)
-  const dashboardUrl = import.meta.env.VITE_OPENREPLAY_DASHBOARD_URL || 'https://replay.aishacrm.com';
+  const dashboardUrl = getRuntimeEnv('VITE_OPENREPLAY_DASHBOARD_URL') || 'https://replay.aishacrm.com';
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(dashboardUrl);
@@ -37,7 +44,7 @@ export function OpenReplayControl({ targetUser }) {
     window.open(dashboardUrl, '_blank', 'noopener,noreferrer');
   };
 
-  if (!import.meta.env.VITE_OPENREPLAY_PROJECT_KEY) {
+  if (!getRuntimeEnv('VITE_OPENREPLAY_PROJECT_KEY')) {
     return null; // Don't render if OpenReplay not configured
   }
 

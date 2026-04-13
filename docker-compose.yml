@@ -403,6 +403,9 @@ services:
       - VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_6AFc_XdEzOF0SAE6ivUL2A_fpdZZdBq
       - VITE_AISHACRM_BACKEND_URL=http://localhost:4001
       - VITE_CALCOM_URL=${VITE_CALCOM_URL:-http://localhost:3002}
+      - VITE_OPENREPLAY_PROJECT_KEY=${VITE_OPENREPLAY_PROJECT_KEY:-}
+      - VITE_OPENREPLAY_INGEST_POINT=${VITE_OPENREPLAY_INGEST_POINT:-}
+      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-https://replay.aishacrm.com}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
