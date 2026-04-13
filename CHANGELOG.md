@@ -114,7 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   3. Optimistic update removed record from UI table
   4. Cached/stale data reloaded and record reappeared
   5. Second delete attempt failed with "Failed to delete" because record was already deleted
-  
+
   Updated 6 entity files: `src/pages/Leads.jsx`, `src/pages/Contacts.jsx`, `src/pages/Accounts.jsx`, `src/pages/Opportunities.jsx`, `src/pages/Activities.jsx`, `src/pages/BizDevSources.jsx`
 
 - **WebSocket server Supabase import (`backend/lib/websocketServer.js`):** Fixed backend crash `Cannot find module '/app/lib/supabaseAdmin.js'` by changing import from non-existent `supabaseAdmin.js` to `getSupabaseAdmin()` from `supabaseFactory.js`. WebSocket server now implements secure JWT token verification and is available for WebSocket features.
@@ -1310,4 +1310,3 @@ See `orchestra/PLAN.md` for detailed history of bugfixes and features.
 ---
 
 _This changelog was created as part of Phase 4 closure on December 4, 2025._
-
