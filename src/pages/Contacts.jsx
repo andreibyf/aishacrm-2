@@ -258,8 +258,7 @@ export default function ContactsPage() {
     } catch (error) {
       console.error('Error deleting contact:', error);
       toast.error('Failed to delete contact');
-      loadContacts();
-      loadTotalStats();
+      await Promise.allSettled([loadContacts(), loadTotalStats()]);
       setDeletingId(null);
     }
   };

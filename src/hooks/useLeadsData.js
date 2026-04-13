@@ -557,7 +557,7 @@ export function useLeadsData({
         setTotalItems(estimatedTotal);
         setCurrentPage(page);
 
-        if (forceFresh) {
+        if (forceFreshFromSession) {
           clearForceFreshFlag();
         }
         // Use inline stats from list response when present (filter-scoped: assigned_to, etc.)

@@ -335,7 +335,7 @@ export default function BizDevSourcesPage() {
   const handleRefresh = async () => {
     clearCache();
     // Immediately reload - cache clear is synchronous
-    loadSources();
+    await loadSources();
   };
 
   const handleCreate = () => {
@@ -639,7 +639,7 @@ export default function BizDevSourcesPage() {
       }
       toast.error(`Failed to delete ${bizdevSourceLabel.toLowerCase()}`);
       // Reload on error to ensure consistency
-      handleRefresh();
+      await handleRefresh();
       setDeletingId(null);
     }
   };
