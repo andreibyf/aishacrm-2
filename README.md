@@ -55,7 +55,7 @@ cp .env.example .env
 # Edit .env with your Supabase credentials
 ```
 
-See [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) for complete deployment instructions.
+See [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md) for complete deployment instructions.
 
 ---
 

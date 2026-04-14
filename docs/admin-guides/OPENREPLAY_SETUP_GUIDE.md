@@ -9,6 +9,7 @@
 ## Overview
 
 OpenReplay is an open-source session replay and co-browsing platform that allows support teams to:
+
 - **Record user sessions** with full context (DOM, network, console, performance)
 - **Live co-browse** with users (Assist mode) including remote control
 - **Debug issues** with DevTools integration
@@ -136,8 +137,9 @@ See [OpenReplay Self-Hosting Docs](https://docs.openreplay.com/deployment/deploy
    - Find the user you want to assist
 
 2. **Open Session Viewer:**
-   - Click "View Session" button next to "Login As"
-   - Modal shows user details and dashboard link
+
+- Click "Start Assist" (or "Start Assist Session") for the selected user
+- Modal shows user details and dashboard link
 
 3. **Access OpenReplay Dashboard:**
    - Click "Open Dashboard"
@@ -156,6 +158,7 @@ See [OpenReplay Self-Hosting Docs](https://docs.openreplay.com/deployment/deploy
 ### For End Users
 
 Users are automatically tracked when:
+
 - They log in to AiSHA CRM
 - OpenReplay is configured (project key present)
 
@@ -175,11 +178,7 @@ OpenReplay automatically redacts sensitive inputs (password, credit card, etc.).
 
 ```html
 <!-- Example: mask SSN field -->
-<input 
-  type="text" 
-  name="ssn" 
-  data-openreplay-obscured 
-/>
+<input type="text" name="ssn" data-openreplay-obscured />
 
 <!-- Example: block entire section -->
 <div data-openreplay-block>
@@ -189,7 +188,7 @@ OpenReplay automatically redacts sensitive inputs (password, credit card, etc.).
 
 ### Security Features
 
-- ✅ **Superadmin-only access** - Only users with `role=superadmin` see "View Session" button
+- ✅ **Superadmin-only access** - Only users with `role=superadmin` can start assist sessions
 - ✅ **Audit logging** - All session views logged to `audit_log` table (future enhancement)
 - ✅ **Tenant isolation** - Users can only see sessions from their own tenant
 - ✅ **Data retention** - Configure retention policy in OpenReplay dashboard (default: 30 days)
@@ -213,10 +212,12 @@ OpenReplay automatically redacts sensitive inputs (password, credit card, etc.).
 **Solutions:**
 
 1. **Check environment variables:**
+
    ```bash
    # In browser console:
    console.log(import.meta.env.VITE_OPENREPLAY_PROJECT_KEY)
    ```
+
    Should output your project key (not `undefined`).
 
 2. **Check browser console for errors:**
@@ -262,13 +263,14 @@ OpenReplay automatically redacts sensitive inputs (password, credit card, etc.).
    - Loads asynchronously, minimal impact
 
 2. **Reduce sampling rate:**
+
    ```javascript
    // In useOpenReplay.js, add:
    tracker.start({
      userID: userId,
      respectDoNotTrack: true,
      // Record only 50% of sessions:
-     sampleRate: 50
+     sampleRate: 50,
    });
    ```
 
@@ -282,11 +284,11 @@ OpenReplay automatically redacts sensitive inputs (password, credit card, etc.).
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `VITE_OPENREPLAY_PROJECT_KEY` | Yes | - | Project key from OpenReplay dashboard |
-| `VITE_OPENREPLAY_INGEST_POINT` | No | Cloud default | Custom ingest endpoint (self-hosted only) |
-| `VITE_OPENREPLAY_DASHBOARD_URL` | No | `https://app.openreplay.com` | Dashboard URL for viewing sessions |
+| Variable                        | Required | Default                      | Description                               |
+| ------------------------------- | -------- | ---------------------------- | ----------------------------------------- |
+| `VITE_OPENREPLAY_PROJECT_KEY`   | Yes      | -                            | Project key from OpenReplay dashboard     |
+| `VITE_OPENREPLAY_INGEST_POINT`  | No       | Cloud default                | Custom ingest endpoint (self-hosted only) |
+| `VITE_OPENREPLAY_DASHBOARD_URL` | No       | `https://app.openreplay.com` | Dashboard URL for viewing sessions        |
 
 ### Tracker Options
 
@@ -296,28 +298,29 @@ Customize in `src/hooks/useOpenReplay.js`:
 const tracker = new Tracker({
   projectKey,
   ingestPoint,
-  
+
   // Privacy
-  respectDoNotTrack: true,        // Honor DNT browser setting
-  obscureTextEmails: true,        // Mask email addresses
-  obscureTextNumbers: true,       // Mask credit card numbers
-  obscureInputEmails: true,       // Mask email input fields
-  
+  respectDoNotTrack: true, // Honor DNT browser setting
+  obscureTextEmails: true, // Mask email addresses
+  obscureTextNumbers: true, // Mask credit card numbers
+  obscureInputEmails: true, // Mask email input fields
+
   // Performance
-  sampleRate: 100,                // Record 100% of sessions
+  sampleRate: 100, // Record 100% of sessions
   consoleMethods: ['log', 'error'], // Capture console logs
-  
+
   // Network
-  capturePerformance: true,       // Capture performance metrics
+  capturePerformance: true, // Capture performance metrics
   network: {
-    capturePayload: true,         // Capture request/response bodies
-    sanitizer: (data) => {        // Sanitize sensitive data
+    capturePayload: true, // Capture request/response bodies
+    sanitizer: (data) => {
+      // Sanitize sensitive data
       if (data.url.includes('password')) {
         data.body = '[REDACTED]';
       }
       return data;
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -334,11 +337,11 @@ import { useOpenReplay } from '@/hooks/useOpenReplay';
 
 function MyComponent() {
   const { trackEvent } = useOpenReplay();
-  
+
   const handlePurchase = () => {
     trackEvent('purchase_completed', {
       amount: 99.99,
-      product: 'Enterprise Plan'
+      product: 'Enterprise Plan',
     });
   };
 }
@@ -355,7 +358,7 @@ import * as Sentry from '@sentry/react';
 tracker.start({
   onError: (error) => {
     Sentry.captureException(error);
-  }
+  },
 });
 ```
 
@@ -368,7 +371,7 @@ Link frontend sessions with backend logs:
 const sessionUrl = tracker.getSessionURL();
 logger.error('API request failed', {
   sessionUrl,
-  error: err.message
+  error: err.message,
 });
 ```
 
@@ -402,9 +405,11 @@ If you previously had CoBrowse.io integration:
 ## Support
 
 For AiSHA-specific OpenReplay issues:
+
 - Check [IMPLEMENTATION_SUMMARY_DELETE_UI_AND_ACTIVITY_FEED.md](./IMPLEMENTATION_SUMMARY_DELETE_UI_AND_ACTIVITY_FEED.md)
 - Review [CHANGELOG.md](../../CHANGELOG.md) (OpenReplay integration section)
 
 For OpenReplay platform issues:
+
 - [GitHub Issues](https://github.com/openreplay/openreplay/issues)
 - [Community Slack](https://slack.openreplay.com)

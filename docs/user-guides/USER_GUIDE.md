@@ -1,6 +1,6 @@
 # Aisha CRM User Guide
 
-**Version 5.10** | **Updated: March 17, 2026**
+**Version 5.10** | **Updated: April 13, 2026**
 
 ---
 
@@ -381,10 +381,10 @@ The collapsible left sidebar provides quick access to:
    - Click main menu items for primary modules
    - Hover for dropdown submenus
 
-2. **Global Search** (Ctrl/Cmd + K)
-   - Type keywords to find any record
-   - Use filters: `type:contact john` or `account:acme`
-   - Recent searches saved automatically
+2. **Global Search (header search)**
+   - Click the search field/icon in the header
+   - Type keywords to find records across modules
+   - Use clear keywords like name, company, email, or phone
 
 3. **Breadcrumb Trail**
 
@@ -395,9 +395,9 @@ The collapsible left sidebar provides quick access to:
    Click any breadcrumb to navigate back
 
 4. **Quick Actions**
-   - Floating action button (bottom right)
-   - Press `+` key for keyboard shortcut
-   - Access: Create Contact, Create Lead, Create Account
+   - Use module-level **Add** buttons (for example: Add Contact, Add Lead, Add Account)
+   - Use action menus on list rows/cards for Edit, View, or Delete
+   - Use bulk action menus after selecting multiple records
 
 ### Navigation Patterns
 
@@ -412,6 +412,25 @@ graph LR
     style A fill:#4F46E5,color:#fff
     style C fill:#10B981,color:#fff
 ```
+
+### Common Buttons and What They Do
+
+| Button / Icon                 | Where You See It                             | What It Does                                   |
+| ----------------------------- | -------------------------------------------- | ---------------------------------------------- |
+| **Add / Create**              | List pages (Contacts, Leads, Accounts, etc.) | Opens create form for a new record             |
+| **Save**                      | Forms and edit dialogs                       | Saves your changes                             |
+| **Cancel**                    | Forms and dialogs                            | Closes dialog without saving                   |
+| **Edit** (pencil)             | Record cards, detail views, table rows       | Opens the selected record in edit mode         |
+| **Delete** (trash)            | Record cards, detail views, table rows       | Deletes record (usually asks for confirmation) |
+| **Refresh**                   | Page headers or toolbar                      | Reloads latest data from server                |
+| **Filter**                    | List pages                                   | Limits visible records by selected criteria    |
+| **Export CSV**                | List pages                                   | Downloads current list/report as CSV           |
+| **Ask AiSHA**                 | Header/right rail                            | Opens AI assistant for conversational actions  |
+| **Start Assist** (superadmin) | User Management                              | Opens OpenReplay flow to assist a user session |
+
+> **💡 TIP**
+>
+> If you are unsure what a button does, hover over it. Most action icons include a tooltip label.
 
 ## 2.4 Your User Profile
 
@@ -527,8 +546,7 @@ The AI Assistant is the heart of Aisha CRM, providing intelligent automation and
 **Methods to Access:**
 
 1. Click the 🤖 icon (top right)
-2. Press `Ctrl/Cmd + Shift + A`
-3. Click "Ask AI" from any page
+2. Click "Ask AiSHA" from pages that show the launcher
 
 ### AI Assistant Interface
 
@@ -749,7 +767,7 @@ Booking links are tied to the employee who owns the record:
 
 ### Global Search
 
-**Access:** Press `Ctrl/Cmd + K` or click search icon
+**Access:** Click the search icon/field in the header
 
 ```
 ┌──────────────────────────────────────────┐
@@ -808,7 +826,7 @@ Booking links are tied to the employee who owns the record:
 
 ### Manual Contact Creation
 
-1. Click **+ New** or press `+` key
+1. Click **+ New** (or the module's **Add Contact** button)
 2. Select **Contact** from dropdown
 3. Fill required fields:
    - **First Name\*** (required)
@@ -945,7 +963,7 @@ Simply tell the AI:
 
 > **💡 TIP**
 >
-> Use keyboard shortcut `E` while viewing a contact to enter edit mode quickly.
+> If inline editing is available, click directly into a field and press Enter to save quickly.
 
 ## 4.3 Contact Activities
 
@@ -2306,13 +2324,13 @@ Navigate to **AI Suggestions** from the left sidebar (listed between AI Campaign
 
 ### What Appears in AI Suggestions?
 
-| Source | Example | When Created |
-|--------|---------|--------------|
-| **Email Drafts** | "Draft an email to Jennifer..." | When you ask AiSHA to draft/compose/write an email |
-| **Stale Deal Alerts** | Deal inactive for 14+ days | Nightly AI triggers worker |
-| **Lead Follow-up Nudges** | Lead stagnant with no activity | Nightly AI engine check |
-| **CARE Workflow Emails** | Triggered by playbook rule | When a CARE workflow action fires with `require_approval: true` |
-| **Account Risk Alerts** | Account showing risk signals | AI analysis of account health |
+| Source                    | Example                         | When Created                                                    |
+| ------------------------- | ------------------------------- | --------------------------------------------------------------- |
+| **Email Drafts**          | "Draft an email to Jennifer..." | When you ask AiSHA to draft/compose/write an email              |
+| **Stale Deal Alerts**     | Deal inactive for 14+ days      | Nightly AI triggers worker                                      |
+| **Lead Follow-up Nudges** | Lead stagnant with no activity  | Nightly AI engine check                                         |
+| **CARE Workflow Emails**  | Triggered by playbook rule      | When a CARE workflow action fires with `require_approval: true` |
+| **Account Risk Alerts**   | Account showing risk signals    | AI analysis of account health                                   |
 
 ### Reviewing an Email Draft
 
@@ -2336,22 +2354,22 @@ Click Approve → Email sent via SMTP
 
 ### Actions You Can Take
 
-| Action | Result |
-|--------|--------|
-| **Approve** | Email is sent, activity logged against the record |
-| **Reject** | Draft discarded, no email sent |
-| **Edit** | (Where supported) Modify the draft before approving |
+| Action      | Result                                              |
+| ----------- | --------------------------------------------------- |
+| **Approve** | Email is sent, activity logged against the record   |
+| **Reject**  | Draft discarded, no email sent                      |
+| **Edit**    | (Where supported) Modify the draft before approving |
 
 > **⚠️ IMPORTANT:** AiSHA never sends emails automatically. You must explicitly approve each draft in AI Suggestions.
 
 ### Understanding Suggestion Statuses
 
-| Status | Meaning |
-|--------|---------|
-| **Pending** | Awaiting your review |
-| **Approved** | You approved it; action executed |
-| **Rejected** | You rejected it; no action taken |
-| **Expired** | Aged out without action (configurable) |
+| Status       | Meaning                                |
+| ------------ | -------------------------------------- |
+| **Pending**  | Awaiting your review                   |
+| **Approved** | You approved it; action executed       |
+| **Rejected** | You rejected it; no action taken       |
+| **Expired**  | Aged out without action (configurable) |
 
 ### Tips for Managing AI Suggestions
 
@@ -2443,13 +2461,13 @@ Check current status at: [System Status Page]
 
 ### Help Resources
 
-1. **In-App Help** (Press `F1`)
-   - Contextual help for current page
-   - Quick tips
-   - Video tutorials
+1. **In-App Guidance**
+   - Tooltips on buttons and icons
+   - Field-level validation messages and hints
+   - Module pages with clear action labels
 
 2. **Knowledge Base**
-   - Searchable articles
+   - Searchable markdown guides
    - How-to guides
    - Best practices
 
@@ -2477,50 +2495,24 @@ Check current status at: [System Status Page]
 
 # Appendix A: Keyboard Shortcuts
 
+> **📝 NOTE**
+>
+> This list only includes shortcuts verified in the current release. Some browser shortcuts (refresh, tab navigation) still apply.
+
 ## Global Shortcuts
 
-| Shortcut               | Action             |
-| ---------------------- | ------------------ |
-| `Ctrl/Cmd + K`         | Global search      |
-| `Ctrl/Cmd + Shift + A` | Open AI assistant  |
-| `+`                    | Quick create       |
-| `F1`                   | Help               |
-| `Esc`                  | Close dialog/modal |
+| Shortcut               | Action                            |
+| ---------------------- | --------------------------------- |
+| `Esc`                  | Close dialog/modal                |
+| `Ctrl/Cmd + Shift + K` | Clear AI chat (with confirmation) |
 
 ## AI Voice Shortcuts
 
 | Shortcut          | Action                                 |
 | ----------------- | -------------------------------------- |
 | `Spacebar` (hold) | Push-to-talk when voice mode is active |
-| `Enter`           | Send typed message in AI chat          |
-
-## Navigation Shortcuts
-
-| Shortcut     | Action              |
-| ------------ | ------------------- |
-| `G` then `D` | Go to Dashboard     |
-| `G` then `C` | Go to Contacts      |
-| `G` then `L` | Go to Leads         |
-| `G` then `A` | Go to Accounts      |
-| `G` then `O` | Go to Opportunities |
-
-## Record Actions
-
-| Shortcut | Action                |
-| -------- | --------------------- |
-| `E`      | Edit current record   |
-| `Delete` | Delete current record |
-| `S`      | Star/favorite         |
-| `N`      | Add note              |
-
-## List View Shortcuts
-
-| Shortcut           | Action               |
-| ------------------ | -------------------- |
-| `↑` / `↓`          | Navigate records     |
-| `Enter`            | Open selected record |
-| `Ctrl/Cmd + A`     | Select all           |
-| `Ctrl/Cmd + Click` | Multi-select         |
+| `Enter`           | Send typed message in AI chat input    |
+| `Shift + Enter`   | Add new line in AI chat input          |
 
 ---
 

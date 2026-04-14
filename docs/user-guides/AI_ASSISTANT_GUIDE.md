@@ -171,7 +171,7 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 
 > **📧 Email Drafting is different from Activities**
 >
-> When you ask AiSHA to *draft*, *write*, or *compose* an email, AiSHA uses a dedicated **email drafting tool** that routes the message to the **AI Suggestions** approval queue — it does **NOT** create an activity. The email is not sent automatically. See [Section 4.8 Email Drafting](#48-email-drafting) below.
+> When you ask AiSHA to _draft_, _write_, or _compose_ an email, AiSHA uses a dedicated **email drafting tool** that routes the message to the **AI Suggestions** approval queue — it does **NOT** create an activity. The email is not sent automatically. See [Section 4.8 Email Drafting](#48-email-drafting) below.
 
 ### 4.6 Dashboard & Analytics
 
@@ -189,16 +189,16 @@ AiSHA understands natural language and recognizes keywords associated with diffe
 
 ### 4.7 Action Types
 
-| Action        | Keywords                                                           | Examples                                                        |
-| ------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| **Create**    | create, creating, add, adding, new, schedule, book                 | "Create a new lead", "Add a contact", "Schedule a meeting"      |
-| **Update**    | update, updating, edit, editing, modify, change, changing, move    | "Update the account", "Change the status", "Move to next stage" |
-| **View/List** | list, show, display, view, see, find, search, lookup, look up, get | "Show me leads", "List all accounts", "Find overdue tasks"      |
-| **Assign**    | assign, assigning, reassign, transfer                              | "Assign this lead to Sarah", "Reassign the opportunity"         |
-| **Convert**   | convert, converting                                                | "Convert this lead to an account"                               |
-| **Export**    | export, download                                                   | "Export my contacts", "Download the report"                     |
-| **Delete**    | delete, deleting, remove, removing                                 | "Delete this task" (requires confirmation)                      |
-| **Draft Email** | draft, compose, write an email, send an email to                 | "Draft an email to Jennifer about the proposal"                 |
+| Action          | Keywords                                                           | Examples                                                        |
+| --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| **Create**      | create, creating, add, adding, new, schedule, book                 | "Create a new lead", "Add a contact", "Schedule a meeting"      |
+| **Update**      | update, updating, edit, editing, modify, change, changing, move    | "Update the account", "Change the status", "Move to next stage" |
+| **View/List**   | list, show, display, view, see, find, search, lookup, look up, get | "Show me leads", "List all accounts", "Find overdue tasks"      |
+| **Assign**      | assign, assigning, reassign, transfer                              | "Assign this lead to Sarah", "Reassign the opportunity"         |
+| **Convert**     | convert, converting                                                | "Convert this lead to an account"                               |
+| **Export**      | export, download                                                   | "Export my contacts", "Download the report"                     |
+| **Delete**      | delete, deleting, remove, removing                                 | "Delete this task" (requires confirmation)                      |
+| **Draft Email** | draft, compose, write an email, send an email to                   | "Draft an email to Jennifer about the proposal"                 |
 
 ### 4.8 Email Drafting
 
@@ -532,17 +532,17 @@ AiSHA has access to 53 specialized tools for CRM operations:
 
 ### Common Commands
 
-| What You Want   | What to Say                              |
-| --------------- | ---------------------------------------- |
-| See your leads  | "Show me my leads"                       |
-| Check pipeline  | "What's in my pipeline?"                 |
-| Today's tasks   | "What's on my calendar today?"           |
-| Schedule a call | "Schedule a call with [name] for [time]" |
-| Create a lead   | "Create a new lead for [company]"        |
-| Get details     | "Tell me about [name]"                   |
-| Dashboard       | "Show me the dashboard"                  |
-| Draft an email  | "Draft an email to [name] about [topic]" |
-| View pending approvals | "Navigate to AI Suggestions"      |
+| What You Want          | What to Say                              |
+| ---------------------- | ---------------------------------------- |
+| See your leads         | "Show me my leads"                       |
+| Check pipeline         | "What's in my pipeline?"                 |
+| Today's tasks          | "What's on my calendar today?"           |
+| Schedule a call        | "Schedule a call with [name] for [time]" |
+| Create a lead          | "Create a new lead for [company]"        |
+| Get details            | "Tell me about [name]"                   |
+| Dashboard              | "Show me the dashboard"                  |
+| Draft an email         | "Draft an email to [name] about [topic]" |
+| View pending approvals | "Navigate to AI Suggestions"             |
 
 ### Agent Delegation Commands (v3.7.0+)
 
@@ -634,7 +634,7 @@ AI-SHA (AI Super Hi-performing Assistant) is an integrated AI executive assistan
 The AI Assistant is available via:
 
 - **Header Widget**: Click "✨ ASK AISHA" in the top header bar (shows "Executive Assistant • Ready" when available)
-- **Command Palette**: Press `Ctrl+K` / `Cmd+K` for quick access
+- **Assistant Launcher**: Use the Ask AiSHA launcher on pages that expose the assistant panel
 
 The header widget opens a chat panel where you can type or speak your requests.
 
@@ -1366,13 +1366,13 @@ If you notice consistent hallucination patterns:
 
 ## Appendix B: Keyboard Shortcuts
 
-| Shortcut           | Action               |
-| ------------------ | -------------------- |
-| `Ctrl+K` / `Cmd+K` | Open command palette |
-| `Escape`           | Close AI widget      |
-| `Enter`            | Send message         |
-| `Shift+Enter`      | New line in message  |
-| `Ctrl+/` / `Cmd+/` | Toggle AI sidebar    |
+| Shortcut               | Action                                 |
+| ---------------------- | -------------------------------------- |
+| `Escape`               | Close dialog/modal                     |
+| `Ctrl/Cmd + Shift + K` | Clear AI chat (with confirmation)      |
+| `Spacebar` (hold)      | Push-to-talk when voice mode is active |
+| `Enter`                | Send typed AI message                  |
+| `Shift + Enter`        | Insert new line in AI message composer |
 
 ---
 

@@ -27,6 +27,7 @@
 - [3.2 User Roles and Permissions](#32-user-roles-and-permissions)
 - [3.3 Employee Management](#33-employee-management)
 - [3.4 Access Control](#34-access-control)
+- [3.5 OpenReplay Assist Support](#35-openreplay-assist-support)
 
 ### Chapter 4: Tenant Management
 
@@ -1010,6 +1011,63 @@ AUTH_RATE_LIMIT_MAX=5       # 5 login attempts per minute
   "retryAfter": 60
 }
 ```
+
+## 3.5 OpenReplay Assist Support
+
+Use OpenReplay to observe and assist users during live support sessions.
+
+### Prerequisites
+
+1. OpenReplay is configured and reachable.
+2. Frontend runtime configuration includes:
+
+- `VITE_OPENREPLAY_PROJECT_KEY`
+- `VITE_OPENREPLAY_INGEST_POINT`
+- `VITE_OPENREPLAY_DASHBOARD_URL`
+
+3. Support operator has `superadmin` role.
+
+See the full setup runbook in [docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md](docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md).
+
+### Start an Assist Session
+
+1. Open **Settings -> User Management**.
+2. Locate the user needing help.
+3. Click **Start Assist** (or **Start Assist Session**).
+4. Open the OpenReplay dashboard from the modal.
+5. Find the user session by email or user identifier.
+6. Open the live session and click **Assist**.
+7. Request control. The user must explicitly accept before remote control is granted.
+
+### During Assistance
+
+1. Confirm consent verbally or in chat before taking control.
+2. Narrate actions while assisting so the user can follow along.
+3. Avoid entering or exposing sensitive data unless required.
+4. End the assist session once the issue is resolved.
+
+### Troubleshooting Assist Sessions
+
+1. No sessions visible:
+
+- Verify OpenReplay env vars in frontend runtime config.
+- Confirm ingest endpoint is reachable from the browser.
+
+2. Assist button unavailable or control not granted:
+
+- Confirm session is live.
+- Confirm user accepted the control request.
+
+3. Wrong tenant or project shown:
+
+- Ensure you are searching by the target user identity.
+- Confirm project mapping and dashboard selection in OpenReplay.
+
+### Security and Audit Notes
+
+1. Restrict assist access to `superadmin` only.
+2. Keep tenant isolation enforced in all support operations.
+3. Capture support session notes in your incident or ticket system.
 
 ---
 
