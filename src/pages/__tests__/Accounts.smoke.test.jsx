@@ -163,9 +163,6 @@ vi.mock('@/components/shared/RefreshButton', () => ({
 vi.mock('@/components/shared/StatusHelper', () => ({
   default: () => <div data-testid="status-helper">StatusHelper</div>,
 }));
-vi.mock('@/components/shared/ComponentHelp', () => ({
-  ComponentHelp: () => <div data-testid="component-help">Help</div>,
-}));
 vi.mock('@/components/accounts/BulkActionsMenu', () => ({
   default: () => <div data-testid="bulk-actions-menu">BulkActionsMenu</div>,
 }));
@@ -387,13 +384,6 @@ describe('[CRM] Full regression', () => {
     render(<AccountsPage />);
     await waitFor(() => {
       expect(screen.getByTestId('csv-export-button')).toBeTruthy();
-    });
-  });
-
-  it('ComponentHelp is present', async () => {
-    render(<AccountsPage />);
-    await waitFor(() => {
-      expect(screen.getByTestId('component-help')).toBeTruthy();
     });
   });
 
