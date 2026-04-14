@@ -49,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Video help feature (`src/components/shared/ComponentHelp.jsx`, `src/pages/Accounts.jsx`, `src/pages/Customers.jsx`, `scripts/help/`, `public/help-videos/`):** Removed the in-app video help buttons, local help-video assets, and Playwright recording script used for help-video generation.
+
 - **CoBrowse.io Integration:** Removed paid third-party service that required enterprise license
   - Deleted: `src/hooks/useCoBrowse.js`, `src/components/admin/CoBrowseControl.jsx`, `docs/admin-guides/COBROWSE_SETUP_GUIDE.md`
   - CoBrowse.io Enterprise Self-Hosting requires paid license and private Docker registry access

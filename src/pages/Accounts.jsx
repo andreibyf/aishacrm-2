@@ -23,7 +23,6 @@ import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import RefreshButton from '../components/shared/RefreshButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ComponentHelp } from '../components/shared/ComponentHelp';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useAiShaEvents } from '@/hooks/useAiShaEvents';
@@ -409,11 +408,6 @@ export default function AccountsPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-bold text-slate-100">{accountsLabel}</h1>
-                <ComponentHelp
-                  title="Accounts Management Guide"
-                  description="Learn how to create, filter, and manage your accounts effectively."
-                  videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
-                />
               </div>
               <p className="text-slate-400 mt-1">
                 Manage your company {accountsLabel.toLowerCase()} and partnerships.
