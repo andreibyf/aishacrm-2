@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **OpenReplay self-hosted defaults (`.env.example`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Switched project guidance from cloud-first to self-hosted-first for AiSHA deployments. Added default self-hosted dashboard/ingest sample values (`https://replay.aishacrm.com`) and updated setup documentation to prioritize CI/CD deployment flow.
+- **OpenReplay dev defaults for local Docker (`docker-compose.yml`, `.env.example`, `src/components/admin/OpenReplayControl.jsx`):** Changed local-development fallback from `replay.aishacrm.com` to OpenReplay Cloud (`https://app.openreplay.com`) and defaulted ingest point to empty. This avoids unreachable self-hosted domain assumptions in DEV while keeping self-hosted values available as explicit overrides.
+- **OpenReplay localhost secure-mode compatibility (`src/hooks/useOpenReplay.js`):** Fixed missing sessions in local Docker by disabling tracker secure mode on `http://localhost` / `http://127.0.0.1` in addition to Vite DEV mode. This allows cloud tracking during local containerized testing where the frontend bundle is built in production mode.
+- **OpenReplay cloud ingest + localhost diagnostics (`src/hooks/useOpenReplay.js`):** Added explicit cloud ingest fallback (`https://api.openreplay.com/ingest`) when no custom ingest endpoint is configured, upgraded startup/no-key messages to visible warnings, and added localhost-only debug helpers (`window.__OR_TRACKER__`, `window.__OR_PING__`) to verify tracker/event flow from browser DevTools.
+- **OpenReplay local defaults realigned to self-hosted (`docker-compose.yml`, `.env.example`, `src/components/admin/OpenReplayControl.jsx`, `src/hooks/useOpenReplay.js`):** Reverted local default dashboard/ingest values back to `https://replay.aishacrm.com` and removed temporary cloud-debug instrumentation. Local configuration now mirrors production self-hosted expectations while preserving runtime env support and localhost secure-mode compatibility.
+- **OpenReplay Docker runtime env wiring (`frontend-entrypoint.sh`, `src/hooks/useOpenReplay.js`, `src/components/admin/OpenReplayControl.jsx`, `docker-compose.yml`, `docker-compose.prod.yml`):** Fixed Assist button/session tracking gating in Dockerized deployments by reading OpenReplay config from runtime `window._env_` (with build-time fallback) and exporting `VITE_OPENREPLAY_*` variables into generated `env-config.js`. Frontend compose services now also pass through OpenReplay runtime vars explicitly.
 
 - **Dashboard cache-first loading optimization (`src/pages/Dashboard.jsx`):** Moved cache check before `setLoading(true)` so cached data displays instantly without skeleton loaders. When cache exists, dashboard now shows data immediately with background refresh, eliminating the "obvious loading time" for repeat visits. Loading skeleton only appears when no cache is available (first visit or after cache expiration).
 
@@ -56,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Replaced with:** OpenReplay (open-source, MIT licensed, feature-complete alternative)
 
 ### Fixed
+
+- **Frontend OpenReplay runtime env ingestion (`frontend-entrypoint.sh`):** Added compatibility for Doppler secrets named without the `VITE_` prefix (`OPENREPLAY_PROJECT_KEY`, `OPENREPLAY_INGEST_POINT`, `OPENREPLAY_DASHBOARD_URL`). Frontend startup now maps these to `VITE_OPENREPLAY_*` and writes them into `env-config.js`, preventing blank OpenReplay project/ingest values at runtime.
 
 - **Leads bulk-delete stale refresh regression (`src/hooks/useLeadsBulkOps.js`, `src/hooks/useLeadsData.js`):** Fixed intermittent count rollback after bulk delete (for example 130 -> 105 -> browser refresh shows 130 -> later 105). Bulk delete now marks a short-lived force-fresh window and post-mutation lead loads include a cache-bust query parameter so immediate reloads bypass stale list cache. The force-fresh flag auto-clears after a successful fresh load.
 
