@@ -86,14 +86,17 @@ export default function DocumentationPage() {
   }, [cachedRequest, effectiveTenantId, user]);
 
   const handleDownloadPDF = async () => {
-    // Prefer backend-generated PDF from our markdown-based User Guide
+    // Prefer backend-generated PDF from the current markdown-based User Guide.
+    // Fallbacks keep older deployments working when only static assets are available.
     const backendUrl = getBackendUrl().replace(/\/$/, '');
+    const markdownFallbackUrl =
+      'https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/docs/user-guides/USER_GUIDE.md';
     const candidates = [
       backendUrl ? `${backendUrl}/api/documentation/user-guide.pdf` : null,
       // Local static fallbacks if present
       '/guides/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
       '/guides/AISHA_CRM_USER_GUIDE.pdf',
-      // Raw GitHub fallback (repo: andreibyf/aishacrm-2)
+      // Raw GitHub PDF fallback (repo: andreibyf/aishacrm-2)
       'https://raw.githubusercontent.com/andreibyf/aishacrm-2/main/docs/Ai-SHA-CRM-User-Guide-2025-10-26.pdf',
     ].filter(Boolean);
 
@@ -117,7 +120,8 @@ export default function DocumentationPage() {
     }
 
     if (!urlToDownload) {
-      alert('Unable to locate the User Guide PDF. Please check with your administrator.');
+      // If no PDF is reachable, open the latest online markdown guide.
+      window.open(markdownFallbackUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
