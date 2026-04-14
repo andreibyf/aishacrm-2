@@ -2,9 +2,18 @@
  * Braid Metrics REST API
  *
  * Dashboard-ready endpoints for tool performance, usage, and health metrics.
- * Combines real-time Redis counters with historical data from braid_audit_log.
+ * Combines real-time Redis counters with historical data from braid_audit_log,
+ * and pre-populates from the static TOOL_GRAPH registry for tools that have
+ * no call history yet (surfaced with healthStatus: 'unused').
  *
- * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants
+ * Registry-vs-audit semantics:
+ *   - Tools with real audit data carry a numeric healthScore (0-100) and one
+ *     of: 'healthy' | 'degraded' | 'warning' | 'critical'.
+ *   - Tools present only in TOOL_GRAPH carry healthScore: null and
+ *     healthStatus: 'unused' — excluded from overallHealth averages and from
+ *     problemTools so a fresh deployment does not look degraded.
+ *
+ * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants.
  *
  * @module routes/braidMetrics
  */
@@ -26,23 +35,52 @@ import logger from '../lib/logger.js';
  * Build a zero-call registry entry for each tool in TOOL_GRAPH.
  * Used to pre-populate the Tool Health tab before any audit log entries exist.
  */
-function buildRegistryFallback() {
-  return Object.entries(TOOL_GRAPH).map(([name, config]) => ({
+export function buildRegistryFallback(toolGraph = TOOL_GRAPH) {
+  return Object.entries(toolGraph).map(([name, config]) => ({
     name,
     category: config.category || 'GENERAL',
-    policy: config.category || 'GENERAL',
+    // policy is the tool's declared policy (read/write/side-effect class),
+    // NOT its category. Leave null when the registry does not carry one —
+    // the UI treats missing policy as "unspecified".
+    policy: config.policy || null,
     calls: 0,
-    successRate: 100,
-    errorRate: 0,
-    cacheHitRate: 0,
-    avgLatencyMs: 0,
-    p95LatencyMs: 0,
+    successRate: null, // null = no samples; distinct from 100% success with 0 calls
+    errorRate: null,
+    cacheHitRate: null,
+    avgLatencyMs: null,
+    p95LatencyMs: null,
     errorTypes: {},
     lastUsed: null,
-    healthScore: 100,
-    healthStatus: 'healthy',
+    healthScore: null, // null signals "unknown / never called"
+    healthStatus: 'unused',
     _fromRegistry: true, // flag: no real data yet
   }));
+}
+
+/**
+ * Merge audited tools with TOOL_GRAPH registry fallback and return source metadata.
+ *
+ * @param {Array} auditedTools
+ * @param {Object} toolGraph
+ * @returns {{tools:Array, fromRegistry:boolean, auditedTools:number}}
+ */
+export function mergeRegistryToolMetrics(auditedTools = [], toolGraph = TOOL_GRAPH) {
+  const fromRegistry = auditedTools.length === 0;
+  if (fromRegistry) {
+    return {
+      tools: buildRegistryFallback(toolGraph),
+      fromRegistry: true,
+      auditedTools: 0,
+    };
+  }
+
+  const auditedNames = new Set(auditedTools.map((t) => t.name));
+  const missingTools = buildRegistryFallback(toolGraph).filter((t) => !auditedNames.has(t.name));
+  return {
+    tools: [...auditedTools, ...missingTools],
+    fromRegistry: false,
+    auditedTools: auditedTools.length,
+  };
 }
 
 const router = express.Router();
@@ -189,33 +227,27 @@ router.get('/tools', async (req, res) => {
     }
 
     // Extract tools array from result
-    let tools = result.tools || [];
+    const merged = mergeRegistryToolMetrics(result.tools || []);
+    const tools = merged.tools;
+    const fromRegistry = merged.fromRegistry;
 
-    // When the audit log is empty (no Braid tool calls yet), fall back to the static
-    // TOOL_GRAPH registry so the Tool Health tab always shows the full tool inventory.
-    const fromRegistry = tools.length === 0;
-    if (fromRegistry) {
-      tools = buildRegistryFallback();
-    } else {
-      // Merge registry tools that have no audit log entries yet (show them as 0-call healthy)
-      const auditedNames = new Set(tools.map((t) => t.name));
-      const missingTools = buildRegistryFallback().filter((t) => !auditedNames.has(t.name));
-      tools = [...tools, ...missingTools];
-    }
-
-    // Generate summary
+    // Generate summary — `unused` tools (registry-only, never called) are
+    // excluded from the overallHealth average so a fresh deployment does not
+    // skew the dashboard toward a neutral score.
+    const scored = tools.filter((t) => typeof t.healthScore === 'number');
     const summary = {
       totalTools: tools.length,
       healthyCount: tools.filter((t) => t.healthStatus === 'healthy').length,
       degradedCount: tools.filter((t) => t.healthStatus === 'degraded').length,
       warningCount: tools.filter((t) => t.healthStatus === 'warning').length,
       criticalCount: tools.filter((t) => t.healthStatus === 'critical').length,
+      unusedCount: tools.filter((t) => t.healthStatus === 'unused').length,
       overallHealth:
-        tools.length > 0
-          ? Math.round(tools.reduce((sum, t) => sum + t.healthScore, 0) / tools.length)
-          : 100,
+        scored.length > 0
+          ? Math.round(scored.reduce((sum, t) => sum + t.healthScore, 0) / scored.length)
+          : null,
       registeredTools: Object.keys(TOOL_GRAPH).length,
-      auditedTools: fromRegistry ? 0 : tools.length - tools.filter((t) => t._fromRegistry).length,
+      auditedTools: merged.auditedTools,
       dataSource: fromRegistry ? 'registry' : 'audit_log+registry',
     };
 
@@ -356,9 +388,9 @@ router.get('/summary', async (req, res) => {
         health: t.healthScore,
       }));
 
-    // Tools needing attention (health < 80)
+    // Tools needing attention (health < 80) — ignore null (never-called) tools
     const problemTools = toolMetrics
-      .filter((t) => t.healthScore < 80)
+      .filter((t) => typeof t.healthScore === 'number' && t.healthScore < 80)
       .sort((a, b) => a.healthScore - b.healthScore)
       .slice(0, 5)
       .map((t) => ({
@@ -368,11 +400,13 @@ router.get('/summary', async (req, res) => {
         successRate: t.successRate,
       }));
 
-    // Calculate overall health
+    // Calculate overall health — only count tools that have a numeric score
+    // (exclude registry-only "unused" rows with null healthScore).
+    const scoredTools = toolMetrics.filter((t) => typeof t.healthScore === 'number');
     const overallHealth =
-      toolMetrics.length > 0
-        ? Math.round(toolMetrics.reduce((sum, t) => sum + t.healthScore, 0) / toolMetrics.length)
-        : 100;
+      scoredTools.length > 0
+        ? Math.round(scoredTools.reduce((sum, t) => sum + t.healthScore, 0) / scoredTools.length)
+        : null;
 
     // Determine overall status
     let overallStatus = 'healthy';
@@ -392,7 +426,9 @@ router.get('/summary', async (req, res) => {
         score: overallHealth,
         status: overallStatus,
         toolCount: toolMetrics.length,
-        healthyCount: toolMetrics.filter((t) => t.healthScore >= 80).length,
+        scoredCount: scoredTools.length,
+        healthyCount: scoredTools.filter((t) => t.healthScore >= 80).length,
+        unusedCount: toolMetrics.filter((t) => t.healthStatus === 'unused').length,
       },
       timestamp: new Date().toISOString(),
     });

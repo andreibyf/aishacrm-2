@@ -11,17 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Migration 151 RLS tenant-isolation pattern (`backend/migrations/151_llm_activity_logs.sql`):** The initial draft used `current_setting('app.current_tenant_id', true)::uuid`, but the repo was standardized to the JWT-based helper `public.current_tenant_id()` (see migration `rls_fix_high3_standardize_tenant_isolation_pattern`). The session GUC is never `SET` in current middleware, so the SELECT policy would have returned zero rows. Migration 151 now uses `public.current_tenant_id()` to match the rest of the system.
+
+- **Migration 151 retention was never enforced (`backend/migrations/151_llm_activity_logs.sql`):** `cleanup_llm_activity_logs()` existed but was not scheduled — the 90-day retention claim was inaccurate. Added a pg_cron job (`llm_activity_logs_cleanup`, daily at 03:15 UTC) that invokes the cleanup function, with explicit `GRANT EXECUTE ... TO service_role` and idempotent re-registration (unschedule-then-schedule guarded by a `pg_cron` extension check).
+
+- **Migration 151 primary key collision risk (`backend/migrations/151_llm_activity_logs.sql`):** The original `TEXT PRIMARY KEY` of `llm-<ts>-<6-char-rand>` could collide across concurrent MCP containers; failures would be silently swallowed by the fire-and-forget insert path. Switched to `UUID PRIMARY KEY DEFAULT gen_random_uuid()` and moved the original in-memory id to a new `external_id` column for cross-referencing with the real-time monitor buffer.
+
+- **Migration 151 index strategy (`backend/migrations/151_llm_activity_logs.sql`):** Replaced five single-column indexes (four of them redundant vs dashboard query patterns) with three composite indexes that match the actual access paths: `(tenant_id, created_at DESC)`, `(tenant_id, status, created_at DESC)`, and `(provider, created_at DESC)`, plus the global `(created_at DESC)`.
+
+- **LLM cost estimation ignored model (`backend/lib/aiEngine/activityLogger.js`):** Pricing was keyed on provider only, so `gpt-4o-mini` traffic was billed at `gpt-4o` rates (~10× overstatement) and `claude-haiku`/`opus` collapsed into a single Anthropic rate. Introduced `MODEL_COST_RATES` model-aware lookup (`resolveModelRates(provider, model)`) covering current OpenAI, Anthropic, and Groq model families, with provider-level defaults for unknown models.
+
+- **AI Tools registry fallback reported unused tools as "healthy" (`backend/routes/braidMetrics.js`):** `buildRegistryFallback` previously set `healthScore: 100, healthStatus: 'healthy'` on every registry-only tool, skewing the overall health average for fresh deployments and conflating never-called with validated-healthy. Unused tools now carry `healthScore: null, healthStatus: 'unused'` and are excluded from `overallHealth` / `problemTools` aggregation. The bogus `policy = category` assignment was also removed (policy now reflects the declared tool policy or null).
+
 - **LLM Monitor "By Provider" / "By Status" cards always empty (`backend/lib/aiEngine/activityLogger.js`):** Stats were computed exclusively from the 5-minute window, so cards were blank whenever no recent activity existed. Now falls back to the full in-memory buffer when the 5-minute window is empty, and always exposes `allTime.byProvider` / `allTime.byStatus` / `allTime.byCapability` in the stats response for buffer-wide breakdowns.
 
 - **LLM Monitor "Avg Duration" showing "-" when idle (`backend/lib/aiEngine/activityLogger.js`):** Same 5-minute window bug — now falls back to all-buffer durations when the recent window has no entries.
 
-- **AI Tools Monitor showing "0 tools monitored" before first tool call (`backend/routes/braidMetrics.js`):** `getToolMetrics` queries `braid_audit_log` which is empty on a fresh instance. The `/api/braid/metrics/tools` handler now pre-populates from the static `TOOL_GRAPH` registry (all ~126 tools) when the audit log returns no results, and merges registry entries for any tool not yet in the audit log when some data exists. Tools with no call history are shown as healthy with 0 calls.
+- **AI Tools Monitor showing "0 tools monitored" before first tool call (`backend/routes/braidMetrics.js`):** `getToolMetrics` queries `braid_audit_log` which is empty on a fresh instance. The `/api/braid/metrics/tools` handler now pre-populates from the static `TOOL_GRAPH` registry (all ~126 tools) when the audit log returns no results, and merges registry entries for any tool not yet in the audit log when some data exists. Registry-only tools surface as `unused` rather than `healthy`.
 
 ### Added
 
-- **LLM call cost estimation (`backend/lib/aiEngine/activityLogger.js`, `src/components/settings/LLMActivityMonitor.jsx`):** `getLLMActivityStats()` now returns `tokenUsage.allTime.estimatedCostUSD` computed from per-provider input/output token rates (Anthropic, OpenAI, Groq, Local). A new "Est. Cost (buffer)" stat card is displayed in the LLM Monitor header row, showing 4 decimal places.
+- **LLM activity DB-persist observability counters (`backend/lib/aiEngine/activityLogger.js`):** Fire-and-forget inserts now track `{attempts, successes, errors, lastError, lastErrorAt}` exposed via `getLLMActivityStats().persistence` and a new `getPersistCounters()` export. Ops can now detect sustained persistence failures without greping application logs.
 
-- **LLM activity log DB persistence (`backend/migrations/151_llm_activity_logs.sql`, `backend/lib/aiEngine/activityLogger.js`):** All LLM calls are now persisted to a `llm_activity_logs` table (90-day retention) via a non-blocking fire-and-forget insert. Server restarts no longer wipe the activity history. RLS enforced — service role writes, authenticated users read their own tenant's logs.
+- **LLM activity logger test seams (`backend/lib/aiEngine/activityLogger.js`):** Added `__setSupabaseClientForTest`, `__resetSupabaseClientForTest`, `__resetPersistCountersForTest`, `buildPersistPayload`, `resolveModelRates`, and `MODEL_COST_RATES` exports so persistence, payload shape, and cost resolution can be unit-tested without a live Supabase client.
+
+- **LLM call cost estimation (`backend/lib/aiEngine/activityLogger.js`, `src/components/settings/LLMActivityMonitor.jsx`):** `getLLMActivityStats()` returns `tokenUsage.allTime.estimatedCostUSD` computed from model-aware input/output token rates. A "Est. Cost (buffer)" stat card is displayed in the LLM Monitor header row with 4 decimal places.
+
+- **LLM activity log DB persistence (`backend/migrations/151_llm_activity_logs.sql`, `backend/lib/aiEngine/activityLogger.js`):** All LLM calls are persisted to a `llm_activity_logs` table (90-day retention, pg_cron enforced) via a non-blocking fire-and-forget insert. Server restarts no longer wipe activity history. RLS: service role writes; authenticated users read their own tenant's logs via `public.current_tenant_id()`.
+
+- **Expanded test coverage for LLM activity logger (`backend/__tests__/ai/activityLogger.test.js`):** Added tests for model-aware cost resolution across OpenAI/Anthropic/Groq/local, for the DB persist payload shape (including tenant `unknown` → null and tools_called normalization), and for persist-counter behavior under insert success, explicit error, and missing-client cases.
 
 - **AI Tools Monitor registry-aware status banners (`src/components/settings/BraidSDKMonitor.jsx`):** Tool Health tab now shows a contextual info banner distinguishing between "registry-only" state (no calls yet) and "audit+registry" state (some tools have real call data), with counts for each.
 
