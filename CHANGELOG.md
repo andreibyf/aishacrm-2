@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **OpenReplay self-hosted defaults (`.env.example`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Switched project guidance from cloud-first to self-hosted-first for AiSHA deployments. Added default self-hosted dashboard/ingest sample values (`https://replay.aishacrm.com`) and updated setup documentation to prioritize CI/CD deployment flow.
+- **OpenReplay Docker runtime env wiring (`frontend-entrypoint.sh`):** Normalized OpenReplay runtime env names so `OPENREPLAY_*` secrets are promoted to `VITE_OPENREPLAY_*` before generating `env-config.js`, ensuring Dockerized frontend runtime config is consistent for the browser bundle.
 
 - **Dashboard cache-first loading optimization (`src/pages/Dashboard.jsx`):** Moved cache check before `setLoading(true)` so cached data displays instantly without skeleton loaders. When cache exists, dashboard now shows data immediately with background refresh, eliminating the "obvious loading time" for repeat visits. Loading skeleton only appears when no cache is available (first visit or after cache expiration).
 
@@ -56,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Replaced with:** OpenReplay (open-source, MIT licensed, feature-complete alternative)
 
 ### Fixed
+
+- **Frontend OpenReplay runtime env ingestion (`frontend-entrypoint.sh`):** Added compatibility for Doppler secrets named without the `VITE_` prefix (`OPENREPLAY_PROJECT_KEY`, `OPENREPLAY_INGEST_POINT`, `OPENREPLAY_DASHBOARD_URL`). Frontend startup now maps these to `VITE_OPENREPLAY_*` and writes them into `env-config.js`, preventing blank OpenReplay project/ingest values at runtime.
 
 - **Leads bulk-delete stale refresh regression (`src/hooks/useLeadsBulkOps.js`, `src/hooks/useLeadsData.js`):** Fixed intermittent count rollback after bulk delete (for example 130 -> 105 -> browser refresh shows 130 -> later 105). Bulk delete now marks a short-lived force-fresh window and post-mutation lead loads include a cache-bust query parameter so immediate reloads bypass stale list cache. The force-fresh flag auto-clears after a successful fresh load.
 
