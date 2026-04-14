@@ -524,7 +524,7 @@ export default function LLMActivityMonitor() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <span
-                          className={`font-mono text-xs ${entry.durationMs > 3000 ? 'text-yellow-500' : entry.durationMs > 5000 ? 'text-red-500' : ''}`}
+                          className={`font-mono text-xs ${entry.durationMs > 5000 ? 'text-red-500' : entry.durationMs > 3000 ? 'text-yellow-500' : ''}`}
                         >
                           {formatDuration(entry.durationMs)}
                         </span>

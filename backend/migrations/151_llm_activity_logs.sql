@@ -1,8 +1,8 @@
 -- Migration 151: LLM Activity Logs (persistent storage)
--- Replaces the in-memory rolling buffer with a proper audit table.
--- Non-blocking insert path: backend inserts fire-and-forget, never block response.
---
--- Retention: 90 days (managed via pg_cron or scheduled cleanup job)
+-- Adds a persistent audit table alongside the existing in-memory rolling buffer.
+-- The buffer remains for real-time display (fast, no DB round-trip); this table
+-- provides durable history that survives restarts, with 90-day retention.
+-- Non-blocking insert path: backend inserts are fire-and-forget, never blocking response.
 
 CREATE TABLE IF NOT EXISTS llm_activity_logs (
   id              TEXT PRIMARY KEY,                        -- e.g. "llm-<ts>-<rand>"
@@ -39,10 +39,10 @@ ALTER TABLE llm_activity_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY llm_activity_logs_service_all ON llm_activity_logs
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Authenticated users can see their own tenant's logs
+-- Authenticated users can see their own tenant's logs (matches repo UUID-based pattern)
 CREATE POLICY llm_activity_logs_tenant_select ON llm_activity_logs
   FOR SELECT TO authenticated
-  USING (tenant_id = (SELECT id FROM tenants WHERE slug = current_setting('app.tenant_slug', true)));
+  USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
 -- Cleanup function: delete entries older than 90 days
 CREATE OR REPLACE FUNCTION cleanup_llm_activity_logs()

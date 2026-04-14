@@ -29,6 +29,7 @@ import logger from '../lib/logger.js';
 function buildRegistryFallback() {
   return Object.entries(TOOL_GRAPH).map(([name, config]) => ({
     name,
+    category: config.category || 'GENERAL',
     policy: config.category || 'GENERAL',
     calls: 0,
     successRate: 100,
