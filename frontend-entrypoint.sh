@@ -90,13 +90,13 @@ fi
 # Normalize OpenReplay env names so frontend runtime always gets VITE_* keys.
 # This allows Doppler projects using OPENREPLAY_* naming to work without renaming secrets.
 if [ -z "$VITE_OPENREPLAY_PROJECT_KEY" ] && [ -n "$OPENREPLAY_PROJECT_KEY" ]; then
-  VITE_OPENREPLAY_PROJECT_KEY="$OPENREPLAY_PROJECT_KEY"
+  export VITE_OPENREPLAY_PROJECT_KEY="$OPENREPLAY_PROJECT_KEY"
 fi
 if [ -z "$VITE_OPENREPLAY_INGEST_POINT" ] && [ -n "$OPENREPLAY_INGEST_POINT" ]; then
-  VITE_OPENREPLAY_INGEST_POINT="$OPENREPLAY_INGEST_POINT"
+  export VITE_OPENREPLAY_INGEST_POINT="$OPENREPLAY_INGEST_POINT"
 fi
 if [ -z "$VITE_OPENREPLAY_DASHBOARD_URL" ] && [ -n "$OPENREPLAY_DASHBOARD_URL" ]; then
-  VITE_OPENREPLAY_DASHBOARD_URL="$OPENREPLAY_DASHBOARD_URL"
+  export VITE_OPENREPLAY_DASHBOARD_URL="$OPENREPLAY_DASHBOARD_URL"
 fi
 
 # CRITICAL: Always use version baked into Docker image (/app/VERSION) as source of truth
