@@ -1,20 +1,26 @@
 /**
  * LLM Activity Monitor
- * 
+ *
  * Real-time view of all LLM calls showing:
  * - Tenant ID, Capability, Provider, Model, Node ID
  * - Status, Duration, Token Usage
  * - Auto-refresh with polling
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { BACKEND_URL } from "@/api/entities";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { BACKEND_URL } from '@/api/entities';
 import {
   RefreshCw,
   Trash2,
@@ -23,20 +29,20 @@ import {
   AlertCircle,
   CheckCircle,
   ArrowRightLeft,
-} from "lucide-react";
+} from 'lucide-react';
 
 const PROVIDER_COLORS = {
-  openai: "bg-green-600",
-  anthropic: "bg-orange-600",
-  groq: "bg-purple-600",
-  local: "bg-blue-600",
-  unknown: "bg-gray-600",
+  openai: 'bg-green-600',
+  anthropic: 'bg-orange-600',
+  groq: 'bg-purple-600',
+  local: 'bg-blue-600',
+  unknown: 'bg-gray-600',
 };
 
 const STATUS_COLORS = {
-  success: "bg-green-600",
-  error: "bg-red-600",
-  failover: "bg-yellow-600",
+  success: 'bg-green-600',
+  error: 'bg-red-600',
+  failover: 'bg-yellow-600',
 };
 
 const STATUS_ICONS = {
@@ -46,33 +52,36 @@ const STATUS_ICONS = {
 };
 
 function formatDuration(ms) {
-  if (!ms) return "-";
+  if (!ms) return '-';
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function formatTimestamp(iso) {
-  if (!iso) return "-";
+  if (!iso) return '-';
   const d = new Date(iso);
   const today = new Date();
   const isToday = d.toDateString() === today.toDateString();
-  
+
   // Show date if not today, otherwise just time
   if (isToday) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
-  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + 
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return (
+    d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+    ' ' +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  );
 }
 
 function formatTokens(usage) {
-  if (!usage) return "-";
+  if (!usage) return '-';
   const { prompt_tokens, completion_tokens, total_tokens } = usage;
   if (total_tokens) return `${total_tokens} tokens`;
   if (prompt_tokens || completion_tokens) {
     return `${prompt_tokens || 0}/${completion_tokens || 0}`;
   }
-  return "-";
+  return '-';
 }
 
 export default function LLMActivityMonitor() {
@@ -82,67 +91,72 @@ export default function LLMActivityMonitor() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [refreshInterval, _setRefreshInterval] = useState(3000);
   const [filters, setFilters] = useState({
-    provider: "",
-    capability: "",
-    status: "",
+    provider: '',
+    capability: '',
+    status: '',
   });
   const [showFilters, setShowFilters] = useState(false);
   const lastTimestamp = useRef(null);
 
-  const fetchActivity = useCallback(async (incremental = false) => {
-    try {
-      const params = new URLSearchParams();
-      params.set("limit", "100");
-      
-      if (filters.provider) params.set("provider", filters.provider);
-      if (filters.capability) params.set("capability", filters.capability);
-      if (filters.status) params.set("status", filters.status);
-      
-      // Incremental fetch: only get entries since last fetch
-      if (incremental && lastTimestamp.current) {
-        params.set("since", lastTimestamp.current);
+  const fetchActivity = useCallback(
+    async (incremental = false) => {
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '100');
+
+        if (filters.provider) params.set('provider', filters.provider);
+        if (filters.capability) params.set('capability', filters.capability);
+        if (filters.status) params.set('status', filters.status);
+
+        // Incremental fetch: only get entries since last fetch
+        if (incremental && lastTimestamp.current) {
+          params.set('since', lastTimestamp.current);
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/system/llm-activity?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch LLM activity');
+
+        const data = await response.json();
+        const newEntries = data.data || [];
+
+        if (incremental && newEntries.length > 0) {
+          // Merge new entries at the top
+          setEntries((prev) => {
+            const combined = [...newEntries, ...prev];
+            // Dedupe by id and limit to 200 entries
+            const seen = new Set();
+            return combined
+              .filter((e) => {
+                if (seen.has(e.id)) return false;
+                seen.add(e.id);
+                return true;
+              })
+              .slice(0, 200);
+          });
+        } else if (!incremental) {
+          setEntries(newEntries);
+        }
+
+        // Update last timestamp for incremental fetches
+        if (newEntries.length > 0) {
+          lastTimestamp.current = newEntries[0].timestamp;
+        }
+      } catch (err) {
+        console.error('[LLMActivityMonitor] Fetch error:', err);
       }
-      
-      const response = await fetch(`${BACKEND_URL}/api/system/llm-activity?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch LLM activity");
-      
-      const data = await response.json();
-      const newEntries = data.data || [];
-      
-      if (incremental && newEntries.length > 0) {
-        // Merge new entries at the top
-        setEntries((prev) => {
-          const combined = [...newEntries, ...prev];
-          // Dedupe by id and limit to 200 entries
-          const seen = new Set();
-          return combined.filter((e) => {
-            if (seen.has(e.id)) return false;
-            seen.add(e.id);
-            return true;
-          }).slice(0, 200);
-        });
-      } else if (!incremental) {
-        setEntries(newEntries);
-      }
-      
-      // Update last timestamp for incremental fetches
-      if (newEntries.length > 0) {
-        lastTimestamp.current = newEntries[0].timestamp;
-      }
-    } catch (err) {
-      console.error("[LLMActivityMonitor] Fetch error:", err);
-    }
-  }, [filters]);
+    },
+    [filters],
+  );
 
   const fetchStats = useCallback(async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/system/llm-activity/stats`);
-      if (!response.ok) throw new Error("Failed to fetch LLM stats");
-      
+      if (!response.ok) throw new Error('Failed to fetch LLM stats');
+
       const data = await response.json();
       setStats(data.data || null);
     } catch (err) {
-      console.error("[LLMActivityMonitor] Stats error:", err);
+      console.error('[LLMActivityMonitor] Stats error:', err);
     }
   }, []);
 
@@ -150,15 +164,15 @@ export default function LLMActivityMonitor() {
     try {
       setLoading(true);
       const response = await fetch(`${BACKEND_URL}/api/system/llm-activity`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
-      if (!response.ok) throw new Error("Failed to clear logs");
-      
+      if (!response.ok) throw new Error('Failed to clear logs');
+
       setEntries([]);
       lastTimestamp.current = null;
       await fetchStats();
     } catch (err) {
-      console.error("[LLMActivityMonitor] Clear error:", err);
+      console.error('[LLMActivityMonitor] Clear error:', err);
     } finally {
       setLoading(false);
     }
@@ -179,12 +193,12 @@ export default function LLMActivityMonitor() {
   // Auto-refresh polling
   useEffect(() => {
     if (!autoRefresh) return;
-    
+
     const interval = setInterval(() => {
       fetchActivity(true);
       fetchStats();
     }, refreshInterval);
-    
+
     return () => clearInterval(interval);
   }, [autoRefresh, refreshInterval, fetchActivity, fetchStats]);
 
@@ -219,25 +233,53 @@ export default function LLMActivityMonitor() {
           </Card>
           <Card className="bg-card/50">
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">By Provider</div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                By Provider
+                {stats.windowLabel === 'buffer' && (
+                  <span className="text-[10px] text-muted-foreground/60">(buffer)</span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1 mt-1">
-                {Object.entries(stats.byProvider || {}).map(([p, count]) => (
-                  <Badge key={p} variant="outline" className="text-xs">
-                    {p}: {count}
-                  </Badge>
-                ))}
+                {Object.entries(stats.allTime?.byProvider || stats.byProvider || {}).map(
+                  ([p, count]) => (
+                    <Badge
+                      key={p}
+                      variant="outline"
+                      className={`text-xs ${PROVIDER_COLORS[p] ? 'border-current' : ''}`}
+                    >
+                      {p}: {count}
+                    </Badge>
+                  ),
+                )}
+                {Object.keys(stats.allTime?.byProvider || stats.byProvider || {}).length === 0 && (
+                  <span className="text-xs text-muted-foreground/60">No data</span>
+                )}
               </div>
             </CardContent>
           </Card>
           <Card className="bg-card/50">
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">By Status</div>
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                By Status
+                {stats.windowLabel === 'buffer' && (
+                  <span className="text-[10px] text-muted-foreground/60">(buffer)</span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1 mt-1">
-                {Object.entries(stats.byStatus || {}).map(([s, count]) => (
-                  <Badge key={s} variant="outline" className={`text-xs ${s === "error" ? "border-red-500" : s === "failover" ? "border-yellow-500" : ""}`}>
-                    {s}: {count}
-                  </Badge>
-                ))}
+                {Object.entries(stats.allTime?.byStatus || stats.byStatus || {}).map(
+                  ([s, count]) => (
+                    <Badge
+                      key={s}
+                      variant="outline"
+                      className={`text-xs ${s === 'error' ? 'border-red-500 text-red-400' : s === 'failover' ? 'border-yellow-500 text-yellow-400' : 'border-green-600 text-green-400'}`}
+                    >
+                      {s}: {count}
+                    </Badge>
+                  ),
+                )}
+                {Object.keys(stats.allTime?.byStatus || stats.byStatus || {}).length === 0 && (
+                  <span className="text-xs text-muted-foreground/60">No data</span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -248,7 +290,8 @@ export default function LLMActivityMonitor() {
                 {stats.tokenUsage?.last5Minutes?.totalTokens?.toLocaleString() || 0}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {stats.tokenUsage?.last5Minutes?.promptTokens?.toLocaleString() || 0} in / {stats.tokenUsage?.last5Minutes?.completionTokens?.toLocaleString() || 0} out
+                {stats.tokenUsage?.last5Minutes?.promptTokens?.toLocaleString() || 0} in /{' '}
+                {stats.tokenUsage?.last5Minutes?.completionTokens?.toLocaleString() || 0} out
               </div>
             </CardContent>
           </Card>
@@ -257,6 +300,18 @@ export default function LLMActivityMonitor() {
               <div className="text-xs text-muted-foreground">Tokens (buffer)</div>
               <div className="text-xl font-bold">
                 {stats.tokenUsage?.allTime?.totalTokens?.toLocaleString() || 0}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {stats.tokenUsage?.allTime?.promptTokens?.toLocaleString() || 0} in /{' '}
+                {stats.tokenUsage?.allTime?.completionTokens?.toLocaleString() || 0} out
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card/50">
+            <CardContent className="p-3">
+              <div className="text-xs text-muted-foreground">Est. Cost (buffer)</div>
+              <div className="text-xl font-bold text-yellow-500">
+                ${stats.tokenUsage?.allTime?.estimatedCostUSD?.toFixed(4) || '0.0000'}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {stats.tokenUsage?.allTime?.entriesInBuffer || 0} entries
@@ -269,41 +324,33 @@ export default function LLMActivityMonitor() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <Switch
-            id="auto-refresh"
-            checked={autoRefresh}
-            onCheckedChange={setAutoRefresh}
-          />
+          <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={setAutoRefresh} />
           <Label htmlFor="auto-refresh" className="text-sm">
             Auto-refresh
           </Label>
           {autoRefresh && (
-            <span className="text-xs text-muted-foreground">
-              ({refreshInterval / 1000}s)
-            </span>
+            <span className="text-xs text-muted-foreground">({refreshInterval / 1000}s)</span>
           )}
         </div>
-        
+
         <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
-        
+
         <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
           <Filter className="w-4 h-4 mr-1" />
           Filters
         </Button>
-        
+
         <Button variant="outline" size="sm" onClick={clearLogs} disabled={loading}>
           <Trash2 className="w-4 h-4 mr-1" />
           Clear Logs
         </Button>
-        
+
         <div className="flex-1" />
-        
-        <div className="text-sm text-muted-foreground">
-          {entries.length} entries
-        </div>
+
+        <div className="text-sm text-muted-foreground">{entries.length} entries</div>
       </div>
 
       {/* Filters */}
@@ -313,7 +360,7 @@ export default function LLMActivityMonitor() {
             <Label className="text-xs">Provider:</Label>
             <Select
               value={filters.provider}
-              onValueChange={(v) => setFilters((f) => ({ ...f, provider: v === "all" ? "" : v }))}
+              onValueChange={(v) => setFilters((f) => ({ ...f, provider: v === 'all' ? '' : v }))}
             >
               <SelectTrigger className="w-32 h-8">
                 <SelectValue placeholder="All" />
@@ -327,12 +374,12 @@ export default function LLMActivityMonitor() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <Label className="text-xs">Capability:</Label>
             <Select
               value={filters.capability}
-              onValueChange={(v) => setFilters((f) => ({ ...f, capability: v === "all" ? "" : v }))}
+              onValueChange={(v) => setFilters((f) => ({ ...f, capability: v === 'all' ? '' : v }))}
             >
               <SelectTrigger className="w-36 h-8">
                 <SelectValue placeholder="All" />
@@ -347,12 +394,12 @@ export default function LLMActivityMonitor() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <Label className="text-xs">Status:</Label>
             <Select
               value={filters.status}
-              onValueChange={(v) => setFilters((f) => ({ ...f, status: v === "all" ? "" : v }))}
+              onValueChange={(v) => setFilters((f) => ({ ...f, status: v === 'all' ? '' : v }))}
             >
               <SelectTrigger className="w-28 h-8">
                 <SelectValue placeholder="All" />
@@ -365,12 +412,12 @@ export default function LLMActivityMonitor() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              setFilters({ provider: "", capability: "", status: "" });
+              setFilters({ provider: '', capability: '', status: '' });
               refresh();
             }}
           >
@@ -404,7 +451,9 @@ export default function LLMActivityMonitor() {
                   <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
                     <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
                     <div>No LLM activity recorded yet.</div>
-                    <div className="text-xs mt-1">Activity will appear here as AI features are used.</div>
+                    <div className="text-xs mt-1">
+                      Activity will appear here as AI features are used.
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -418,13 +467,17 @@ export default function LLMActivityMonitor() {
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <Badge className={`${STATUS_COLORS[entry.status] || "bg-gray-600"} text-white text-xs`}>
+                        <Badge
+                          className={`${STATUS_COLORS[entry.status] || 'bg-gray-600'} text-white text-xs`}
+                        >
                           <StatusIcon className="w-3 h-3 mr-1" />
                           {entry.status}
                         </Badge>
                       </td>
                       <td className="px-3 py-2">
-                        <Badge className={`${PROVIDER_COLORS[entry.provider] || PROVIDER_COLORS.unknown} text-white text-xs`}>
+                        <Badge
+                          className={`${PROVIDER_COLORS[entry.provider] || PROVIDER_COLORS.unknown} text-white text-xs`}
+                        >
                           {entry.provider}
                         </Badge>
                       </td>
@@ -436,7 +489,10 @@ export default function LLMActivityMonitor() {
                       </td>
                       <td className="px-3 py-2">
                         {entry.intent ? (
-                          <Badge variant="outline" className="text-xs font-mono bg-blue-950/30 border-blue-600/50">
+                          <Badge
+                            variant="outline"
+                            className="text-xs font-mono bg-blue-950/30 border-blue-600/50"
+                          >
                             {entry.intent}
                           </Badge>
                         ) : (
@@ -458,16 +514,18 @@ export default function LLMActivityMonitor() {
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs text-muted-foreground">
-                          {entry.nodeId || "-"}
+                          {entry.nodeId || '-'}
                         </span>
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs text-muted-foreground">
-                          {entry.tenantId?.slice(0, 8) || "-"}...
+                          {entry.tenantId?.slice(0, 8) || '-'}...
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <span className={`font-mono text-xs ${entry.durationMs > 3000 ? "text-yellow-500" : entry.durationMs > 5000 ? "text-red-500" : ""}`}>
+                        <span
+                          className={`font-mono text-xs ${entry.durationMs > 5000 ? 'text-red-500' : entry.durationMs > 3000 ? 'text-yellow-500' : ''}`}
+                        >
                           {formatDuration(entry.durationMs)}
                         </span>
                       </td>
@@ -484,9 +542,9 @@ export default function LLMActivityMonitor() {
           </table>
         </div>
       </div>
-      
+
       {/* Error Details (if any errors visible) */}
-      {entries.some((e) => e.status === "error" && e.error) && (
+      {entries.some((e) => e.status === 'error' && e.error) && (
         <Card className="border-red-500/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -496,10 +554,13 @@ export default function LLMActivityMonitor() {
           </CardHeader>
           <CardContent className="space-y-2">
             {entries
-              .filter((e) => e.status === "error" && e.error)
+              .filter((e) => e.status === 'error' && e.error)
               .slice(0, 5)
               .map((e) => (
-                <div key={e.id} className="text-xs p-2 bg-red-950/30 rounded border border-red-900/50">
+                <div
+                  key={e.id}
+                  className="text-xs p-2 bg-red-950/30 rounded border border-red-900/50"
+                >
                   <div className="font-mono text-muted-foreground mb-1">
                     {formatTimestamp(e.timestamp)} | {e.provider}:{e.model} | {e.nodeId}
                   </div>

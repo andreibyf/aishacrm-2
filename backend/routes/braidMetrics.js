@@ -1,20 +1,87 @@
 /**
  * Braid Metrics REST API
- * 
+ *
  * Dashboard-ready endpoints for tool performance, usage, and health metrics.
- * Combines real-time Redis counters with historical data from braid_audit_log.
- * 
- * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants
- * 
+ * Combines real-time Redis counters with historical data from braid_audit_log,
+ * and pre-populates from the static TOOL_GRAPH registry for tools that have
+ * no call history yet (surfaced with healthStatus: 'unused').
+ *
+ * Registry-vs-audit semantics:
+ *   - Tools with real audit data carry a numeric healthScore (0-100) and one
+ *     of: 'healthy' | 'degraded' | 'warning' | 'critical'.
+ *   - Tools present only in TOOL_GRAPH carry healthScore: null and
+ *     healthStatus: 'unused' — excluded from overallHealth averages and from
+ *     problemTools so a fresh deployment does not look degraded.
+ *
+ * AUTHENTICATION: Superadmin-only (ADMIN_EMAILS) - monitors ALL tenants.
+ *
  * @module routes/braidMetrics
  */
 
 import express from 'express';
 import { requireAuthCookie } from '../middleware/authCookie.js';
 import { getRealtimeMetrics } from '../lib/braidIntegration-v2.js';
-import { getToolMetrics, getMetricsTimeSeries, getErrorAnalysis, getAuditStats } from '../../braid-llm-kit/sdk/index.js';
+import { TOOL_GRAPH } from '../lib/braid/analysis.js';
+import {
+  getToolMetrics,
+  getMetricsTimeSeries,
+  getErrorAnalysis,
+  getAuditStats,
+} from '../../braid-llm-kit/sdk/index.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
+
+/**
+ * Build a zero-call registry entry for each tool in TOOL_GRAPH.
+ * Used to pre-populate the Tool Health tab before any audit log entries exist.
+ */
+export function buildRegistryFallback(toolGraph = TOOL_GRAPH) {
+  return Object.entries(toolGraph).map(([name, config]) => ({
+    name,
+    category: config.category || 'GENERAL',
+    // policy is the tool's declared policy (read/write/side-effect class),
+    // NOT its category. Leave null when the registry does not carry one —
+    // the UI treats missing policy as "unspecified".
+    policy: config.policy || null,
+    calls: 0,
+    successRate: null, // null = no samples; distinct from 100% success with 0 calls
+    errorRate: null,
+    cacheHitRate: null,
+    avgLatencyMs: null,
+    p95LatencyMs: null,
+    errorTypes: {},
+    lastUsed: null,
+    healthScore: null, // null signals "unknown / never called"
+    healthStatus: 'unused',
+    _fromRegistry: true, // flag: no real data yet
+  }));
+}
+
+/**
+ * Merge audited tools with TOOL_GRAPH registry fallback and return source metadata.
+ *
+ * @param {Array} auditedTools
+ * @param {Object} toolGraph
+ * @returns {{tools:Array, fromRegistry:boolean, auditedTools:number}}
+ */
+export function mergeRegistryToolMetrics(auditedTools = [], toolGraph = TOOL_GRAPH) {
+  const fromRegistry = auditedTools.length === 0;
+  if (fromRegistry) {
+    return {
+      tools: buildRegistryFallback(toolGraph),
+      fromRegistry: true,
+      auditedTools: 0,
+    };
+  }
+
+  const auditedNames = new Set(auditedTools.map((t) => t.name));
+  const missingTools = buildRegistryFallback(toolGraph).filter((t) => !auditedNames.has(t.name));
+  return {
+    tools: [...auditedTools, ...missingTools],
+    fromRegistry: false,
+    auditedTools: auditedTools.length,
+  };
+}
 
 const router = express.Router();
 
@@ -22,25 +89,25 @@ const router = express.Router();
 function requireAdmin(req, res, next) {
   if (!req.user || !req.user.email) {
     return res.status(401).json({
-      error: "Unauthorized - authentication required"
+      error: 'Unauthorized - authentication required',
     });
   }
 
-  const adminEmails = (process.env.ADMIN_EMAILS || "")
-    .split(",")
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
   if (adminEmails.length === 0) {
     return res.status(403).json({
-      error: "Admin access not configured (ADMIN_EMAILS missing)"
+      error: 'Admin access not configured (ADMIN_EMAILS missing)',
     });
   }
 
   const userEmail = String(req.user.email).toLowerCase();
   if (!adminEmails.includes(userEmail)) {
     return res.status(403).json({
-      error: "Forbidden - superadmin access required"
+      error: 'Forbidden - superadmin access required',
     });
   }
 
@@ -53,13 +120,13 @@ router.use(requireAdmin);
 
 /**
  * GET /api/braid/metrics/realtime
- * 
+ *
  * Returns real-time metrics from Redis counters (last minute and hour).
  * Fastest endpoint - no database queries.
- * 
+ *
  * Query params:
  * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
- * 
+ *
  * Response:
  * {
  *   minute: { total: 45, success: 42, failed: 3, cacheHits: 20, totalLatencyMs: 12500 },
@@ -75,48 +142,42 @@ router.get('/realtime', async (req, res) => {
     // Get both minute and hour windows
     const [minuteMetrics, hourMetrics] = await Promise.all([
       getRealtimeMetrics(tenantId, 'minute'),
-      getRealtimeMetrics(tenantId, 'hour')
+      getRealtimeMetrics(tenantId, 'hour'),
     ]);
-    
+
     const metrics = {
       minute: {
         total: minuteMetrics.calls,
         success: minuteMetrics.calls - minuteMetrics.errors,
         failed: minuteMetrics.errors,
         cacheHits: minuteMetrics.cacheHits,
-        totalLatencyMs: 0 // Not tracked in current implementation
+        totalLatencyMs: 0, // Not tracked in current implementation
       },
       hour: {
         total: hourMetrics.calls,
         success: hourMetrics.calls - hourMetrics.errors,
         failed: hourMetrics.errors,
         cacheHits: hourMetrics.cacheHits,
-        totalLatencyMs: 0 // Not tracked in current implementation
-      }
+        totalLatencyMs: 0, // Not tracked in current implementation
+      },
     };
-    
+
     // Add derived metrics for easy dashboard consumption
     const derived = {
-      minuteSuccessRate: metrics.minute.total > 0 
-        ? metrics.minute.success / metrics.minute.total 
-        : 1,
-      hourSuccessRate: metrics.hour.total > 0 
-        ? metrics.hour.success / metrics.hour.total 
-        : 1,
-      minuteCacheRate: metrics.minute.total > 0 
-        ? metrics.minute.cacheHits / metrics.minute.total 
-        : 0,
-      hourCacheRate: metrics.hour.total > 0 
-        ? metrics.hour.cacheHits / metrics.hour.total 
-        : 0,
+      minuteSuccessRate:
+        metrics.minute.total > 0 ? metrics.minute.success / metrics.minute.total : 1,
+      hourSuccessRate: metrics.hour.total > 0 ? metrics.hour.success / metrics.hour.total : 1,
+      minuteCacheRate:
+        metrics.minute.total > 0 ? metrics.minute.cacheHits / metrics.minute.total : 0,
+      hourCacheRate: metrics.hour.total > 0 ? metrics.hour.cacheHits / metrics.hour.total : 0,
       minuteAvgLatencyMs: 0, // Not tracked yet
-      hourAvgLatencyMs: 0 // Not tracked yet
+      hourAvgLatencyMs: 0, // Not tracked yet
     };
 
     res.json({
       ...metrics,
       derived,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('[Braid Metrics] Realtime error:', error);
@@ -126,13 +187,13 @@ router.get('/realtime', async (req, res) => {
 
 /**
  * GET /api/braid/metrics/tools
- * 
+ *
  * Returns per-tool metrics with health scores.
- * 
+ *
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
  * - tenant_id: Optional - filter by specific tenant UUID (superadmin can monitor any tenant)
- * 
+ *
  * Response:
  * {
  *   tools: [
@@ -166,25 +227,35 @@ router.get('/tools', async (req, res) => {
     }
 
     // Extract tools array from result
-    const tools = result.tools || [];
+    const merged = mergeRegistryToolMetrics(result.tools || []);
+    const tools = merged.tools;
+    const fromRegistry = merged.fromRegistry;
 
-    // Generate summary
+    // Generate summary — `unused` tools (registry-only, never called) are
+    // excluded from the overallHealth average so a fresh deployment does not
+    // skew the dashboard toward a neutral score.
+    const scored = tools.filter((t) => typeof t.healthScore === 'number');
     const summary = {
       totalTools: tools.length,
-      healthyCount: tools.filter(t => t.healthStatus === 'healthy').length,
-      degradedCount: tools.filter(t => t.healthStatus === 'degraded').length,
-      warningCount: tools.filter(t => t.healthStatus === 'warning').length,
-      criticalCount: tools.filter(t => t.healthStatus === 'critical').length,
-      overallHealth: tools.length > 0 
-        ? Math.round(tools.reduce((sum, t) => sum + t.healthScore, 0) / tools.length) 
-        : 100
+      healthyCount: tools.filter((t) => t.healthStatus === 'healthy').length,
+      degradedCount: tools.filter((t) => t.healthStatus === 'degraded').length,
+      warningCount: tools.filter((t) => t.healthStatus === 'warning').length,
+      criticalCount: tools.filter((t) => t.healthStatus === 'critical').length,
+      unusedCount: tools.filter((t) => t.healthStatus === 'unused').length,
+      overallHealth:
+        scored.length > 0
+          ? Math.round(scored.reduce((sum, t) => sum + t.healthScore, 0) / scored.length)
+          : null,
+      registeredTools: Object.keys(TOOL_GRAPH).length,
+      auditedTools: merged.auditedTools,
+      dataSource: fromRegistry ? 'registry' : 'audit_log+registry',
     };
 
     res.json({
       period,
       tools,
       summary,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('[Braid Metrics] Tools error:', error);
@@ -194,14 +265,14 @@ router.get('/tools', async (req, res) => {
 
 /**
  * GET /api/braid/metrics/timeseries
- * 
+ *
  * Returns time-series data for charting.
- * 
+ *
  * Query params:
  * - granularity: 'minute' | 'hour' | 'day' (default: 'hour')
  * - points: number of data points (default: 24, max: 168)
  * - tenant_id: Optional - filter by specific tenant UUID
- * 
+ *
  * Response:
  * {
  *   granularity: 'hour',
@@ -218,7 +289,9 @@ router.get('/timeseries', async (req, res) => {
     const granularity = req.query.granularity || 'hour';
     const validGranularities = ['minute', 'hour', 'day'];
     if (!validGranularities.includes(granularity)) {
-      return res.status(400).json({ error: `Invalid granularity. Use: ${validGranularities.join(', ')}` });
+      return res
+        .status(400)
+        .json({ error: `Invalid granularity. Use: ${validGranularities.join(', ')}` });
     }
 
     const points = Math.min(parseInt(req.query.points) || 24, 168);
@@ -230,7 +303,7 @@ router.get('/timeseries', async (req, res) => {
       granularity,
       points,
       data,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('[Braid Metrics] Timeseries error:', error);
@@ -240,13 +313,13 @@ router.get('/timeseries', async (req, res) => {
 
 /**
  * GET /api/braid/metrics/errors
- * 
+ *
  * Returns error analysis for debugging.
- * 
+ *
  * Query params:
  * - period: '1h' | '24h' | '7d' | '30d' (default: '24h')
  * - tenant_id: Optional - filter by specific tenant UUID
- * 
+ *
  * Response:
  * {
  *   totalErrors: 25,
@@ -271,7 +344,7 @@ router.get('/errors', async (req, res) => {
     res.json({
       period,
       ...analysis,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('[Braid Metrics] Errors analysis error:', error);
@@ -281,10 +354,10 @@ router.get('/errors', async (req, res) => {
 
 /**
  * GET /api/braid/metrics/summary
- * 
+ *
  * Returns a combined summary for dashboard widgets.
  * Includes realtime stats, top tools, and health overview.
- * 
+ *
  * Query params:
  * - tenant_id: Optional - filter by specific tenant UUID
  */
@@ -298,7 +371,7 @@ router.get('/summary', async (req, res) => {
     const [realtime, toolMetricsResult, auditStats] = await Promise.all([
       getRealtimeMetrics(tenantId),
       getToolMetrics(supabase, tenantId, 'day'),
-      getAuditStats(supabase, tenantId, 'day')
+      getAuditStats(supabase, tenantId, 'day'),
     ]);
 
     // Extract tools array from result
@@ -308,30 +381,43 @@ router.get('/summary', async (req, res) => {
     const topTools = toolMetrics
       .sort((a, b) => b.calls - a.calls)
       .slice(0, 5)
-      .map(t => ({ name: t.name, total: t.calls, successRate: t.successRate, health: t.healthScore }));
+      .map((t) => ({
+        name: t.name,
+        total: t.calls,
+        successRate: t.successRate,
+        health: t.healthScore,
+      }));
 
-    // Tools needing attention (health < 80)
+    // Tools needing attention (health < 80) — ignore null (never-called) tools
     const problemTools = toolMetrics
-      .filter(t => t.healthScore < 80)
+      .filter((t) => typeof t.healthScore === 'number' && t.healthScore < 80)
       .sort((a, b) => a.healthScore - b.healthScore)
       .slice(0, 5)
-      .map(t => ({ name: t.name, health: t.healthScore, status: t.healthStatus, successRate: t.successRate }));
+      .map((t) => ({
+        name: t.name,
+        health: t.healthScore,
+        status: t.healthStatus,
+        successRate: t.successRate,
+      }));
 
-    // Calculate overall health
-    const overallHealth = toolMetrics.length > 0
-      ? Math.round(toolMetrics.reduce((sum, t) => sum + t.healthScore, 0) / toolMetrics.length)
-      : 100;
+    // Calculate overall health — only count tools that have a numeric score
+    // (exclude registry-only "unused" rows with null healthScore).
+    const scoredTools = toolMetrics.filter((t) => typeof t.healthScore === 'number');
+    const overallHealth =
+      scoredTools.length > 0
+        ? Math.round(scoredTools.reduce((sum, t) => sum + t.healthScore, 0) / scoredTools.length)
+        : null;
 
     // Determine overall status
     let overallStatus = 'healthy';
-    if (problemTools.some(t => t.status === 'critical')) overallStatus = 'critical';
-    else if (problemTools.some(t => t.status === 'warning')) overallStatus = 'warning';
+    if (problemTools.some((t) => t.status === 'critical')) overallStatus = 'critical';
+    else if (problemTools.some((t) => t.status === 'warning')) overallStatus = 'warning';
     else if (problemTools.length > 0) overallStatus = 'degraded';
 
     res.json({
       realtime: {
         lastMinute: realtime.minute,
-        lastHour: realtime.hour
+        lastHour: realtime.hour,
       },
       today: auditStats,
       topTools,
@@ -340,9 +426,11 @@ router.get('/summary', async (req, res) => {
         score: overallHealth,
         status: overallStatus,
         toolCount: toolMetrics.length,
-        healthyCount: toolMetrics.filter(t => t.healthScore >= 80).length
+        scoredCount: scoredTools.length,
+        healthyCount: scoredTools.filter((t) => t.healthScore >= 80).length,
+        unusedCount: toolMetrics.filter((t) => t.healthStatus === 'unused').length,
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     logger.error('[Braid Metrics] Summary error:', error);
