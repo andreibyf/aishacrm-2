@@ -9,10 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **LLM Monitor "By Provider" / "By Status" cards always empty (`backend/lib/aiEngine/activityLogger.js`):** Stats were computed exclusively from the 5-minute window, so cards were blank whenever no recent activity existed. Now falls back to the full in-memory buffer when the 5-minute window is empty, and always exposes `allTime.byProvider` / `allTime.byStatus` / `allTime.byCapability` in the stats response for buffer-wide breakdowns.
+
+- **LLM Monitor "Avg Duration" showing "-" when idle (`backend/lib/aiEngine/activityLogger.js`):** Same 5-minute window bug — now falls back to all-buffer durations when the recent window has no entries.
+
+- **AI Tools Monitor showing "0 tools monitored" before first tool call (`backend/routes/braidMetrics.js`):** `getToolMetrics` queries `braid_audit_log` which is empty on a fresh instance. The `/api/braid/metrics/tools` handler now pre-populates from the static `TOOL_GRAPH` registry (all ~126 tools) when the audit log returns no results, and merges registry entries for any tool not yet in the audit log when some data exists. Tools with no call history are shown as healthy with 0 calls.
+
+### Added
+
+- **LLM call cost estimation (`backend/lib/aiEngine/activityLogger.js`, `src/components/settings/LLMActivityMonitor.jsx`):** `getLLMActivityStats()` now returns `tokenUsage.allTime.estimatedCostUSD` computed from per-provider input/output token rates (Anthropic, OpenAI, Groq, Local). A new "Est. Cost (buffer)" stat card is displayed in the LLM Monitor header row, showing 4 decimal places.
+
+- **LLM activity log DB persistence (`backend/migrations/151_llm_activity_logs.sql`, `backend/lib/aiEngine/activityLogger.js`):** All LLM calls are now persisted to a `llm_activity_logs` table (90-day retention) via a non-blocking fire-and-forget insert. Server restarts no longer wipe the activity history. RLS enforced — service role writes, authenticated users read their own tenant's logs.
+
+- **AI Tools Monitor registry-aware status banners (`src/components/settings/BraidSDKMonitor.jsx`):** Tool Health tab now shows a contextual info banner distinguishing between "registry-only" state (no calls yet) and "audit+registry" state (some tools have real call data), with counts for each.
+
+### Changed
+
+- **LLM Monitor "By Provider" / "By Status" cards use buffer-wide data (`src/components/settings/LLMActivityMonitor.jsx`):** Cards now source from `stats.allTime.byProvider` / `allTime.byStatus` (always populated from the full buffer) rather than the 5-minute window. A `(buffer)` label appears when data comes from outside the recent window.
+
+- **Tokens (buffer) card now shows prompt/completion breakdown instead of entry count (`src/components/settings/LLMActivityMonitor.jsx`):** More useful for cost analysis.
+
 ### Changed
 
 - **OpenReplay self-hosted defaults (`.env.example`, `src/components/admin/OpenReplayControl.jsx`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Switched project guidance from cloud-first to self-hosted-first for AiSHA deployments. Added default self-hosted dashboard/ingest sample values (`https://replay.aishacrm.com`) and updated setup documentation to prioritize CI/CD deployment flow.
 - **OpenReplay Docker runtime env wiring (`frontend-entrypoint.sh`):** Normalized OpenReplay runtime env names so `OPENREPLAY_*` secrets are promoted to `VITE_OPENREPLAY_*` before generating `env-config.js`, ensuring Dockerized frontend runtime config is consistent for the browser bundle.
+- **System admin runbook updates for OpenReplay assist (`docs/admin-guides/ADMIN_GUIDE.md`):** Added a dedicated section for support operators covering OpenReplay prerequisites, how to start an assist session from User Management, live control/consent flow, troubleshooting, and security/audit notes.
+- **Core documentation index and support-flow alignment (`README.md`, `docs/README.md`, `docs/admin-guides/OPENREPLAY_SETUP_GUIDE.md`):** Fixed stale doc links to current folder structure, added OpenReplay admin guides to the docs index, and updated assist instructions to match the current UI labels (`Start Assist` / `Start Assist Session`).
+- **User guidance refresh for navigation, buttons, and shortcuts (`docs/user-guides/USER_GUIDE.md`, `docs/user-guides/AI_ASSISTANT_GUIDE.md`, `docs/README.md`):** Reworked navigation and common-button guidance, removed unsupported shortcut claims, aligned AI assistant access text with current UI launcher behavior, and documented the online guide freshness workflow for `public/guides/` synchronization.
+- **Online user-guide download resiliency (`src/pages/Documentation.jsx`):** Updated the in-app documentation download flow to prefer backend-generated/current PDF sources and fall back to the latest published markdown guide when no PDF is reachable, reducing stale-guide failures from legacy hardcoded paths.
 
 - **Dashboard cache-first loading optimization (`src/pages/Dashboard.jsx`):** Moved cache check before `setLoading(true)` so cached data displays instantly without skeleton loaders. When cache exists, dashboard now shows data immediately with background refresh, eliminating the "obvious loading time" for repeat visits. Loading skeleton only appears when no cache is available (first visit or after cache expiration).
 

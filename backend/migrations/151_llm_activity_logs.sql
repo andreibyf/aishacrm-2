@@ -1,0 +1,53 @@
+-- Migration 151: LLM Activity Logs (persistent storage)
+-- Replaces the in-memory rolling buffer with a proper audit table.
+-- Non-blocking insert path: backend inserts fire-and-forget, never block response.
+--
+-- Retention: 90 days (managed via pg_cron or scheduled cleanup job)
+
+CREATE TABLE IF NOT EXISTS llm_activity_logs (
+  id              TEXT PRIMARY KEY,                        -- e.g. "llm-<ts>-<rand>"
+  tenant_id       UUID,                                    -- nullable for system calls
+  capability      TEXT NOT NULL,                           -- chat_tools, json_strict, etc.
+  provider        TEXT NOT NULL,                           -- openai, anthropic, groq, local
+  model           TEXT NOT NULL,
+  node_id         TEXT,                                    -- e.g. "ai:chat:iter0"
+  container_id    TEXT,                                    -- MCP_NODE_ID / HOSTNAME
+  status          TEXT NOT NULL DEFAULT 'success',         -- success | error | failover
+  duration_ms     INTEGER,
+  error           TEXT,
+  usage           JSONB,                                   -- { prompt_tokens, completion_tokens, total_tokens }
+  tools_called    TEXT[],                                  -- array of tool names
+  intent          TEXT,                                    -- e.g. LEAD_CREATE
+  task_id         TEXT,
+  request_id      TEXT,
+  attempt         SMALLINT,
+  total_attempts  SMALLINT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes for dashboard queries
+CREATE INDEX IF NOT EXISTS llm_activity_logs_created_at_idx   ON llm_activity_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS llm_activity_logs_tenant_idx        ON llm_activity_logs (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS llm_activity_logs_provider_idx      ON llm_activity_logs (provider, created_at DESC);
+CREATE INDEX IF NOT EXISTS llm_activity_logs_status_idx        ON llm_activity_logs (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS llm_activity_logs_capability_idx    ON llm_activity_logs (capability, created_at DESC);
+
+-- RLS: admin/superadmin read; backend service role insert
+ALTER TABLE llm_activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- Service role (backend) can do everything
+CREATE POLICY llm_activity_logs_service_all ON llm_activity_logs
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Authenticated users can see their own tenant's logs
+CREATE POLICY llm_activity_logs_tenant_select ON llm_activity_logs
+  FOR SELECT TO authenticated
+  USING (tenant_id = (SELECT id FROM tenants WHERE slug = current_setting('app.tenant_slug', true)));
+
+-- Cleanup function: delete entries older than 90 days
+CREATE OR REPLACE FUNCTION cleanup_llm_activity_logs()
+RETURNS void LANGUAGE sql AS $$
+  DELETE FROM llm_activity_logs WHERE created_at < NOW() - INTERVAL '90 days';
+$$;
+
+COMMENT ON TABLE llm_activity_logs IS 'Persistent audit log for all LLM API calls. 90-day retention.';

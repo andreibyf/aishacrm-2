@@ -2,12 +2,53 @@
  * LLM Activity Logger
  *
  * Captures all LLM calls for real-time monitoring in Settings.
- * Stores entries in memory with a rolling buffer (last N entries).
- * Also outputs structured JSON logs for log aggregation (Loki, CloudWatch, etc.)
+ * Dual-path: in-memory rolling buffer (fast, real-time) + async DB insert (persistent, 90-day).
+ * DB insert is fire-and-forget — never blocks the LLM response path.
  */
+
+import { getSupabaseClient } from '../supabase-db.js';
 
 const MAX_ENTRIES = 500;
 const activityLog = [];
+
+/**
+ * Non-blocking DB persist for one log entry.
+ * Errors are caught and swallowed — DB issues must never affect LLM throughput.
+ */
+async function persistToDatabase(entry) {
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return; // supabase not configured, skip silently
+
+    const { error } = await supabase.from('llm_activity_logs').insert({
+      id: entry.id,
+      tenant_id: entry.tenantId !== 'unknown' ? entry.tenantId : null,
+      capability: entry.capability,
+      provider: entry.provider,
+      model: entry.model,
+      node_id: entry.nodeId,
+      container_id: entry.containerId,
+      status: entry.status,
+      duration_ms: entry.durationMs,
+      error: entry.error,
+      usage: entry.usage,
+      tools_called: entry.toolsCalled,
+      intent: entry.intent,
+      task_id: entry.taskId,
+      request_id: entry.requestId,
+      attempt: entry.attempt,
+      total_attempts: entry.totalAttempts,
+      created_at: entry.timestamp,
+    });
+
+    if (error) {
+      // Only log at debug level — DB persistence is best-effort
+      console.debug('[LLMActivityLogger] DB persist skipped:', error.message);
+    }
+  } catch (err) {
+    console.debug('[LLMActivityLogger] DB persist error (non-fatal):', err.message);
+  }
+}
 
 /**
  * Get the node/container ID from environment.
@@ -96,6 +137,9 @@ export function logLLMActivity(entry) {
       error: logEntry.error,
     }),
   );
+
+  // Fire-and-forget DB persist — never awaited, never blocks
+  persistToDatabase(logEntry);
 }
 
 /**
@@ -147,28 +191,42 @@ export function getLLMActivityStats() {
   const fiveMinutesAgo = now - 5 * 60 * 1000;
 
   const recentEntries = activityLog.filter((e) => new Date(e.timestamp).getTime() > fiveMinutesAgo);
-
   const lastMinute = activityLog.filter((e) => new Date(e.timestamp).getTime() > oneMinuteAgo);
 
-  // Count by provider
+  // Count by provider/capability/status — use 5-min window when available, else full buffer
+  const windowEntries = recentEntries.length > 0 ? recentEntries : activityLog;
+  const windowLabel = recentEntries.length > 0 ? 'last5min' : 'buffer';
+
   const byProvider = {};
   const byCapability = {};
   const byStatus = {};
 
-  for (const entry of recentEntries) {
+  for (const entry of windowEntries) {
     byProvider[entry.provider] = (byProvider[entry.provider] || 0) + 1;
     byCapability[entry.capability] = (byCapability[entry.capability] || 0) + 1;
     byStatus[entry.status] = (byStatus[entry.status] || 0) + 1;
   }
 
-  // Calculate average duration
-  const durations = recentEntries.filter((e) => e.durationMs).map((e) => e.durationMs);
+  // allTime breakdowns always from full buffer (for cards that always show buffer totals)
+  const allTimeByProvider = {};
+  const allTimeByStatus = {};
+  const allTimeByCapability = {};
+  for (const entry of activityLog) {
+    allTimeByProvider[entry.provider] = (allTimeByProvider[entry.provider] || 0) + 1;
+    allTimeByStatus[entry.status] = (allTimeByStatus[entry.status] || 0) + 1;
+    allTimeByCapability[entry.capability] = (allTimeByCapability[entry.capability] || 0) + 1;
+  }
+
+  // Average duration — prefer 5-min window, fall back to full buffer
+  const recentDurations = recentEntries.filter((e) => e.durationMs).map((e) => e.durationMs);
+  const allDurations = activityLog.filter((e) => e.durationMs).map((e) => e.durationMs);
+  const durationSource = recentDurations.length > 0 ? recentDurations : allDurations;
   const avgDuration =
-    durations.length > 0
-      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+    durationSource.length > 0
+      ? Math.round(durationSource.reduce((a, b) => a + b, 0) / durationSource.length)
       : null;
 
-  // Calculate token usage
+  // Token usage — 5-min window
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
   let totalTokens = 0;
@@ -185,13 +243,30 @@ export function getLLMActivityStats() {
     }
   }
 
-  // Token stats for all time (from buffer)
+  // Token stats + cost estimates for all time (from buffer)
+  // Approximate cost per 1K tokens (input/output averaged) by provider+model
+  const COST_PER_1K = {
+    anthropic: { input: 0.003, output: 0.015 }, // claude-sonnet-4 approximate
+    openai: { input: 0.0025, output: 0.01 }, // gpt-4o approximate
+    groq: { input: 0.0001, output: 0.0001 }, // llama on groq
+    local: { input: 0, output: 0 },
+  };
+
   let allTimeTokens = 0;
+  let allTimePromptTokens = 0;
+  let allTimeCompletionTokens = 0;
+  let estimatedCostUSD = 0;
+
   for (const entry of activityLog) {
     if (entry.usage) {
-      allTimeTokens +=
-        entry.usage.total_tokens ||
-        (entry.usage.prompt_tokens || 0) + (entry.usage.completion_tokens || 0);
+      const pt = entry.usage.prompt_tokens || 0;
+      const ct = entry.usage.completion_tokens || 0;
+      const tt = entry.usage.total_tokens || pt + ct;
+      allTimeTokens += tt;
+      allTimePromptTokens += pt;
+      allTimeCompletionTokens += ct;
+      const rates = COST_PER_1K[entry.provider] || COST_PER_1K.openai;
+      estimatedCostUSD += (pt / 1000) * rates.input + (ct / 1000) * rates.output;
     }
   }
 
@@ -201,9 +276,17 @@ export function getLLMActivityStats() {
     lastMinute: lastMinute.length,
     requestsPerMinute: lastMinute.length,
     avgDurationMs: avgDuration,
+    // Window-aware breakdowns (5-min when active, buffer otherwise)
     byProvider,
     byCapability,
     byStatus,
+    windowLabel,
+    // Full buffer breakdowns — always available regardless of recent activity
+    allTime: {
+      byProvider: allTimeByProvider,
+      byStatus: allTimeByStatus,
+      byCapability: allTimeByCapability,
+    },
     tokenUsage: {
       last5Minutes: {
         promptTokens: totalPromptTokens,
@@ -213,7 +296,10 @@ export function getLLMActivityStats() {
       },
       allTime: {
         totalTokens: allTimeTokens,
+        promptTokens: allTimePromptTokens,
+        completionTokens: allTimeCompletionTokens,
         entriesInBuffer: activityLog.length,
+        estimatedCostUSD: Math.round(estimatedCostUSD * 10000) / 10000, // 4 decimal places
       },
     },
   };
