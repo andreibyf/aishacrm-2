@@ -4,6 +4,7 @@ import express from 'express';
 import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/validateTenant.js';
 import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
 import logger from '../lib/logger.js';
+import { resolveAudience } from '../lib/campaigns/resolveAudience.js';
 
 // Valid campaign types — must match DB CHECK constraint
 const VALID_CAMPAIGN_TYPES = [
@@ -41,6 +42,33 @@ export default function createAICampaignRoutes(pgPool) {
   const router = express.Router();
   router.use(validateTenantAccess);
   router.use(enforceEmployeeDataScope);
+
+  // POST /api/aicampaigns/audience-preview
+  router.post('/audience-preview', async (req, res) => {
+    try {
+      const { tenant_id, target_audience = {}, campaign_type = 'email' } = req.body || {};
+      if (!tenant_id) {
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+      }
+
+      const rows = await resolveAudience(pgPool, {
+        tenant_id,
+        audience: target_audience,
+        campaignType: campaign_type,
+      });
+
+      return res.json({
+        status: 'success',
+        data: {
+          total: rows.length,
+          preview: rows.slice(0, 25),
+        },
+      });
+    } catch (err) {
+      logger.error('[AI Campaigns] Audience preview error:', err.message);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
 
   // ─── GET /api/aicampaigns — list with filters + pagination ──────────────────
   router.get('/', async (req, res) => {
@@ -312,12 +340,15 @@ export default function createAICampaignRoutes(pgPool) {
         return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       }
       const campaign = getR.rows[0];
-      const meta = campaign.metadata || {};
-      const cType = campaign.campaign_type || meta.campaign_type || 'email';
+      let metadataObj =
+        typeof campaign.metadata === 'object' && campaign.metadata !== null
+          ? campaign.metadata
+          : {};
+      const cType = campaign.campaign_type || metadataObj.campaign_type || 'email';
 
       // Validate integration ownership for channel-specific types
       if (cType === 'email') {
-        const profileId = meta.ai_email_config?.sending_profile_id;
+        const profileId = metadataObj.ai_email_config?.sending_profile_id;
         if (profileId) {
           const profR = await pgPool.query(
             'SELECT id FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = TRUE LIMIT 1',
@@ -331,7 +362,7 @@ export default function createAICampaignRoutes(pgPool) {
           }
         }
       } else if (cType === 'call') {
-        const callId = meta.ai_call_integration_id;
+        const callId = metadataObj.ai_call_integration_id;
         if (callId) {
           const callR = await pgPool.query(
             'SELECT id FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = TRUE LIMIT 1',
@@ -348,26 +379,160 @@ export default function createAICampaignRoutes(pgPool) {
       // Other types (sms, linkedin, whatsapp, api_connector, social_post)
       // will validate their own integrations when delivery adapters are built
 
+      const requiredChannel = cType === 'email' ? 'email' : 'phone';
+      let audienceRows = [];
+      const target_audience =
+        campaign.target_audience &&
+        typeof campaign.target_audience === 'object' &&
+        !Array.isArray(campaign.target_audience) &&
+        Object.keys(campaign.target_audience).length > 0
+          ? campaign.target_audience
+          : null;
+      const target_contacts = Array.isArray(campaign.target_contacts)
+        ? campaign.target_contacts
+        : [];
+
+      if (target_audience && (!target_contacts || target_contacts.length === 0)) {
+        audienceRows = await resolveAudience(pgPool, {
+          tenant_id,
+          audience: target_audience,
+          campaignType: cType,
+        });
+        if (!Array.isArray(audienceRows) || audienceRows.length === 0) {
+          return res.status(400).json({ status: 'error', message: 'No audience resolved' });
+        }
+      } else if (target_contacts && target_contacts.length > 0) {
+        audienceRows = target_contacts
+          .map((item) => {
+            if (item && typeof item === 'object') {
+              return {
+                contact_id: item.contact_id || item.id || null,
+                contact_name: item.contact_name || item.name || null,
+                email: item.email || null,
+                phone: item.phone || null,
+                company: item.company || null,
+              };
+            }
+            if (typeof item === 'string') {
+              return {
+                contact_id: item,
+                contact_name: null,
+                email: null,
+                phone: null,
+                company: null,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
+      }
+
+      const recipients = audienceRows.filter((row) => {
+        if (!row?.contact_id) return false;
+        if (requiredChannel === 'email') return Boolean(row.email);
+        return Boolean(row.phone);
+      });
+
+      const seen = new Set();
+      const uniqueRecipients = recipients.filter((row) => {
+        if (seen.has(row.contact_id)) return false;
+        seen.add(row.contact_id);
+        return true;
+      });
+
+      if (uniqueRecipients.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'No audience resolved' });
+      }
+
+      if (uniqueRecipients.length > 0) {
+        const insertTargetSql = `
+          INSERT INTO ai_campaign_targets (
+            tenant_id,
+            campaign_id,
+            contact_id,
+            channel,
+            status,
+            destination,
+            target_payload,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, 'pending', $5, $6::jsonb, NOW(), NOW())
+        `;
+
+        for (const row of uniqueRecipients) {
+          const destination = requiredChannel === 'email' ? row.email : row.phone;
+          await pgPool.query(insertTargetSql, [
+            tenant_id,
+            id,
+            row.contact_id,
+            requiredChannel,
+            destination,
+            JSON.stringify({
+              contact_name: row.contact_name || null,
+              company: row.company || null,
+              email: row.email || null,
+              phone: row.phone || null,
+            }),
+          ]);
+        }
+      }
+
+      const schedule = metadataObj.schedule || {};
+      const scheduledAtRaw = schedule.scheduled_at;
+      const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
+      const isFutureSchedule =
+        schedule.type === 'scheduled' &&
+        scheduledAt instanceof Date &&
+        !Number.isNaN(scheduledAt.getTime()) &&
+        scheduledAt.getTime() > Date.now();
+      const nextStatus = isFutureSchedule ? 'scheduled' : 'running';
+      const eventType = isFutureSchedule ? 'campaign_scheduled' : 'campaign_started';
+
       const lifecycle = {
-        ...(meta.lifecycle || {}),
-        scheduled_at: new Date().toISOString(),
+        ...(metadataObj.lifecycle || {}),
+        scheduled_at: isFutureSchedule ? scheduledAt.toISOString() : new Date().toISOString(),
         scheduled_by: req.user?.email || null,
       };
-      const newMeta = { ...meta, lifecycle };
+      const newMeta = { ...metadataObj, lifecycle };
 
       const updR = await pgPool.query(
-        `UPDATE ai_campaign SET status = 'scheduled', metadata = $3, updated_at = NOW()
+        `UPDATE ai_campaign SET status = $3, metadata = $4, updated_at = NOW()
          WHERE tenant_id = $1 AND id = $2 RETURNING *`,
-        [tenant_id, id, JSON.stringify(newMeta)],
+        [tenant_id, id, nextStatus, JSON.stringify(newMeta)],
       );
       const updated = updR.rows[0];
+
+      await pgPool.query(
+        `INSERT INTO ai_campaign_events (
+          tenant_id,
+          campaign_id,
+          contact_id,
+          status,
+          event_type,
+          attempt_no,
+          payload,
+          created_at
+        ) VALUES ($1, $2, NULL, $3, $4, 0, $5::jsonb, NOW())`,
+        [
+          tenant_id,
+          id,
+          nextStatus,
+          eventType,
+          JSON.stringify({
+            campaign_type: cType,
+            resolved_targets: uniqueRecipients.length,
+            channel: requiredChannel,
+          }),
+        ],
+      );
 
       emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.start', {
         id: updated.id,
         status: updated.status,
         campaign_type: cType,
         counts: {
-          totalTargets: Array.isArray(updated.target_contacts) ? updated.target_contacts.length : 0,
+          totalTargets: uniqueRecipients.length,
         },
       }).catch(() => undefined);
 
@@ -393,13 +558,16 @@ export default function createAICampaignRoutes(pgPool) {
       if (getR.rows.length === 0)
         return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
 
-      const meta = getR.rows[0].metadata || {};
+      let metadataObj =
+        typeof getR.rows[0].metadata === 'object' && getR.rows[0].metadata !== null
+          ? getR.rows[0].metadata
+          : {};
       const lifecycle = {
-        ...(meta.lifecycle || {}),
+        ...(metadataObj.lifecycle || {}),
         paused_at: new Date().toISOString(),
         paused_by: req.user?.email || null,
       };
-      const newMeta = { ...meta, lifecycle };
+      const newMeta = { ...metadataObj, lifecycle };
 
       const upd = await pgPool.query(
         `UPDATE ai_campaign SET status = 'paused', metadata = $3, updated_at = NOW()
@@ -435,13 +603,16 @@ export default function createAICampaignRoutes(pgPool) {
       if (getR.rows.length === 0)
         return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
 
-      const meta = getR.rows[0].metadata || {};
+      let metadataObj =
+        typeof getR.rows[0].metadata === 'object' && getR.rows[0].metadata !== null
+          ? getR.rows[0].metadata
+          : {};
       const lifecycle = {
-        ...(meta.lifecycle || {}),
+        ...(metadataObj.lifecycle || {}),
         resumed_at: new Date().toISOString(),
         resumed_by: req.user?.email || null,
       };
-      const newMeta = { ...meta, lifecycle };
+      const newMeta = { ...metadataObj, lifecycle };
 
       const upd = await pgPool.query(
         `UPDATE ai_campaign SET status = 'scheduled', metadata = $3, updated_at = NOW()

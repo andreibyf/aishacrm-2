@@ -14,6 +14,7 @@ import logger from './logger.js';
 
 let workerInterval = null;
 let pgPool = null;
+const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
 /**
  * Initialize and start the campaign worker
@@ -65,27 +66,36 @@ async function processPendingCampaigns() {
   if (!pgPool) return;
 
   try {
-    // Find scheduled campaigns (not yet picked up by any worker)
-    const query = `
-      SELECT id, tenant_id, name, metadata, target_contacts, campaign_type
+    // Phase A: pickup due scheduled campaigns
+    const scheduledQuery = `
+      SELECT id, tenant_id, name, metadata, campaign_type, status
       FROM ai_campaign
       WHERE status = 'scheduled'
-        AND (metadata->'lifecycle'->>'started_at' IS NULL OR metadata->'lifecycle'->>'started_at' = '')
+        AND (
+          (metadata->'schedule'->>'scheduled_at') IS NULL
+          OR (metadata->'schedule'->>'scheduled_at') = ''
+          OR (metadata->'schedule'->>'scheduled_at')::timestamptz <= NOW()
+        )
       ORDER BY created_at ASC
       LIMIT 10
     `;
 
-    const result = await pgPool.query(query);
-
-    if (result.rows.length === 0) {
-      // No work to do
-      return;
+    const scheduledResult = await pgPool.query(scheduledQuery);
+    for (const campaign of scheduledResult.rows) {
+      await processCampaign(campaign);
     }
 
-    logger.debug({ count: result.rows.length }, '[CampaignWorker] Found pending campaigns');
+    // Phase B: process running campaigns
+    const runningQuery = `
+      SELECT id, tenant_id, name, metadata, campaign_type, status
+      FROM ai_campaign
+      WHERE status = 'running'
+      ORDER BY updated_at ASC
+      LIMIT 10
+    `;
 
-    // Process each campaign
-    for (const campaign of result.rows) {
+    const runningResult = await pgPool.query(runningQuery);
+    for (const campaign of runningResult.rows) {
       await processCampaign(campaign);
     }
   } catch (err) {
@@ -115,60 +125,21 @@ async function processCampaign(campaign) {
       return;
     }
 
-    logger.info({ campaignId: id, name }, '[CampaignWorker] Processing campaign');
-
-    // Mark as running and stamp start time
-    await client.query(
-      `
-      UPDATE ai_campaign
-      SET status = 'running',
-          metadata = jsonb_set(
-            jsonb_set(metadata, '{lifecycle,started_at}', to_jsonb(NOW()::text)),
-            '{progress}', '{"total": 0, "processed": 0, "success": 0, "failed": 0}'::jsonb
-          )
-      WHERE id = $1 AND tenant_id = $2
-    `,
-      [id, tenant_id],
+    logger.info(
+      { campaignId: id, name, status: campaign.status },
+      '[CampaignWorker] Processing campaign',
     );
 
-    // Emit progress webhook (started)
-    await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-      id,
-      status: 'running',
-      progress: { total: 0, processed: 0, success: 0, failed: 0 },
-    }).catch((err) => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
+    let campaignRow = campaign;
+    if (campaign.status === 'scheduled') {
+      const startedRow = await transitionScheduledCampaignToRunning(client, campaign);
+      if (!startedRow) return;
+      campaignRow = startedRow;
+    }
 
-    // Execute the campaign based on type
-    const result = await executeCampaign(campaign, client);
+    if (campaignRow.status !== 'running') return;
 
-    // Update final status and metrics
-    const finalStatus = result.success ? 'completed' : 'failed';
-    await client.query(
-      `
-      UPDATE ai_campaign
-      SET status = $1,
-          metadata = jsonb_set(
-            jsonb_set(
-              jsonb_set(metadata, '{lifecycle,${finalStatus}_at}', to_jsonb(NOW()::text)),
-              '{progress}', to_jsonb($2::jsonb)
-            ),
-            '{execution_result}', to_jsonb($3::jsonb)
-          )
-      WHERE id = $4 AND tenant_id = $5
-    `,
-      [finalStatus, JSON.stringify(result.progress), JSON.stringify(result.details), id, tenant_id],
-    );
-
-    // Emit final webhook
-    const event = result.success ? 'aicampaign.completed' : 'aicampaign.failed';
-    await emitTenantWebhooks(pgPool, tenant_id, event, {
-      id,
-      status: finalStatus,
-      progress: result.progress,
-      details: result.details,
-    }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
-
-    logger.info({ campaignId: id, finalStatus }, '[CampaignWorker] Campaign finished');
+    await processRunningCampaignBatch(client, campaignRow);
   } catch (err) {
     logger.error({ err, campaignId: id }, '[CampaignWorker] Error processing campaign');
 
@@ -205,164 +176,412 @@ async function processCampaign(campaign) {
 }
 
 /**
- * Execute a campaign based on its type
+ * Transition due scheduled campaign to running and emit start event.
  */
-async function executeCampaign(campaign, client) {
-  const { id: _id, tenant_id: _tenant_id, metadata, target_contacts, campaign_type } = campaign;
+async function transitionScheduledCampaignToRunning(client, campaign) {
+  const { id, tenant_id } = campaign;
+  const updateResult = await client.query(
+    `
+    UPDATE ai_campaign
+    SET status = 'running',
+        metadata = jsonb_set(
+          COALESCE(metadata, '{}'::jsonb),
+          '{lifecycle,started_at}',
+          to_jsonb(NOW()::text),
+          true
+        ),
+        updated_at = NOW()
+    WHERE id = $1
+      AND tenant_id = $2
+      AND status = 'scheduled'
+      AND (
+        (metadata->'schedule'->>'scheduled_at') IS NULL
+        OR (metadata->'schedule'->>'scheduled_at') = ''
+        OR (metadata->'schedule'->>'scheduled_at')::timestamptz <= NOW()
+      )
+    RETURNING *
+  `,
+    [id, tenant_id],
+  );
 
-  const type = metadata?.campaign_type || campaign_type || 'call';
-  const contacts = Array.isArray(target_contacts) ? target_contacts : [];
+  if (updateResult.rows.length === 0) return null;
 
-  const progress = {
-    total: contacts.length,
-    processed: 0,
-    success: 0,
-    failed: 0,
+  await insertCampaignEvent(client, {
+    tenant_id,
+    campaign_id: id,
+    contact_id: null,
+    status: 'running',
+    event_type: 'campaign_started',
+    attempt_no: 0,
+    payload: {
+      campaign_type: updateResult.rows[0].campaign_type || 'call',
+    },
+  });
+
+  return updateResult.rows[0];
+}
+
+/**
+ * Process a single batch of running campaign targets.
+ */
+async function processRunningCampaignBatch(client, campaign) {
+  const targets = await claimPendingTargets(client, campaign, TARGET_BATCH_SIZE);
+
+  if (targets.length > 0) {
+    let deliveryContext = null;
+    try {
+      deliveryContext = await getDeliveryContext(client, campaign);
+    } catch (err) {
+      deliveryContext = { type: 'error', error: err.message };
+    }
+
+    for (const target of targets) {
+      if (deliveryContext?.type === 'error') {
+        await markTargetFailed(client, campaign, target, deliveryContext.error);
+        continue;
+      }
+
+      try {
+        await deliverTarget(client, campaign, target, deliveryContext);
+        await markTargetCompleted(client, campaign, target);
+      } catch (err) {
+        await markTargetFailed(client, campaign, target, err.message || 'Unknown target error');
+      }
+    }
+  }
+
+  const progress = await computeCampaignProgress(client, campaign.id, campaign.tenant_id);
+  await updateCampaignProgress(client, campaign, progress);
+
+  await emitTenantWebhooks(pgPool, campaign.tenant_id, 'aicampaign.progress', {
+    id: campaign.id,
+    status: progress.pending === 0 && progress.processing === 0 ? 'completed' : 'running',
+    progress,
+  }).catch((err) => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
+}
+
+/**
+ * Claim pending targets for processing using row locks.
+ */
+async function claimPendingTargets(client, campaign, batchSize) {
+  const result = await client.query(
+    `
+    WITH to_claim AS (
+      SELECT id
+      FROM ai_campaign_targets
+      WHERE tenant_id = $1
+        AND campaign_id = $2
+        AND status = 'pending'
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT $3
+    )
+    UPDATE ai_campaign_targets t
+    SET status = 'processing',
+        started_at = NOW(),
+        attempt_count = COALESCE(t.attempt_count, 0) + 1,
+        last_attempt_at = NOW(),
+        updated_at = NOW()
+    FROM to_claim
+    WHERE t.id = to_claim.id
+    RETURNING t.*
+  `,
+    [campaign.tenant_id, campaign.id, batchSize],
+  );
+  return result.rows;
+}
+
+/**
+ * Load tenant-scoped delivery integration configuration.
+ */
+async function getDeliveryContext(client, campaign) {
+  const meta = campaign.metadata || {};
+  const type = campaign.campaign_type || meta.campaign_type || 'call';
+
+  if (type === 'email') {
+    const sendingProfileId = meta?.ai_email_config?.sending_profile_id;
+    if (!sendingProfileId) {
+      throw new Error('No sending profile configured for email campaign');
+    }
+
+    const integrationResult = await client.query(
+      'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
+      [campaign.tenant_id, sendingProfileId],
+    );
+    if (integrationResult.rows.length === 0) {
+      throw new Error('Sending profile not found or inactive');
+    }
+
+    return {
+      type: 'email',
+      integrationType: integrationResult.rows[0].integration_type,
+      credentials: integrationResult.rows[0].credentials || {},
+      subject: meta?.ai_email_config?.subject || 'No Subject',
+      bodyTemplate: meta?.ai_email_config?.body_template || '',
+    };
+  }
+
+  if (type === 'call') {
+    const callIntegrationId = meta?.ai_call_integration_id;
+    if (!callIntegrationId) {
+      throw new Error('No call integration configured');
+    }
+
+    const integrationResult = await client.query(
+      'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
+      [campaign.tenant_id, callIntegrationId],
+    );
+    if (integrationResult.rows.length === 0) {
+      throw new Error('Call integration not found or inactive');
+    }
+
+    return {
+      type: 'call',
+      integrationType: integrationResult.rows[0].integration_type,
+      credentials: integrationResult.rows[0].credentials || {},
+    };
+  }
+
+  return {
+    type: 'unsupported',
+    error: 'Unsupported campaign type',
   };
-
-  if (contacts.length === 0) {
-    return {
-      success: true,
-      progress,
-      details: { message: 'No contacts to process' },
-    };
-  }
-
-  // Execute based on type
-  try {
-    if (type === 'email') {
-      await executeEmailCampaign(campaign, contacts, progress, client);
-    } else if (type === 'call') {
-      await executeCallCampaign(campaign, contacts, progress, client);
-    } else {
-      throw new Error(`Unsupported campaign type: ${type}`);
-    }
-
-    return {
-      success: true,
-      progress,
-      details: { message: `Processed ${progress.processed} contacts` },
-    };
-  } catch (err) {
-    return {
-      success: false,
-      progress,
-      details: { error: err.message },
-    };
-  }
 }
 
 /**
- * Execute email campaign
+ * Deliver a single target based on campaign type.
  */
-async function executeEmailCampaign(campaign, contacts, progress, client) {
-  const { id, tenant_id, metadata } = campaign;
-
-  // Get sending profile (email integration)
-  const sendingProfileId = metadata?.ai_email_config?.sending_profile_id;
-  if (!sendingProfileId) {
-    throw new Error('No sending profile configured for email campaign');
+async function deliverTarget(_client, campaign, target, deliveryContext) {
+  const destination = target.destination || null;
+  if (!destination) {
+    throw new Error('Target destination is missing');
   }
 
-  // Load integration credentials (tenant-scoped)
-  const integrationResult = await client.query(
-    'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, sendingProfileId],
-  );
+  const payload = target.target_payload || {};
+  const campaignMeta = campaign.metadata || {};
 
-  if (integrationResult.rows.length === 0) {
-    throw new Error('Sending profile not found or inactive');
+  if (deliveryContext.type === 'email') {
+    const templateInput = {
+      first_name: payload.first_name || payload.contact_name || '',
+      last_name: payload.last_name || '',
+      email: payload.email || destination,
+      phone: payload.phone || '',
+      company: payload.company || '',
+    };
+    const personalizedBody = personalizeTemplate(deliveryContext.bodyTemplate, templateInput);
+    await sendEmail(
+      deliveryContext.integrationType,
+      deliveryContext.credentials,
+      destination,
+      deliveryContext.subject,
+      personalizedBody,
+    );
+    return;
   }
 
-  const integration = integrationResult.rows[0];
-  const credentials = integration.credentials || {};
-
-  // Email template from metadata
-  const subject = metadata?.ai_email_config?.subject || 'No Subject';
-  const bodyTemplate = metadata?.ai_email_config?.body_template || '';
-
-  // Process each contact
-  for (const contact of contacts) {
-    try {
-      // Personalize email body (simple template replace)
-      const personalizedBody = personalizeTemplate(bodyTemplate, contact);
-
-      // Send email based on integration type
-      await sendEmail(
-        integration.integration_type,
-        credentials,
-        contact.email,
-        subject,
-        personalizedBody,
-      );
-
-      progress.success++;
-    } catch (err) {
-      logger.error({ err, email: contact.email }, '[CampaignWorker] Failed to send email');
-      progress.failed++;
-    }
-
-    progress.processed++;
-
-    // Emit progress webhook every 10 contacts
-    if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-        id,
-        status: 'running',
-        progress: { ...progress },
-      }).catch(() => {});
-    }
+  if (deliveryContext.type === 'call') {
+    await triggerAICall(deliveryContext.integrationType, deliveryContext.credentials, destination, {
+      ...campaignMeta,
+      tenant_id: campaign.tenant_id,
+      campaign_id: campaign.id,
+      contact_id: target.contact_id,
+    });
+    return;
   }
+
+  throw new Error(deliveryContext.error || 'Unsupported campaign type');
 }
 
 /**
- * Execute AI call campaign
+ * Update target as completed and emit event.
  */
-async function executeCallCampaign(campaign, contacts, progress, client) {
-  const { id, tenant_id, metadata } = campaign;
-
-  // Get call integration
-  const callIntegrationId = metadata?.ai_call_integration_id;
-  if (!callIntegrationId) {
-    throw new Error('No call integration configured');
-  }
-
-  // Load integration credentials (tenant-scoped)
-  const integrationResult = await client.query(
-    'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, callIntegrationId],
+async function markTargetCompleted(client, campaign, target) {
+  await client.query(
+    `
+    UPDATE ai_campaign_targets
+    SET status = 'completed',
+        error_message = NULL,
+        completed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = $1
+      AND tenant_id = $2
+      AND campaign_id = $3
+  `,
+    [target.id, campaign.tenant_id, campaign.id],
   );
 
-  if (integrationResult.rows.length === 0) {
-    throw new Error('Call integration not found or inactive');
+  await insertCampaignEvent(client, {
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    contact_id: target.contact_id,
+    status: 'completed',
+    event_type: 'target_completed',
+    attempt_no: target.attempt_count || 0,
+    payload: {
+      target_id: target.id,
+      destination: target.destination || null,
+    },
+  });
+}
+
+/**
+ * Update target as failed and emit event.
+ */
+async function markTargetFailed(client, campaign, target, errorMessage) {
+  const safeMessage = String(errorMessage || 'Unknown target failure').slice(0, 2000);
+  await client.query(
+    `
+    UPDATE ai_campaign_targets
+    SET status = 'failed',
+        error_message = $4,
+        completed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = $1
+      AND tenant_id = $2
+      AND campaign_id = $3
+  `,
+    [target.id, campaign.tenant_id, campaign.id, safeMessage],
+  );
+
+  await insertCampaignEvent(client, {
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    contact_id: target.contact_id,
+    status: 'failed',
+    event_type: 'target_failed',
+    attempt_no: target.attempt_count || 0,
+    payload: {
+      target_id: target.id,
+      destination: target.destination || null,
+      error_message: safeMessage,
+    },
+  });
+}
+
+/**
+ * Aggregate target status counts for campaign metadata rollup.
+ */
+async function computeCampaignProgress(client, campaignId, tenantId) {
+  const countsResult = await client.query(
+    `
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+      COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
+      COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
+      COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
+    FROM ai_campaign_targets
+    WHERE campaign_id = $1
+      AND tenant_id = $2
+  `,
+    [campaignId, tenantId],
+  );
+  return (
+    countsResult.rows[0] || {
+      total: 0,
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+    }
+  );
+}
+
+/**
+ * Persist progress and mark campaign complete when work is drained.
+ */
+async function updateCampaignProgress(client, campaign, progress) {
+  const shouldComplete = Number(progress.pending) === 0 && Number(progress.processing) === 0;
+
+  if (shouldComplete) {
+    const completeResult = await client.query(
+      `
+      UPDATE ai_campaign
+      SET status = 'completed',
+          metadata = jsonb_set(
+            jsonb_set(
+              COALESCE(metadata, '{}'::jsonb),
+              '{progress}',
+              $3::jsonb,
+              true
+            ),
+            '{lifecycle,completed_at}',
+            to_jsonb(NOW()::text),
+            true
+          ),
+          updated_at = NOW()
+      WHERE id = $1
+        AND tenant_id = $2
+        AND status = 'running'
+      RETURNING id
+    `,
+      [campaign.id, campaign.tenant_id, JSON.stringify(progress)],
+    );
+
+    if (completeResult.rows.length > 0) {
+      await insertCampaignEvent(client, {
+        tenant_id: campaign.tenant_id,
+        campaign_id: campaign.id,
+        contact_id: null,
+        status: 'completed',
+        event_type: 'campaign_completed',
+        attempt_no: 0,
+        payload: { progress },
+      });
+      await emitTenantWebhooks(pgPool, campaign.tenant_id, 'aicampaign.completed', {
+        id: campaign.id,
+        status: 'completed',
+        progress,
+      }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
+    }
+    return;
   }
 
-  const integration = integrationResult.rows[0];
-  const credentials = integration.credentials || {};
+  await client.query(
+    `
+    UPDATE ai_campaign
+    SET metadata = jsonb_set(
+          COALESCE(metadata, '{}'::jsonb),
+          '{progress}',
+          $3::jsonb,
+          true
+        ),
+        updated_at = NOW()
+    WHERE id = $1
+      AND tenant_id = $2
+  `,
+    [campaign.id, campaign.tenant_id, JSON.stringify(progress)],
+  );
+}
 
-  // Process each contact
-  for (const contact of contacts) {
-    try {
-      // Trigger AI call via integration
-      await triggerAICall(integration.integration_type, credentials, contact.phone, metadata);
-
-      progress.success++;
-    } catch (err) {
-      logger.error({ err, phone: contact.phone }, '[CampaignWorker] Failed to trigger call');
-      progress.failed++;
-    }
-
-    progress.processed++;
-
-    // Emit progress webhook every 10 contacts
-    if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-        id,
-        status: 'running',
-        progress: { ...progress },
-      }).catch(() => {});
-    }
-  }
+/**
+ * Insert campaign execution event row.
+ */
+async function insertCampaignEvent(client, event) {
+  await client.query(
+    `
+    INSERT INTO ai_campaign_events (
+      tenant_id,
+      campaign_id,
+      contact_id,
+      status,
+      event_type,
+      attempt_no,
+      payload,
+      created_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+  `,
+    [
+      event.tenant_id,
+      event.campaign_id,
+      event.contact_id || null,
+      event.status || 'pending',
+      event.event_type,
+      Number(event.attempt_no || 0),
+      JSON.stringify(event.payload || {}),
+    ],
+  );
 }
 
 /**
