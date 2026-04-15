@@ -324,6 +324,16 @@ export default function createWorkflowRoutes(pgPool) {
           const resolved = replaceVariables(`{{${m.webhook_field}}}`);
           return { targetField: m.contact_field, resolved };
         }
+        // Legacy account shape
+        if (m.account_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.account_field, resolved };
+        }
+        // Legacy opportunity shape
+        if (m.opportunity_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.opportunity_field, resolved };
+        }
         return null;
       }
 
