@@ -209,12 +209,9 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
       };
       const cfg = node.config || {};
 
-      try {
-        switch (node.type) {
-          
       // Resolve a field_mappings entry — handles unified {target_field, source_value}
       // and all legacy {entity_field, webhook_field} shapes.
-      function resolveServiceMapping(m) {
+      const resolveServiceMapping = (m) => {
         if (m.target_field) {
           const raw = m.source_value || '';
           const template = raw.startsWith('{{') ? raw : raw ? `{{${raw}}}` : '';
@@ -232,7 +229,10 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
           return isUnresolved ? null : { field: legacyField, value: resolved };
         }
         return null;
-      }
+      };
+
+      try {
+        switch (node.type) {
           case 'webhook_trigger': {
             log.output = { payload: context.payload };
             break;
