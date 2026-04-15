@@ -167,6 +167,7 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
+          env: { NODE_ENV: 'test' },
           include: [
             'src/components/workflows/**/*.test.{js,jsx,ts,tsx}',
             'src/components/workflows/**/__tests__/**/*.{js,jsx,ts,tsx}',
