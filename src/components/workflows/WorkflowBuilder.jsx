@@ -29,7 +29,7 @@ import WorkflowCanvas from './WorkflowCanvas';
 import NodeLibrary from './NodeLibrary';
 import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
 import FieldMappingPanel from './FieldMappingPanel';
-import { getUpstreamTokens, tokenToTemplate, ENTITY_SCHEMAS } from './upstreamTokens';
+import { getUpstreamTokens, ENTITY_SCHEMAS } from './upstreamTokens';
 import { useToast } from '@/components/ui/use-toast';
 import { WorkflowExecution } from '@/api/entities';
 import { Switch } from '@/components/ui/switch';
