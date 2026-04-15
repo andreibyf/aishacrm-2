@@ -1094,106 +1094,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map webhook fields to lead fields</p>
-
-              <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
-                {(node.config?.field_mappings || []).map((mapping, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <Select
-                      value={mapping.lead_field}
-                      onValueChange={(value) => {
-                        const newMappings = [...(node.config?.field_mappings || [])];
-                        newMappings[index] = { ...mapping, lead_field: value };
-                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                      }}
-                    >
-                      <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                        <SelectValue placeholder="Lead Field" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-slate-700">
-                        <SelectItem value="status">Status</SelectItem>
-                        <SelectItem value="score">Score</SelectItem>
-                        <SelectItem value="company">Company</SelectItem>
-                        <SelectItem value="phone">Phone</SelectItem>
-                        <SelectItem value="job_title">Job Title</SelectItem>
-                        <SelectItem value="source">Source</SelectItem>
-                        <SelectItem value="next_action">Next Action</SelectItem>
-                        <SelectItem value="score_reason">Score Reason</SelectItem>
-                        <SelectItem value="notes">Notes</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {getAvailableFields().length > 0 ? (
-                      <Select
-                        value={mapping.webhook_field}
-                        onValueChange={(value) => {
-                          const newMappings = [...(node.config?.field_mappings || [])];
-                          newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, {
-                            ...node.config,
-                            field_mappings: newMappings,
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                          <SelectValue placeholder="Webhook Field" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map((field) => (
-                            <SelectItem key={field} value={field}>
-                              {field}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        value={mapping.webhook_field}
-                        onChange={(e) => {
-                          const newMappings = [...(node.config?.field_mappings || [])];
-                          newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, {
-                            ...node.config,
-                            field_mappings: newMappings,
-                          });
-                        }}
-                        placeholder="webhook_field"
-                        className="bg-slate-800 border-slate-700 text-slate-200"
-                      />
-                    )}
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter(
-                          (_, i) => i !== index,
-                        );
-                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                      }}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const newMappings = [
-                    ...(node.config?.field_mappings || []),
-                    { lead_field: '', webhook_field: '' },
-                  ];
-                  updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                }}
-                className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Mapping
-              </Button>
+              <p className="text-sm text-slate-400 mb-3">Map inbound data to lead fields to update</p>
+              <FieldMappingPanel
+                mappings={node.config?.field_mappings || []}
+                onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
+                targetSchema={ENTITY_SCHEMAS.lead}
+                upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
+                addLabel="Add Lead Field"
+              />
             </div>
             {renderOutputPreview(node)}
           </div>
@@ -2351,105 +2259,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map webhook fields to contact fields</p>
-
-              <div className="max-h-96 overflow-y-auto pr-2 space-y-2">
-                {(node.config?.field_mappings || []).map((mapping, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <Select
-                      value={mapping.contact_field}
-                      onValueChange={(value) => {
-                        const newMappings = [...(node.config?.field_mappings || [])];
-                        newMappings[index] = { ...mapping, contact_field: value };
-                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                      }}
-                    >
-                      <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                        <SelectValue placeholder="Contact Field" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-slate-700">
-                        <SelectItem value="first_name">First Name</SelectItem>
-                        <SelectItem value="last_name">Last Name</SelectItem>
-                        <SelectItem value="email">Email</SelectItem>
-                        <SelectItem value="phone">Phone</SelectItem>
-                        <SelectItem value="company">Company</SelectItem>
-                        <SelectItem value="job_title">Job Title</SelectItem>
-                        <SelectItem value="status">Status</SelectItem>
-                        <SelectItem value="notes">Notes</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {getAvailableFields().length > 0 ? (
-                      <Select
-                        value={mapping.webhook_field}
-                        onValueChange={(value) => {
-                          const newMappings = [...(node.config?.field_mappings || [])];
-                          newMappings[index] = { ...mapping, webhook_field: value };
-                          updateNodeConfig(node.id, {
-                            ...node.config,
-                            field_mappings: newMappings,
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
-                          <SelectValue placeholder="Webhook Field" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
-                          {getAvailableFields().map((field) => (
-                            <SelectItem key={field} value={field}>
-                              {field}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        value={mapping.webhook_field}
-                        onChange={(e) => {
-                          const newMappings = [...(node.config?.field_mappings || [])];
-                          newMappings[index] = { ...mapping, webhook_field: e.target.value };
-                          updateNodeConfig(node.id, {
-                            ...node.config,
-                            field_mappings: newMappings,
-                          });
-                        }}
-                        placeholder="webhook_field"
-                        className="bg-slate-800 border-slate-700 text-slate-200"
-                      />
-                    )}
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        const newMappings = (node.config?.field_mappings || []).filter(
-                          (_, i) => i !== index,
-                        );
-                        updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                      }}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const newMappings = [
-                    ...(node.config?.field_mappings || []),
-                    { contact_field: '', webhook_field: '' },
-                  ];
-                  updateNodeConfig(node.id, { ...node.config, field_mappings: newMappings });
-                }}
-                className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 mt-2 w-full"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Mapping
-              </Button>
+              <p className="text-sm text-slate-400 mb-3">Map inbound data to contact fields to update</p>
+              <FieldMappingPanel
+                mappings={node.config?.field_mappings || []}
+                onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
+                targetSchema={ENTITY_SCHEMAS.contact}
+                upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
+                addLabel="Add Contact Field"
+              />
             </div>
             {renderOutputPreview(node)}
           </div>
@@ -2868,36 +2685,23 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             </div>
 
             <div>
-              <Label className="text-slate-200">Subject/Title</Label>
-              <Input
-                value={node.config?.title || ''}
-                onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, title: e.target.value });
-                }}
-                placeholder="e.g., Follow-up email"
-                className="bg-slate-800 border-slate-700 text-slate-200"
-              />
-            </div>
-
-            <div>
-              <Label className="text-slate-200">Details</Label>
-              <textarea
-                value={node.config?.details || ''}
-                onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, details: e.target.value });
-                }}
-                placeholder="Activity details (supports {{field}} replacements)"
-                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Use {'{{field_name}}'} to reference webhook data
+              <Label className="text-slate-200">Field Mappings</Label>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to activity fields. Subject, Body, Status, Due Date, Assigned To.
               </p>
+              <FieldMappingPanel
+                mappings={node.config?.field_mappings || []}
+                onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
+                targetSchema={ENTITY_SCHEMAS.activity}
+                upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
+                addLabel="Add Activity Field"
+              />
             </div>
 
             <div>
               <Label className="text-slate-200">Associate With</Label>
               <Select
-                value={node.config?.associate || 'lead'}
+                value={node.config?.associate || 'auto'}
                 onValueChange={(value) => {
                   updateNodeConfig(node.id, { ...node.config, associate: value });
                 }}
@@ -2906,12 +2710,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="auto">Auto-detect from upstream (recommended)</SelectItem>
                   <SelectItem value="lead">Lead</SelectItem>
                   <SelectItem value="contact">Contact</SelectItem>
                   <SelectItem value="account">Account</SelectItem>
                   <SelectItem value="opportunity">Opportunity</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                Auto-detect uses the first found_lead / found_contact / found_account /
+                found_opportunity from upstream nodes.
+              </p>
             </div>
             {renderOutputPreview(node)}
           </div>
