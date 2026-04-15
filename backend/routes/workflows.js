@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Workflow Routes
  * CRUD operations for workflows and workflow executions
  */
@@ -298,6 +298,45 @@ export default function createWorkflowRoutes(pgPool) {
         return (workflow.nodes || []).find((n) => n.id === outgoing[0].to) || null;
       }
 
+      // Helper: normalise a field_mappings entry to { targetField, resolvedValue }.
+      // Handles both legacy shapes and the new unified shape from FieldMappingPanel.
+      //   Legacy create_lead/update_lead: { lead_field, webhook_field }
+      //   Legacy update_contact:          { contact_field, webhook_field }
+      //   New unified shape:              { target_field, source_value }
+      function resolveMapping(m) {
+        // New shape
+        if (m.target_field) {
+          const targetField = m.target_field;
+          const raw = m.source_value || '';
+          // source_value is already a token key (e.g. "email" or "found_lead.first_name").
+          // Wrap it in {{ }} for replaceVariables, or use it directly if it already contains {{ }}.
+          const template = raw.startsWith('{{') ? raw : raw ? `{{${raw}}}` : '';
+          const resolved = template ? replaceVariables(template) : '';
+          return { targetField, resolved };
+        }
+        // Legacy lead shape
+        if (m.lead_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.lead_field, resolved };
+        }
+        // Legacy contact shape
+        if (m.contact_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.contact_field, resolved };
+        }
+        // Legacy account shape
+        if (m.account_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.account_field, resolved };
+        }
+        // Legacy opportunity shape
+        if (m.opportunity_field && m.webhook_field) {
+          const resolved = replaceVariables(`{{${m.webhook_field}}}`);
+          return { targetField: m.opportunity_field, resolved };
+        }
+        return null;
+      }
+
       // Helper: variable replacement
       function replaceVariables(template) {
         if (typeof template !== 'string') return template;
@@ -511,13 +550,12 @@ export default function createWorkflowRoutes(pgPool) {
               vals.push(new Date().toISOString());
               ph.push(`$${idx++}`);
               for (const m of mappings) {
-                if (m.lead_field && m.webhook_field) {
-                  const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== null && v !== undefined && v !== '') {
-                    cols.push(m.lead_field);
-                    vals.push(v);
-                    ph.push(`$${idx++}`);
-                  }
+                const rm = resolveMapping(m);
+                const isUnresolved = typeof rm?.resolved === 'string' && rm.resolved.startsWith('{{') && rm.resolved.endsWith('}}');
+                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '' && !isUnresolved) {
+                  cols.push(rm.targetField);
+                  vals.push(rm.resolved);
+                  ph.push('$' + idx++);
                 }
               }
               const q = `INSERT INTO leads (${cols.join(',')}) VALUES (${ph.join(',')}) RETURNING *`;
@@ -538,12 +576,10 @@ export default function createWorkflowRoutes(pgPool) {
               const vals = [];
               let idx = 1;
               for (const m of mappings) {
-                if (m.lead_field && m.webhook_field) {
-                  const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                    sets.push(`${m.lead_field} = $${idx++}`);
-                    vals.push(v);
-                  }
+                const rm = resolveMapping(m);
+                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== ('{{' + rm.targetField + '}}')) {
+                  sets.push(rm.targetField + ' = $' + idx++);
+                  vals.push(rm.resolved);
                 }
               }
               if (!sets.length) {
@@ -589,12 +625,10 @@ export default function createWorkflowRoutes(pgPool) {
               const vals = [];
               let idx = 1;
               for (const m of mappings) {
-                if (m.contact_field && m.webhook_field) {
-                  const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                    sets.push(`${m.contact_field} = $${idx++}`);
-                    vals.push(v);
-                  }
+                const rm = resolveMapping(m);
+                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== ('{{' + rm.targetField + '}}')) {
+                  sets.push(rm.targetField + ' = $' + idx++);
+                  vals.push(rm.resolved);
                 }
               }
               if (!sets.length) {
@@ -678,7 +712,8 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.opportunity_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== null && v !== undefined && v !== '') {
+                  const vUnresolved = typeof v === 'string' && v.startsWith('{{') && v.endsWith('}}');
+                  if (v !== null && v !== undefined && v !== '' && !vUnresolved) {
                     cols.push(m.opportunity_field);
                     vals.push(v);
                     ph.push(`$${idx++}`);
@@ -742,30 +777,39 @@ export default function createWorkflowRoutes(pgPool) {
             }
             case 'create_activity': {
               const activityType = cfg.type || 'task';
-              const subject = replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
-              const description = replaceVariables(cfg.details || cfg.description || '');
+              // Resolve field_mappings (new unified shape) with fallback to legacy cfg.title/cfg.details
+              const fieldMappings = cfg.field_mappings || [];
+              const resolvedFields = {};
+              for (const m of fieldMappings) {
+                const rm = resolveMapping(m);
+                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '') {
+                  resolvedFields[rm.targetField] = rm.resolved;
+                }
+              }
+              const subject = resolvedFields.subject || replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
+              const body = resolvedFields.body || replaceVariables(cfg.details || cfg.description || '');
+              const status = resolvedFields.status || 'scheduled';
+              const due_date = resolvedFields.due_date || null;
+              const assigned_to = resolvedFields.assigned_to || null;
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
               const account = context.variables.found_account;
               const opportunity = context.variables.found_opportunity;
-              const related_to = lead
-                ? 'lead'
-                : contact
-                  ? 'contact'
-                  : account
-                    ? 'account'
-                    : opportunity
-                      ? 'opportunity'
-                      : null;
-              const related_id = lead
-                ? lead.id
-                : contact
-                  ? contact.id
-                  : account
-                    ? account.id
-                    : opportunity
-                      ? opportunity.id
-                      : null;
+              // Associate: 'auto' (default) = first found entity in context
+              const associate = cfg.associate || 'auto';
+              let related_to = null;
+              let related_id = null;
+              if (associate === 'auto') {
+                related_to = lead ? 'lead' : contact ? 'contact' : account ? 'account' : opportunity ? 'opportunity' : null;
+                related_id = lead ? lead.id : contact ? contact.id : account ? account.id : opportunity ? opportunity.id : null;
+              } else {
+                const entityMap = { lead, contact, account, opportunity };
+                const entity = entityMap[associate];
+                if (entity) { related_to = associate; related_id = entity.id; }
+              }
+              // field_mappings can explicitly override related_to / related_id
+              if (resolvedFields.related_to) related_to = resolvedFields.related_to;
+              if (resolvedFields.related_id) related_id = resolvedFields.related_id;
               const metadata = { created_by_workflow: workflow.id };
               const q = `
                 INSERT INTO activities (
@@ -774,22 +818,25 @@ export default function createWorkflowRoutes(pgPool) {
                   assigned_to, related_to, metadata, created_date, updated_date
                 ) VALUES (
                   $1, $2, $3, $4, $5, $6,
-                  NULL, NULL, NULL, NULL, NULL,
-                  NULL, $7, $8, NOW(), NOW()
+                  NULL, NULL, NULL, $7, NULL,
+                  $8, $9, $10, NOW(), NOW()
                 ) RETURNING *
               `;
               const vals = [
                 workflow.tenant_id,
                 activityType,
                 subject || null,
-                description || null,
-                'scheduled',
+                body || null,
+                status,
                 related_id,
+                due_date,
+                assigned_to,
                 related_to,
                 JSON.stringify(metadata),
               ];
               const r = await pgPool.query(q, vals);
               log.output = { activity: r.rows[0] };
+              context.variables.created_activity = r.rows[0];
               break;
             }
             case 'condition': {

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { BACKEND_URL, supabase } from '@/api/entities';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,7 @@ const statusColors = {
   running: 'bg-green-900/30 text-green-400 border-green-700',
   paused: 'bg-yellow-900/30 text-yellow-400 border-yellow-700',
   completed: 'bg-purple-900/30 text-purple-400 border-purple-700',
+  failed: 'bg-red-900/30 text-red-400 border-red-700',
   cancelled: 'bg-red-900/30 text-red-400 border-red-700',
 };
 
@@ -41,12 +43,43 @@ export default function AICampaignDetailPanel({
   onStatusChange,
 }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [liveTargets, setLiveTargets] = useState(null);
+  const [targetsLoading, setTargetsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !campaign?.id) return;
+    setLiveTargets(null);
+    setTargetsLoading(true);
+    const tenant_id = campaign.tenant_id;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+      fetch(
+        `${BACKEND_URL}/api/aicampaigns/${campaign.id}/targets?tenant_id=${encodeURIComponent(tenant_id)}`,
+        { headers: authHeaders, credentials: 'include' },
+      )
+        .then((r) => r.json())
+        .then((r) => setLiveTargets(Array.isArray(r.data) ? r.data : null))
+        .catch(() => setLiveTargets(null))
+        .finally(() => setTargetsLoading(false));
+    });
+  }, [open, campaign?.id]);
 
   if (!campaign) return null;
 
   const contacts = parseContacts(campaign.target_contacts);
 
+  // Prefer live progress from metadata (set by worker) over stale target_contacts statuses
+  const metaProgress = campaign.metadata?.progress || null;
+
   const getProgressPercentage = () => {
+    if (metaProgress) {
+      const total = Number(metaProgress.total || 0);
+      if (total === 0) return 0;
+      const done = Number(metaProgress.completed || 0) + Number(metaProgress.failed || 0);
+      return Math.round((done / total) * 100);
+    }
     if (contacts.length === 0) return 0;
     const completedContacts = contacts.filter((c) =>
       ['completed', 'failed', 'skipped'].includes(c.status),
@@ -54,17 +87,20 @@ export default function AICampaignDetailPanel({
     return Math.round((completedContacts / contacts.length) * 100);
   };
 
-  const getStatusCounts = () => {
-    return contacts.reduce(
-      (counts, contact) => {
-        counts[contact.status] = (counts[contact.status] || 0) + 1;
-        return counts;
-      },
-      { pending: 0, completed: 0, failed: 0, scheduled: 0 },
-    );
-  };
-
-  const statusCounts = getStatusCounts();
+  const statusCounts = metaProgress
+    ? {
+        pending: Number(metaProgress.pending || 0),
+        scheduled: Number(metaProgress.processing || 0),
+        completed: Number(metaProgress.completed || 0),
+        failed: Number(metaProgress.failed || 0),
+      }
+    : contacts.reduce(
+        (counts, contact) => {
+          counts[contact.status] = (counts[contact.status] || 0) + 1;
+          return counts;
+        },
+        { pending: 0, completed: 0, failed: 0, scheduled: 0 },
+      );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -238,11 +274,80 @@ export default function AICampaignDetailPanel({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
                   <Users className="w-5 h-5" />
-                  Target Contacts ({contacts.length})
+                  Target Contacts ({liveTargets ? liveTargets.length : contacts.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {contacts.length === 0 ? (
+                {targetsLoading ? (
+                  <div className="text-center py-8 text-slate-500">Loading...</div>
+                ) : liveTargets && liveTargets.length > 0 ? (
+                  <div className="space-y-3">
+                    {liveTargets.map((t) => {
+                      const payload =
+                        typeof t.target_payload === 'string'
+                          ? (() => {
+                              try {
+                                return JSON.parse(t.target_payload);
+                              } catch {
+                                return {};
+                              }
+                            })()
+                          : t.target_payload || {};
+                      const name =
+                        payload.contact_name || payload.first_name || t.destination || t.contact_id;
+                      const sub = t.destination || payload.phone || payload.email;
+                      const statusIcon = {
+                        completed: <CheckCircle className="w-4 h-4 text-green-400" />,
+                        failed: <XCircle className="w-4 h-4 text-red-400" />,
+                        processing: <Clock className="w-4 h-4 text-blue-400" />,
+                        pending: <Clock className="w-4 h-4 text-slate-500" />,
+                      }[t.status] || <Clock className="w-4 h-4 text-slate-500" />;
+                      const badgeClass =
+                        {
+                          completed: 'border-green-700 text-green-400',
+                          failed: 'border-red-700 text-red-400',
+                          processing: 'border-blue-700 text-blue-400',
+                          pending: 'border-slate-600 text-slate-300',
+                        }[t.status] || 'border-slate-600 text-slate-300';
+                      return (
+                        <div
+                          key={t.id}
+                          className="flex items-start justify-between p-3 border border-slate-700 rounded-lg bg-slate-800/50"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5">{statusIcon}</div>
+                            <div>
+                              <div className="font-medium text-slate-200">{name}</div>
+                              {sub && sub !== name && (
+                                <div className="text-sm text-slate-400">{sub}</div>
+                              )}
+                              {t.error_message && (
+                                <div className="text-xs text-red-400 mt-1 max-w-xs">
+                                  ⚠ {t.error_message}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right text-sm flex-shrink-0 ml-4">
+                            <Badge variant="outline" className={`capitalize ${badgeClass}`}>
+                              {t.status}
+                            </Badge>
+                            {t.completed_at && (
+                              <div className="text-xs text-slate-500 mt-1">
+                                {format(new Date(t.completed_at), 'MMM d, HH:mm')}
+                              </div>
+                            )}
+                            {!t.completed_at && t.created_at && (
+                              <div className="text-xs text-slate-500 mt-1">
+                                {format(new Date(t.created_at), 'MMM d, HH:mm')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : contacts.length === 0 ? (
                   <div className="text-center py-8 text-slate-500">
                     <Users className="w-12 h-12 mx-auto mb-4 text-slate-600" />
                     <p>No contacts configured for this campaign</p>
@@ -255,47 +360,20 @@ export default function AICampaignDetailPanel({
                         className="flex items-center justify-between p-3 border border-slate-700 rounded-lg bg-slate-800/50"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2">
-                            {contact.status === 'completed' && (
-                              <CheckCircle className="w-4 h-4 text-green-400" />
-                            )}
-                            {contact.status === 'failed' && (
-                              <XCircle className="w-4 h-4 text-red-400" />
-                            )}
-                            {contact.status === 'scheduled' && (
-                              <Clock className="w-4 h-4 text-blue-400" />
-                            )}
-                            {contact.status === 'pending' && (
-                              <Clock className="w-4 h-4 text-slate-500" />
-                            )}
-                          </div>
+                          <Clock className="w-4 h-4 text-slate-500" />
                           <div>
                             <div className="font-medium text-slate-200">{contact.contact_name}</div>
-                            <div className="text-sm text-slate-400">{contact.phone}</div>
-                            {contact.company && (
-                              <div className="text-sm text-slate-400">{contact.company}</div>
-                            )}
+                            <div className="text-sm text-slate-400">
+                              {contact.phone || contact.email}
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right text-sm">
-                          <Badge
-                            variant="outline"
-                            className="capitalize border-slate-600 text-slate-300"
-                          >
-                            {contact.status}
-                          </Badge>
-                          {contact.scheduled_date && (
-                            <div className="text-xs text-slate-500 mt-1">
-                              {format(new Date(contact.scheduled_date), 'MMM d')} at{' '}
-                              {contact.scheduled_time}
-                            </div>
-                          )}
-                          {contact.outcome && (
-                            <div className="text-xs text-slate-400 mt-1 max-w-48 truncate">
-                              {contact.outcome}
-                            </div>
-                          )}
-                        </div>
+                        <Badge
+                          variant="outline"
+                          className="capitalize border-slate-600 text-slate-300"
+                        >
+                          {contact.status || 'pending'}
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -309,89 +387,138 @@ export default function AICampaignDetailPanel({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
                   <BarChart3 className="w-5 h-5" />
-                  Performance Metrics
+                  {campaign.campaign_type === 'call' ? 'Call Performance' : 'Execution Metrics'}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-slate-100">
-                      {campaign.performance_metrics?.total_calls || 0}
+                {campaign.campaign_type === 'call' ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-slate-100">
+                        {campaign.performance_metrics?.total_calls || 0}
+                      </div>
+                      <div className="text-sm text-slate-400">Total Calls</div>
                     </div>
-                    <div className="text-sm text-slate-400">Total Calls</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-green-400">
-                      {campaign.performance_metrics?.successful_calls || 0}
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-green-400">
+                        {campaign.performance_metrics?.successful_calls || 0}
+                      </div>
+                      <div className="text-sm text-slate-400">Successful</div>
                     </div>
-                    <div className="text-sm text-slate-400">Successful</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-red-400">
-                      {campaign.performance_metrics?.failed_calls || 0}
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-red-400">
+                        {campaign.performance_metrics?.failed_calls || 0}
+                      </div>
+                      <div className="text-sm text-slate-400">Failed</div>
                     </div>
-                    <div className="text-sm text-slate-400">Failed</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-400">
-                      {campaign.performance_metrics?.appointments_set || 0}
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-blue-400">
+                        {campaign.performance_metrics?.appointments_set || 0}
+                      </div>
+                      <div className="text-sm text-slate-400">Appointments</div>
                     </div>
-                    <div className="text-sm text-slate-400">Appointments</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-purple-400">
-                      {campaign.performance_metrics?.leads_qualified || 0}
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-purple-400">
+                        {campaign.performance_metrics?.leads_qualified || 0}
+                      </div>
+                      <div className="text-sm text-slate-400">Qualified</div>
                     </div>
-                    <div className="text-sm text-slate-400">Qualified</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-orange-400">
-                      {campaign.performance_metrics?.average_duration || 0}s
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-orange-400">
+                        {campaign.performance_metrics?.average_duration || 0}s
+                      </div>
+                      <div className="text-sm text-slate-400">Avg Duration</div>
                     </div>
-                    <div className="text-sm text-slate-400">Avg Duration</div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-slate-100">
+                        {statusCounts.pending +
+                          statusCounts.scheduled +
+                          statusCounts.completed +
+                          statusCounts.failed}
+                      </div>
+                      <div className="text-sm text-slate-400">Total Contacts</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-green-400">
+                        {statusCounts.completed}
+                      </div>
+                      <div className="text-sm text-slate-400">Completed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-red-400">{statusCounts.failed}</div>
+                      <div className="text-sm text-slate-400">Failed</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-yellow-400">
+                        {statusCounts.pending}
+                      </div>
+                      <div className="text-sm text-slate-400">Pending</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-blue-400">
+                        {statusCounts.scheduled}
+                      </div>
+                      <div className="text-sm text-slate-400">Processing</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-purple-400">
+                        {(() => {
+                          const total = statusCounts.completed + statusCounts.failed;
+                          return total > 0
+                            ? `${Math.round((statusCounts.completed / total) * 100)}%`
+                            : '—';
+                        })()}
+                      </div>
+                      <div className="text-sm text-slate-400">Success Rate</div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
-                  <Target className="w-5 h-5" />
-                  Call Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-slate-400">Max Duration</div>
-                    <div className="text-lg font-semibold text-slate-200">
-                      {campaign.call_settings?.max_duration || 300}s
+            {campaign.campaign_type === 'call' && (
+              <Card className="bg-slate-800 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                    <Target className="w-5 h-5" />
+                    Call Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-slate-400">Max Duration</div>
+                      <div className="text-lg font-semibold text-slate-200">
+                        {campaign.call_settings?.max_duration || 300}s
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-400">Retry Attempts</div>
+                      <div className="text-lg font-semibold text-slate-200">
+                        {campaign.call_settings?.retry_attempts || 2}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-400">Business Hours Only</div>
+                      <div className="text-lg font-semibold text-slate-200">
+                        {campaign.call_settings?.business_hours_only ? 'Yes' : 'No'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-400">Delay Between Calls</div>
+                      <div className="text-lg font-semibold text-slate-200">
+                        {campaign.call_settings?.delay_between_calls || 60}s
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-sm font-medium text-slate-400">Retry Attempts</div>
-                    <div className="text-lg font-semibold text-slate-200">
-                      {campaign.call_settings?.retry_attempts || 2}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-slate-400">Business Hours Only</div>
-                    <div className="text-lg font-semibold text-slate-200">
-                      {campaign.call_settings?.business_hours_only ? 'Yes' : 'No'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-slate-400">Delay Between Calls</div>
-                    <div className="text-lg font-semibold text-slate-200">
-                      {campaign.call_settings?.delay_between_calls || 60}s
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>

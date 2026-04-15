@@ -11,24 +11,25 @@
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import logger from './logger.js';
+import { getSupabaseClient, query as supabaseSqlQuery } from './supabase-db.js';
 
 let workerInterval = null;
-let pgPool = null;
+let supabase = null;
+const webhookDb = { query: supabaseSqlQuery };
+const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
 /**
  * Initialize and start the campaign worker
  */
 export function startCampaignWorker(pool, intervalMs = 30000) {
-  if (!pool) {
-    logger.warn('[CampaignWorker] No database pool provided - worker disabled');
-    return;
+  if (pool) {
+    logger.debug('[CampaignWorker] Ignoring pgPool input; using Supabase client');
   }
-
-  pgPool = pool;
-  const enabled = process.env.CAMPAIGN_WORKER_ENABLED === 'true';
+  supabase = getSupabaseClient();
+  const enabled = process.env.CAMPAIGN_WORKER_ENABLED !== 'false';
 
   if (!enabled) {
-    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED not true)');
+    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED=false)');
     return;
   }
 
@@ -62,30 +63,42 @@ export function stopCampaignWorker() {
  * Main processing loop - finds and executes scheduled campaigns
  */
 async function processPendingCampaigns() {
-  if (!pgPool) return;
+  if (!supabase) return;
 
   try {
-    // Find scheduled campaigns (not yet picked up by any worker)
-    const query = `
-      SELECT id, tenant_id, name, metadata, target_contacts, campaign_type
-      FROM ai_campaign
-      WHERE status = 'scheduled'
-        AND (metadata->'lifecycle'->>'started_at' IS NULL OR metadata->'lifecycle'->>'started_at' = '')
-      ORDER BY created_at ASC
-      LIMIT 10
-    `;
+    // Phase A: pickup due scheduled campaigns.
+    // Fetch a generous page (50) so that future-dated rows don't starve
+    // due campaigns — isScheduledDue filters client-side after fetch.
+    const { data: scheduledCampaigns, error: scheduledErr } = await supabase
+      .from('ai_campaign')
+      .select('id, tenant_id, name, metadata, campaign_type, status, workflow_id, created_at')
+      .eq('status', 'scheduled')
+      .order('created_at', { ascending: true })
+      .limit(50);
+    if (scheduledErr) throw scheduledErr;
 
-    const result = await pgPool.query(query);
-
-    if (result.rows.length === 0) {
-      // No work to do
-      return;
+    const dueScheduled = (scheduledCampaigns || []).filter(isScheduledDue);
+    for (const campaign of dueScheduled) {
+      await processCampaign(campaign);
     }
 
-    logger.debug({ count: result.rows.length }, '[CampaignWorker] Found pending campaigns');
+    // Phase B: process running campaigns
+    const { data: runningCampaigns, error: runningErr } = await supabase
+      .from('ai_campaign')
+      .select('id, tenant_id, name, metadata, campaign_type, status, workflow_id, updated_at')
+      .eq('status', 'running')
+      .order('updated_at', { ascending: true })
+      .limit(10);
+    if (runningErr) throw runningErr;
 
-    // Process each campaign
-    for (const campaign of result.rows) {
+    logger.info(
+      {
+        scheduledDue: dueScheduled.length,
+        runningActive: (runningCampaigns || []).length,
+      },
+      '[CampaignWorker] Tick',
+    );
+    for (const campaign of runningCampaigns || []) {
       await processCampaign(campaign);
     }
   } catch (err) {
@@ -94,275 +107,534 @@ async function processPendingCampaigns() {
 }
 
 /**
- * Process a single campaign with advisory locking
+ * Process a single campaign
  */
 async function processCampaign(campaign) {
   const { id, tenant_id, name } = campaign;
 
-  // Advisory lock ID (hash campaign ID to int)
-  const lockId = hashStringToInt(id);
-
-  let client = null;
   try {
-    // Get a dedicated client for this transaction
-    client = await pgPool.connect();
+    logger.info(
+      { campaignId: id, name, status: campaign.status },
+      '[CampaignWorker] Processing campaign',
+    );
 
-    // Try to acquire advisory lock (non-blocking)
-    const lockResult = await client.query('SELECT pg_try_advisory_lock($1) as locked', [lockId]);
-
-    if (!lockResult.rows[0].locked) {
-      // Another worker is processing this campaign
-      return;
+    let campaignRow = campaign;
+    if (campaign.status === 'scheduled') {
+      const startedRow = await transitionScheduledCampaignToRunning(campaign);
+      if (!startedRow) return;
+      campaignRow = startedRow;
     }
 
-    logger.info({ campaignId: id, name }, '[CampaignWorker] Processing campaign');
+    if (campaignRow.status !== 'running') return;
 
-    // Mark as running and stamp start time
-    await client.query(
-      `
-      UPDATE ai_campaign
-      SET status = 'running',
-          metadata = jsonb_set(
-            jsonb_set(metadata, '{lifecycle,started_at}', to_jsonb(NOW()::text)),
-            '{progress}', '{"total": 0, "processed": 0, "success": 0, "failed": 0}'::jsonb
-          )
-      WHERE id = $1 AND tenant_id = $2
-    `,
-      [id, tenant_id],
-    );
-
-    // Emit progress webhook (started)
-    await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-      id,
-      status: 'running',
-      progress: { total: 0, processed: 0, success: 0, failed: 0 },
-    }).catch((err) => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
-
-    // Execute the campaign based on type
-    const result = await executeCampaign(campaign, client);
-
-    // Update final status and metrics
-    const finalStatus = result.success ? 'completed' : 'failed';
-    await client.query(
-      `
-      UPDATE ai_campaign
-      SET status = $1,
-          metadata = jsonb_set(
-            jsonb_set(
-              jsonb_set(metadata, '{lifecycle,${finalStatus}_at}', to_jsonb(NOW()::text)),
-              '{progress}', to_jsonb($2::jsonb)
-            ),
-            '{execution_result}', to_jsonb($3::jsonb)
-          )
-      WHERE id = $4 AND tenant_id = $5
-    `,
-      [finalStatus, JSON.stringify(result.progress), JSON.stringify(result.details), id, tenant_id],
-    );
-
-    // Emit final webhook
-    const event = result.success ? 'aicampaign.completed' : 'aicampaign.failed';
-    await emitTenantWebhooks(pgPool, tenant_id, event, {
-      id,
-      status: finalStatus,
-      progress: result.progress,
-      details: result.details,
-    }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
-
-    logger.info({ campaignId: id, finalStatus }, '[CampaignWorker] Campaign finished');
+    await processRunningCampaignBatch(campaignRow);
   } catch (err) {
     logger.error({ err, campaignId: id }, '[CampaignWorker] Error processing campaign');
 
     // Mark as failed
-    if (client) {
-      try {
-        await client.query(
-          `
-          UPDATE ai_campaign
-          SET status = 'failed',
-              metadata = jsonb_set(
-                jsonb_set(metadata, '{lifecycle,failed_at}', to_jsonb(NOW()::text)),
-                '{error}', to_jsonb($1::text)
-              )
-          WHERE id = $2 AND tenant_id = $3
-        `,
-          [err.message, id, tenant_id],
-        );
-      } catch (updateErr) {
-        logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
-      }
-    }
-  } finally {
-    // Release advisory lock
-    if (client) {
-      try {
-        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
-      } catch (unlockErr) {
-        logger.error({ err: unlockErr }, '[CampaignWorker] Failed to release lock');
-      }
-      client.release();
+    try {
+      const metadataObj = toObject(campaign.metadata);
+      metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+      metadataObj.lifecycle.failed_at = new Date().toISOString();
+      metadataObj.error = err.message;
+
+      const { error: updateErr } = await supabase
+        .from('ai_campaign')
+        .update({
+          status: 'failed',
+          metadata: metadataObj,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('tenant_id', tenant_id);
+      if (updateErr) throw updateErr;
+    } catch (updateErr) {
+      logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
     }
   }
 }
 
 /**
- * Execute a campaign based on its type
+ * Transition due scheduled campaign to running and emit start event.
  */
-async function executeCampaign(campaign, client) {
-  const { id: _id, tenant_id: _tenant_id, metadata, target_contacts, campaign_type } = campaign;
+async function transitionScheduledCampaignToRunning(campaign) {
+  const { id, tenant_id } = campaign;
+  if (!isScheduledDue(campaign)) return null;
 
-  const type = metadata?.campaign_type || campaign_type || 'call';
-  const contacts = Array.isArray(target_contacts) ? target_contacts : [];
+  const metadataObj = toObject(campaign.metadata);
+  metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+  metadataObj.lifecycle.started_at = new Date().toISOString();
 
-  const progress = {
-    total: contacts.length,
-    processed: 0,
-    success: 0,
-    failed: 0,
+  const { data: updatedRows, error: updateErr } = await supabase
+    .from('ai_campaign')
+    .update({
+      status: 'running',
+      metadata: metadataObj,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('tenant_id', tenant_id)
+    .eq('status', 'scheduled')
+    .select('*');
+  if (updateErr) throw updateErr;
+  if (!updatedRows || updatedRows.length === 0) return null;
+
+  await insertCampaignEvent({
+    tenant_id,
+    campaign_id: id,
+    contact_id: null,
+    status: 'running',
+    event_type: 'campaign_started',
+    attempt_no: 0,
+    payload: {
+      campaign_type: updatedRows[0].campaign_type || 'call',
+    },
+  });
+
+  return updatedRows[0];
+}
+
+/**
+ * Process a single batch of running campaign targets.
+ */
+async function processRunningCampaignBatch(campaign) {
+  const targets = await claimPendingTargets(campaign, TARGET_BATCH_SIZE);
+  logger.info(
+    {
+      campaignId: campaign.id,
+      claimedTargets: targets.length,
+      batchSize: TARGET_BATCH_SIZE,
+    },
+    '[CampaignWorker] Batch claim',
+  );
+
+  if (targets.length > 0) {
+    for (const target of targets) {
+      try {
+        await Promise.race([
+          dispatchViaWorkflow(campaign, target),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Execution timeout')), 15000),
+          ),
+        ]);
+
+        await markTargetCompleted(campaign, target);
+      } catch (err) {
+        console.error('Target execution error:', err);
+        try {
+          await markTargetFailed(campaign, target, err.message || 'Execution failed');
+        } catch (markErr) {
+          console.error('Target failure update error:', markErr);
+          await supabase
+            .from('ai_campaign_targets')
+            .update({
+              status: 'failed',
+              error_message: err.message || 'Execution failed',
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', target.id);
+        }
+      }
+    }
+  }
+
+  const progress = await computeCampaignProgress(campaign.id, campaign.tenant_id);
+  await updateCampaignProgress(campaign, progress);
+
+  await emitTenantWebhooks(webhookDb, campaign.tenant_id, 'aicampaign.progress', {
+    id: campaign.id,
+    status: progress.pending === 0 && progress.processing === 0 ? 'completed' : 'running',
+    progress,
+  }).catch((err) => logger.error({ err }, '[CampaignWorker] Webhook emission failed'));
+}
+
+/**
+ * Claim pending targets for processing using row locks.
+ */
+async function claimPendingTargets(campaign, batchSize) {
+  const { data: pendingTargets, error: pendingErr } = await supabase
+    .from('ai_campaign_targets')
+    .select('*')
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(batchSize);
+  if (pendingErr) throw pendingErr;
+
+  const claimed = [];
+  const now = new Date().toISOString();
+  for (const target of pendingTargets || []) {
+    const { data: updatedRows, error: updateErr } = await supabase
+      .from('ai_campaign_targets')
+      .update({
+        status: 'processing',
+        started_at: now,
+        attempt_count: Number(target.attempt_count || 0) + 1,
+        last_attempt_at: now,
+        updated_at: now,
+      })
+      .eq('id', target.id)
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('campaign_id', campaign.id)
+      .eq('status', 'pending')
+      .select('*');
+    if (updateErr) throw updateErr;
+    if (updatedRows && updatedRows.length > 0) {
+      claimed.push(updatedRows[0]);
+    }
+  }
+
+  return claimed;
+}
+
+/**
+ * Dispatch a single campaign target via the campaign's linked workflow webhook.
+ */
+async function dispatchViaWorkflow(campaign, target) {
+  if (!campaign.workflow_id) {
+    throw new Error('No workflow configured');
+  }
+
+  const { data: workflow, error: workflowErr } = await supabase
+    .from('workflow')
+    .select('id, metadata')
+    .eq('id', campaign.workflow_id)
+    .eq('tenant_id', campaign.tenant_id)
+    .maybeSingle();
+  if (workflowErr) throw workflowErr;
+  if (!workflow) {
+    throw new Error(`Workflow ${campaign.workflow_id} not found for tenant`);
+  }
+
+  let webhookUrl = workflow?.metadata?.webhook_url;
+  if (!webhookUrl) {
+    throw new Error('No webhook URL configured');
+  }
+  // Resolve relative URLs — workflow saves path-only URLs like /api/workflows/:id/webhook
+  if (webhookUrl.startsWith('/')) {
+    const backendUrl =
+      process.env.BACKEND_URL ||
+      `http://localhost:${process.env.BACKEND_PORT || process.env.PORT || 3001}`;
+    webhookUrl = `${backendUrl}${webhookUrl}`;
+  }
+
+  const targetPayload =
+    typeof target.target_payload === 'string'
+      ? safeParseJson(target.target_payload, {})
+      : toObject(target.target_payload);
+
+  const campaignMeta = typeof campaign.metadata === 'object' ? campaign.metadata : {};
+  const assignedTo = campaign.assigned_to || campaignMeta.lifecycle?.scheduled_by || null;
+
+  const payload = {
+    event: 'campaign.dispatch',
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    target_id: target.id,
+    channel: campaign.campaign_type,
+    destination: target.destination,
+    assigned_to: assignedTo,
+    contact: targetPayload,
+    campaign: {
+      name: campaign.name,
+      type: campaign.campaign_type,
+      assigned_to: assignedTo,
+      metadata: campaign.metadata,
+    },
+    idempotency_key: `${campaign.id}-${target.id}`,
   };
 
-  if (contacts.length === 0) {
-    return {
-      success: true,
-      progress,
-      details: { message: 'No contacts to process' },
-    };
+  logger.debug({ target_id: target.id, webhookUrl }, '[CampaignWorker] Dispatching target');
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(14000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    logger.warn({ target_id: target.id, status: response.status }, '[CampaignWorker] Webhook failed');
+    throw new Error(`Webhook returned ${response.status}: ${text}`);
   }
 
-  // Execute based on type
-  try {
-    if (type === 'email') {
-      await executeEmailCampaign(campaign, contacts, progress, client);
-    } else if (type === 'call') {
-      await executeCallCampaign(campaign, contacts, progress, client);
-    } else {
-      throw new Error(`Unsupported campaign type: ${type}`);
-    }
-
-    return {
-      success: true,
-      progress,
-      details: { message: `Processed ${progress.processed} contacts` },
-    };
-  } catch (err) {
-    return {
-      success: false,
-      progress,
-      details: { error: err.message },
-    };
-  }
+  logger.info({ target_id: target.id }, '[CampaignWorker] Webhook success');
 }
 
 /**
- * Execute email campaign
+ * Load tenant-scoped delivery integration configuration.
+ * @deprecated Superseded by dispatchViaWorkflow. Kept for reference.
  */
-async function executeEmailCampaign(campaign, contacts, progress, client) {
-  const { id, tenant_id, metadata } = campaign;
+async function getDeliveryContext(campaign) {
+  const meta = toObject(campaign.metadata);
+  const type = campaign.campaign_type || meta.campaign_type || 'call';
 
-  // Get sending profile (email integration)
-  const sendingProfileId = metadata?.ai_email_config?.sending_profile_id;
-  if (!sendingProfileId) {
-    throw new Error('No sending profile configured for email campaign');
-  }
-
-  // Load integration credentials (tenant-scoped)
-  const integrationResult = await client.query(
-    'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, sendingProfileId],
-  );
-
-  if (integrationResult.rows.length === 0) {
-    throw new Error('Sending profile not found or inactive');
-  }
-
-  const integration = integrationResult.rows[0];
-  const credentials = integration.credentials || {};
-
-  // Email template from metadata
-  const subject = metadata?.ai_email_config?.subject || 'No Subject';
-  const bodyTemplate = metadata?.ai_email_config?.body_template || '';
-
-  // Process each contact
-  for (const contact of contacts) {
-    try {
-      // Personalize email body (simple template replace)
-      const personalizedBody = personalizeTemplate(bodyTemplate, contact);
-
-      // Send email based on integration type
-      await sendEmail(
-        integration.integration_type,
-        credentials,
-        contact.email,
-        subject,
-        personalizedBody,
-      );
-
-      progress.success++;
-    } catch (err) {
-      logger.error({ err, email: contact.email }, '[CampaignWorker] Failed to send email');
-      progress.failed++;
+  if (type === 'email') {
+    const sendingProfileId = meta?.ai_email_config?.sending_profile_id;
+    if (!sendingProfileId) {
+      throw new Error('No sending profile configured for email campaign');
     }
 
-    progress.processed++;
-
-    // Emit progress webhook every 10 contacts
-    if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-        id,
-        status: 'running',
-        progress: { ...progress },
-      }).catch(() => {});
+    const { data: integration, error: integrationErr } = await supabase
+      .from('tenant_integrations')
+      .select('*')
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('id', sendingProfileId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (integrationErr) throw integrationErr;
+    if (!integration) {
+      throw new Error('Sending profile not found or inactive');
     }
+
+    return {
+      type: 'email',
+      integrationType: integration.integration_type,
+      credentials: integration.credentials || {},
+      subject: meta?.ai_email_config?.subject || 'No Subject',
+      bodyTemplate: meta?.ai_email_config?.body_template || '',
+    };
   }
+
+  if (type === 'call') {
+    const callIntegrationId = meta?.ai_call_integration_id;
+    if (!callIntegrationId) {
+      throw new Error('No call integration configured');
+    }
+
+    const { data: integration, error: integrationErr } = await supabase
+      .from('tenant_integrations')
+      .select('*')
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('id', callIntegrationId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (integrationErr) throw integrationErr;
+    if (!integration) {
+      throw new Error('Call integration not found or inactive');
+    }
+
+    return {
+      type: 'call',
+      integrationType: integration.integration_type,
+      credentials: integration.credentials || {},
+    };
+  }
+
+  return {
+    type: 'unsupported',
+    error: 'Unsupported campaign type',
+  };
 }
 
 /**
- * Execute AI call campaign
+ * Deliver a single target based on campaign type.
  */
-async function executeCallCampaign(campaign, contacts, progress, client) {
-  const { id, tenant_id, metadata } = campaign;
-
-  // Get call integration
-  const callIntegrationId = metadata?.ai_call_integration_id;
-  if (!callIntegrationId) {
-    throw new Error('No call integration configured');
+async function deliverTarget(campaign, target, deliveryContext) {
+  const destination = target.destination || null;
+  if (!destination) {
+    throw new Error('Target destination is missing');
   }
 
-  // Load integration credentials (tenant-scoped)
-  const integrationResult = await client.query(
-    'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-    [tenant_id, callIntegrationId],
-  );
+  const payload =
+    typeof target.target_payload === 'string'
+      ? safeParseJson(target.target_payload, {})
+      : toObject(target.target_payload);
+  const campaignMeta = toObject(campaign.metadata);
 
-  if (integrationResult.rows.length === 0) {
-    throw new Error('Call integration not found or inactive');
+  if (deliveryContext.type === 'email') {
+    const templateInput = {
+      first_name: payload.first_name || payload.contact_name || '',
+      last_name: payload.last_name || '',
+      email: payload.email || destination,
+      phone: payload.phone || '',
+      company: payload.company || '',
+    };
+    const personalizedBody = personalizeTemplate(deliveryContext.bodyTemplate, templateInput);
+    await sendEmail(
+      deliveryContext.integrationType,
+      deliveryContext.credentials,
+      destination,
+      deliveryContext.subject,
+      personalizedBody,
+    );
+    return;
   }
 
-  const integration = integrationResult.rows[0];
-  const credentials = integration.credentials || {};
+  if (deliveryContext.type === 'call') {
+    await triggerAICall(deliveryContext.integrationType, deliveryContext.credentials, destination, {
+      ...campaignMeta,
+      tenant_id: campaign.tenant_id,
+      campaign_id: campaign.id,
+      contact_id: target.contact_id,
+    });
+    return;
+  }
 
-  // Process each contact
-  for (const contact of contacts) {
-    try {
-      // Trigger AI call via integration
-      await triggerAICall(integration.integration_type, credentials, contact.phone, metadata);
+  throw new Error(deliveryContext.error || 'Unsupported campaign type');
+}
 
-      progress.success++;
-    } catch (err) {
-      logger.error({ err, phone: contact.phone }, '[CampaignWorker] Failed to trigger call');
-      progress.failed++;
+/**
+ * Update target as completed and emit event.
+ */
+async function markTargetCompleted(campaign, target) {
+  const { error: updateErr } = await supabase
+    .from('ai_campaign_targets')
+    .update({
+      status: 'completed',
+      error_message: null,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', target.id)
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id);
+  if (updateErr) throw updateErr;
+
+  await insertCampaignEvent({
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    contact_id: target.contact_id,
+    status: 'completed',
+    event_type: 'target_completed',
+    attempt_no: target.attempt_count || 0,
+    payload: {
+      target_id: target.id,
+      destination: target.destination || null,
+    },
+  });
+}
+
+/**
+ * Update target as failed and emit event.
+ */
+async function markTargetFailed(campaign, target, errorMessage) {
+  const safeMessage = String(errorMessage || 'Unknown target failure').slice(0, 2000);
+  const { error: updateErr } = await supabase
+    .from('ai_campaign_targets')
+    .update({
+      status: 'failed',
+      error_message: safeMessage,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', target.id)
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id);
+  if (updateErr) throw updateErr;
+
+  await insertCampaignEvent({
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    contact_id: target.contact_id,
+    status: 'failed',
+    event_type: 'target_failed',
+    attempt_no: target.attempt_count || 0,
+    payload: {
+      target_id: target.id,
+      destination: target.destination || null,
+      error_message: safeMessage,
+    },
+  });
+}
+
+/**
+ * Aggregate target status counts for campaign metadata rollup.
+ */
+async function computeCampaignProgress(campaignId, tenantId) {
+  const { data: rows, error } = await supabase
+    .from('ai_campaign_targets')
+    .select('status')
+    .eq('campaign_id', campaignId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+
+  const progress = { total: 0, pending: 0, processing: 0, completed: 0, failed: 0 };
+  for (const row of rows || []) {
+    progress.total += 1;
+    if (row.status === 'pending') progress.pending += 1;
+    if (row.status === 'processing') progress.processing += 1;
+    if (row.status === 'completed') progress.completed += 1;
+    if (row.status === 'failed') progress.failed += 1;
+  }
+  return progress;
+}
+
+/**
+ * Persist progress and mark campaign complete when work is drained.
+ */
+async function updateCampaignProgress(campaign, progress) {
+  const shouldComplete = Number(progress.pending) === 0 && Number(progress.processing) === 0;
+  const metadataObj = toObject(campaign.metadata);
+  metadataObj.progress = progress;
+
+  if (shouldComplete) {
+    metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+    // Mark as 'failed' if every target failed and nothing completed
+    const allFailed = Number(progress.failed || 0) > 0 && Number(progress.completed || 0) === 0;
+    const finalStatus = allFailed ? 'failed' : 'completed';
+    metadataObj.lifecycle[`${finalStatus}_at`] = new Date().toISOString();
+    const { data: completedRows, error: completedErr } = await supabase
+      .from('ai_campaign')
+      .update({
+        status: finalStatus,
+        metadata: metadataObj,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', campaign.id)
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('status', 'running')
+      .select('id');
+    if (completedErr) throw completedErr;
+
+    if (completedRows && completedRows.length > 0) {
+      await insertCampaignEvent({
+        tenant_id: campaign.tenant_id,
+        campaign_id: campaign.id,
+        contact_id: null,
+        status: finalStatus,
+        event_type: allFailed ? 'campaign_failed' : 'campaign_completed',
+        attempt_no: 0,
+        payload: { progress },
+      });
+      await emitTenantWebhooks(webhookDb, campaign.tenant_id, `aicampaign.${finalStatus}`, {
+        id: campaign.id,
+        status: finalStatus,
+        progress,
+      }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
     }
-
-    progress.processed++;
-
-    // Emit progress webhook every 10 contacts
-    if (progress.processed % 10 === 0) {
-      await emitTenantWebhooks(pgPool, tenant_id, 'aicampaign.progress', {
-        id,
-        status: 'running',
-        progress: { ...progress },
-      }).catch(() => {});
-    }
+    return;
   }
+
+  const { error: updateErr } = await supabase
+    .from('ai_campaign')
+    .update({
+      metadata: metadataObj,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', campaign.id)
+    .eq('tenant_id', campaign.tenant_id);
+  if (updateErr) throw updateErr;
+}
+
+/**
+ * Insert campaign execution event row.
+ */
+async function insertCampaignEvent(event) {
+  const { error } = await supabase.from('ai_campaign_events').insert({
+    tenant_id: event.tenant_id,
+    campaign_id: event.campaign_id,
+    contact_id: event.contact_id || null,
+    status: event.status || 'pending',
+    event_type: event.event_type,
+    attempt_no: Number(event.attempt_no || 0),
+    payload: event.payload || {},
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
 }
 
 /**
@@ -406,9 +678,8 @@ async function triggerAICall(integrationType, credentials, phone, metadata) {
   let callContext;
   try {
     const { prepareOutboundCall } = await import('./callFlowHandler.js');
-    const { pgPool } = await import('../config/db.js');
 
-    callContext = await prepareOutboundCall(pgPool, {
+    callContext = await prepareOutboundCall(webhookDb, {
       tenant_id,
       contact_id,
       campaign_id,
@@ -536,15 +807,26 @@ function personalizeTemplate(template, contact) {
   return result;
 }
 
-/**
- * Hash string to integer for advisory lock
- */
-function hashStringToInt(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
+function safeParseJson(raw, fallback = {}) {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch {
+    return fallback;
   }
-  return Math.abs(hash);
+}
+
+function toObject(value) {
+  if (value && typeof value === 'object') return value;
+  if (typeof value === 'string') return safeParseJson(value, {});
+  return {};
+}
+
+function isScheduledDue(campaign) {
+  const metadata = toObject(campaign.metadata);
+  const scheduledAt = metadata?.schedule?.scheduled_at;
+  if (!scheduledAt) return true;
+  const scheduledTime = new Date(scheduledAt);
+  if (Number.isNaN(scheduledTime.getTime())) return true;
+  return scheduledTime.getTime() <= Date.now();
 }

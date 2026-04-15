@@ -163,10 +163,14 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
           return context.payload[trimmed];
         }
 
-        // Check nested paths
+        // Check nested paths (dot-notation: e.g. contact.email, found_lead.first_name)
         const parts = trimmed.split('.');
         if (parts.length > 1) {
+          // Check context.variables first, then fall back to context.payload
           let value = context.variables[parts[0]];
+          if (value === undefined && context.payload) {
+            value = context.payload[parts[0]];
+          }
           for (let i = 1; i < parts.length; i++) {
             if (value && value[parts[i]] !== undefined) value = value[parts[i]];
             else {
@@ -175,7 +179,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             }
           }
           if (value !== undefined) {
-            logger.debug(`[replaceVariables] Found "${trimmed}" in nested variables:`, value);
+            logger.debug(`[replaceVariables] Found "${trimmed}" in nested path:`, value);
             return value;
           }
         } else if (context.variables && context.variables[trimmed] !== undefined) {
@@ -207,6 +211,28 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
       try {
         switch (node.type) {
+          
+      // Resolve a field_mappings entry — handles unified {target_field, source_value}
+      // and all legacy {entity_field, webhook_field} shapes.
+      function resolveServiceMapping(m) {
+        if (m.target_field) {
+          const raw = m.source_value || '';
+          const template = raw.startsWith('{{') ? raw : raw ? `{{${raw}}}` : '';
+          const resolved = template ? replaceVariables(template) : '';
+          const isUnresolved = typeof resolved === 'string' && resolved.startsWith('{{') && resolved.endsWith('}}');
+          return isUnresolved || resolved === '' ? null : { field: m.target_field, value: resolved };
+        }
+        const legacyField =
+          m.lead_field || m.contact_field || m.account_field ||
+          m.opportunity_field || m.activity_field;
+        const legacySrc = m.webhook_field;
+        if (legacyField && legacySrc) {
+          const resolved = replaceVariables(`{{${legacySrc}}}`);
+          const isUnresolved = resolved === `{{${legacySrc}}}`;
+          return isUnresolved ? null : { field: legacyField, value: resolved };
+        }
+        return null;
+      }
           case 'webhook_trigger': {
             log.output = { payload: context.payload };
             break;
@@ -600,12 +626,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
             const insertData = { tenant_id: workflow.tenant_id };
             for (const m of mappings) {
-              if (m.lead_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== null && v !== undefined && v !== '') {
-                  insertData[m.lead_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) insertData[rm.field] = rm.value;
             }
 
             const { data: newLead, error: createError } = await supabase
@@ -635,12 +657,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.lead_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.lead_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -701,12 +719,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.contact_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.contact_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -767,12 +781,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.account_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.account_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -809,12 +819,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
             const insertData = { tenant_id: workflow.tenant_id };
             for (const m of mappings) {
-              if (m.opportunity_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== null && v !== undefined && v !== '') {
-                  insertData[m.opportunity_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) insertData[rm.field] = rm.value;
             }
 
             // Associate to account or lead if present
@@ -850,12 +856,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.opportunity_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.opportunity_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -884,15 +886,21 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
           case 'create_activity': {
             const activityType = cfg.type || 'task';
-            const subject = replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
-            const description = replaceVariables(cfg.details || cfg.description || '');
+            // Default subject to campaign name if node has no title configured
+            const campaignName = context.payload?.campaign?.name || null;
+            const defaultSubject = campaignName ? `Campaign: ${campaignName}` : 'Workflow activity';
+            const subject = replaceVariables(cfg.title || cfg.subject || defaultSubject);
+            // Default body includes campaign name so the activity is self-describing
+            const defaultDetails = campaignName ? `Dispatched via campaign: ${campaignName}` : '';
+            const description = replaceVariables(cfg.details || cfg.description || defaultDetails);
 
             const lead = context.variables.found_lead;
             const contact = context.variables.found_contact;
             const account = context.variables.found_account;
             const opportunity = context.variables.found_opportunity;
 
-            const related_to = lead
+            // If a find_* node ran upstream, use that result for association
+            let related_to = lead
               ? 'lead'
               : contact
                 ? 'contact'
@@ -901,7 +909,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                   : opportunity
                     ? 'opportunity'
                     : null;
-            const related_id = lead
+            let related_id = lead
               ? lead.id
               : contact
                 ? contact.id
@@ -911,7 +919,52 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                     ? opportunity.id
                     : null;
 
-            const { data: actData, error: _actError } = await supabase
+            // If node has explicit associate override (not 'auto'), use it
+            const associateOverride =
+              cfg.associate && cfg.associate !== 'auto' ? cfg.associate : null;
+
+            // Normalize entity type aliases → canonical DB values used in activities.related_to
+            const normalizeEntityType = (t) => {
+              if (t === 'potential_lead' || t === 'source') return 'bizdev_source';
+              return t || 'contact';
+            };
+
+            // Fallback: use entity_type + contact_id directly from the campaign dispatch payload
+            if (!related_id && context.payload?.contact) {
+              const cp = context.payload.contact;
+              const entityType = normalizeEntityType(associateOverride || cp.entity_type);
+              const entityId = cp.contact_id;
+              if (entityId) {
+                related_to = entityType;
+                related_id = entityId;
+              }
+            } else if (related_id && associateOverride) {
+              // Override the entity type from find_* node with explicit config
+              related_to = normalizeEntityType(associateOverride);
+            }
+
+            // Resolve assigned_to: UUID from campaign > email fallback
+            const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const assignedToRaw =
+              replaceVariables(cfg.assigned_to || '') ||
+              context.payload?.assigned_to ||
+              context.payload?.campaign?.assigned_to ||
+              null;
+            const assignedToUuid =
+              assignedToRaw && UUID_RE.test(String(assignedToRaw)) ? assignedToRaw : null;
+            const assignedToEmail = assignedToRaw && !assignedToUuid ? assignedToRaw : null;
+
+            logger.info(`[WorkflowExecution] create_activity insert payload:`, {
+              tenant_id: workflow.tenant_id,
+              type: activityType,
+              subject,
+              related_to,
+              related_id,
+              assigned_to_uuid: assignedToUuid,
+              assigned_to_email: assignedToEmail,
+            });
+
+            const { data: actData, error: actError } = await supabase
               .from('activities')
               .insert({
                 tenant_id: workflow.tenant_id,
@@ -921,14 +974,29 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                 status: 'scheduled',
                 related_id: related_id,
                 related_to: related_to,
-                metadata: { created_by_workflow: workflow.id },
+                ...(assignedToUuid ? { assigned_to: assignedToUuid } : {}),
+                metadata: {
+                  created_by_workflow: workflow.id,
+                  ...(assignedToEmail ? { assigned_to_email: assignedToEmail } : {}),
+                },
                 created_date: new Date().toISOString(),
                 updated_date: new Date().toISOString(),
               })
               .select()
               .single();
 
-            log.output = { activity: actData };
+            if (actError) {
+              logger.error(
+                `[WorkflowExecution] Failed to create activity: ${actError.message}`,
+                actError,
+              );
+              log.status = 'error';
+              log.error = `Failed to create activity: ${actError.message}`;
+            } else {
+              logger.info(`[WorkflowExecution] Activity created: ${actData?.id}`);
+              context.variables.created_activity = actData;
+              log.output = { activity: actData };
+            }
             break;
           }
 
