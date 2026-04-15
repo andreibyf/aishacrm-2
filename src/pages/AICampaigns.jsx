@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { AICampaign } from '@/api/entities';
+import { AICampaign, BACKEND_URL, supabase } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import AICampaignForm from '../components/campaigns/AICampaignForm';
 import AICampaignDetailPanel from '../components/campaigns/AICampaignDetailPanel';
 import CampaignMonitor from '../components/campaigns/CampaignMonitor';
@@ -231,7 +231,74 @@ export default function AICampaigns() {
 
   const handleStatusChange = async (campaign, newStatus) => {
     try {
-      await AICampaign.update(campaign.id, { status: newStatus });
+      const tenant_id = campaign?.tenant_id || selectedTenantId || currentUser?.tenant_id;
+      if (!tenant_id) {
+        throw new Error('tenant_id is required');
+      }
+
+      if (newStatus === 'running') {
+        const endpoint = campaign.status === 'paused' ? 'resume' : 'start';
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const authHeaders = session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {};
+        const response = await fetch(`${BACKEND_URL}/api/aicampaigns/${campaign.id}/${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id }),
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const raw = await response.text();
+        const result = contentType.includes('application/json')
+          ? JSON.parse(raw || '{}')
+          : { message: raw };
+        if (!response.ok) {
+          const message =
+            result?.message && !String(result.message).startsWith('<!doctype')
+              ? result.message
+              : `Failed to ${endpoint} campaign`;
+          throw new Error(message);
+        }
+      } else if (newStatus === 'paused') {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const authHeaders = session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {};
+        const response = await fetch(`${BACKEND_URL}/api/aicampaigns/${campaign.id}/pause`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          credentials: 'include',
+          body: JSON.stringify({ tenant_id }),
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        const raw = await response.text();
+        const result = contentType.includes('application/json')
+          ? JSON.parse(raw || '{}')
+          : { message: raw };
+        if (!response.ok) {
+          const message =
+            result?.message && !String(result.message).startsWith('<!doctype')
+              ? result.message
+              : 'Failed to pause campaign';
+          throw new Error(message);
+        }
+      } else {
+        await AICampaign.update(campaign.id, { status: newStatus, tenant_id });
+      }
+
       loadCampaigns();
     } catch (error) {
       console.error('Error updating campaign status:', error);
@@ -622,6 +689,9 @@ export default function AICampaigns() {
         }}
       >
         <DialogContent className="bg-slate-900 border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-y-auto p-0 gap-0">
+          <DialogTitle className="sr-only">
+            {editingCampaign ? 'Edit AI Campaign' : 'Create AI Campaign'}
+          </DialogTitle>
           <AICampaignForm
             campaign={editingCampaign}
             onSubmit={handleSubmit}

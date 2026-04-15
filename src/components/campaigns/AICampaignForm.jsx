@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getBackendUrl } from '@/api/backendUrl';
 // [2026-02-23 Claude] — AiCampaigns overhaul: expanded campaign types, fixed form rendering
 import {
   Users,
@@ -30,7 +31,15 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 // [2026-02-23 Claude] — added BizDevSource for campaign targeting
-import { Contact, Lead, BizDevSource, TenantIntegration } from '@/api/entities';
+import {
+  Contact,
+  Lead,
+  BizDevSource,
+  TenantIntegration,
+  Workflow,
+  supabase,
+  BACKEND_URL,
+} from '@/api/entities';
 // Replaced direct User.me() usage with global user context hook
 import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from '../shared/tenantUtils';
@@ -71,11 +80,22 @@ const promptTemplates = {
   survey: `Hello {{contact_name}}, I'm calling from {{company_name}} to get your valuable feedback on our recent service. This will only take 2-3 minutes of your time. Would you mind sharing your experience with us?`,
 };
 
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes(),
+  )}`;
+}
+
 export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     campaign_type: 'call',
     name: '',
     description: '',
+    workflow_id: null,
     ai_provider: 'callfluent',
     ai_prompt_template: '',
     call_objective: 'follow_up',
@@ -102,6 +122,15 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
   const [callProviders, setCallProviders] = useState([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState([]);
+  const [audienceMode, setAudienceMode] = useState('manual');
+  const [smartAudiencePrompt, setSmartAudiencePrompt] = useState('');
+  const [audiencePreview, setAudiencePreview] = useState({ total: 0, preview: [] });
+  const [audiencePreviewLoading, setAudiencePreviewLoading] = useState(false);
+  const [audiencePreviewError, setAudiencePreviewError] = useState('');
+  const [scheduleType, setScheduleType] = useState('immediate');
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [scheduleTimezone, setScheduleTimezone] = useState('America/New_York');
 
   const { user: currentUser } = useUser();
   const [previewPrompt, setPreviewPrompt] = useState('');
@@ -114,8 +143,12 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       try {
         const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
-        const contactsData = await Contact.filter(tenantFilter);
-        const leadsData = await Lead.filter(tenantFilter);
+        const [contactsData, leadsData, workflowsData] = await Promise.all([
+          Contact.filter(tenantFilter),
+          Lead.filter(tenantFilter),
+          Workflow.list(tenantFilter).catch(() => []),
+        ]);
+        setAvailableWorkflows(workflowsData || []);
         let sourcesData = [];
         try {
           sourcesData = await BizDevSource.filter(tenantFilter);
@@ -151,17 +184,27 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
         setAvailableContacts(combinedContacts);
 
         if (campaign) {
+          let missingFromFilter = [];
           const meta = campaign.metadata || {};
+          const existingTargetContacts = Array.isArray(campaign.target_contacts)
+            ? campaign.target_contacts
+            : [];
+          const existingTargetAudience =
+            campaign.target_audience && typeof campaign.target_audience === 'object'
+              ? campaign.target_audience
+              : {};
+
           setFormData({
             campaign_type: meta.campaign_type || campaign.campaign_type || 'call',
             name: campaign.name || '',
             description: campaign.description || '',
+            workflow_id: campaign.workflow_id || null,
             ai_provider: meta.ai_provider || campaign.ai_provider || 'callfluent',
             ai_prompt_template: campaign.ai_prompt_template || meta.ai_prompt_template || '',
             call_objective: campaign.call_objective || meta.call_objective || 'follow_up',
             email_subject: meta.ai_email_config?.subject || '',
             email_body_template: meta.ai_email_config?.body_template || '',
-            target_contacts: campaign.target_contacts || [],
+            target_contacts: existingTargetContacts,
             call_settings: {
               max_duration:
                 campaign.call_settings?.max_duration || meta.call_settings?.max_duration || 300,
@@ -199,10 +242,140 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             },
           });
 
-          if (campaign.target_contacts) {
-            const contactIds = campaign.target_contacts.map((tc) => tc.contact_id);
+          if (existingTargetContacts.length > 0) {
+            const contactIds = existingTargetContacts.map((tc) => tc.contact_id);
             setSelectedContacts(contactIds);
+
+            // Ensure already-selected recipients are visible even if they fail the channel filter
+            // (e.g. a BizDev source with no email in an email campaign)
+            const filteredIds = new Set(combinedContacts.map((c) => c.id));
+            missingFromFilter = existingTargetContacts
+              .filter((tc) => !filteredIds.has(tc.contact_id))
+              .map((tc) => {
+                // Try to find the full record in allContacts (unfiltered)
+                const found = combinedContactsAll.find((c) => c.id === tc.contact_id);
+                if (found) return { ...found, missing_channel: true };
+                // Reconstruct from stored target_contacts data as fallback
+                const nameStr = tc.contact_name || '';
+                const parts = nameStr.split(' ');
+                return {
+                  id: tc.contact_id,
+                  type:
+                    tc.entity_type === 'lead'
+                      ? 'lead'
+                      : tc.entity_type === 'bizdev_source'
+                        ? 'source'
+                        : 'contact',
+                  first_name: parts[0] || '',
+                  last_name: parts.slice(1).join(' ') || '',
+                  email: tc.email || null,
+                  phone: tc.phone || null,
+                  company: tc.company || '',
+                  missing_channel: true,
+                };
+              });
+            if (missingFromFilter.length > 0) {
+              setAvailableContacts([...combinedContacts, ...missingFromFilter]);
+            }
           }
+
+          // Fetch actual dispatch targets to restore any recipients filtered by the API
+          // (e.g. BizDev sources suppressed by team visibility scope — the canonical
+          // source of truth is ai_campaign_targets, not target_contacts snapshot)
+          if (campaign.id && campaign.tenant_id) {
+            try {
+              const {
+                data: { session },
+              } = await supabase.auth.getSession();
+              const authHeaders = session?.access_token
+                ? { Authorization: `Bearer ${session.access_token}` }
+                : {};
+              const targetsRes = await fetch(
+                `${BACKEND_URL}/api/aicampaigns/${campaign.id}/targets?tenant_id=${encodeURIComponent(campaign.tenant_id)}`,
+                { headers: authHeaders, credentials: 'include' },
+              );
+              const targetsJson = await targetsRes.json();
+              const dispatchedTargets = Array.isArray(targetsJson.data) ? targetsJson.data : [];
+
+              if (dispatchedTargets.length > 0) {
+                // Override selected contacts with who was ACTUALLY dispatched
+                const dispatchedIds = [
+                  ...new Set(dispatchedTargets.map((t) => t.contact_id).filter(Boolean)),
+                ];
+                setSelectedContacts(dispatchedIds);
+
+                // Restore contacts missing from ALL API responses (visibility-filtered, etc.)
+                const knownIds = new Set(combinedContactsAll.map((c) => c.id));
+                const seenRestoredIds = new Set();
+                const restoredContacts = dispatchedTargets
+                  .filter((t) => {
+                    if (
+                      !t.contact_id ||
+                      knownIds.has(t.contact_id) ||
+                      seenRestoredIds.has(t.contact_id)
+                    ) {
+                      return false;
+                    }
+                    seenRestoredIds.add(t.contact_id);
+                    return true;
+                  })
+                  .map((t) => {
+                    let payload;
+                    try {
+                      payload =
+                        typeof t.target_payload === 'string'
+                          ? JSON.parse(t.target_payload)
+                          : t.target_payload || {};
+                    } catch {
+                      payload = {};
+                    }
+                    const nameStr = payload.contact_name || '';
+                    const parts = nameStr.split(' ');
+                    return {
+                      id: t.contact_id,
+                      type:
+                        payload.entity_type === 'lead'
+                          ? 'lead'
+                          : payload.entity_type === 'bizdev_source'
+                            ? 'source'
+                            : 'contact',
+                      first_name: parts[0] || '',
+                      last_name: parts.slice(1).join(' ') || '',
+                      email: payload.email || t.destination || null,
+                      phone: payload.phone || null,
+                      company: payload.company || '',
+                      restored_from_history: true,
+                    };
+                  });
+
+                if (restoredContacts.length > 0) {
+                  setAllContacts((prev) => [...prev, ...restoredContacts]);
+                  setAvailableContacts([
+                    ...combinedContacts,
+                    ...missingFromFilter,
+                    ...restoredContacts,
+                  ]);
+                }
+              }
+            } catch (e) {
+              console.warn('[AICampaignForm] Could not restore targets from history:', e.message);
+            }
+          }
+          const modeFromCampaign =
+            existingTargetContacts.length > 0
+              ? 'manual'
+              : existingTargetAudience?.type === 'ai_segment'
+                ? 'smart'
+                : 'manual';
+          setAudienceMode(modeFromCampaign);
+          setSmartAudiencePrompt(existingTargetAudience?.prompt || '');
+          setAudiencePreview({ total: 0, preview: [] });
+          setAudiencePreviewError('');
+
+          const schedule = meta.schedule || {};
+          setScheduleType(schedule.type === 'scheduled' ? 'scheduled' : 'immediate');
+          setScheduleAt(toDateTimeLocal(schedule.scheduled_at));
+          setScheduleTimezone(schedule.timezone || 'America/New_York');
         } else {
           const tomorrow = new Date();
           tomorrow.setDate(tomorrow.getDate() + 1);
@@ -217,6 +390,13 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               end_date: nextWeek.toISOString().split('T')[0],
             },
           }));
+          setAudienceMode('manual');
+          setSmartAudiencePrompt('');
+          setAudiencePreview({ total: 0, preview: [] });
+          setAudiencePreviewError('');
+          setScheduleType('immediate');
+          setScheduleAt('');
+          setScheduleTimezone('America/New_York');
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -231,7 +411,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   // Load tenant integrations
   useEffect(() => {
     if (!currentUser && !selectedTenantId) return;
-    const tenant_id = currentUser?.tenant_id || selectedTenantId;
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
     if (!tenant_id) return;
     (async () => {
       try {
@@ -302,38 +482,112 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     }
   };
 
+  const handlePreviewAudience = async () => {
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
+    if (!tenant_id) {
+      setAudiencePreviewError('No tenant selected');
+      return;
+    }
+    if (!smartAudiencePrompt.trim()) {
+      setAudiencePreviewError('Enter an audience prompt to preview');
+      return;
+    }
+
+    setAudiencePreviewLoading(true);
+    setAudiencePreviewError('');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/aicampaigns/audience-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id,
+          campaign_type: formData.campaign_type,
+          target_audience: {
+            type: 'ai_segment',
+            prompt: smartAudiencePrompt.trim(),
+          },
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || result?.status !== 'success') {
+        throw new Error(result?.message || 'Failed to preview audience');
+      }
+      const data = result?.data || {};
+      setAudiencePreview({
+        total: Number(data.total || 0),
+        preview: Array.isArray(data.preview) ? data.preview : [],
+      });
+    } catch (error) {
+      setAudiencePreview({ total: 0, preview: [] });
+      setAudiencePreviewError(error.message || 'Failed to preview audience');
+    } finally {
+      setAudiencePreviewLoading(false);
+    }
+  };
+
   // [2026-02-23 Claude] — aligned submission with backend schema
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
 
-    if (!currentUser?.tenant_id && !selectedTenantId) {
+    if (!tenant_id) {
       alert('Cannot save: No client selected');
       return;
     }
 
     const noContactTypes = ['social_post', 'api_connector'];
-    if (!noContactTypes.includes(formData.campaign_type) && selectedContacts.length === 0) {
+    if (
+      audienceMode === 'manual' &&
+      !noContactTypes.includes(formData.campaign_type) &&
+      selectedContacts.length === 0
+    ) {
       alert('Please select at least one contact for the campaign');
       return;
     }
+    if (audienceMode === 'smart' && !smartAudiencePrompt.trim()) {
+      alert('Please enter a smart audience prompt');
+      return;
+    }
+    if (scheduleType === 'scheduled' && !scheduleAt) {
+      alert('Please choose a scheduled date and time');
+      return;
+    }
 
-    const targetContacts = selectedContacts.map((contactId) => {
-      const contact = availableContacts.find((c) => c.id === contactId);
-      const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : '';
-      return {
-        contact_id: contact?.id,
-        contact_name: contactName,
-        email: contact?.email || null,
-        phone: contact?.phone || null,
-        company: contact?.company || '',
-        scheduled_date: formData.schedule_config.start_date,
-        scheduled_time: formData.schedule_config.preferred_hours.start,
-        status: 'pending',
-      };
-    });
+    const targetContacts =
+      audienceMode === 'smart'
+        ? []
+        : selectedContacts.map((contactId) => {
+            const contact = availableContacts.find((c) => c.id === contactId);
+            const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : '';
+            return {
+              contact_id: contact?.id,
+              entity_type:
+                contact?.type === 'lead'
+                  ? 'lead'
+                  : contact?.type === 'source'
+                    ? 'bizdev_source'
+                    : 'contact',
+              contact_name: contactName,
+              email: contact?.email || null,
+              phone: contact?.phone || null,
+              company: contact?.company || '',
+              scheduled_date: formData.schedule_config.start_date,
+              scheduled_time: formData.schedule_config.preferred_hours.start,
+              status: 'pending',
+            };
+          });
 
-    // [2026-02-23 Claude] — pack channel-specific fields into metadata
-    const metadata = { schedule_config: formData.schedule_config };
+    // [2026-02-23 Claude] - pack channel-specific fields into metadata
+    const metadata = {
+      schedule_config: formData.schedule_config,
+      schedule: {
+        type: scheduleType,
+        scheduled_at:
+          scheduleType === 'scheduled' && scheduleAt ? new Date(scheduleAt).toISOString() : null,
+        timezone: scheduleTimezone || 'America/New_York',
+      },
+    };
     const ct = formData.campaign_type;
     if (ct === 'call') {
       metadata.ai_provider = formData.ai_provider;
@@ -373,9 +627,17 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       description: formData.description,
       campaign_type: formData.campaign_type,
       target_contacts: targetContacts,
-      tenant_id: currentUser?.tenant_id || selectedTenantId,
+      target_audience:
+        audienceMode === 'smart'
+          ? {
+              type: 'ai_segment',
+              prompt: smartAudiencePrompt.trim(),
+            }
+          : null,
+      tenant_id,
       assigned_to: currentUser?.email,
       status: 'draft',
+      workflow_id: formData.workflow_id || null,
       metadata,
       performance_metrics: {
         total_sent: 0,
@@ -484,6 +746,34 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 rows={3}
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
               />
+            </div>
+
+            {/* Linked Workflow */}
+            <div>
+              <Label className="text-slate-200">Linked Workflow</Label>
+              <Select
+                value={formData.workflow_id || 'none'}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, workflow_id: v === 'none' ? null : v }))
+                }
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="Select a workflow..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
+                  <SelectItem value="none" className="focus:bg-slate-700">
+                    — No workflow —
+                  </SelectItem>
+                  {availableWorkflows.map((wf) => (
+                    <SelectItem key={wf.id} value={wf.id} className="focus:bg-slate-700">
+                      {wf.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.workflow_id && (
+                <p className="text-xs text-slate-500 mt-1 font-mono">{formData.workflow_id}</p>
+              )}
             </div>
 
             {/* Provider Selection (Calls only) */}
@@ -978,73 +1268,141 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               Target Recipients ({selectedContacts.length} selected)
             </h3>
 
-            <div className="flex items-center gap-2 mb-4">
-              <Checkbox
-                id="select-all"
-                checked={
-                  selectedContacts.length === availableContacts.length &&
-                  availableContacts.length > 0
-                }
-                onCheckedChange={handleSelectAllContacts}
-              />
-              <Label htmlFor="select-all" className="text-slate-200">
-                Select All ({availableContacts.length} recipients)
-              </Label>
+            <div className="space-y-2">
+              <Label className="text-slate-200">Audience Mode</Label>
+              <Select value={audienceMode} onValueChange={setAudienceMode}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
+                  <SelectItem value="manual" className="focus:bg-slate-700">
+                    Manual Selection
+                  </SelectItem>
+                  <SelectItem value="smart" className="focus:bg-slate-700">
+                    Smart Audience
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
-              {availableContacts.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  {formData.campaign_type === 'email'
-                    ? 'No contacts with email addresses found'
-                    : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
-                      ? 'No contacts with phone numbers found'
-                      : 'No contacts found'}
-                </p>
-              ) : (
-                availableContacts.map((contact) => (
-                  <div
-                    key={contact.id}
-                    className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded"
+            {audienceMode === 'manual' ? (
+              <>
+                <div className="flex items-center gap-2 mb-4">
+                  <Checkbox
+                    id="select-all"
+                    checked={
+                      selectedContacts.length === availableContacts.length &&
+                      availableContacts.length > 0
+                    }
+                    onCheckedChange={handleSelectAllContacts}
+                  />
+                  <Label htmlFor="select-all" className="text-slate-200">
+                    Select All ({availableContacts.length} recipients)
+                  </Label>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-4 space-y-2">
+                  {availableContacts.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      {formData.campaign_type === 'email'
+                        ? 'No contacts with email addresses found'
+                        : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
+                          ? 'No contacts with phone numbers found'
+                          : 'No contacts found'}
+                    </p>
+                  ) : (
+                    availableContacts.map((contact) => (
+                      <div
+                        key={contact.id}
+                        className="flex items-center gap-3 p-2 hover:bg-slate-800 rounded"
+                      >
+                        <Checkbox
+                          id={`contact-${contact.id}`}
+                          checked={selectedContacts.includes(contact.id)}
+                          onCheckedChange={(checked) => handleContactSelection(contact.id, checked)}
+                        />
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${
+                                contact.type === 'contact'
+                                  ? 'border-blue-600 text-blue-300'
+                                  : contact.type === 'lead'
+                                    ? 'border-green-600 text-green-300'
+                                    : 'border-amber-600 text-amber-300'
+                              }`}
+                            >
+                              {contact.type === 'source' ? 'potential' : contact.type}
+                            </Badge>
+                            <span className="font-medium text-slate-200">
+                              {contact.first_name} {contact.last_name}
+                            </span>
+                            {contact.company && (
+                              <span className="text-slate-400">- {contact.company}</span>
+                            )}
+                            {contact.missing_channel && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-red-600 text-red-400"
+                              >
+                                no {formData.campaign_type === 'email' ? 'email' : 'phone'}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-sm text-slate-400">
+                            {formData.campaign_type === 'email'
+                              ? contact.email || '—'
+                              : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
+                                ? contact.phone || '—'
+                                : contact.email || contact.phone || '-'}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3 border border-slate-700 rounded-md p-4">
+                <div>
+                  <Label className="text-slate-200">Audience Prompt</Label>
+                  <Textarea
+                    value={smartAudiencePrompt}
+                    onChange={(e) => setSmartAudiencePrompt(e.target.value)}
+                    placeholder="Example: warm leads inactive 30 days with email"
+                    rows={3}
+                    className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <Button
+                    type="button"
+                    onClick={handlePreviewAudience}
+                    disabled={audiencePreviewLoading}
+                    className="bg-slate-700 hover:bg-slate-600"
                   >
-                    <Checkbox
-                      id={`contact-${contact.id}`}
-                      checked={selectedContacts.includes(contact.id)}
-                      onCheckedChange={(checked) => handleContactSelection(contact.id, checked)}
-                    />
-                    <div className="flex-grow">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${
-                            contact.type === 'contact'
-                              ? 'border-blue-600 text-blue-300'
-                              : contact.type === 'lead'
-                                ? 'border-green-600 text-green-300'
-                                : 'border-amber-600 text-amber-300'
-                          }`}
-                        >
-                          {contact.type === 'source' ? 'potential' : contact.type}
-                        </Badge>
-                        <span className="font-medium text-slate-200">
-                          {contact.first_name} {contact.last_name}
-                        </span>
-                        {contact.company && (
-                          <span className="text-slate-400">- {contact.company}</span>
-                        )}
+                    {audiencePreviewLoading ? 'Previewing...' : 'Preview Audience'}
+                  </Button>
+                </div>
+                {audiencePreviewError ? (
+                  <p className="text-sm text-red-400">{audiencePreviewError}</p>
+                ) : null}
+                <div className="text-sm text-slate-400">Total matches: {audiencePreview.total}</div>
+                {audiencePreview.preview.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-md p-3 space-y-2">
+                    {audiencePreview.preview.slice(0, 25).map((item, idx) => (
+                      <div key={`${item.contact_id || idx}`} className="text-sm text-slate-300">
+                        <div className="font-medium">
+                          {item.contact_name || 'Unknown'} {item.company ? `- ${item.company}` : ''}
+                        </div>
+                        <div className="text-slate-400">{item.email || item.phone || '-'}</div>
                       </div>
-                      <div className="text-sm text-slate-400">
-                        {formData.campaign_type === 'email'
-                          ? contact.email
-                          : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
-                            ? contact.phone
-                            : contact.email || contact.phone || '—'}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))
-              )}
-            </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <Separator className="bg-slate-700" />
@@ -1055,6 +1413,50 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               <Calendar className="w-5 h-5" />
               Schedule
             </h3>
+            <div className="space-y-2">
+              <Label className="text-slate-200">Schedule Type</Label>
+              <Select value={scheduleType} onValueChange={setScheduleType}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
+                  <SelectItem value="immediate" className="focus:bg-slate-700">
+                    Send Immediately
+                  </SelectItem>
+                  <SelectItem value="scheduled" className="focus:bg-slate-700">
+                    Schedule for Later
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {scheduleType === 'scheduled' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="scheduled_at" className="text-slate-200">
+                    Scheduled Date & Time
+                  </Label>
+                  <Input
+                    id="scheduled_at"
+                    type="datetime-local"
+                    value={scheduleAt}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    className="w-full bg-slate-800 border-slate-700 text-slate-200"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="schedule_timezone" className="text-slate-200">
+                    Timezone
+                  </Label>
+                  <Input
+                    id="schedule_timezone"
+                    value={scheduleTimezone}
+                    onChange={(e) => setScheduleTimezone(e.target.value)}
+                    placeholder="America/New_York"
+                    className="w-full bg-slate-800 border-slate-700 text-slate-200"
+                  />
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="start_date" className="text-slate-200">
@@ -1232,6 +1634,52 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 <Label htmlFor="business_hours_only" className="text-slate-200">
                   Only call during business hours
                 </Label>
+              </div>
+
+              {/* Excluded Days */}
+              <div className="space-y-2">
+                <Label className="text-slate-200">Excluded Days</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'monday',
+                    'tuesday',
+                    'wednesday',
+                    'thursday',
+                    'friday',
+                    'saturday',
+                    'sunday',
+                  ].map((day) => {
+                    const excluded = (formData.schedule_config.excluded_days || []).includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => {
+                            const current = prev.schedule_config.excluded_days || [];
+                            const next = excluded
+                              ? current.filter((d) => d !== day)
+                              : [...current, day];
+                            return {
+                              ...prev,
+                              schedule_config: { ...prev.schedule_config, excluded_days: next },
+                            };
+                          })
+                        }
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors capitalize ${
+                          excluded
+                            ? 'bg-red-900/50 border border-red-700 text-red-400'
+                            : 'bg-slate-800 border border-slate-600 text-slate-400 hover:border-slate-500'
+                        }`}
+                      >
+                        {day.slice(0, 3).charAt(0).toUpperCase() + day.slice(1, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Click to toggle — red = excluded from calling
+                </p>
               </div>
             </div>
           )}
