@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
+import { getBackendUrl } from '@/api/backendUrl';
 // [2026-02-23 Claude] — AiCampaigns overhaul: expanded campaign types, fixed form rendering
 import {
   Users,
@@ -30,7 +31,15 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 // [2026-02-23 Claude] — added BizDevSource for campaign targeting
-import { Contact, Lead, BizDevSource, TenantIntegration } from '@/api/entities';
+import {
+  Contact,
+  Lead,
+  BizDevSource,
+  TenantIntegration,
+  Workflow,
+  supabase,
+  BACKEND_URL,
+} from '@/api/entities';
 // Replaced direct User.me() usage with global user context hook
 import { useUser } from '@/components/shared/useUser.js';
 import { getTenantFilter } from '../shared/tenantUtils';
@@ -86,6 +95,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     campaign_type: 'call',
     name: '',
     description: '',
+    workflow_id: null,
     ai_provider: 'callfluent',
     ai_prompt_template: '',
     call_objective: 'follow_up',
@@ -112,6 +122,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [emailSendingProfiles, setEmailSendingProfiles] = useState([]);
   const [callProviders, setCallProviders] = useState([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState([]);
   const [audienceMode, setAudienceMode] = useState('manual');
   const [smartAudiencePrompt, setSmartAudiencePrompt] = useState('');
   const [audiencePreview, setAudiencePreview] = useState({ total: 0, preview: [] });
@@ -132,8 +143,12 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       try {
         const tenantFilter = getTenantFilter(currentUser, selectedTenantId);
 
-        const contactsData = await Contact.filter(tenantFilter);
-        const leadsData = await Lead.filter(tenantFilter);
+        const [contactsData, leadsData, workflowsData] = await Promise.all([
+          Contact.filter(tenantFilter),
+          Lead.filter(tenantFilter),
+          Workflow.list(tenantFilter).catch(() => []),
+        ]);
+        setAvailableWorkflows(workflowsData || []);
         let sourcesData = [];
         try {
           sourcesData = await BizDevSource.filter(tenantFilter);
@@ -169,6 +184,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
         setAvailableContacts(combinedContacts);
 
         if (campaign) {
+          let missingFromFilter = [];
           const meta = campaign.metadata || {};
           const existingTargetContacts = Array.isArray(campaign.target_contacts)
             ? campaign.target_contacts
@@ -182,6 +198,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             campaign_type: meta.campaign_type || campaign.campaign_type || 'call',
             name: campaign.name || '',
             description: campaign.description || '',
+            workflow_id: campaign.workflow_id || null,
             ai_provider: meta.ai_provider || campaign.ai_provider || 'callfluent',
             ai_prompt_template: campaign.ai_prompt_template || meta.ai_prompt_template || '',
             call_objective: campaign.call_objective || meta.call_objective || 'follow_up',
@@ -228,6 +245,121 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
           if (existingTargetContacts.length > 0) {
             const contactIds = existingTargetContacts.map((tc) => tc.contact_id);
             setSelectedContacts(contactIds);
+
+            // Ensure already-selected recipients are visible even if they fail the channel filter
+            // (e.g. a BizDev source with no email in an email campaign)
+            const filteredIds = new Set(combinedContacts.map((c) => c.id));
+            missingFromFilter = existingTargetContacts
+              .filter((tc) => !filteredIds.has(tc.contact_id))
+              .map((tc) => {
+                // Try to find the full record in allContacts (unfiltered)
+                const found = combinedContactsAll.find((c) => c.id === tc.contact_id);
+                if (found) return { ...found, missing_channel: true };
+                // Reconstruct from stored target_contacts data as fallback
+                const nameStr = tc.contact_name || '';
+                const parts = nameStr.split(' ');
+                return {
+                  id: tc.contact_id,
+                  type:
+                    tc.entity_type === 'lead'
+                      ? 'lead'
+                      : tc.entity_type === 'bizdev_source'
+                        ? 'source'
+                        : 'contact',
+                  first_name: parts[0] || '',
+                  last_name: parts.slice(1).join(' ') || '',
+                  email: tc.email || null,
+                  phone: tc.phone || null,
+                  company: tc.company || '',
+                  missing_channel: true,
+                };
+              });
+            if (missingFromFilter.length > 0) {
+              setAvailableContacts([...combinedContacts, ...missingFromFilter]);
+            }
+          }
+
+          // Fetch actual dispatch targets to restore any recipients filtered by the API
+          // (e.g. BizDev sources suppressed by team visibility scope — the canonical
+          // source of truth is ai_campaign_targets, not target_contacts snapshot)
+          if (campaign.id && campaign.tenant_id) {
+            try {
+              const {
+                data: { session },
+              } = await supabase.auth.getSession();
+              const authHeaders = session?.access_token
+                ? { Authorization: `Bearer ${session.access_token}` }
+                : {};
+              const targetsRes = await fetch(
+                `${BACKEND_URL}/api/aicampaigns/${campaign.id}/targets?tenant_id=${encodeURIComponent(campaign.tenant_id)}`,
+                { headers: authHeaders, credentials: 'include' },
+              );
+              const targetsJson = await targetsRes.json();
+              const dispatchedTargets = Array.isArray(targetsJson.data) ? targetsJson.data : [];
+
+              if (dispatchedTargets.length > 0) {
+                // Override selected contacts with who was ACTUALLY dispatched
+                const dispatchedIds = [
+                  ...new Set(dispatchedTargets.map((t) => t.contact_id).filter(Boolean)),
+                ];
+                setSelectedContacts(dispatchedIds);
+
+                // Restore contacts missing from ALL API responses (visibility-filtered, etc.)
+                const knownIds = new Set(combinedContactsAll.map((c) => c.id));
+                const seenRestoredIds = new Set();
+                const restoredContacts = dispatchedTargets
+                  .filter((t) => {
+                    if (
+                      !t.contact_id ||
+                      knownIds.has(t.contact_id) ||
+                      seenRestoredIds.has(t.contact_id)
+                    ) {
+                      return false;
+                    }
+                    seenRestoredIds.add(t.contact_id);
+                    return true;
+                  })
+                  .map((t) => {
+                    let payload;
+                    try {
+                      payload =
+                        typeof t.target_payload === 'string'
+                          ? JSON.parse(t.target_payload)
+                          : t.target_payload || {};
+                    } catch {
+                      payload = {};
+                    }
+                    const nameStr = payload.contact_name || '';
+                    const parts = nameStr.split(' ');
+                    return {
+                      id: t.contact_id,
+                      type:
+                        payload.entity_type === 'lead'
+                          ? 'lead'
+                          : payload.entity_type === 'bizdev_source'
+                            ? 'source'
+                            : 'contact',
+                      first_name: parts[0] || '',
+                      last_name: parts.slice(1).join(' ') || '',
+                      email: payload.email || t.destination || null,
+                      phone: payload.phone || null,
+                      company: payload.company || '',
+                      restored_from_history: true,
+                    };
+                  });
+
+                if (restoredContacts.length > 0) {
+                  setAllContacts((prev) => [...prev, ...restoredContacts]);
+                  setAvailableContacts([
+                    ...combinedContacts,
+                    ...missingFromFilter,
+                    ...restoredContacts,
+                  ]);
+                }
+              }
+            } catch (e) {
+              console.warn('[AICampaignForm] Could not restore targets from history:', e.message);
+            }
           }
           const modeFromCampaign =
             existingTargetContacts.length > 0
@@ -279,7 +411,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   // Load tenant integrations
   useEffect(() => {
     if (!currentUser && !selectedTenantId) return;
-    const tenant_id = currentUser?.tenant_id || selectedTenantId;
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
     if (!tenant_id) return;
     (async () => {
       try {
@@ -351,7 +483,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   };
 
   const handlePreviewAudience = async () => {
-    const tenant_id = currentUser?.tenant_id || selectedTenantId;
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
     if (!tenant_id) {
       setAudiencePreviewError('No tenant selected');
       return;
@@ -364,7 +496,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     setAudiencePreviewLoading(true);
     setAudiencePreviewError('');
     try {
-      const response = await fetch('/api/aicampaigns/audience-preview', {
+      const response = await fetch(`${getBackendUrl()}/api/aicampaigns/audience-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -397,7 +529,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
   // [2026-02-23 Claude] — aligned submission with backend schema
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const tenant_id = currentUser?.tenant_id || selectedTenantId;
+    const tenant_id = selectedTenantId || currentUser?.tenant_id;
 
     if (!tenant_id) {
       alert('Cannot save: No client selected');
@@ -430,6 +562,12 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
             const contactName = contact ? `${contact.first_name} ${contact.last_name}`.trim() : '';
             return {
               contact_id: contact?.id,
+              entity_type:
+                contact?.type === 'lead'
+                  ? 'lead'
+                  : contact?.type === 'source'
+                    ? 'bizdev_source'
+                    : 'contact',
               contact_name: contactName,
               email: contact?.email || null,
               phone: contact?.phone || null,
@@ -499,6 +637,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
       tenant_id,
       assigned_to: currentUser?.email,
       status: 'draft',
+      workflow_id: formData.workflow_id || null,
       metadata,
       performance_metrics: {
         total_sent: 0,
@@ -607,6 +746,34 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 rows={3}
                 className="bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-400"
               />
+            </div>
+
+            {/* Linked Workflow */}
+            <div>
+              <Label className="text-slate-200">Linked Workflow</Label>
+              <Select
+                value={formData.workflow_id || 'none'}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, workflow_id: v === 'none' ? null : v }))
+                }
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="Select a workflow..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200 z-[10000]">
+                  <SelectItem value="none" className="focus:bg-slate-700">
+                    — No workflow —
+                  </SelectItem>
+                  {availableWorkflows.map((wf) => (
+                    <SelectItem key={wf.id} value={wf.id} className="focus:bg-slate-700">
+                      {wf.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.workflow_id && (
+                <p className="text-xs text-slate-500 mt-1 font-mono">{formData.workflow_id}</p>
+              )}
             </div>
 
             {/* Provider Selection (Calls only) */}
@@ -1174,12 +1341,20 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                             {contact.company && (
                               <span className="text-slate-400">- {contact.company}</span>
                             )}
+                            {contact.missing_channel && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-red-600 text-red-400"
+                              >
+                                no {formData.campaign_type === 'email' ? 'email' : 'phone'}
+                              </Badge>
+                            )}
                           </div>
                           <div className="text-sm text-slate-400">
                             {formData.campaign_type === 'email'
-                              ? contact.email
+                              ? contact.email || '—'
                               : ['call', 'sms', 'whatsapp'].includes(formData.campaign_type)
-                                ? contact.phone
+                                ? contact.phone || '—'
                                 : contact.email || contact.phone || '-'}
                           </div>
                         </div>
@@ -1459,6 +1634,52 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
                 <Label htmlFor="business_hours_only" className="text-slate-200">
                   Only call during business hours
                 </Label>
+              </div>
+
+              {/* Excluded Days */}
+              <div className="space-y-2">
+                <Label className="text-slate-200">Excluded Days</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'monday',
+                    'tuesday',
+                    'wednesday',
+                    'thursday',
+                    'friday',
+                    'saturday',
+                    'sunday',
+                  ].map((day) => {
+                    const excluded = (formData.schedule_config.excluded_days || []).includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => {
+                            const current = prev.schedule_config.excluded_days || [];
+                            const next = excluded
+                              ? current.filter((d) => d !== day)
+                              : [...current, day];
+                            return {
+                              ...prev,
+                              schedule_config: { ...prev.schedule_config, excluded_days: next },
+                            };
+                          })
+                        }
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors capitalize ${
+                          excluded
+                            ? 'bg-red-900/50 border border-red-700 text-red-400'
+                            : 'bg-slate-800 border border-slate-600 text-slate-400 hover:border-slate-500'
+                        }`}
+                      >
+                        {day.slice(0, 3).charAt(0).toUpperCase() + day.slice(1, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Click to toggle — red = excluded from calling
+                </p>
               </div>
             </div>
           )}

@@ -11,25 +11,25 @@
 
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import logger from './logger.js';
+import { getSupabaseClient, query as supabaseSqlQuery } from './supabase-db.js';
 
 let workerInterval = null;
-let pgPool = null;
+let supabase = null;
+const webhookDb = { query: supabaseSqlQuery };
 const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
 /**
  * Initialize and start the campaign worker
  */
 export function startCampaignWorker(pool, intervalMs = 30000) {
-  if (!pool) {
-    logger.warn('[CampaignWorker] No database pool provided - worker disabled');
-    return;
+  if (pool) {
+    logger.debug('[CampaignWorker] Ignoring pgPool input; using Supabase client');
   }
-
-  pgPool = pool;
-  const enabled = process.env.CAMPAIGN_WORKER_ENABLED === 'true';
+  supabase = getSupabaseClient();
+  const enabled = process.env.CAMPAIGN_WORKER_ENABLED !== 'false';
 
   if (!enabled) {
-    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED not true)');
+    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED=false)');
     return;
   }
 
@@ -63,39 +63,40 @@ export function stopCampaignWorker() {
  * Main processing loop - finds and executes scheduled campaigns
  */
 async function processPendingCampaigns() {
-  if (!pgPool) return;
+  if (!supabase) return;
 
   try {
     // Phase A: pickup due scheduled campaigns
-    const scheduledQuery = `
-      SELECT id, tenant_id, name, metadata, campaign_type, status
-      FROM ai_campaign
-      WHERE status = 'scheduled'
-        AND (
-          (metadata->'schedule'->>'scheduled_at') IS NULL
-          OR (metadata->'schedule'->>'scheduled_at') = ''
-          OR (metadata->'schedule'->>'scheduled_at')::timestamptz <= NOW()
-        )
-      ORDER BY created_at ASC
-      LIMIT 10
-    `;
+    const { data: scheduledCampaigns, error: scheduledErr } = await supabase
+      .from('ai_campaign')
+      .select('id, tenant_id, name, metadata, campaign_type, status, workflow_id, created_at')
+      .eq('status', 'scheduled')
+      .order('created_at', { ascending: true })
+      .limit(10);
+    if (scheduledErr) throw scheduledErr;
 
-    const scheduledResult = await pgPool.query(scheduledQuery);
-    for (const campaign of scheduledResult.rows) {
+    const dueScheduled = (scheduledCampaigns || []).filter(isScheduledDue);
+    for (const campaign of dueScheduled) {
       await processCampaign(campaign);
     }
 
     // Phase B: process running campaigns
-    const runningQuery = `
-      SELECT id, tenant_id, name, metadata, campaign_type, status
-      FROM ai_campaign
-      WHERE status = 'running'
-      ORDER BY updated_at ASC
-      LIMIT 10
-    `;
+    const { data: runningCampaigns, error: runningErr } = await supabase
+      .from('ai_campaign')
+      .select('id, tenant_id, name, metadata, campaign_type, status, workflow_id, updated_at')
+      .eq('status', 'running')
+      .order('updated_at', { ascending: true })
+      .limit(10);
+    if (runningErr) throw runningErr;
 
-    const runningResult = await pgPool.query(runningQuery);
-    for (const campaign of runningResult.rows) {
+    logger.info(
+      {
+        scheduledDue: dueScheduled.length,
+        runningActive: (runningCampaigns || []).length,
+      },
+      '[CampaignWorker] Tick',
+    );
+    for (const campaign of runningCampaigns || []) {
       await processCampaign(campaign);
     }
   } catch (err) {
@@ -104,27 +105,12 @@ async function processPendingCampaigns() {
 }
 
 /**
- * Process a single campaign with advisory locking
+ * Process a single campaign
  */
 async function processCampaign(campaign) {
   const { id, tenant_id, name } = campaign;
 
-  // Advisory lock ID (hash campaign ID to int)
-  const lockId = hashStringToInt(id);
-
-  let client = null;
   try {
-    // Get a dedicated client for this transaction
-    client = await pgPool.connect();
-
-    // Try to acquire advisory lock (non-blocking)
-    const lockResult = await client.query('SELECT pg_try_advisory_lock($1) as locked', [lockId]);
-
-    if (!lockResult.rows[0].locked) {
-      // Another worker is processing this campaign
-      return;
-    }
-
     logger.info(
       { campaignId: id, name, status: campaign.status },
       '[CampaignWorker] Processing campaign',
@@ -132,45 +118,36 @@ async function processCampaign(campaign) {
 
     let campaignRow = campaign;
     if (campaign.status === 'scheduled') {
-      const startedRow = await transitionScheduledCampaignToRunning(client, campaign);
+      const startedRow = await transitionScheduledCampaignToRunning(campaign);
       if (!startedRow) return;
       campaignRow = startedRow;
     }
 
     if (campaignRow.status !== 'running') return;
 
-    await processRunningCampaignBatch(client, campaignRow);
+    await processRunningCampaignBatch(campaignRow);
   } catch (err) {
     logger.error({ err, campaignId: id }, '[CampaignWorker] Error processing campaign');
 
     // Mark as failed
-    if (client) {
-      try {
-        await client.query(
-          `
-          UPDATE ai_campaign
-          SET status = 'failed',
-              metadata = jsonb_set(
-                jsonb_set(metadata, '{lifecycle,failed_at}', to_jsonb(NOW()::text)),
-                '{error}', to_jsonb($1::text)
-              )
-          WHERE id = $2 AND tenant_id = $3
-        `,
-          [err.message, id, tenant_id],
-        );
-      } catch (updateErr) {
-        logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
-      }
-    }
-  } finally {
-    // Release advisory lock
-    if (client) {
-      try {
-        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
-      } catch (unlockErr) {
-        logger.error({ err: unlockErr }, '[CampaignWorker] Failed to release lock');
-      }
-      client.release();
+    try {
+      const metadataObj = toObject(campaign.metadata);
+      metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+      metadataObj.lifecycle.failed_at = new Date().toISOString();
+      metadataObj.error = err.message;
+
+      const { error: updateErr } = await supabase
+        .from('ai_campaign')
+        .update({
+          status: 'failed',
+          metadata: metadataObj,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('tenant_id', tenant_id);
+      if (updateErr) throw updateErr;
+    } catch (updateErr) {
+      logger.error({ err: updateErr }, '[CampaignWorker] Failed to update error status');
     }
   }
 }
@@ -178,35 +155,29 @@ async function processCampaign(campaign) {
 /**
  * Transition due scheduled campaign to running and emit start event.
  */
-async function transitionScheduledCampaignToRunning(client, campaign) {
+async function transitionScheduledCampaignToRunning(campaign) {
   const { id, tenant_id } = campaign;
-  const updateResult = await client.query(
-    `
-    UPDATE ai_campaign
-    SET status = 'running',
-        metadata = jsonb_set(
-          COALESCE(metadata, '{}'::jsonb),
-          '{lifecycle,started_at}',
-          to_jsonb(NOW()::text),
-          true
-        ),
-        updated_at = NOW()
-    WHERE id = $1
-      AND tenant_id = $2
-      AND status = 'scheduled'
-      AND (
-        (metadata->'schedule'->>'scheduled_at') IS NULL
-        OR (metadata->'schedule'->>'scheduled_at') = ''
-        OR (metadata->'schedule'->>'scheduled_at')::timestamptz <= NOW()
-      )
-    RETURNING *
-  `,
-    [id, tenant_id],
-  );
+  if (!isScheduledDue(campaign)) return null;
 
-  if (updateResult.rows.length === 0) return null;
+  const metadataObj = toObject(campaign.metadata);
+  metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+  metadataObj.lifecycle.started_at = new Date().toISOString();
 
-  await insertCampaignEvent(client, {
+  const { data: updatedRows, error: updateErr } = await supabase
+    .from('ai_campaign')
+    .update({
+      status: 'running',
+      metadata: metadataObj,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('tenant_id', tenant_id)
+    .eq('status', 'scheduled')
+    .select('*');
+  if (updateErr) throw updateErr;
+  if (!updatedRows || updatedRows.length === 0) return null;
+
+  await insertCampaignEvent({
     tenant_id,
     campaign_id: id,
     contact_id: null,
@@ -214,46 +185,62 @@ async function transitionScheduledCampaignToRunning(client, campaign) {
     event_type: 'campaign_started',
     attempt_no: 0,
     payload: {
-      campaign_type: updateResult.rows[0].campaign_type || 'call',
+      campaign_type: updatedRows[0].campaign_type || 'call',
     },
   });
 
-  return updateResult.rows[0];
+  return updatedRows[0];
 }
 
 /**
  * Process a single batch of running campaign targets.
  */
-async function processRunningCampaignBatch(client, campaign) {
-  const targets = await claimPendingTargets(client, campaign, TARGET_BATCH_SIZE);
+async function processRunningCampaignBatch(campaign) {
+  const targets = await claimPendingTargets(campaign, TARGET_BATCH_SIZE);
+  logger.info(
+    {
+      campaignId: campaign.id,
+      claimedTargets: targets.length,
+      batchSize: TARGET_BATCH_SIZE,
+    },
+    '[CampaignWorker] Batch claim',
+  );
 
   if (targets.length > 0) {
-    let deliveryContext = null;
-    try {
-      deliveryContext = await getDeliveryContext(client, campaign);
-    } catch (err) {
-      deliveryContext = { type: 'error', error: err.message };
-    }
-
     for (const target of targets) {
-      if (deliveryContext?.type === 'error') {
-        await markTargetFailed(client, campaign, target, deliveryContext.error);
-        continue;
-      }
-
       try {
-        await deliverTarget(client, campaign, target, deliveryContext);
-        await markTargetCompleted(client, campaign, target);
+        await Promise.race([
+          dispatchViaWorkflow(campaign, target),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Execution timeout')), 15000),
+          ),
+        ]);
+
+        await markTargetCompleted(campaign, target);
       } catch (err) {
-        await markTargetFailed(client, campaign, target, err.message || 'Unknown target error');
+        console.error('Target execution error:', err);
+        try {
+          await markTargetFailed(campaign, target, err.message || 'Execution failed');
+        } catch (markErr) {
+          console.error('Target failure update error:', markErr);
+          await supabase
+            .from('ai_campaign_targets')
+            .update({
+              status: 'failed',
+              error_message: err.message || 'Execution failed',
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', target.id);
+        }
       }
     }
   }
 
-  const progress = await computeCampaignProgress(client, campaign.id, campaign.tenant_id);
-  await updateCampaignProgress(client, campaign, progress);
+  const progress = await computeCampaignProgress(campaign.id, campaign.tenant_id);
+  await updateCampaignProgress(campaign, progress);
 
-  await emitTenantWebhooks(pgPool, campaign.tenant_id, 'aicampaign.progress', {
+  await emitTenantWebhooks(webhookDb, campaign.tenant_id, 'aicampaign.progress', {
     id: campaign.id,
     status: progress.pending === 0 && progress.processing === 0 ? 'completed' : 'running',
     progress,
@@ -263,39 +250,119 @@ async function processRunningCampaignBatch(client, campaign) {
 /**
  * Claim pending targets for processing using row locks.
  */
-async function claimPendingTargets(client, campaign, batchSize) {
-  const result = await client.query(
-    `
-    WITH to_claim AS (
-      SELECT id
-      FROM ai_campaign_targets
-      WHERE tenant_id = $1
-        AND campaign_id = $2
-        AND status = 'pending'
-      ORDER BY created_at ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT $3
-    )
-    UPDATE ai_campaign_targets t
-    SET status = 'processing',
-        started_at = NOW(),
-        attempt_count = COALESCE(t.attempt_count, 0) + 1,
-        last_attempt_at = NOW(),
-        updated_at = NOW()
-    FROM to_claim
-    WHERE t.id = to_claim.id
-    RETURNING t.*
-  `,
-    [campaign.tenant_id, campaign.id, batchSize],
-  );
-  return result.rows;
+async function claimPendingTargets(campaign, batchSize) {
+  const { data: pendingTargets, error: pendingErr } = await supabase
+    .from('ai_campaign_targets')
+    .select('*')
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(batchSize);
+  if (pendingErr) throw pendingErr;
+
+  const claimed = [];
+  const now = new Date().toISOString();
+  for (const target of pendingTargets || []) {
+    const { data: updatedRows, error: updateErr } = await supabase
+      .from('ai_campaign_targets')
+      .update({
+        status: 'processing',
+        started_at: now,
+        attempt_count: Number(target.attempt_count || 0) + 1,
+        last_attempt_at: now,
+        updated_at: now,
+      })
+      .eq('id', target.id)
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('campaign_id', campaign.id)
+      .eq('status', 'pending')
+      .select('*');
+    if (updateErr) throw updateErr;
+    if (updatedRows && updatedRows.length > 0) {
+      claimed.push(updatedRows[0]);
+    }
+  }
+
+  return claimed;
+}
+
+/**
+ * Dispatch a single campaign target via the campaign's linked workflow webhook.
+ */
+async function dispatchViaWorkflow(campaign, target) {
+  if (!campaign.workflow_id) {
+    throw new Error('No workflow configured');
+  }
+
+  const { data: workflow, error: workflowErr } = await supabase
+    .from('workflow')
+    .select('id, metadata')
+    .eq('id', campaign.workflow_id)
+    .maybeSingle();
+  if (workflowErr) throw workflowErr;
+
+  console.log('Workflow object:', workflow);
+  let webhookUrl = workflow?.metadata?.webhook_url;
+  if (!webhookUrl) {
+    throw new Error('No webhook URL configured');
+  }
+  // Resolve relative URLs — workflow saves path-only URLs like /api/workflows/:id/webhook
+  if (webhookUrl.startsWith('/')) {
+    const port = process.env.BACKEND_PORT || process.env.PORT || 3001;
+    webhookUrl = `http://localhost:${port}${webhookUrl}`;
+  }
+
+  const targetPayload =
+    typeof target.target_payload === 'string'
+      ? safeParseJson(target.target_payload, {})
+      : toObject(target.target_payload);
+
+  const campaignMeta = typeof campaign.metadata === 'object' ? campaign.metadata : {};
+  const assignedTo = campaign.assigned_to || campaignMeta.lifecycle?.scheduled_by || null;
+
+  const payload = {
+    event: 'campaign.dispatch',
+    tenant_id: campaign.tenant_id,
+    campaign_id: campaign.id,
+    target_id: target.id,
+    channel: campaign.campaign_type,
+    destination: target.destination,
+    assigned_to: assignedTo,
+    contact: targetPayload,
+    campaign: {
+      name: campaign.name,
+      type: campaign.campaign_type,
+      assigned_to: assignedTo,
+      metadata: campaign.metadata,
+    },
+    idempotency_key: `${campaign.id}-${target.id}`,
+  };
+
+  console.log('Dispatching campaign target', target.id);
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(14000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    console.log('Webhook failed', target.id, text);
+    throw new Error(`Webhook returned ${response.status}: ${text}`);
+  }
+
+  console.log('Webhook success', target.id);
 }
 
 /**
  * Load tenant-scoped delivery integration configuration.
+ * @deprecated Superseded by dispatchViaWorkflow. Kept for reference.
  */
-async function getDeliveryContext(client, campaign) {
-  const meta = campaign.metadata || {};
+async function getDeliveryContext(campaign) {
+  const meta = toObject(campaign.metadata);
   const type = campaign.campaign_type || meta.campaign_type || 'call';
 
   if (type === 'email') {
@@ -304,18 +371,22 @@ async function getDeliveryContext(client, campaign) {
       throw new Error('No sending profile configured for email campaign');
     }
 
-    const integrationResult = await client.query(
-      'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-      [campaign.tenant_id, sendingProfileId],
-    );
-    if (integrationResult.rows.length === 0) {
+    const { data: integration, error: integrationErr } = await supabase
+      .from('tenant_integrations')
+      .select('*')
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('id', sendingProfileId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (integrationErr) throw integrationErr;
+    if (!integration) {
       throw new Error('Sending profile not found or inactive');
     }
 
     return {
       type: 'email',
-      integrationType: integrationResult.rows[0].integration_type,
-      credentials: integrationResult.rows[0].credentials || {},
+      integrationType: integration.integration_type,
+      credentials: integration.credentials || {},
       subject: meta?.ai_email_config?.subject || 'No Subject',
       bodyTemplate: meta?.ai_email_config?.body_template || '',
     };
@@ -327,18 +398,22 @@ async function getDeliveryContext(client, campaign) {
       throw new Error('No call integration configured');
     }
 
-    const integrationResult = await client.query(
-      'SELECT * FROM tenant_integrations WHERE tenant_id = $1 AND id = $2 AND is_active = true LIMIT 1',
-      [campaign.tenant_id, callIntegrationId],
-    );
-    if (integrationResult.rows.length === 0) {
+    const { data: integration, error: integrationErr } = await supabase
+      .from('tenant_integrations')
+      .select('*')
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('id', callIntegrationId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (integrationErr) throw integrationErr;
+    if (!integration) {
       throw new Error('Call integration not found or inactive');
     }
 
     return {
       type: 'call',
-      integrationType: integrationResult.rows[0].integration_type,
-      credentials: integrationResult.rows[0].credentials || {},
+      integrationType: integration.integration_type,
+      credentials: integration.credentials || {},
     };
   }
 
@@ -351,14 +426,17 @@ async function getDeliveryContext(client, campaign) {
 /**
  * Deliver a single target based on campaign type.
  */
-async function deliverTarget(_client, campaign, target, deliveryContext) {
+async function deliverTarget(campaign, target, deliveryContext) {
   const destination = target.destination || null;
   if (!destination) {
     throw new Error('Target destination is missing');
   }
 
-  const payload = target.target_payload || {};
-  const campaignMeta = campaign.metadata || {};
+  const payload =
+    typeof target.target_payload === 'string'
+      ? safeParseJson(target.target_payload, {})
+      : toObject(target.target_payload);
+  const campaignMeta = toObject(campaign.metadata);
 
   if (deliveryContext.type === 'email') {
     const templateInput = {
@@ -395,22 +473,21 @@ async function deliverTarget(_client, campaign, target, deliveryContext) {
 /**
  * Update target as completed and emit event.
  */
-async function markTargetCompleted(client, campaign, target) {
-  await client.query(
-    `
-    UPDATE ai_campaign_targets
-    SET status = 'completed',
-        error_message = NULL,
-        completed_at = NOW(),
-        updated_at = NOW()
-    WHERE id = $1
-      AND tenant_id = $2
-      AND campaign_id = $3
-  `,
-    [target.id, campaign.tenant_id, campaign.id],
-  );
+async function markTargetCompleted(campaign, target) {
+  const { error: updateErr } = await supabase
+    .from('ai_campaign_targets')
+    .update({
+      status: 'completed',
+      error_message: null,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', target.id)
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id);
+  if (updateErr) throw updateErr;
 
-  await insertCampaignEvent(client, {
+  await insertCampaignEvent({
     tenant_id: campaign.tenant_id,
     campaign_id: campaign.id,
     contact_id: target.contact_id,
@@ -427,23 +504,22 @@ async function markTargetCompleted(client, campaign, target) {
 /**
  * Update target as failed and emit event.
  */
-async function markTargetFailed(client, campaign, target, errorMessage) {
+async function markTargetFailed(campaign, target, errorMessage) {
   const safeMessage = String(errorMessage || 'Unknown target failure').slice(0, 2000);
-  await client.query(
-    `
-    UPDATE ai_campaign_targets
-    SET status = 'failed',
-        error_message = $4,
-        completed_at = NOW(),
-        updated_at = NOW()
-    WHERE id = $1
-      AND tenant_id = $2
-      AND campaign_id = $3
-  `,
-    [target.id, campaign.tenant_id, campaign.id, safeMessage],
-  );
+  const { error: updateErr } = await supabase
+    .from('ai_campaign_targets')
+    .update({
+      status: 'failed',
+      error_message: safeMessage,
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', target.id)
+    .eq('tenant_id', campaign.tenant_id)
+    .eq('campaign_id', campaign.id);
+  if (updateErr) throw updateErr;
 
-  await insertCampaignEvent(client, {
+  await insertCampaignEvent({
     tenant_id: campaign.tenant_id,
     campaign_id: campaign.id,
     contact_id: target.contact_id,
@@ -461,127 +537,97 @@ async function markTargetFailed(client, campaign, target, errorMessage) {
 /**
  * Aggregate target status counts for campaign metadata rollup.
  */
-async function computeCampaignProgress(client, campaignId, tenantId) {
-  const countsResult = await client.query(
-    `
-    SELECT
-      COUNT(*)::int AS total,
-      COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
-      COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
-      COUNT(*) FILTER (WHERE status = 'completed')::int AS completed,
-      COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
-    FROM ai_campaign_targets
-    WHERE campaign_id = $1
-      AND tenant_id = $2
-  `,
-    [campaignId, tenantId],
-  );
-  return (
-    countsResult.rows[0] || {
-      total: 0,
-      pending: 0,
-      processing: 0,
-      completed: 0,
-      failed: 0,
-    }
-  );
+async function computeCampaignProgress(campaignId, tenantId) {
+  const { data: rows, error } = await supabase
+    .from('ai_campaign_targets')
+    .select('status')
+    .eq('campaign_id', campaignId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+
+  const progress = { total: 0, pending: 0, processing: 0, completed: 0, failed: 0 };
+  for (const row of rows || []) {
+    progress.total += 1;
+    if (row.status === 'pending') progress.pending += 1;
+    if (row.status === 'processing') progress.processing += 1;
+    if (row.status === 'completed') progress.completed += 1;
+    if (row.status === 'failed') progress.failed += 1;
+  }
+  return progress;
 }
 
 /**
  * Persist progress and mark campaign complete when work is drained.
  */
-async function updateCampaignProgress(client, campaign, progress) {
+async function updateCampaignProgress(campaign, progress) {
   const shouldComplete = Number(progress.pending) === 0 && Number(progress.processing) === 0;
+  const metadataObj = toObject(campaign.metadata);
+  metadataObj.progress = progress;
 
   if (shouldComplete) {
-    const completeResult = await client.query(
-      `
-      UPDATE ai_campaign
-      SET status = 'completed',
-          metadata = jsonb_set(
-            jsonb_set(
-              COALESCE(metadata, '{}'::jsonb),
-              '{progress}',
-              $3::jsonb,
-              true
-            ),
-            '{lifecycle,completed_at}',
-            to_jsonb(NOW()::text),
-            true
-          ),
-          updated_at = NOW()
-      WHERE id = $1
-        AND tenant_id = $2
-        AND status = 'running'
-      RETURNING id
-    `,
-      [campaign.id, campaign.tenant_id, JSON.stringify(progress)],
-    );
+    metadataObj.lifecycle = toObject(metadataObj.lifecycle);
+    // Mark as 'failed' if every target failed and nothing completed
+    const allFailed = Number(progress.failed || 0) > 0 && Number(progress.completed || 0) === 0;
+    const finalStatus = allFailed ? 'failed' : 'completed';
+    metadataObj.lifecycle[`${finalStatus}_at`] = new Date().toISOString();
+    const { data: completedRows, error: completedErr } = await supabase
+      .from('ai_campaign')
+      .update({
+        status: finalStatus,
+        metadata: metadataObj,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', campaign.id)
+      .eq('tenant_id', campaign.tenant_id)
+      .eq('status', 'running')
+      .select('id');
+    if (completedErr) throw completedErr;
 
-    if (completeResult.rows.length > 0) {
-      await insertCampaignEvent(client, {
+    if (completedRows && completedRows.length > 0) {
+      await insertCampaignEvent({
         tenant_id: campaign.tenant_id,
         campaign_id: campaign.id,
         contact_id: null,
-        status: 'completed',
-        event_type: 'campaign_completed',
+        status: finalStatus,
+        event_type: allFailed ? 'campaign_failed' : 'campaign_completed',
         attempt_no: 0,
         payload: { progress },
       });
-      await emitTenantWebhooks(pgPool, campaign.tenant_id, 'aicampaign.completed', {
+      await emitTenantWebhooks(webhookDb, campaign.tenant_id, `aicampaign.${finalStatus}`, {
         id: campaign.id,
-        status: 'completed',
+        status: finalStatus,
         progress,
       }).catch((err) => logger.error({ err }, '[CampaignWorker] Final webhook emission failed'));
     }
     return;
   }
 
-  await client.query(
-    `
-    UPDATE ai_campaign
-    SET metadata = jsonb_set(
-          COALESCE(metadata, '{}'::jsonb),
-          '{progress}',
-          $3::jsonb,
-          true
-        ),
-        updated_at = NOW()
-    WHERE id = $1
-      AND tenant_id = $2
-  `,
-    [campaign.id, campaign.tenant_id, JSON.stringify(progress)],
-  );
+  const { error: updateErr } = await supabase
+    .from('ai_campaign')
+    .update({
+      metadata: metadataObj,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', campaign.id)
+    .eq('tenant_id', campaign.tenant_id);
+  if (updateErr) throw updateErr;
 }
 
 /**
  * Insert campaign execution event row.
  */
-async function insertCampaignEvent(client, event) {
-  await client.query(
-    `
-    INSERT INTO ai_campaign_events (
-      tenant_id,
-      campaign_id,
-      contact_id,
-      status,
-      event_type,
-      attempt_no,
-      payload,
-      created_at
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
-  `,
-    [
-      event.tenant_id,
-      event.campaign_id,
-      event.contact_id || null,
-      event.status || 'pending',
-      event.event_type,
-      Number(event.attempt_no || 0),
-      JSON.stringify(event.payload || {}),
-    ],
-  );
+async function insertCampaignEvent(event) {
+  const { error } = await supabase.from('ai_campaign_events').insert({
+    tenant_id: event.tenant_id,
+    campaign_id: event.campaign_id,
+    contact_id: event.contact_id || null,
+    status: event.status || 'pending',
+    event_type: event.event_type,
+    attempt_no: Number(event.attempt_no || 0),
+    payload: event.payload || {},
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
 }
 
 /**
@@ -625,9 +671,8 @@ async function triggerAICall(integrationType, credentials, phone, metadata) {
   let callContext;
   try {
     const { prepareOutboundCall } = await import('./callFlowHandler.js');
-    const { pgPool } = await import('../config/db.js');
 
-    callContext = await prepareOutboundCall(pgPool, {
+    callContext = await prepareOutboundCall(webhookDb, {
       tenant_id,
       contact_id,
       campaign_id,
@@ -755,15 +800,26 @@ function personalizeTemplate(template, contact) {
   return result;
 }
 
-/**
- * Hash string to integer for advisory lock
- */
-function hashStringToInt(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
+function safeParseJson(raw, fallback = {}) {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : fallback;
+  } catch {
+    return fallback;
   }
-  return Math.abs(hash);
+}
+
+function toObject(value) {
+  if (value && typeof value === 'object') return value;
+  if (typeof value === 'string') return safeParseJson(value, {});
+  return {};
+}
+
+function isScheduledDue(campaign) {
+  const metadata = toObject(campaign.metadata);
+  const scheduledAt = metadata?.schedule?.scheduled_at;
+  if (!scheduledAt) return true;
+  const scheduledTime = new Date(scheduledAt);
+  if (Number.isNaN(scheduledTime.getTime())) return true;
+  return scheduledTime.getTime() <= Date.now();
 }

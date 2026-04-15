@@ -5,6 +5,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { emitTenantWebhooks } from '../lib/webhookEmitter.js';
 import logger from '../lib/logger.js';
 import { resolveAudience } from '../lib/campaigns/resolveAudience.js';
+import { buildAudienceFromPrompt } from '../lib/campaigns/buildAudienceFromPrompt.js';
 
 // Valid campaign types — must match DB CHECK constraint
 const VALID_CAMPAIGN_TYPES = [
@@ -51,9 +52,15 @@ export default function createAICampaignRoutes(pgPool) {
         return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
       }
 
+      // If this is a smart/AI audience segment, parse the prompt into structured filters
+      const audience =
+        target_audience?.type === 'ai_segment' && target_audience?.prompt
+          ? buildAudienceFromPrompt(target_audience.prompt)
+          : target_audience;
+
       const rows = await resolveAudience(pgPool, {
         tenant_id,
-        audience: target_audience,
+        audience,
         campaignType: campaign_type,
       });
 
@@ -130,6 +137,29 @@ export default function createAICampaignRoutes(pgPool) {
     }
   });
 
+  // ─── GET /api/aicampaigns/:id/targets ──────────────────────────────────────
+  router.get('/:id/targets', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tenant_id } = req.query || {};
+      if (!tenant_id)
+        return res.status(400).json({ status: 'error', message: 'tenant_id is required' });
+
+      const result = await pgPool.query(
+        `SELECT id, contact_id, channel, status, destination, target_payload,
+                error_message, attempt_count, started_at, completed_at, created_at
+         FROM ai_campaign_targets
+         WHERE tenant_id = $1 AND campaign_id = $2
+         ORDER BY created_at ASC`,
+        [tenant_id, id],
+      );
+      res.json({ status: 'success', data: result.rows });
+    } catch (err) {
+      logger.error('[AI Campaigns] Get targets error:', err.message);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   // ─── GET /api/aicampaigns/:id ───────────────────────────────────────────────
   router.get('/:id', async (req, res) => {
     try {
@@ -167,6 +197,7 @@ export default function createAICampaignRoutes(pgPool) {
         content = {},
         performance_metrics = {},
         metadata = {},
+        workflow_id = null,
         is_test_data = false,
       } = req.body;
 
@@ -184,13 +215,15 @@ export default function createAICampaignRoutes(pgPool) {
 
       const safeAssignedTo = normalizeOptionalUuid(assigned_to);
 
+      const safeWorkflowId = normalizeOptionalUuid(workflow_id);
+
       const query = `
         INSERT INTO ai_campaign (
           tenant_id, name, campaign_type, type, status, description,
           assigned_to, target_contacts, target_audience, content,
-          performance_metrics, metadata, is_test_data, created_at
+          performance_metrics, metadata, workflow_id, is_test_data, created_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
         RETURNING *
       `;
       const values = [
@@ -206,6 +239,7 @@ export default function createAICampaignRoutes(pgPool) {
         JSON.stringify(content),
         JSON.stringify(performance_metrics),
         JSON.stringify(metadata),
+        safeWorkflowId,
         is_test_data,
       ];
 
@@ -242,6 +276,7 @@ export default function createAICampaignRoutes(pgPool) {
         content,
         performance_metrics,
         metadata,
+        workflow_id,
       } = req.body;
       // Resolve tenant_id consistently: body → query → middleware-resolved tenant
       const tenant_id = body_tenant_id || req.query.tenant_id || req.tenant?.id;
@@ -258,6 +293,7 @@ export default function createAICampaignRoutes(pgPool) {
       }
 
       const safeAssignedTo = normalizeOptionalUuid(assigned_to);
+      const safeWorkflowId = normalizeOptionalUuid(workflow_id);
 
       const update = `
         UPDATE ai_campaign
@@ -272,6 +308,7 @@ export default function createAICampaignRoutes(pgPool) {
             content = COALESCE($10, content),
             performance_metrics = COALESCE($11, performance_metrics),
             metadata = COALESCE($12, metadata),
+            workflow_id = COALESCE($13, workflow_id),
             updated_at = NOW()
         WHERE tenant_id = $1 AND id = $2
         RETURNING *
@@ -289,6 +326,7 @@ export default function createAICampaignRoutes(pgPool) {
         content ? JSON.stringify(content) : null,
         performance_metrics ? JSON.stringify(performance_metrics) : null,
         metadata ? JSON.stringify(metadata) : null,
+        safeWorkflowId,
       ];
       const result = await pgPool.query(update, values);
 
@@ -317,6 +355,9 @@ export default function createAICampaignRoutes(pgPool) {
       if (result.rowCount === 0) {
         return res.status(404).json({ status: 'error', message: 'AI Campaign not found' });
       }
+      // Clean up child rows (no FK cascade on these tables)
+      await pgPool.query('DELETE FROM ai_campaign_targets WHERE campaign_id = $1', [id]);
+      await pgPool.query('DELETE FROM ai_campaign_events WHERE campaign_id = $1', [id]);
       res.json({ status: 'success', data: { id } });
     } catch (err) {
       logger.error('[AI Campaigns] Delete error:', err.message);
@@ -381,32 +422,54 @@ export default function createAICampaignRoutes(pgPool) {
 
       const requiredChannel = cType === 'email' ? 'email' : 'phone';
       let audienceRows = [];
+      let contactsArray = [];
+      if (Array.isArray(campaign.target_contacts)) {
+        contactsArray = campaign.target_contacts;
+      } else if (typeof campaign.target_contacts === 'string') {
+        try {
+          contactsArray = JSON.parse(campaign.target_contacts || '[]');
+        } catch (_e) {
+          contactsArray = [];
+        }
+      }
+      // target_audience may be stored as a JSON string (TEXT column) or already parsed (JSONB)
+      let rawTargetAudience = campaign.target_audience;
+      if (typeof rawTargetAudience === 'string') {
+        try {
+          rawTargetAudience = JSON.parse(rawTargetAudience);
+        } catch (_e) {
+          rawTargetAudience = null;
+        }
+      }
       const target_audience =
-        campaign.target_audience &&
-        typeof campaign.target_audience === 'object' &&
-        !Array.isArray(campaign.target_audience) &&
-        Object.keys(campaign.target_audience).length > 0
-          ? campaign.target_audience
+        rawTargetAudience &&
+        typeof rawTargetAudience === 'object' &&
+        !Array.isArray(rawTargetAudience) &&
+        Object.keys(rawTargetAudience).length > 0
+          ? rawTargetAudience
           : null;
-      const target_contacts = Array.isArray(campaign.target_contacts)
-        ? campaign.target_contacts
-        : [];
 
-      if (target_audience && (!target_contacts || target_contacts.length === 0)) {
+      if (target_audience && contactsArray.length === 0) {
+        // If stored as a smart/AI segment, parse the prompt into structured filters first
+        const resolvedAudience =
+          target_audience?.type === 'ai_segment' && target_audience?.prompt
+            ? buildAudienceFromPrompt(target_audience.prompt)
+            : target_audience;
         audienceRows = await resolveAudience(pgPool, {
           tenant_id,
-          audience: target_audience,
+          audience: resolvedAudience,
           campaignType: cType,
         });
         if (!Array.isArray(audienceRows) || audienceRows.length === 0) {
           return res.status(400).json({ status: 'error', message: 'No audience resolved' });
         }
-      } else if (target_contacts && target_contacts.length > 0) {
-        audienceRows = target_contacts
+      } else if (contactsArray.length > 0) {
+        audienceRows = contactsArray
           .map((item) => {
             if (item && typeof item === 'object') {
               return {
                 contact_id: item.contact_id || item.id || null,
+                entity_type: item.entity_type || 'contact',
                 contact_name: item.contact_name || item.name || null,
                 email: item.email || null,
                 phone: item.phone || null,
@@ -428,7 +491,8 @@ export default function createAICampaignRoutes(pgPool) {
       }
 
       const recipients = audienceRows.filter((row) => {
-        if (!row?.contact_id) return false;
+        const contactId = row?.contact_id ? String(row.contact_id).trim() : '';
+        if (!contactId || !UUID_REGEX.test(contactId)) return false;
         if (requiredChannel === 'email') return Boolean(row.email);
         return Boolean(row.phone);
       });
@@ -453,27 +517,21 @@ export default function createAICampaignRoutes(pgPool) {
             channel,
             status,
             destination,
-            target_payload,
-            created_at,
-            updated_at
+            target_payload
           )
-          VALUES ($1, $2, $3, $4, 'pending', $5, $6::jsonb, NOW(), NOW())
+          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
         `;
 
         for (const row of uniqueRecipients) {
-          const destination = requiredChannel === 'email' ? row.email : row.phone;
+          const destination = row.email || row.phone;
           await pgPool.query(insertTargetSql, [
             tenant_id,
             id,
             row.contact_id,
-            requiredChannel,
+            campaign.campaign_type || cType,
+            'pending',
             destination,
-            JSON.stringify({
-              contact_name: row.contact_name || null,
-              company: row.company || null,
-              email: row.email || null,
-              phone: row.phone || null,
-            }),
+            JSON.stringify(row),
           ]);
         }
       }
@@ -513,12 +571,14 @@ export default function createAICampaignRoutes(pgPool) {
           attempt_no,
           payload,
           created_at
-        ) VALUES ($1, $2, NULL, $3, $4, 0, $5::jsonb, NOW())`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
         [
           tenant_id,
           id,
+          null,
           nextStatus,
           eventType,
+          0,
           JSON.stringify({
             campaign_type: cType,
             resolved_targets: uniqueRecipients.length,

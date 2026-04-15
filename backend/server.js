@@ -921,13 +921,9 @@ server.listen(PORT, async () => {
     }
   }, 1000); // Delay 1 second to ensure server is fully started
 
-  // Start campaign worker if enabled
-  if (process.env.CAMPAIGN_WORKER_ENABLED === 'true' && pgPool) {
-    const workerInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '30000', 10);
-    startCampaignWorker(pgPool, workerInterval);
-  } else {
-    logger.debug('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
-  }
+  // Start campaign worker
+  startCampaignWorker(pgPool, 5000);
+  console.log('Campaign worker started');
 
   // Start AI triggers worker if enabled (Phase 3 Autonomous Operations)
   if (process.env.AI_TRIGGERS_WORKER_ENABLED === 'true' && pgPool) {

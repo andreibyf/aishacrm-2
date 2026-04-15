@@ -4,13 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '@/components/shared/tenantContext';
-import { AICampaign, BACKEND_URL } from '@/api/entities';
+import { AICampaign, BACKEND_URL, supabase } from '@/api/entities';
 
 // [2026-02-23 Claude] — AiCampaigns overhaul: aligned with DB schema
 export default function CampaignMonitor() {
   const { user } = useUser();
   const { selectedTenantId } = useTenant();
-  const tenant_id = user?.tenant_id || selectedTenantId;
+  const tenant_id = selectedTenantId || user?.tenant_id;
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
 
@@ -35,9 +35,15 @@ export default function CampaignMonitor() {
   const startCampaign = async (id) => {
     if (!tenant_id) return;
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
       await fetch(`${BACKEND_URL}/api/aicampaigns/${id}/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         credentials: 'include',
         body: JSON.stringify({ tenant_id }),
       });
@@ -54,9 +60,15 @@ export default function CampaignMonitor() {
   const pauseCampaign = async (id) => {
     if (!tenant_id) return;
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
       await fetch(`${BACKEND_URL}/api/aicampaigns/${id}/pause`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         credentials: 'include',
         body: JSON.stringify({ tenant_id }),
       });
@@ -69,9 +81,15 @@ export default function CampaignMonitor() {
   const resumeCampaign = async (id) => {
     if (!tenant_id) return;
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authHeaders = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
       await fetch(`${BACKEND_URL}/api/aicampaigns/${id}/resume`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         credentials: 'include',
         body: JSON.stringify({ tenant_id }),
       });

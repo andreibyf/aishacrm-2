@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Account, Contact, Lead, Opportunity } from '@/api/entities';
+import { Activity, Account, Contact, Lead, Opportunity, BizDevSource } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useApiManager } from '../components/shared/ApiManager';
 import { useProgress } from '../components/shared/ProgressOverlay';
@@ -10,6 +10,7 @@ import ContactDetailPanel from '../components/contacts/ContactDetailPanel';
 import AccountDetailPanel from '../components/accounts/AccountDetailPanel';
 import LeadDetailPanel from '../components/leads/LeadDetailPanel';
 import OpportunityDetailPanel from '../components/opportunities/OpportunityDetailPanel';
+import BizDevSourceDetailPanel from '../components/bizdev/BizDevSourceDetailPanel';
 import BulkActionsMenu from '../components/activities/BulkActionsMenu';
 import ActivityStatsCards from '../components/activities/ActivityStatsCards';
 import ActivityFilters from '../components/activities/ActivityFilters';
@@ -311,6 +312,7 @@ export default function ActivitiesPage() {
       account: { api: Account, label: 'Account' },
       lead: { api: Lead, label: 'Lead' },
       opportunity: { api: Opportunity, label: 'Opportunity' },
+      bizdev_source: { api: BizDevSource, label: 'Potential Lead' },
     };
 
     const entity = entityMap[activity.related_to];
@@ -820,6 +822,17 @@ export default function ActivitiesPage() {
       {relatedEntityType === 'opportunity' && isRelatedDetailOpen && viewingRelatedEntity && (
         <OpportunityDetailPanel
           opportunity={viewingRelatedEntity}
+          onClose={() => {
+            setIsRelatedDetailOpen(false);
+            setViewingRelatedEntity(null);
+            setRelatedEntityType(null);
+          }}
+          user={user}
+        />
+      )}
+      {relatedEntityType === 'bizdev_source' && isRelatedDetailOpen && viewingRelatedEntity && (
+        <BizDevSourceDetailPanel
+          bizDevSource={viewingRelatedEntity}
           onClose={() => {
             setIsRelatedDetailOpen(false);
             setViewingRelatedEntity(null);
