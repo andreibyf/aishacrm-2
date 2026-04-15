@@ -551,7 +551,8 @@ export default function createWorkflowRoutes(pgPool) {
               ph.push(`$${idx++}`);
               for (const m of mappings) {
                 const rm = resolveMapping(m);
-                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '') {
+                const isUnresolved = typeof rm?.resolved === 'string' && rm.resolved.startsWith('{{') && rm.resolved.endsWith('}}');
+                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '' && !isUnresolved) {
                   cols.push(rm.targetField);
                   vals.push(rm.resolved);
                   ph.push('$' + idx++);
@@ -711,7 +712,8 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.opportunity_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  if (v !== null && v !== undefined && v !== '') {
+                  const vUnresolved = typeof v === 'string' && v.startsWith('{{') && v.endsWith('}}');
+                  if (v !== null && v !== undefined && v !== '' && !vUnresolved) {
                     cols.push(m.opportunity_field);
                     vals.push(v);
                     ph.push(`$${idx++}`);

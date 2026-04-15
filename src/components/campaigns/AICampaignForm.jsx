@@ -496,9 +496,16 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
     setAudiencePreviewLoading(true);
     setAudiencePreviewError('');
     try {
+      const {
+        data: { session: previewSession },
+      } = await supabase.auth.getSession();
+      const previewAuthHeaders = previewSession?.access_token
+        ? { Authorization: `Bearer ${previewSession.access_token}` }
+        : {};
       const response = await fetch(`${getBackendUrl()}/api/aicampaigns/audience-preview`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...previewAuthHeaders },
+        credentials: 'include',
         body: JSON.stringify({
           tenant_id,
           campaign_type: formData.campaign_type,

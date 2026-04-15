@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS ai_campaign_targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL,
+  tenant_id UUID NOT NULL,
   campaign_id UUID NOT NULL,
   contact_id UUID NOT NULL,
   channel TEXT,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS ai_campaign_targets (
 
 CREATE TABLE IF NOT EXISTS ai_campaign_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id TEXT NOT NULL,
+  tenant_id UUID NOT NULL,
   campaign_id UUID NOT NULL,
   contact_id UUID,
   status TEXT NOT NULL DEFAULT 'pending',
