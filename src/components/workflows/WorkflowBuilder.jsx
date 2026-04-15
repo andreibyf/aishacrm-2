@@ -733,11 +733,15 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           rows: [
             row('id', 'ID', '(existing)'),
             ...mappings.map((m) => {
-              const val = m.webhook_field
-                ? (resolvePayloadPath(m.webhook_field, testPayload) ?? null)
+              const targetField = m.target_field || m.contact_field || m.lead_field;
+              const sourceValue = m.source_value || m.webhook_field;
+              if (!targetField) return null;
+              const val = sourceValue
+                ? (resolvePayloadPath(sourceValue, testPayload) ??
+                   resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
                 : null;
-              return row(m.contact_field || m.lead_field, m.contact_field || m.lead_field, val);
-            }),
+              return row(targetField, targetField, val);
+            }).filter(Boolean),
             row('updated_at', 'Updated At', '(now)'),
           ],
         };
@@ -2765,7 +2769,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 onChange={(e) => {
                   updateNodeConfig(node.id, { ...node.config, details: e.target.value });
                 }}
-                placeholder="Activity details â€” click a variable in the output preview to insert"
+                placeholder="Activity details — click a variable in the output preview to insert"
                 className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
             </div>

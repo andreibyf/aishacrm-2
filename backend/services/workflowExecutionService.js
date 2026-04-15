@@ -211,6 +211,28 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
       try {
         switch (node.type) {
+          
+      // Resolve a field_mappings entry — handles unified {target_field, source_value}
+      // and all legacy {entity_field, webhook_field} shapes.
+      function resolveServiceMapping(m) {
+        if (m.target_field) {
+          const raw = m.source_value || '';
+          const template = raw.startsWith('{{') ? raw : raw ? `{{${raw}}}` : '';
+          const resolved = template ? replaceVariables(template) : '';
+          const isUnresolved = typeof resolved === 'string' && resolved.startsWith('{{') && resolved.endsWith('}}');
+          return isUnresolved || resolved === '' ? null : { field: m.target_field, value: resolved };
+        }
+        const legacyField =
+          m.lead_field || m.contact_field || m.account_field ||
+          m.opportunity_field || m.activity_field;
+        const legacySrc = m.webhook_field;
+        if (legacyField && legacySrc) {
+          const resolved = replaceVariables(`{{${legacySrc}}}`);
+          const isUnresolved = resolved === `{{${legacySrc}}}`;
+          return isUnresolved ? null : { field: legacyField, value: resolved };
+        }
+        return null;
+      }
           case 'webhook_trigger': {
             log.output = { payload: context.payload };
             break;
@@ -604,12 +626,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
             const insertData = { tenant_id: workflow.tenant_id };
             for (const m of mappings) {
-              if (m.lead_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== null && v !== undefined && v !== '') {
-                  insertData[m.lead_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) insertData[rm.field] = rm.value;
             }
 
             const { data: newLead, error: createError } = await supabase
@@ -639,12 +657,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.lead_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.lead_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -705,12 +719,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.contact_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.contact_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -771,12 +781,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.account_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.account_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
@@ -813,12 +819,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
             const insertData = { tenant_id: workflow.tenant_id };
             for (const m of mappings) {
-              if (m.opportunity_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== null && v !== undefined && v !== '') {
-                  insertData[m.opportunity_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) insertData[rm.field] = rm.value;
             }
 
             // Associate to account or lead if present
@@ -854,12 +856,8 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const mappings = cfg.field_mappings || [];
             const updateData = {};
             for (const m of mappings) {
-              if (m.opportunity_field && m.webhook_field) {
-                const v = replaceVariables(`{{${m.webhook_field}}}`);
-                if (v !== `{{${m.webhook_field}}}` && v !== null && v !== undefined) {
-                  updateData[m.opportunity_field] = v;
-                }
-              }
+              const rm = resolveServiceMapping(m);
+              if (rm) updateData[rm.field] = rm.value;
             }
 
             if (!Object.keys(updateData).length) {
