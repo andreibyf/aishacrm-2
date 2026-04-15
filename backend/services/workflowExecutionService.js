@@ -996,6 +996,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               log.error = `Failed to create activity: ${actError.message}`;
             } else {
               logger.info(`[WorkflowExecution] Activity created: ${actData?.id}`);
+              context.variables.created_activity = actData;
               log.output = { activity: actData };
             }
             break;

@@ -387,6 +387,14 @@ export default function createAICampaignRoutes(pgPool) {
           : {};
       const cType = campaign.campaign_type || metadataObj.campaign_type || 'email';
 
+      // Require a linked workflow — delivery goes exclusively through dispatchViaWorkflow
+      if (!campaign.workflow_id) {
+        return res.status(422).json({
+          status: 'error',
+          message: 'A workflow must be linked to this campaign before it can be started.',
+        });
+      }
+
       // Validate integration ownership for channel-specific types
       if (cType === 'email') {
         const profileId = metadataObj.ai_email_config?.sending_profile_id;

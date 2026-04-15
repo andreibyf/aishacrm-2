@@ -17,13 +17,13 @@ const CHANNEL_PATTERNS = [
 function parseInactivityDays(text) {
   if (!text) return null;
 
-  const dayMatch = text.match(/(\d+)\s*(day|days|d)\b/);
+  const dayMatch = text.match(/(\d{1,4}) ?(days?|d)\b/);
   if (dayMatch) return Number(dayMatch[1]);
 
-  const weekMatch = text.match(/(\d+)\s*(week|weeks|w)\b/);
+  const weekMatch = text.match(/(\d{1,4}) ?(weeks?|w)\b/);
   if (weekMatch) return Number(weekMatch[1]) * 7;
 
-  const monthMatch = text.match(/(\d+)\s*(month|months|mo)\b/);
+  const monthMatch = text.match(/(\d{1,4}) ?(months?|mo)\b/);
   if (monthMatch) return Number(monthMatch[1]) * 30;
 
   return null;

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +30,20 @@ import NodeLibrary from './NodeLibrary';
 import WorkflowTemplatesBrowser from './WorkflowTemplatesBrowser';
 import FieldMappingPanel from './FieldMappingPanel';
 import { getUpstreamTokens, ENTITY_SCHEMAS } from './upstreamTokens';
+// Normalise legacy {entity_field, webhook_field} mapping shapes to unified {target_field, source_value}
+// so FieldMappingPanel renders correctly for workflows saved before this change.
+function normaliseMappings(mappings) {
+  if (!Array.isArray(mappings)) return [];
+  return mappings.map((m) => {
+    if (m.target_field !== undefined) return m;
+    const legacyKey =
+      m.lead_field || m.contact_field || m.account_field || m.opportunity_field || m.activity_field;
+    if (legacyKey) {
+      return { target_field: legacyKey, source_value: m.webhook_field || m.source_value || '' };
+    }
+    return m;
+  });
+}
 import { useToast } from '@/components/ui/use-toast';
 import { WorkflowExecution } from '@/api/entities';
 import { Switch } from '@/components/ui/switch';
@@ -663,15 +677,17 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               varPath: `${prefix}.id`,
             },
             ...mappings.map((m) => {
-              const val = m.webhook_field
-                ? (resolvePayloadPath(m.webhook_field, testPayload) ??
-                  resolvePreviewVar(`{{${m.webhook_field}}}`, testPayload))
+              const targetField = m.target_field || m.lead_field;
+              const sourceValue = m.source_value || m.webhook_field;
+              const val = sourceValue
+                ? (resolvePayloadPath(sourceValue, testPayload) ??
+                  resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
                 : null;
               return {
-                field: m.lead_field,
-                label: m.lead_field,
+                field: targetField,
+                label: targetField,
                 value: val,
-                varPath: `${prefix}.${m.lead_field}`,
+                varPath: `${prefix}.${targetField}`,
               };
             }),
             {
@@ -800,39 +816,39 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         return {
           description: 'Newly created activity — click any row to insert into a focused field',
           rows: [
-            { field: 'id', label: 'ID', value: '(generated)', varPath: 'activity.id' },
-            { field: 'type', label: 'Type', value: actType, varPath: 'activity.type' },
+            { field: 'id', label: 'ID', value: '(generated)', varPath: 'created_activity.id' },
+            { field: 'type', label: 'Type', value: actType, varPath: 'created_activity.type' },
             {
               field: 'subject',
               label: 'Subject',
               value: subject || null,
-              varPath: 'activity.subject',
+              varPath: 'created_activity.subject',
             },
-            { field: 'body', label: 'Body', value: body || null, varPath: 'activity.body' },
-            { field: 'status', label: 'Status', value: 'scheduled', varPath: 'activity.status' },
+            { field: 'body', label: 'Body', value: body || null, varPath: 'created_activity.body' },
+            { field: 'status', label: 'Status', value: 'scheduled', varPath: 'created_activity.status' },
             {
               field: 'related_to',
               label: 'Related To',
               value: relatedTo,
-              varPath: 'activity.related_to',
+              varPath: 'created_activity.related_to',
             },
             {
               field: 'related_id',
               label: 'Related ID',
               value: relatedId,
-              varPath: 'activity.related_id',
+              varPath: 'created_activity.related_id',
             },
             {
               field: 'assigned_to',
               label: 'Assigned To',
               value: assignedToRaw || null,
-              varPath: 'activity.assigned_to',
+              varPath: 'created_activity.assigned_to',
             },
             {
               field: 'created_date',
               label: 'Created Date',
               value: '(now)',
-              varPath: 'activity.created_date',
+              varPath: 'created_activity.created_date',
             },
           ],
         };
@@ -1393,7 +1409,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to new lead fields</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.lead}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -1411,7 +1427,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to lead fields to update</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.lead}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -2576,7 +2592,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to contact fields to update</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.contact}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -2657,7 +2673,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to account fields to update</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.account}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -2676,7 +2692,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to new opportunity fields</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.opportunity}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -2695,7 +2711,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               <Label className="text-slate-200">Field Mappings</Label>
               <p className="text-sm text-slate-400 mb-3">Map inbound data to opportunity fields to update</p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.opportunity}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
@@ -2770,7 +2786,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Leave blank to use campaign owner automatically
               </p>
               <FieldMappingPanel
-                mappings={node.config?.field_mappings || []}
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
                 targetSchema={ENTITY_SCHEMAS.activity}
                 upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}

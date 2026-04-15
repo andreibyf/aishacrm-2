@@ -66,13 +66,15 @@ async function processPendingCampaigns() {
   if (!supabase) return;
 
   try {
-    // Phase A: pickup due scheduled campaigns
+    // Phase A: pickup due scheduled campaigns.
+    // Fetch a generous page (50) so that future-dated rows don't starve
+    // due campaigns — isScheduledDue filters client-side after fetch.
     const { data: scheduledCampaigns, error: scheduledErr } = await supabase
       .from('ai_campaign')
       .select('id, tenant_id, name, metadata, campaign_type, status, workflow_id, created_at')
       .eq('status', 'scheduled')
       .order('created_at', { ascending: true })
-      .limit(10);
+      .limit(50);
     if (scheduledErr) throw scheduledErr;
 
     const dueScheduled = (scheduledCampaigns || []).filter(isScheduledDue);
@@ -299,18 +301,23 @@ async function dispatchViaWorkflow(campaign, target) {
     .from('workflow')
     .select('id, metadata')
     .eq('id', campaign.workflow_id)
+    .eq('tenant_id', campaign.tenant_id)
     .maybeSingle();
   if (workflowErr) throw workflowErr;
+  if (!workflow) {
+    throw new Error(`Workflow ${campaign.workflow_id} not found for tenant`);
+  }
 
-  console.log('Workflow object:', workflow);
   let webhookUrl = workflow?.metadata?.webhook_url;
   if (!webhookUrl) {
     throw new Error('No webhook URL configured');
   }
   // Resolve relative URLs — workflow saves path-only URLs like /api/workflows/:id/webhook
   if (webhookUrl.startsWith('/')) {
-    const port = process.env.BACKEND_PORT || process.env.PORT || 3001;
-    webhookUrl = `http://localhost:${port}${webhookUrl}`;
+    const backendUrl =
+      process.env.BACKEND_URL ||
+      `http://localhost:${process.env.BACKEND_PORT || process.env.PORT || 3001}`;
+    webhookUrl = `${backendUrl}${webhookUrl}`;
   }
 
   const targetPayload =
@@ -339,7 +346,7 @@ async function dispatchViaWorkflow(campaign, target) {
     idempotency_key: `${campaign.id}-${target.id}`,
   };
 
-  console.log('Dispatching campaign target', target.id);
+  logger.debug({ target_id: target.id, webhookUrl }, '[CampaignWorker] Dispatching target');
 
   const response = await fetch(webhookUrl, {
     method: 'POST',
@@ -350,11 +357,11 @@ async function dispatchViaWorkflow(campaign, target) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
-    console.log('Webhook failed', target.id, text);
+    logger.warn({ target_id: target.id, status: response.status }, '[CampaignWorker] Webhook failed');
     throw new Error(`Webhook returned ${response.status}: ${text}`);
   }
 
-  console.log('Webhook success', target.id);
+  logger.info({ target_id: target.id }, '[CampaignWorker] Webhook success');
 }
 
 /**
