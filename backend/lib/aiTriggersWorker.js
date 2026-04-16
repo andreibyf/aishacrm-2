@@ -256,6 +256,11 @@ async function processTriggersForTenant(tenant) {
           days_stagnant: lead.days_stagnant,
           status: lead.status,
           last_activity: lead.last_activity_at,
+          source: lead.source || null,
+          company: lead.company || null,
+          email: lead.email || null,
+          phone: lead.phone || null,
+          recent_notes: lead.recent_notes || [],
         },
       });
       triggerCount++;
@@ -1547,7 +1552,7 @@ async function detectStagnantLeads(tenantUuid) {
     const { data: leads, error } = await supabase
       .from('leads')
       .select(
-        'id, first_name, last_name, email, phone, status, updated_at, created_at, is_test_data',
+        'id, first_name, last_name, email, phone, status, source, company, updated_at, created_at, is_test_data',
       )
       .eq('tenant_id', tenantUuid)
       .not('status', 'in', '(converted,closed,disqualified)')
@@ -1577,7 +1582,7 @@ async function detectStagnantLeads(tenantUuid) {
 
     // Step 3: Filter in JavaScript and calculate days_stagnant
     // Exclude ghost leads (no name, email, or phone — not actionable)
-    return (leads || [])
+    const filteredLeads = (leads || [])
       .filter((lead) => !existingIds.has(lead.id))
       .filter((lead) => {
         const hasName = lead.first_name || lead.last_name;
@@ -1599,6 +1604,33 @@ async function detectStagnantLeads(tenantUuid) {
         ),
         last_activity_at: null,
       }));
+
+    // Step 4: Fetch recent notes for each lead to enrich AI context
+    if (filteredLeads.length > 0) {
+      const filteredIds = filteredLeads.map((l) => l.id);
+      const { data: notesData } = await supabase
+        .from('notes')
+        .select('entity_id, note_text, created_at')
+        .eq('tenant_id', tenantUuid)
+        .eq('entity_type', 'lead')
+        .in('entity_id', filteredIds)
+        .order('created_at', { ascending: false })
+        .limit(filteredIds.length * 3);
+
+      const notesByLead = {};
+      for (const note of notesData || []) {
+        if (!notesByLead[note.entity_id]) notesByLead[note.entity_id] = [];
+        if (notesByLead[note.entity_id].length < 3)
+          notesByLead[note.entity_id].push(note.note_text);
+      }
+
+      return filteredLeads.map((lead) => ({
+        ...lead,
+        recent_notes: notesByLead[lead.id] || [],
+      }));
+    }
+
+    return filteredLeads;
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] detectStagnantLeads error');
     return [];

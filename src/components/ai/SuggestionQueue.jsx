@@ -328,6 +328,89 @@ function EmailPreview({ action }) {
 }
 
 /**
+ * Human-friendly summary card for create_activity, update_activity,
+ * create_lead, update_lead, create_opportunity, update_opportunity, etc.
+ */
+function ActionSummaryCard({ action }) {
+  const tool = action?.tool_name || '';
+  const args = action?.tool_args || {};
+
+  const TOOL_LABELS = {
+    create_activity: { icon: '📋', label: 'Create Activity' },
+    update_activity: { icon: '✏️', label: 'Update Activity' },
+    create_lead: { icon: '🎯', label: 'Create Lead' },
+    update_lead: { icon: '✏️', label: 'Update Lead' },
+    create_opportunity: { icon: '💼', label: 'Create Opportunity' },
+    update_opportunity: { icon: '✏️', label: 'Update Opportunity' },
+    create_contact: { icon: '👤', label: 'Create Contact' },
+    update_contact: { icon: '✏️', label: 'Update Contact' },
+  };
+
+  const meta = TOOL_LABELS[tool] || { icon: '⚙️', label: tool.replace(/_/g, ' ') };
+
+  const ACTIVITY_TYPE_ICONS = { call: '📞', email: '✉️', meeting: '📅', task: '✅' };
+  const activityIcon = ACTIVITY_TYPE_ICONS[args.type] || '📋';
+
+  const fields = [];
+
+  if (tool === 'create_activity' || tool === 'update_activity') {
+    if (args.type) fields.push({ label: 'Type', value: `${activityIcon} ${args.type}` });
+    if (args.subject) fields.push({ label: 'Subject', value: args.subject });
+    if (args.body) fields.push({ label: 'Note', value: args.body });
+    if (args.related_to) fields.push({ label: 'Related To', value: args.related_to });
+    if (args.status) fields.push({ label: 'Status', value: args.status });
+    if (args.due_date)
+      fields.push({ label: 'Due', value: new Date(args.due_date).toLocaleDateString() });
+  } else if (tool === 'update_lead' || tool === 'create_lead') {
+    if (args.status) fields.push({ label: 'Status', value: args.status });
+    if (args.first_name || args.last_name)
+      fields.push({
+        label: 'Name',
+        value: [args.first_name, args.last_name].filter(Boolean).join(' '),
+      });
+    if (args.email) fields.push({ label: 'Email', value: args.email });
+    if (args.source) fields.push({ label: 'Source', value: args.source });
+  } else if (tool === 'update_opportunity' || tool === 'create_opportunity') {
+    if (args.name) fields.push({ label: 'Name', value: args.name });
+    if (args.stage) fields.push({ label: 'Stage', value: args.stage });
+    if (args.amount != null)
+      fields.push({ label: 'Amount', value: `$${Number(args.amount).toLocaleString()}` });
+    if (args.close_date)
+      fields.push({ label: 'Close Date', value: new Date(args.close_date).toLocaleDateString() });
+  } else {
+    // Generic: show all args as key/value pairs
+    for (const [k, v] of Object.entries(args)) {
+      if (v != null && v !== '' && k !== 'related_id') {
+        fields.push({
+          label: k.replace(/_/g, ' '),
+          value: typeof v === 'object' ? JSON.stringify(v) : String(v),
+        });
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+        <span>{meta.icon}</span>
+        <span>{meta.label}</span>
+      </div>
+      <div className="border border-slate-700 rounded-lg divide-y divide-slate-700 text-sm bg-slate-900/50">
+        {fields.map(({ label, value }) => (
+          <div key={label} className="flex gap-3 px-3 py-2">
+            <span className="text-slate-400 w-24 shrink-0 capitalize">{label}</span>
+            <span className="text-slate-200 break-words flex-1">{value}</span>
+          </div>
+        ))}
+        {fields.length === 0 && (
+          <div className="px-3 py-2 text-slate-500 text-xs">No details available</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Modal dialog that shows the AI-generated email body for review before approving.
  */
 function EmailDraftPreviewModal({
@@ -581,6 +664,13 @@ function SuggestionCard({
                 <h4 className="font-medium text-sm mb-2 text-slate-200">Proposed Action</h4>
                 {suggestion.action.tool_name === 'send_email' ? (
                   <EmailPreview action={suggestion.action} />
+                ) : suggestion.action.tool_name === 'create_activity' ? (
+                  <ActionSummaryCard action={suggestion.action} />
+                ) : suggestion.action.tool_name === 'update_activity' ? (
+                  <ActionSummaryCard action={suggestion.action} />
+                ) : suggestion.action.tool_name?.startsWith('create_') ||
+                  suggestion.action.tool_name?.startsWith('update_') ? (
+                  <ActionSummaryCard action={suggestion.action} />
                 ) : (
                   <pre className="text-xs overflow-x-auto whitespace-pre-wrap text-slate-400">
                     {JSON.stringify(suggestion.action, null, 2)}
