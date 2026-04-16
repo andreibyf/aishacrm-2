@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deployment path restored to last known-good `v6.3.4` behavior (`docker-compose.prod.yml`, `.github/workflows/docker-release.yml`):** Removed the backend volume-mounted entrypoint override and the extra SCP/SSH workflow plumbing added after `v6.3.4`. Those changes introduced GHCR deploy regressions on the VPS (workflow syntax issues, SCP overwrite conflicts, stale directory/file conflicts, and permission failures) while `v6.3.4` already deployed successfully using the image-baked backend entrypoint. The deploy path now matches the working baseline again.
+
 - **Migration 151 RLS tenant-isolation pattern (`backend/migrations/151_llm_activity_logs.sql`):** The initial draft used `current_setting('app.current_tenant_id', true)::uuid`, but the repo was standardized to the JWT-based helper `public.current_tenant_id()` (see migration `rls_fix_high3_standardize_tenant_isolation_pattern`). The session GUC is never `SET` in current middleware, so the SELECT policy would have returned zero rows. Migration 151 now uses `public.current_tenant_id()` to match the rest of the system.
 
 - **Migration 151 retention was never enforced (`backend/migrations/151_llm_activity_logs.sql`):** `cleanup_llm_activity_logs()` existed but was not scheduled — the 90-day retention claim was inaccurate. Added a pg_cron job (`llm_activity_logs_cleanup`, daily at 03:15 UTC) that invokes the cleanup function, with explicit `GRANT EXECUTE ... TO service_role` and idempotent re-registration (unschedule-then-schedule guarded by a `pg_cron` extension check).

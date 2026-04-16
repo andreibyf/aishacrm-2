@@ -378,17 +378,6 @@ jobs:
           DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
           DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
 
-      - name: Prepare VPS directories for SCP
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
-          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
-          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
-          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          script: |
-            mkdir -p /opt/aishacrm/backend
-            rm -rf /opt/aishacrm/backend/docker-entrypoint.sh
-
       - name: Deploy root-level files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -396,7 +385,7 @@ jobs:
           username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,litellm_config.yaml,backend/docker-entrypoint.sh"
+          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,litellm_config.yaml"
           target: "/opt/aishacrm/"
           strip_components: 0
           timeout: 120s
@@ -438,12 +427,7 @@ jobs:
               echo "ERROR: MCP docker-compose.prod.yml missing!"
               exit 1
             fi
-            if [ ! -f /opt/aishacrm/backend/docker-entrypoint.sh ]; then
-              echo "ERROR: backend/docker-entrypoint.sh missing!"
-              exit 1
-            fi
-            chmod +x /opt/aishacrm/backend/docker-entrypoint.sh
-            echo "✓ All files verified"
+            echo "✓ All compose files verified"
 
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@v1.0.3

@@ -41,11 +41,6 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-backend:latest
     container_name: aishacrm-backend
     restart: unless-stopped
-    # Override image entrypoint with the repo's fixed version so Doppler secrets
-    # are never wiped by env-var prefixing. git pull on the VPS is enough to update.
-    entrypoint: ["sh", "/custom-entrypoint.sh"]
-    volumes:
-      - ./backend/docker-entrypoint.sh:/custom-entrypoint.sh:ro
     depends_on:
       redis-memory:
         condition: service_healthy
