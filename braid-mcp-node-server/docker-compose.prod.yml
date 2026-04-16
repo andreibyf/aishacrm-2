@@ -15,6 +15,10 @@ services:
     environment:
       NODE_ENV: production
       MCP_ROLE: server
+      # Doppler secrets injection (entrypoint uses DOPPLER_TOKEN to fetch all secrets at runtime)
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
       # Production backend URL (internal Docker network)
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
@@ -40,6 +44,10 @@ services:
       NODE_ENV: production
       MCP_ROLE: node
       MCP_NODE_ID: "1"
+      # Doppler secrets injection
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
       MCP_SERVER_URL: http://braid-mcp-server:8000
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
@@ -65,6 +73,10 @@ services:
       NODE_ENV: production
       MCP_ROLE: node
       MCP_NODE_ID: "2"
+      # Doppler secrets injection
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
       MCP_SERVER_URL: http://braid-mcp-server:8000
       CRM_BACKEND_URL: http://aishacrm-backend:3001
       REDIS_URL: redis://aishacrm-redis-memory:6379
