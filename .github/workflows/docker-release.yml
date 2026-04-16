@@ -387,7 +387,7 @@ jobs:
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
           script: |
             mkdir -p /opt/aishacrm/backend
-            rm -f /opt/aishacrm/backend/docker-entrypoint.sh
+            rm -rf /opt/aishacrm/backend/docker-entrypoint.sh
 
       - name: Deploy root-level files to VPS
         uses: appleboy/scp-action@v0.1.7
