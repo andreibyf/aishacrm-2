@@ -482,6 +482,7 @@ export default function createAICampaignRoutes(pgPool) {
                 email: item.email || null,
                 phone: item.phone || null,
                 company: item.company || null,
+                assigned_to: item.assigned_to || null,
               };
             }
             if (typeof item === 'string') {

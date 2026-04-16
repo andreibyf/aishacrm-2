@@ -579,6 +579,7 @@ export default function AICampaignForm({ campaign, onSubmit, onCancel }) {
               email: contact?.email || null,
               phone: contact?.phone || null,
               company: contact?.company || '',
+              assigned_to: contact?.assigned_to || null,
               scheduled_date: formData.schedule_config.start_date,
               scheduled_time: formData.schedule_config.preferred_hours.start,
               status: 'pending',

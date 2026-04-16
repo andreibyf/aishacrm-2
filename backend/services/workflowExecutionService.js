@@ -1010,6 +1010,42 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               log.status = 'error';
               log.error = `Failed to create activity: ${actError.message}`;
             } else {
+              // Resolve and store related_name for the activity link display
+              let resolvedRelatedName = null;
+              const finalRelatedTo = mappedFields.related_to || related_to;
+              const finalRelatedId = mappedFields.related_id || related_id;
+              if (finalRelatedTo && finalRelatedId) {
+                try {
+                  const nameQueries = {
+                    lead: supabase.from('leads').select('first_name, last_name, company').eq('id', finalRelatedId).single(),
+                    contact: supabase.from('contacts').select('first_name, last_name').eq('id', finalRelatedId).single(),
+                    account: supabase.from('accounts').select('name').eq('id', finalRelatedId).single(),
+                    opportunity: supabase.from('opportunities').select('name').eq('id', finalRelatedId).single(),
+                    bizdev_source: supabase.from('bizdev_sources').select('contact_person, company_name').eq('id', finalRelatedId).single(),
+                  };
+                  const nameQuery = nameQueries[finalRelatedTo];
+                  if (nameQuery) {
+                    const { data: nameData } = await nameQuery;
+                    if (nameData) {
+                      if (finalRelatedTo === 'lead') {
+                        const person = `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim();
+                        resolvedRelatedName = nameData.company && person ? `${nameData.company} (${person})` : nameData.company || person || null;
+                      } else if (finalRelatedTo === 'bizdev_source') {
+                        const person = nameData.contact_person || '';
+                        resolvedRelatedName = nameData.company_name && person ? `${nameData.company_name} (${person})` : nameData.company_name || person || null;
+                      } else if (finalRelatedTo === 'contact') {
+                        resolvedRelatedName = `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim() || null;
+                      } else {
+                        resolvedRelatedName = nameData.name || null;
+                      }
+                    }
+                  }
+                } catch (_) { /* non-fatal */ }
+                if (resolvedRelatedName) {
+                  await supabase.from('activities').update({ related_name: resolvedRelatedName }).eq('id', actData.id);
+                  actData.related_name = resolvedRelatedName;
+                }
+              }
               logger.info(`[WorkflowExecution] Activity created: ${actData?.id}`);
               context.variables.created_activity = actData;
               log.output = { activity: actData };

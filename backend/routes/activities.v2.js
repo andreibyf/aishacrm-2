@@ -58,7 +58,7 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
     opportunity: { table: 'opportunities', select: 'name' },
     bizdev_source: {
       table: 'bizdev_sources',
-      select: 'company_name, first_name, last_name, email',
+      select: 'contact_person, company_name, contact_email, email',
     },
   };
 
@@ -83,10 +83,17 @@ async function lookupRelatedEntity(supabase, relatedTo, relatedId) {
 
     // Build name based on entity type (B2B: show company + contact for leads)
     let name = null;
-    if (relatedTo === 'lead' || relatedTo === 'bizdev_source') {
-      // B2B Leads/BizDev: "Company Name (Contact Name)" format
+    if (relatedTo === 'lead') {
       const personName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
       const companyField = data.company || data.company_name;
+      if (companyField && personName) {
+        name = `${companyField} (${personName})`;
+      } else {
+        name = companyField || personName || null;
+      }
+    } else if (relatedTo === 'bizdev_source') {
+      const personName = data.contact_person || '';
+      const companyField = data.company_name;
       if (companyField && personName) {
         name = `${companyField} (${personName})`;
       } else {
