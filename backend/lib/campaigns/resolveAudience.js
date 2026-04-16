@@ -20,7 +20,7 @@ function normalizeTargetType(targetType) {
 async function fetchLeads(supabase, { tenant_id, inactivityDays, temperature, requiredChannel }) {
   let query = supabase
     .from('leads')
-    .select('id, first_name, last_name, email, phone, company, status, updated_at, created_at')
+    .select('id, first_name, last_name, email, phone, company, status, assigned_to, updated_at, created_at')
     .eq('tenant_id', tenant_id);
 
   if (inactivityDays > 0) {
@@ -44,6 +44,7 @@ async function fetchLeads(supabase, { tenant_id, inactivityDays, temperature, re
     email: r.email || null,
     phone: r.phone || null,
     company: r.company || null,
+    assigned_to: r.assigned_to || null,
   }));
 }
 
@@ -54,7 +55,7 @@ async function fetchContacts(
   let query = supabase
     .from('contacts')
     .select(
-      'id, first_name, last_name, email, phone, mobile, account_name, status, updated_at, created_at',
+      'id, first_name, last_name, email, phone, mobile, account_name, status, assigned_to, updated_at, created_at',
     )
     .eq('tenant_id', tenant_id);
 
@@ -79,6 +80,7 @@ async function fetchContacts(
     email: r.email || null,
     phone: r.phone || r.mobile || null,
     company: r.account_name || null,
+    assigned_to: r.assigned_to || null,
   }));
 }
 
@@ -86,7 +88,7 @@ async function fetchSources(supabase, { tenant_id, inactivityDays, temperature, 
   let query = supabase
     .from('bizdev_sources')
     .select(
-      'id, contact_person, company_name, source, contact_email, email, phone_number, status, updated_at, created_at',
+      'id, contact_person, company_name, source, contact_email, email, phone_number, status, assigned_to, updated_at, created_at',
     )
     .eq('tenant_id', tenant_id);
 
@@ -111,6 +113,7 @@ async function fetchSources(supabase, { tenant_id, inactivityDays, temperature, 
     email: r.contact_email || r.email || null,
     phone: r.phone_number || null,
     company: r.company_name || r.source || null,
+    assigned_to: r.assigned_to || null,
   }));
 }
 

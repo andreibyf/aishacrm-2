@@ -326,7 +326,14 @@ async function dispatchViaWorkflow(campaign, target) {
       : toObject(target.target_payload);
 
   const campaignMeta = typeof campaign.metadata === 'object' ? campaign.metadata : {};
-  const assignedTo = campaign.assigned_to || campaignMeta.lifecycle?.scheduled_by || null;
+  // Prefer the assigned_to from the target record (snapshotted at audience resolution),
+  // then campaign-level assignment. Never use scheduled_by — that is the user who
+  // started the campaign, not the record owner.
+  const assignedTo =
+    targetPayload.assigned_to ||
+    campaign.assigned_to ||
+    campaignMeta.assigned_to ||
+    null;
 
   const payload = {
     event: 'campaign.dispatch',
