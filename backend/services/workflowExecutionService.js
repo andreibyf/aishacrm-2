@@ -886,13 +886,26 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
           case 'create_activity': {
             const activityType = cfg.type || 'task';
-            // Default subject to campaign name if node has no title configured
+
+            // Build field map from field_mappings (unified shape), falling back
+            // to legacy cfg.title / cfg.details / cfg.assigned_to for saved workflows
+            const activityMappings = cfg.field_mappings || [];
+            const mappedFields = {};
+            for (const m of activityMappings) {
+              const resolved = resolveServiceMapping(m);
+              if (resolved) mappedFields[resolved.field] = resolved.value;
+            }
+
+            // Legacy fallback — only used if field_mappings is absent
             const campaignName = context.payload?.campaign?.name || null;
             const defaultSubject = campaignName ? `Campaign: ${campaignName}` : 'Workflow activity';
-            const subject = replaceVariables(cfg.title || cfg.subject || defaultSubject);
-            // Default body includes campaign name so the activity is self-describing
             const defaultDetails = campaignName ? `Dispatched via campaign: ${campaignName}` : '';
-            const description = replaceVariables(cfg.details || cfg.description || defaultDetails);
+            const subject =
+              mappedFields.subject ??
+              replaceVariables(cfg.title || cfg.subject || defaultSubject);
+            const description =
+              mappedFields.body ??
+              replaceVariables(cfg.details || cfg.description || defaultDetails);
 
             const lead = context.variables.found_lead;
             const contact = context.variables.found_contact;
@@ -946,6 +959,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             // Resolve assigned_to: UUID from campaign > email fallback
             const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             const assignedToRaw =
+              mappedFields.assigned_to ||
               replaceVariables(cfg.assigned_to || '') ||
               context.payload?.assigned_to ||
               context.payload?.campaign?.assigned_to ||
@@ -968,12 +982,14 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               .from('activities')
               .insert({
                 tenant_id: workflow.tenant_id,
-                type: activityType,
+                type: mappedFields.type || activityType,
                 subject: subject || null,
                 body: description || null,
-                status: 'scheduled',
-                related_id: related_id,
-                related_to: related_to,
+                status: mappedFields.status || 'scheduled',
+                due_date: mappedFields.due_date || null,
+                priority: mappedFields.priority || null,
+                related_id: mappedFields.related_id || related_id,
+                related_to: mappedFields.related_to || related_to,
                 ...(assignedToUuid ? { assigned_to: assignedToUuid } : {}),
                 metadata: {
                   created_by_workflow: workflow.id,

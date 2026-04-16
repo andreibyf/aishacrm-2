@@ -800,40 +800,46 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       case 'create_activity': {
         const actType = cfg.type || 'task';
-        const campaignName = resolvePayloadPath('campaign.name', testPayload) || null;
-        const defaultSubject = campaignName ? `Campaign: ${campaignName}` : 'Workflow activity';
-        const defaultBody = campaignName ? `Dispatched via campaign: ${campaignName}` : '';
-        const subject = resolvePreviewVar(cfg.title || cfg.subject || defaultSubject, testPayload);
-        const body = resolvePreviewVar(cfg.details || cfg.description || defaultBody, testPayload);
-        const entityTypeRaw =
+        const mappings = cfg.field_mappings || [];
+        const ENTITY_LABELS = {
+          bizdev_source: 'Potential Lead',
+          lead: 'Lead',
+          contact: 'Contact',
+          account: 'Account',
+          opportunity: 'Opportunity',
+        };
+        const associateRaw =
           cfg.associate && cfg.associate !== 'auto'
             ? cfg.associate
             : resolvePayloadPath('contact.entity_type', testPayload) || 'contact';
         const normalizeET = (t) =>
           t === 'potential_lead' || t === 'source' ? 'bizdev_source' : t || 'contact';
-        const relatedTo = normalizeET(entityTypeRaw);
+        const relatedTo = normalizeET(associateRaw);
         const relatedId = resolvePayloadPath('contact.contact_id', testPayload) || null;
-        const assignedToRaw =
-          resolvePreviewVar(cfg.assigned_to || '', testPayload) ||
-          resolvePayloadPath('assigned_to', testPayload) ||
-          null;
         return {
           description: 'Newly created activity — click any row to insert into a focused field',
           rows: [
-            { field: 'id', label: 'ID', value: '(generated)', varPath: 'created_activity.id' },
-            { field: 'type', label: 'Type', value: actType, varPath: 'created_activity.type' },
-            {
-              field: 'subject',
-              label: 'Subject',
-              value: subject || null,
-              varPath: 'created_activity.subject',
-            },
-            { field: 'body', label: 'Body', value: body || null, varPath: 'created_activity.body' },
-            { field: 'status', label: 'Status', value: 'scheduled', varPath: 'created_activity.status' },
+            { field: 'id',   label: 'ID',   value: '(generated)', varPath: 'created_activity.id' },
+            { field: 'type', label: 'Type', value: actType,        varPath: 'created_activity.type' },
+            ...mappings.map((m) => {
+              const targetField = m.target_field || m.activity_field;
+              const sourceValue = m.source_value || m.webhook_field;
+              if (!targetField) return null;
+              const val = sourceValue
+                ? (resolvePayloadPath(sourceValue, testPayload) ??
+                   resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
+                : null;
+              return {
+                field: targetField,
+                label: ENTITY_SCHEMAS.activity.find((s) => s.value === targetField)?.label || targetField,
+                value: val,
+                varPath: `created_activity.${targetField}`,
+              };
+            }).filter(Boolean),
             {
               field: 'related_to',
               label: 'Related To',
-              value: relatedTo,
+              value: ENTITY_LABELS[relatedTo] || relatedTo,
               varPath: 'created_activity.related_to',
             },
             {
@@ -842,18 +848,8 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               value: relatedId,
               varPath: 'created_activity.related_id',
             },
-            {
-              field: 'assigned_to',
-              label: 'Assigned To',
-              value: assignedToRaw || null,
-              varPath: 'created_activity.assigned_to',
-            },
-            {
-              field: 'created_date',
-              label: 'Created Date',
-              value: '(now)',
-              varPath: 'created_activity.created_date',
-            },
+            { field: 'status',       label: 'Status',       value: 'scheduled', varPath: 'created_activity.status' },
+            { field: 'created_date', label: 'Created Date', value: '(now)',      varPath: 'created_activity.created_date' },
           ],
         };
       }
@@ -2751,54 +2747,6 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             </div>
 
             <div>
-              <Label className="text-slate-200">Subject/Title</Label>
-              <Input
-                value={node.config?.title || ''}
-                onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, title: e.target.value });
-                }}
-                placeholder="e.g., Follow-up with {{contact.contact_name}}"
-                className="bg-slate-800 border-slate-700 text-slate-200"
-              />
-            </div>
-
-            <div>
-              <Label className="text-slate-200">Details</Label>
-              <textarea
-                value={node.config?.details || ''}
-                onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, details: e.target.value });
-                }}
-                placeholder="Activity details — click a variable in the output preview to insert"
-                className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
-              />
-            </div>
-
-            {renderVariablePicker(node.id, insertAtFocused)}
-
-            <div>
-              <Label className="text-slate-200">Assigned To</Label>
-              <Input
-                value={node.config?.assigned_to || ''}
-                onChange={(e) => {
-                  updateNodeConfig(node.id, { ...node.config, assigned_to: e.target.value });
-                }}
-                placeholder="e.g. {{assigned_to}} or user@email.com"
-                className="bg-slate-800 border-slate-700 text-slate-200"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Leave blank to use campaign owner automatically
-              </p>
-              <FieldMappingPanel
-                mappings={normaliseMappings(node.config?.field_mappings || [])}
-                onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
-                targetSchema={ENTITY_SCHEMAS.activity}
-                upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
-                addLabel="Add Activity Field"
-              />
-            </div>
-
-            <div>
               <Label className="text-slate-200">Associate With</Label>
               <Select
                 value={node.config?.associate || 'auto'}
@@ -2822,6 +2770,21 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 Auto detects the entity type from the campaign payload
               </p>
             </div>
+
+            <div>
+              <Label className="text-slate-200">Field Mappings</Label>
+              <p className="text-xs text-slate-500 mb-2">
+                Map activity fields to upstream variables or static values
+              </p>
+              <FieldMappingPanel
+                mappings={normaliseMappings(node.config?.field_mappings || [])}
+                onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
+                targetSchema={ENTITY_SCHEMAS.activity}
+                upstreamTokens={getUpstreamTokens(node.id, nodes, connections, testPayload)}
+                addLabel="Add Activity Field"
+              />
+            </div>
+
             {renderOutputPreview(node)}
           </div>
         );

@@ -83,6 +83,8 @@ export const ENTITY_SCHEMAS = {
     { value: 'assigned_to', label: 'Assigned To' },
     { value: 'type',        label: 'Activity Type' },
     { value: 'priority',    label: 'Priority' },
+    { value: 'related_to',  label: 'Related Entity Type' },
+    { value: 'related_id',  label: 'Related Entity ID' },
   ],
 };
 
