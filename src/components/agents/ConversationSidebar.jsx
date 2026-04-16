@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as agentSDK from '@/api/conversations';
 import { Loader2, Plus, RefreshCw, MessageSquare, Trash2, Filter, Edit2, Check, X } from 'lucide-react';
 import AI_CONFIG from '@/config/ai.config';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 
 // Topic categories for filtering
 const TOPICS = [
@@ -34,6 +35,7 @@ function formatRelativeTime(dateString) {
  * Beautiful, compact sidebar for conversation management with topic filtering
  */
 export default function ConversationSidebar({ agentName, tenantId, activeConversationId, onSelect }) {
+  const { authCookiesReady } = useAuthCookiesReady();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
@@ -64,7 +66,7 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
   }, [items, search, selectedTopic]);
 
   async function loadList() {
-    if (!tenantId) return;
+    if (!tenantId || !authCookiesReady) return;
     setLoading(true);
     setError(null);
     try {
@@ -78,12 +80,13 @@ export default function ConversationSidebar({ agentName, tenantId, activeConvers
   }
 
   useEffect(() => {
+    if (!tenantId || !authCookiesReady) return;
     loadList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentName, tenantId]);
+  }, [agentName, tenantId, authCookiesReady]);
 
   async function handleNew() {
-    if (!tenantId) return;
+    if (!tenantId || !authCookiesReady) return;
     try {
       const storageKey = `${AI_CONFIG.conversation.storageKeyPrefix}${agentName}_${tenantId || 'default'}`;
       const timestampKey = `${storageKey}_timestamp`;

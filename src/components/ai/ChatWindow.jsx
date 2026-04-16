@@ -13,6 +13,7 @@ import MicButton from './MicButton';
 import MessageBubble from './MessageBubble';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '@/components/shared/tenantContext';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 
 const INDUSTRY_LABELS = {
   aerospace_and_defense: 'Aerospace & Defense',
@@ -64,6 +65,7 @@ const wrapMessage = (msg) => {
 export default function ChatWindow() {
   const { user: currentUser } = useUser();
   const { selectedTenantId } = useTenant();
+  const { authCookiesReady } = useAuthCookiesReady();
   const effectiveTenantId = selectedTenantId || currentUser?.tenant_id || currentUser?.tenant?.id;
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -157,6 +159,8 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
 
   useEffect(() => {
     if (!effectiveTenantId) return; // Superadmin must select a client first
+    if (!currentUser) return;
+    if (!authCookiesReady) return;
     let mounted = true;
     console.log('[ChatWindow] Initializing, creating conversation...');
     (async () => {
@@ -177,7 +181,7 @@ Only discuss other industries if explicitly requested by the user (e.g., "What a
     return () => {
       mounted = false;
     };
-  }, [effectiveTenantId]);
+  }, [effectiveTenantId, currentUser, authCookiesReady]);
 
   useEffect(() => {
     if (!conversationId) return;

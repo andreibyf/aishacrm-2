@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { getBackendUrl } from '@/api/backendUrl';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
 
 /**
  * Get cookie value by name
@@ -29,8 +30,13 @@ export function useSocket(namespace = '/') {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState(null);
   const socketRef = useRef(null);
+  const { authCookiesReady } = useAuthCookiesReady();
 
   useEffect(() => {
+    if (!authCookiesReady) {
+      return;
+    }
+
     // Get backend URL from environment
     const backendUrl = getBackendUrl();
 
@@ -93,7 +99,7 @@ export function useSocket(namespace = '/') {
         socket.disconnect();
       }
     };
-  }, [namespace]);
+  }, [namespace, authCookiesReady]);
 
   return {
     socket: socketRef.current,
