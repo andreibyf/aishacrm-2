@@ -92,24 +92,41 @@ export const ENTITY_SCHEMAS = {
 // Maps node type → function(node, testPayload) → [{ key, label, example? }]
 // The context variable prefix (found_lead, etc.) must match workflowExecutionService.
 
-const NODE_TOKEN_EMITTERS = {
-  webhook_trigger: (_node, testPayload) => {
-    if (!testPayload || typeof testPayload !== 'object') return [];
-    return Object.keys(testPayload).map((k) => ({
-      key: k,
-      label: k.replace(/_/g, ' '),
-      example: testPayload[k],
-    }));
-  },
+/**
+ * Recursively flatten an object into dot-notation key paths.
+ * e.g. { contact: { email: 'a', name: 'b' } } → ['contact.email', 'contact.name']
+ * Stops recursing into arrays — emits the array path itself.
+ */
+function flattenKeys(obj, prefix = '') {
+  if (obj === null || obj === undefined) return [];
+  if (Array.isArray(obj) || typeof obj !== 'object') {
+    return prefix ? [{ key: prefix, value: obj }] : [];
+  }
+  const results = [];
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      results.push(...flattenKeys(v, path));
+    } else {
+      results.push({ key: path, value: v });
+    }
+  }
+  return results;
+}
 
-  care_trigger: (_node, testPayload) => {
-    if (!testPayload || typeof testPayload !== 'object') return [];
-    return Object.keys(testPayload).map((k) => ({
-      key: k,
-      label: k.replace(/_/g, ' '),
-      example: testPayload[k],
-    }));
-  },
+function payloadToTokens(testPayload) {
+  if (!testPayload || typeof testPayload !== 'object') return [];
+  return flattenKeys(testPayload).map(({ key, value }) => ({
+    key,
+    label: key.replace(/_/g, ' ').replace(/\./g, ' › '),
+    example: value != null ? String(value) : undefined,
+  }));
+}
+
+const NODE_TOKEN_EMITTERS = {
+  webhook_trigger: (_node, testPayload) => payloadToTokens(testPayload),
+
+  care_trigger: (_node, testPayload) => payloadToTokens(testPayload),
 
   find_lead: () =>
     ENTITY_SCHEMAS.lead.map(({ value, label }) => ({

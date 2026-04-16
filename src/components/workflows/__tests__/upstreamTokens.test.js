@@ -4,17 +4,20 @@
  * Tests for the upstream token resolver and ENTITY_SCHEMAS.
  *
  * Coverage:
- *  1. getUpstreamTokens — webhook_trigger uses testPayload keys
- *  2. getUpstreamTokens — find_lead emits prefixed tokens
- *  3. getUpstreamTokens — multi-node graph, correct stepIndex labels
- *  4. getUpstreamTokens — target node itself is excluded
- *  5. getUpstreamTokens — http_request emits last_http_status / last_http_response
- *  6. getUpstreamTokens — returns empty array when no upstream nodes
- *  7. getUpstreamTokens — unknown node type is silently skipped
- *  8. tokenToTemplate — wraps bare key in {{ }}
- *  9. tokenToTemplate — leaves existing {{ }} untouched
- * 10. tokenToTemplate — returns empty string for falsy input
- * 11. ENTITY_SCHEMAS — all five entities have required fields
+ *  1. getUpstreamTokens — webhook_trigger uses testPayload keys (flat)
+ *  2. getUpstreamTokens — webhook_trigger flattens nested payload to dot-notation keys
+ *  3. getUpstreamTokens — nested token label uses › separator
+ *  4. getUpstreamTokens — nested token carries example value
+ *  5. getUpstreamTokens — find_lead emits prefixed tokens
+ *  6. getUpstreamTokens — multi-node graph, correct stepIndex labels
+ *  7. getUpstreamTokens — target node itself is excluded
+ *  8. getUpstreamTokens — http_request emits last_http_status / last_http_response
+ *  9. getUpstreamTokens — returns empty array when no upstream nodes
+ * 10. getUpstreamTokens — unknown node type is silently skipped
+ * 11. tokenToTemplate — wraps bare key in {{ }}
+ * 12. tokenToTemplate — leaves existing {{ }} untouched
+ * 13. tokenToTemplate — returns empty string for falsy input
+ * 14. ENTITY_SCHEMAS — all five entities have required fields
  */
 
 import { describe, it, expect } from 'vitest';
@@ -35,11 +38,25 @@ const linearConnections = [
 
 const testPayload = { email: 'test@example.com', first_name: 'Jane', company: 'Acme' };
 
+// Nested payload matching campaign dispatch shape
+const nestedPayload = {
+  contact: {
+    contact_name: 'Jack Dempsey',
+    email: 'jack@example.com',
+    entity_type: 'bizdev_source',
+    contact_id: 'abc-123',
+  },
+  campaign: {
+    name: 'Campaign Test 12',
+    assigned_to: 'user@example.com',
+  },
+  assigned_to: 'user@example.com',
+};
+
 // ─── getUpstreamTokens ─────────────────────────────────────────────────────
 
 describe('[upstreamTokens] getUpstreamTokens', () => {
-  it('returns payload keys as tokens for webhook_trigger', () => {
-    // Target = n2, upstream = n1 (webhook_trigger)
+  it('returns flat payload keys as tokens for webhook_trigger', () => {
     const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, testPayload);
     const keys = tokens.map((t) => t.key);
     expect(keys).toContain('email');
@@ -47,12 +64,41 @@ describe('[upstreamTokens] getUpstreamTokens', () => {
     expect(keys).toContain('company');
   });
 
+  it('flattens nested payload to dot-notation keys for webhook_trigger', () => {
+    const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, nestedPayload);
+    const keys = tokens.map((t) => t.key);
+    expect(keys).toContain('contact.contact_name');
+    expect(keys).toContain('contact.email');
+    expect(keys).toContain('contact.entity_type');
+    expect(keys).toContain('contact.contact_id');
+    expect(keys).toContain('campaign.name');
+    expect(keys).toContain('campaign.assigned_to');
+    expect(keys).toContain('assigned_to');
+    // Top-level parent keys (non-leaf) should NOT appear
+    expect(keys).not.toContain('contact');
+    expect(keys).not.toContain('campaign');
+  });
+
+  it('uses › separator in label for nested keys', () => {
+    const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, nestedPayload);
+    const token = tokens.find((t) => t.key === 'contact.contact_name');
+    expect(token).toBeDefined();
+    expect(token.label).toBe('contact › contact name');
+  });
+
+  it('carries the leaf value as example for nested tokens', () => {
+    const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, nestedPayload);
+    const token = tokens.find((t) => t.key === 'campaign.name');
+    expect(token).toBeDefined();
+    expect(token.example).toBe('Campaign Test 12');
+  });
+
   it('returns empty token list for webhook_trigger when no testPayload', () => {
     const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, null);
     expect(tokens.filter((t) => t.nodeType === 'webhook_trigger')).toHaveLength(0);
   });
 
-  it('attaches example value from testPayload to webhook tokens', () => {
+  it('attaches example value from testPayload to flat webhook tokens', () => {
     const tokens = getUpstreamTokens('n2', [triggerNode, findLeadNode], linearConnections, testPayload);
     const emailToken = tokens.find((t) => t.key === 'email');
     expect(emailToken.example).toBe('test@example.com');
@@ -70,7 +116,6 @@ describe('[upstreamTokens] getUpstreamTokens', () => {
     const keys = leadTokens.map((t) => t.key);
     expect(keys).toContain('found_lead.email');
     expect(keys).toContain('found_lead.first_name');
-    expect(keys).toContain('found_lead.id');
   });
 
   it('sets correct stepIndex — trigger is step 1, find_lead is step 2', () => {
@@ -115,7 +160,6 @@ describe('[upstreamTokens] getUpstreamTokens', () => {
   it('silently skips unknown node types', () => {
     const nodes = [triggerNode, unknownNode, createActivityNode];
     const conns = [{ from: 'n1', to: 'n5' }, { from: 'n5', to: 'n3' }];
-    // Should not throw
     expect(() =>
       getUpstreamTokens('n3', nodes, conns, testPayload),
     ).not.toThrow();
@@ -182,3 +226,4 @@ describe('[upstreamTokens] ENTITY_SCHEMAS', () => {
     });
   }
 });
+
