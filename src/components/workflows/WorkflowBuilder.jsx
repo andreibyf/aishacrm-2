@@ -2724,6 +2724,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
       // Activities: Create
       case 'create_activity': {
+        // One-time migration: ensure field_mappings key exists so backend
+        // knows this node uses the new FieldMappingPanel UX (not legacy cfg.title/details).
+        if (!Array.isArray(node.config?.field_mappings)) {
+          setTimeout(() => updateNodeConfig(node.id, {
+            ...node.config,
+            field_mappings: [],
+          }), 0);
+        }
         return (
           <div className="space-y-4">
             <div>

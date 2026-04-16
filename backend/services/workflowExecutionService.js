@@ -887,25 +887,26 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
           case 'create_activity': {
             const activityType = cfg.type || 'task';
 
-            // Build field map from field_mappings (unified shape), falling back
-            // to legacy cfg.title / cfg.details / cfg.assigned_to for saved workflows
+            // Build field map from field_mappings (unified shape).
+            // If field_mappings key is present (even empty array), the node has been
+            // migrated to the new FieldMappingPanel UX — ignore legacy cfg.title/details.
             const activityMappings = cfg.field_mappings || [];
+            const hasMappingConfig = Array.isArray(cfg.field_mappings);
             const mappedFields = {};
             for (const m of activityMappings) {
               const resolved = resolveServiceMapping(m);
               if (resolved) mappedFields[resolved.field] = resolved.value;
             }
 
-            // Legacy fallback — only used if field_mappings is absent
+            // Legacy fallback — only used for nodes saved before FieldMappingPanel refactor
+            // (identified by absence of field_mappings key on cfg).
             const campaignName = context.payload?.campaign?.name || null;
             const defaultSubject = campaignName ? `Campaign: ${campaignName}` : 'Workflow activity';
             const defaultDetails = campaignName ? `Dispatched via campaign: ${campaignName}` : '';
-            const subject =
-              mappedFields.subject ??
-              replaceVariables(cfg.title || cfg.subject || defaultSubject);
-            const description =
-              mappedFields.body ??
-              replaceVariables(cfg.details || cfg.description || defaultDetails);
+            const subject = mappedFields.subject ??
+              (!hasMappingConfig ? replaceVariables(cfg.title || cfg.subject || defaultSubject) : null);
+            const description = mappedFields.body ??
+              (!hasMappingConfig ? replaceVariables(cfg.details || cfg.description || defaultDetails) : null);
 
             const lead = context.variables.found_lead;
             const contact = context.variables.found_contact;
@@ -960,7 +961,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             const assignedToRaw =
               mappedFields.assigned_to ||
-              replaceVariables(cfg.assigned_to || '') ||
+              (!hasMappingConfig ? replaceVariables(cfg.assigned_to || '') : null) ||
               context.payload?.assigned_to ||
               context.payload?.campaign?.assigned_to ||
               null;
