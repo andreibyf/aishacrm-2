@@ -378,6 +378,17 @@ jobs:
           DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
           DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
 
+      - name: Prepare VPS directories for SCP
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
+          username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
+          key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
+          port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
+          script: |
+            mkdir -p /opt/aishacrm/backend
+            rm -f /opt/aishacrm/backend/docker-entrypoint.sh
+
       - name: Deploy root-level files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -385,7 +396,7 @@ jobs:
           username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,litellm_config.yaml"
+          source: "docker-compose.prod.yml,nginx-n8n.conf,nginx-proxy/nginx.conf,litellm_config.yaml,backend/docker-entrypoint.sh"
           target: "/opt/aishacrm/"
           strip_components: 0
           timeout: 120s
@@ -427,60 +438,12 @@ jobs:
               echo "ERROR: MCP docker-compose.prod.yml missing!"
               exit 1
             fi
-            echo "✓ All compose files verified"
-            # Write the fixed backend entrypoint via SSH (avoids SCP tar conflict when file already exists)
-            mkdir -p /opt/aishacrm/backend
-            cat > /opt/aishacrm/backend/docker-entrypoint.sh << 'ENTRYPOINT_EOF'
-#!/bin/sh
-# Docker entrypoint for backend container with Doppler support
-
-set -e
-
-if [ "$#" -eq 0 ]; then
-  set -- node server.js
-fi
-
-# Preserve Docker-provided scheduler URL values so they can be restored
-# after Doppler injects secrets for the child process.
-DOCKER_PUBLIC_SCHEDULER_URL="${PUBLIC_SCHEDULER_URL}"
-DOCKER_VITE_CALCOM_URL="${VITE_CALCOM_URL}"
-DOCKER_CALCOM_PUBLIC_URL="${CALCOM_PUBLIC_URL}"
-
-if [ -n "$DOPPLER_TOKEN" ]; then
-  echo "[ENTRYPOINT] Starting backend with Doppler (project: ${DOPPLER_PROJECT:-aishacrm}, config: ${DOPPLER_CONFIG:-prd_prd})"
-
-  # Export saved Docker vars so they survive into the doppler run subprocess
-  export DOCKER_PUBLIC_SCHEDULER_URL DOCKER_VITE_CALCOM_URL DOCKER_CALCOM_PUBLIC_URL
-
-  # Use plain sh -c (no env VAR=val prefix) so all Doppler-injected secrets
-  # are preserved in the child environment unchanged.
-  exec doppler run --token "$DOPPLER_TOKEN" --project "${DOPPLER_PROJECT:-aishacrm}" --config "${DOPPLER_CONFIG:-prd_prd}" -- \
-    sh -c '
-      if [ -n "$DOCKER_PUBLIC_SCHEDULER_URL" ]; then
-        export PUBLIC_SCHEDULER_URL="$DOCKER_PUBLIC_SCHEDULER_URL"
-      fi
-      if [ -n "$DOCKER_VITE_CALCOM_URL" ]; then
-        export VITE_CALCOM_URL="$DOCKER_VITE_CALCOM_URL"
-      fi
-      if [ -n "$DOCKER_CALCOM_PUBLIC_URL" ]; then
-        export CALCOM_PUBLIC_URL="$DOCKER_CALCOM_PUBLIC_URL"
-      fi
-      if [ -z "$PUBLIC_SCHEDULER_URL" ]; then
-        if [ -n "$CALCOM_PUBLIC_URL" ]; then
-          export PUBLIC_SCHEDULER_URL="$CALCOM_PUBLIC_URL"
-        elif [ -n "$VITE_CALCOM_URL" ]; then
-          export PUBLIC_SCHEDULER_URL="$VITE_CALCOM_URL"
-        fi
-      fi
-      exec "$@"
-    ' sh "$@"
-else
-  echo "[ENTRYPOINT] WARNING: DOPPLER_TOKEN not set, running without Doppler"
-  exec "$@"
-fi
-ENTRYPOINT_EOF
+            if [ ! -f /opt/aishacrm/backend/docker-entrypoint.sh ]; then
+              echo "ERROR: backend/docker-entrypoint.sh missing!"
+              exit 1
+            fi
             chmod +x /opt/aishacrm/backend/docker-entrypoint.sh
-            echo "✓ backend/docker-entrypoint.sh written"
+            echo "✓ All files verified"
 
       - name: Deploy to Production VPS
         uses: appleboy/ssh-action@v1.0.3
