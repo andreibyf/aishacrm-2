@@ -16,34 +16,34 @@ DOCKER_CALCOM_PUBLIC_URL="${CALCOM_PUBLIC_URL}"
 if [ -n "$DOPPLER_TOKEN" ]; then
   echo "[ENTRYPOINT] Starting backend with Doppler (project: ${DOPPLER_PROJECT:-aishacrm}, config: ${DOPPLER_CONFIG:-prd_prd})"
 
-  # Use 'doppler run' to inject secrets, then restore selected Docker overrides
-  # needed for local scheduler URL behavior in development.
+  # Export saved Docker vars so they survive into the doppler run subprocess
+  # (doppler run inherits the full environment; we re-apply overrides inside sh -c)
+  export DOCKER_PUBLIC_SCHEDULER_URL DOCKER_VITE_CALCOM_URL DOCKER_CALCOM_PUBLIC_URL
+
+  # Use plain sh -c (no `env VAR=val` prefix) so all Doppler-injected secrets
+  # are preserved in the child environment unchanged.
   exec doppler run --token "$DOPPLER_TOKEN" --project "${DOPPLER_PROJECT:-aishacrm}" --config "${DOPPLER_CONFIG:-prd_prd}" -- \
-    env \
-      DOCKER_PUBLIC_SCHEDULER_URL="$DOCKER_PUBLIC_SCHEDULER_URL" \
-      DOCKER_VITE_CALCOM_URL="$DOCKER_VITE_CALCOM_URL" \
-      DOCKER_CALCOM_PUBLIC_URL="$DOCKER_CALCOM_PUBLIC_URL" \
-      sh -c '
-        if [ -n "$DOCKER_PUBLIC_SCHEDULER_URL" ]; then
-          export PUBLIC_SCHEDULER_URL="$DOCKER_PUBLIC_SCHEDULER_URL"
+    sh -c '
+      if [ -n "$DOCKER_PUBLIC_SCHEDULER_URL" ]; then
+        export PUBLIC_SCHEDULER_URL="$DOCKER_PUBLIC_SCHEDULER_URL"
+      fi
+      if [ -n "$DOCKER_VITE_CALCOM_URL" ]; then
+        export VITE_CALCOM_URL="$DOCKER_VITE_CALCOM_URL"
+      fi
+      if [ -n "$DOCKER_CALCOM_PUBLIC_URL" ]; then
+        export CALCOM_PUBLIC_URL="$DOCKER_CALCOM_PUBLIC_URL"
+      fi
+      # Fallback: ensure backend startup guard has a scheduler URL even when
+      # only Cal.com-facing vars are provided by Doppler.
+      if [ -z "$PUBLIC_SCHEDULER_URL" ]; then
+        if [ -n "$CALCOM_PUBLIC_URL" ]; then
+          export PUBLIC_SCHEDULER_URL="$CALCOM_PUBLIC_URL"
+        elif [ -n "$VITE_CALCOM_URL" ]; then
+          export PUBLIC_SCHEDULER_URL="$VITE_CALCOM_URL"
         fi
-        if [ -n "$DOCKER_VITE_CALCOM_URL" ]; then
-          export VITE_CALCOM_URL="$DOCKER_VITE_CALCOM_URL"
-        fi
-        if [ -n "$DOCKER_CALCOM_PUBLIC_URL" ]; then
-          export CALCOM_PUBLIC_URL="$DOCKER_CALCOM_PUBLIC_URL"
-        fi
-        # Fallback: ensure backend startup guard has a scheduler URL even when
-        # only Cal.com-facing vars are provided by Doppler.
-        if [ -z "$PUBLIC_SCHEDULER_URL" ]; then
-          if [ -n "$CALCOM_PUBLIC_URL" ]; then
-            export PUBLIC_SCHEDULER_URL="$CALCOM_PUBLIC_URL"
-          elif [ -n "$VITE_CALCOM_URL" ]; then
-            export PUBLIC_SCHEDULER_URL="$VITE_CALCOM_URL"
-          fi
-        fi
-        exec "$@"
-      ' sh "$@"
+      fi
+      exec "$@"
+    ' sh "$@"
 else
   echo "[ENTRYPOINT] WARNING: DOPPLER_TOKEN not set, running without Doppler"
   exec "$@"

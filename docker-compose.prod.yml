@@ -65,10 +65,8 @@ services:
       # PEP Custom Query — use Groq (no Ollama in prod)
       - PEP_LLM_PROVIDER=groq
       - PEP_LLM_MODEL=llama-3.3-70b-versatile
-      # LiteLLM proxy (Docker-internal URL; LITELLM_ENABLED and LITELLM_MASTER_KEY from Doppler)
-      - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
+      # LiteLLM proxy (Docker-internal URL; LITELLM_ENABLED and LITELLM_MASTER_KEY injected by Doppler at runtime — do NOT set them here)
       - LITELLM_BASE_URL=http://litellm:4000
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       # Office visualization disabled in production
       - TELEMETRY_ENABLED=false
     healthcheck:
