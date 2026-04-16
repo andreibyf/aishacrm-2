@@ -986,10 +986,10 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                 subject: subject || null,
                 body: description || null,
                 status: mappedFields.status || 'scheduled',
-                due_date: mappedFields.due_date || null,
-                priority: mappedFields.priority || null,
                 related_id: mappedFields.related_id || related_id,
                 related_to: mappedFields.related_to || related_to,
+                ...(mappedFields.due_date ? { due_date: mappedFields.due_date } : {}),
+                ...(mappedFields.priority ? { priority: mappedFields.priority } : {}),
                 ...(assignedToUuid ? { assigned_to: assignedToUuid } : {}),
                 metadata: {
                   created_by_workflow: workflow.id,
