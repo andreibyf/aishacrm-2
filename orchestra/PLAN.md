@@ -317,6 +317,91 @@ Allowed:
 
 ## Active Tasks
 
+### BUG-TPL-STAB-001 – Template send_email execution and Templates UI stabilization
+
+Status: **Complete ✅** (Apr 16, 2026)
+
+Scope: **Fix residual stability and UX issues in structured template execution and management without changing architecture:**
+
+- Prevent invalid template URL blocks from reaching runtime render failure paths.
+- Ensure send_email template_id resolution failures produce actionable node errors.
+- Align integration test execute endpoint with actual API contract.
+- Improve Templates manager error handling for non-Error throw paths.
+- Keep workflow docs readable and consistent after template feature merge.
+
+Allowed files:
+
+- `backend/routes/templates.v2.js`
+- `backend/routes/workflows.js`
+- `backend/services/workflowExecutionService.js`
+- `backend/__tests__/routes/templates.v2.test.js`
+- `backend/__tests__/routes/workflows.template-email.integration.test.js`
+- `src/components/settings/TemplatesManager.jsx`
+- `docs/WORKFLOW_FEATURES_IMPLEMENTATION.md`
+- `CHANGELOG.md`
+
+Acceptance Criteria:
+
+1. Template block validation rejects unsafe/non-absolute URL values unless they are variable tokens.
+2. Both workflow execution paths fail cleanly when template_id is empty or unresolved token text.
+3. Integration test targets the real execute endpoint contract and no longer depends on non-existent route.
+4. Templates manager shows useful toast/error text for non-Error exceptions.
+5. Focused Docker tests pass:
+
+- `docker exec aishacrm-backend node --test __tests__/routes/templates.v2.test.js __tests__/routes/workflows.resolveMapping.test.js __tests__/lib/renderTemplate.test.js`
+
+6. Required Docker regression passes:
+
+- `docker exec aishacrm-backend npm test`
+
+# Execution Record (Apr 16, 2026)
+
+- Task activated with bugfix-first scope and no architecture changes.
+- Acceptance criteria 1-4 verified in implementation files.
+- Focused Docker tests passed:
+  - `docker exec aishacrm-backend node --test __tests__/routes/templates.v2.test.js __tests__/routes/workflows.resolveMapping.test.js __tests__/lib/renderTemplate.test.js`
+  - Result: 31 pass, 0 fail.
+- Full Docker backend regression passed:
+  - `docker exec aishacrm-backend npm test`
+  - Result: 2223 pass, 0 fail, 10 skipped.
+
+### BUG-TPL-POLISH-002 – TemplatesManager UX polish (non-architectural)
+
+Status: **Complete ✅** (Apr 16, 2026)
+
+Scope: **Apply targeted UX polish to template creation/editing without changing architecture or API contracts:**
+
+- Add live JSON validation feedback in the editor panel.
+- Add quick actions to format JSON and reset to a safe starter template.
+- Prevent submit while JSON is invalid or required fields are missing.
+- Keep existing create/update/toggle flows intact.
+
+Allowed files:
+
+- `src/components/settings/TemplatesManager.jsx`
+- `CHANGELOG.md`
+- `orchestra/PLAN.md`
+
+Acceptance Criteria:
+
+1. TemplatesManager shows clear inline JSON validation status while editing.
+2. TemplatesManager includes "Format JSON" and "Reset Example" actions.
+3. Submit button is disabled when JSON is invalid or name is blank.
+4. Existing create/update flows still work with valid payloads.
+5. Required Docker backend regression passes:
+
+- `docker exec aishacrm-backend npm test`
+
+# Execution Record (Apr 16, 2026)
+
+- Implemented live inline JSON validation feedback in TemplatesManager.
+- Added editor quick actions: `Format JSON` and `Reset Example`.
+- Submit button now blocks invalid JSON and missing name states.
+- Existing create/update/toggle flows preserved.
+- Docker backend regression passed:
+  - `docker exec aishacrm-backend npm test`
+  - Result: 2223 pass, 0 fail, 10 skipped.
+
 # PLAN – Realtime Voice Interaction (OpenAI Realtime WebRTC)
 
 Phase: **Realtime Voice / Streaming Assistant**  

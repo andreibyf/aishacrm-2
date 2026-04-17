@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Templates manager UX polish (`src/components/settings/TemplatesManager.jsx`):** Added live inline JSON validation feedback, quick editor actions (`Format JSON`, `Reset Example`), and stronger submit guardrails (disabled when name is empty or JSON is invalid) while preserving existing create/update/toggle flows.
+
+- **PR #511 review follow-up (`src/components/settings/TemplatesManager.jsx`, `orchestra/PLAN.md`):** Decoupled template submit availability from list-loading state, moved JSON validation logic to a stable module-level helper to satisfy hook dependency expectations, made `Reset Example` honor the currently selected template type, and normalized new PLAN task headings under `## Active Tasks` to `###` for correct markdown hierarchy.
+
 - **PR #510 review follow-up hardening (`backend/routes/templates.v2.js`, `backend/routes/workflows.js`, `backend/services/workflowExecutionService.js`, `backend/__tests__/routes/workflows.template-email.integration.test.js`, `src/components/settings/TemplatesManager.jsx`, `docs/WORKFLOW_FEATURES_IMPLEMENTATION.md`, `backend/__tests__/routes/templates.v2.test.js`):** Restored readable phase-list markdown formatting, corrected workflow integration test execution endpoint to `/api/workflows/execute` with `workflow_id` body, added explicit unresolved/empty `template_id` guards in both workflow execution paths, hardened template manager toast error handling for non-`Error` throws, and enforced URL validation for `image`/`button` blocks (absolute `http(s)` or variable token) with new route test coverage.
 
 - **Template API payload hardening (`backend/routes/templates.v2.js`, `backend/__tests__/routes/templates.v2.test.js`):** Added block-level validation for `template_json.blocks` (non-empty array, block-count cap, allowed block types, and required fields per block type) with explicit error messages to prevent malformed templates from being stored and later failing at render time.

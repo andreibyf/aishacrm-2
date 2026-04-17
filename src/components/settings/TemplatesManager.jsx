@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,6 +24,13 @@ const DEFAULT_TEMPLATE_JSON = {
   blocks: [{ type: 'text', content: 'Hi {{contact_name}},' }],
 };
 
+function getDefaultTemplateJson(type = 'email') {
+  return {
+    ...DEFAULT_TEMPLATE_JSON,
+    type,
+  };
+}
+
 function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -36,6 +43,22 @@ function getErrorMessage(error, fallback = 'Unexpected error') {
   return String(error || fallback);
 }
 
+function validateTemplateJson(parsedTemplate) {
+  if (!parsedTemplate || typeof parsedTemplate !== 'object' || Array.isArray(parsedTemplate)) {
+    return 'template_json must be an object';
+  }
+
+  if (!Array.isArray(parsedTemplate.blocks)) {
+    return 'template_json.blocks must be an array';
+  }
+
+  if (parsedTemplate.blocks.length === 0) {
+    return 'template_json.blocks must include at least one block';
+  }
+
+  return '';
+}
+
 export default function TemplatesManager() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -44,11 +67,12 @@ export default function TemplatesManager() {
   const [editing, setEditing] = useState(null);
   const [filterType, setFilterType] = useState('all');
   const [formError, setFormError] = useState('');
+  const [jsonTouched, setJsonTouched] = useState(false);
   const [form, setForm] = useState({
     name: '',
     type: 'email',
     is_active: true,
-    template_json_text: prettyJson(DEFAULT_TEMPLATE_JSON),
+    template_json_text: prettyJson(getDefaultTemplateJson('email')),
   });
 
   const loadTemplates = useCallback(async () => {
@@ -72,48 +96,81 @@ export default function TemplatesManager() {
   const resetForm = () => {
     setEditing(null);
     setFormError('');
+    setJsonTouched(false);
     setForm({
       name: '',
       type: 'email',
       is_active: true,
-      template_json_text: prettyJson(DEFAULT_TEMPLATE_JSON),
+      template_json_text: prettyJson(getDefaultTemplateJson('email')),
     });
   };
 
   const startEdit = (row) => {
     setEditing(row);
     setFormError('');
+    setJsonTouched(false);
     setForm({
       name: row.name || '',
       type: row.type || 'email',
       is_active: row.is_active !== false,
-      template_json_text: prettyJson(row.template_json || DEFAULT_TEMPLATE_JSON),
+      template_json_text: prettyJson(row.template_json || getDefaultTemplateJson(row.type || 'email')),
     });
   };
 
-  const validateTemplateJson = (parsedTemplate) => {
-    if (!parsedTemplate || typeof parsedTemplate !== 'object' || Array.isArray(parsedTemplate)) {
-      return 'template_json must be an object';
+  const jsonValidationMessage = useMemo(() => {
+    if (!form.template_json_text.trim()) {
+      return 'template_json must be valid JSON';
     }
 
-    if (!Array.isArray(parsedTemplate.blocks)) {
-      return 'template_json.blocks must be an array';
+    let parsedTemplate;
+    try {
+      parsedTemplate = JSON.parse(form.template_json_text);
+    } catch {
+      return 'template_json must be valid JSON';
     }
 
-    if (parsedTemplate.blocks.length === 0) {
-      return 'template_json.blocks must include at least one block';
-    }
+    return validateTemplateJson(parsedTemplate);
+  }, [form.template_json_text]);
 
-    return '';
+  const formatJson = () => {
+    try {
+      const parsedTemplate = JSON.parse(form.template_json_text);
+      setForm((prev) => ({
+        ...prev,
+        template_json_text: prettyJson(parsedTemplate),
+      }));
+      setFormError('');
+      toast.success('template_json formatted');
+    } catch {
+      const message = 'Cannot format invalid JSON';
+      setFormError(message);
+      toast.error(message);
+    }
+  };
+
+  const resetJsonExample = () => {
+    const currentType = form.type || 'email';
+    setForm((prev) => ({
+      ...prev,
+      template_json_text: prettyJson(getDefaultTemplateJson(currentType)),
+    }));
+    setJsonTouched(false);
+    setFormError('');
+    toast.success('template_json reset to starter example');
   };
 
   const submit = async (event) => {
     event.preventDefault();
     setFormError('');
+    setJsonTouched(true);
     setSaving(true);
     try {
       if (!form.name.trim()) {
         throw new Error('Template name is required');
+      }
+
+      if (jsonValidationMessage) {
+        throw new Error(jsonValidationMessage);
       }
 
       let parsedTemplate;
@@ -300,7 +357,29 @@ export default function TemplatesManager() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="template-json">template_json (JSON)</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="template-json">template_json (JSON)</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={formatJson}
+                disabled={saving}
+              >
+                Format JSON
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={resetJsonExample}
+                disabled={saving}
+              >
+                Reset Example
+              </Button>
+            </div>
+          </div>
           <Textarea
             id="template-json"
             className="min-h-[220px] font-mono text-xs"
@@ -312,10 +391,21 @@ export default function TemplatesManager() {
                 template_json_text: e.target.value,
               }))
             }
+            onBlur={() => setJsonTouched(true)}
           />
+          {jsonTouched && jsonValidationMessage ? (
+            <p className="text-xs text-red-600">{jsonValidationMessage}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              URLs in image/button blocks must be absolute http(s) URLs or variable tokens.
+            </p>
+          )}
         </div>
 
-        <Button type="submit" disabled={saving}>
+        <Button
+          type="submit"
+          disabled={saving || !form.name.trim() || Boolean(jsonValidationMessage)}
+        >
           {saving ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
