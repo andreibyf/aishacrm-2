@@ -28,6 +28,14 @@ function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function getErrorMessage(error, fallback = 'Unexpected error') {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error || fallback);
+}
+
 export default function TemplatesManager() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -51,7 +59,7 @@ export default function TemplatesManager() {
       const rows = await Template.filter(query);
       setTemplates(Array.isArray(rows) ? rows : []);
     } catch (error) {
-      toast.error(`Failed to load templates: ${error.message}`);
+      toast.error(`Failed to load templates: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
     }
@@ -138,7 +146,7 @@ export default function TemplatesManager() {
       resetForm();
       await loadTemplates();
     } catch (error) {
-      const message = error.message || 'Failed to save template';
+      const message = getErrorMessage(error, 'Failed to save template');
       setFormError(message);
       toast.error(message);
     } finally {
@@ -153,7 +161,7 @@ export default function TemplatesManager() {
       toast.success('Template status updated');
       await loadTemplates();
     } catch (error) {
-      toast.error(`Failed to update status: ${error.message}`);
+      toast.error(`Failed to update status: ${getErrorMessage(error)}`);
     } finally {
       setRowBusyId(null);
     }

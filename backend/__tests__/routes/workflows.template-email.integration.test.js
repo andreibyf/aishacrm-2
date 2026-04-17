@@ -156,10 +156,11 @@ async function findQueuedEmailActivity(workflowId, subject) {
       createdWorkflowId = workflowResult.json?.data?.id || workflowResult.json?.data?.workflow?.id;
       assert.ok(createdWorkflowId, 'Expected workflow id');
 
-      const executeResult = await jsonFetch(`/api/workflows/${createdWorkflowId}/execute`, {
+      const executeResult = await jsonFetch('/api/workflows/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          workflow_id: createdWorkflowId,
           tenant_id: TENANT_ID,
           contact_name: 'Ari',
           company: 'AiSHA CRM',

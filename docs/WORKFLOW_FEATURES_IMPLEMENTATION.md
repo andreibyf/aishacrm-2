@@ -492,9 +492,17 @@ export const workflowTemplates = [
 2. Configuration UI for: Wait, Send Email, Create Activity
 3. Backend execution for: Wait, Send Email, Create Activity
 
-**Phase 2 (v3.2.0):** 4. Send SMS configuration + backend 5. Assign Record (round-robin) configuration + backend 6. Update Status configuration + backend
+**Phase 2 (v3.2.0):**
 
-**Phase 3 (v3.3.0):** 7. Scheduled triggers 8. Workflow templates library 9. Advanced conditional branching
+4. Send SMS configuration + backend
+5. Assign Record (round-robin) configuration + backend
+6. Update Status configuration + backend
+
+**Phase 3 (v3.3.0):**
+
+7. Scheduled triggers
+8. Workflow templates library
+9. Advanced conditional branching
 
 ---
 

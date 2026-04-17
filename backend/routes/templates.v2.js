@@ -5,6 +5,21 @@ import { getTemplateById, listTemplatesByType } from '../lib/templates/templateS
 
 const ALLOWED_TYPES = new Set(['email', 'sms', 'call_script']);
 const ALLOWED_BLOCK_TYPES = new Set(['text', 'image', 'button', 'divider']);
+const VARIABLE_TOKEN_RE = /^\{\{\s*[a-zA-Z0-9_]+\s*\}\}$/;
+
+function isAbsoluteHttpUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isTemplateUrlValue(url) {
+  return isAbsoluteHttpUrl(url) || VARIABLE_TOKEN_RE.test(String(url).trim());
+}
 
 function validateTemplateBlocks(templateJson) {
   const errors = [];
@@ -46,6 +61,10 @@ function validateTemplateBlocks(templateJson) {
     if (block.type === 'image') {
       if (typeof block.url !== 'string' || !block.url.trim()) {
         errors.push(`template_json.blocks[${index}].url is required for image blocks`);
+      } else if (!isTemplateUrlValue(block.url)) {
+        errors.push(
+          `template_json.blocks[${index}].url must be an absolute http(s) URL or a variable token (e.g. {{booking_link}})`,
+        );
       }
     }
 
@@ -55,6 +74,10 @@ function validateTemplateBlocks(templateJson) {
       }
       if (typeof block.url !== 'string' || !block.url.trim()) {
         errors.push(`template_json.blocks[${index}].url is required for button blocks`);
+      } else if (!isTemplateUrlValue(block.url)) {
+        errors.push(
+          `template_json.blocks[${index}].url must be an absolute http(s) URL or a variable token (e.g. {{booking_link}})`,
+        );
       }
     }
   });

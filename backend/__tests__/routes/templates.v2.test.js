@@ -177,6 +177,35 @@ test('POST /api/v2/templates validates block type and required fields', async ()
   }
 });
 
+test('POST /api/v2/templates rejects non-absolute and non-token block urls', async () => {
+  const supabase = createSupabaseStub([]);
+  const server = await createServer(supabase);
+  try {
+    const { port } = server.address();
+    const res = await fetch(`http://127.0.0.1:${port}/api/v2/templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Bad URL Blocks',
+        type: 'email',
+        template_json: {
+          blocks: [
+            { type: 'image', url: '/assets/logo.png' },
+            { type: 'button', text: 'Click', url: 'ftp://example.com' },
+          ],
+        },
+      }),
+    });
+    const json = await res.json();
+
+    assert.equal(res.status, 400);
+    assert.equal(json.status, 'error');
+    assert.match(json.message, /must be an absolute http\(s\) URL or a variable token/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('DELETE /api/v2/templates/:id performs soft delete', async () => {
   const supabase = createSupabaseStub([
     {

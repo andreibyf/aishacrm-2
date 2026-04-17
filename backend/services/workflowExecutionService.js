@@ -558,6 +558,16 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             let resolvedTemplateId = null;
             if (templateIdRaw) {
               resolvedTemplateId = String(replaceVariables(String(templateIdRaw))).trim();
+              const unresolvedTemplateId =
+                !resolvedTemplateId ||
+                (resolvedTemplateId.startsWith('{{') && resolvedTemplateId.endsWith('}}'));
+              if (unresolvedTemplateId) {
+                log.status = 'error';
+                log.error =
+                  'send_email template_id is missing or unresolved; provide a concrete template UUID';
+                break;
+              }
+
               const template = await getTemplateById(
                 supabase,
                 resolvedTemplateId,

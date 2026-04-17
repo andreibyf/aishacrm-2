@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **PR #510 review follow-up hardening (`backend/routes/templates.v2.js`, `backend/routes/workflows.js`, `backend/services/workflowExecutionService.js`, `backend/__tests__/routes/workflows.template-email.integration.test.js`, `src/components/settings/TemplatesManager.jsx`, `docs/WORKFLOW_FEATURES_IMPLEMENTATION.md`, `backend/__tests__/routes/templates.v2.test.js`):** Restored readable phase-list markdown formatting, corrected workflow integration test execution endpoint to `/api/workflows/execute` with `workflow_id` body, added explicit unresolved/empty `template_id` guards in both workflow execution paths, hardened template manager toast error handling for non-`Error` throws, and enforced URL validation for `image`/`button` blocks (absolute `http(s)` or variable token) with new route test coverage.
+
 - **Template API payload hardening (`backend/routes/templates.v2.js`, `backend/__tests__/routes/templates.v2.test.js`):** Added block-level validation for `template_json.blocks` (non-empty array, block-count cap, allowed block types, and required fields per block type) with explicit error messages to prevent malformed templates from being stored and later failing at render time.
 
 - **Workflow send_email guardrails for unresolved recipients (`backend/routes/workflows.js`, `backend/services/workflowExecutionService.js`):** Added recipient normalization and required-recipient checks so email nodes fail with actionable logs when `config.to` resolves to empty values instead of silently queuing invalid email activities.
