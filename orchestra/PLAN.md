@@ -365,6 +365,43 @@ Acceptance Criteria:
   - `docker exec aishacrm-backend npm test`
   - Result: 2223 pass, 0 fail, 10 skipped.
 
+# BUG-TPL-POLISH-002 – TemplatesManager UX polish (non-architectural)
+
+Status: **Complete ✅** (Apr 16, 2026)
+
+Scope: **Apply targeted UX polish to template creation/editing without changing architecture or API contracts:**
+
+- Add live JSON validation feedback in the editor panel.
+- Add quick actions to format JSON and reset to a safe starter template.
+- Prevent submit while JSON is invalid or required fields are missing.
+- Keep existing create/update/toggle flows intact.
+
+Allowed files:
+
+- `src/components/settings/TemplatesManager.jsx`
+- `CHANGELOG.md`
+- `orchestra/PLAN.md`
+
+Acceptance Criteria:
+
+1. TemplatesManager shows clear inline JSON validation status while editing.
+2. TemplatesManager includes "Format JSON" and "Reset Example" actions.
+3. Submit button is disabled when JSON is invalid or name is blank.
+4. Existing create/update flows still work with valid payloads.
+5. Required Docker backend regression passes:
+
+- `docker exec aishacrm-backend npm test`
+
+# Execution Record (Apr 16, 2026)
+
+- Implemented live inline JSON validation feedback in TemplatesManager.
+- Added editor quick actions: `Format JSON` and `Reset Example`.
+- Submit button now blocks invalid JSON and missing name states.
+- Existing create/update/toggle flows preserved.
+- Docker backend regression passed:
+  - `docker exec aishacrm-backend npm test`
+  - Result: 2223 pass, 0 fail, 10 skipped.
+
 # PLAN – Realtime Voice Interaction (OpenAI Realtime WebRTC)
 
 Phase: **Realtime Voice / Streaming Assistant**  
