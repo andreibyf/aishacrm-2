@@ -65,7 +65,7 @@ const NAV_ITEMS = [
     label: 'BizDev Sources',
     description: 'Lead source tracking',
     default: false,
-    moduleName: 'BizDev Sources',
+    moduleName: 'Potential Leads',
   },
   {
     key: 'CashFlow',
@@ -135,7 +135,7 @@ const NAV_ITEMS = [
     label: 'Construction Projects',
     description: 'Project management',
     default: false,
-    moduleName: 'Construction Projects',
+    moduleName: 'Project Management',
   },
   {
     key: 'Workers',

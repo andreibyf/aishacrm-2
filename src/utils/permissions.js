@@ -332,6 +332,7 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     Workflows: 'Workflows',
     ConstructionProjects: 'Project Management',
     Workers: 'Workers',
+    CareWorkflows: 'CARE Workflows',
     DuplicateContacts: null,
     DuplicateAccounts: null,
     DuplicateLeads: null,
