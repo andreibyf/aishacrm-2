@@ -19,6 +19,7 @@ function toLabel(key) {
     ClientOnboarding: 'Client Onboarding',
     WorkflowGuide: 'Workflow Guide',
     ClientRequirements: 'Client Requirements',
+    CareWorkflows: 'CARE Workflows',
   };
   return map[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 }
@@ -48,6 +49,7 @@ const ORDER = [
   'ClientOnboarding',
   'WorkflowGuide',
   'ClientRequirements',
+  'CareWorkflows',
 ];
 
 export default function NavigationPermissions({

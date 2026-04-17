@@ -140,6 +140,7 @@ const secondaryNavIconMap = {
   Documentation: BookOpen,
   DeveloperAI: Bot,
   ClientRequirements: ClipboardCheck,
+  CareWorkflows: Zap,
 };
 
 const navItems = baseNavItems.map((item) => ({

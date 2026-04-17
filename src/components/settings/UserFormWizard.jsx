@@ -46,6 +46,7 @@ import {
   Menu,
   Copy,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -232,6 +233,12 @@ const NAV_MODULES = [
     icon: Settings,
     description: 'System configuration and preferences',
   },
+  {
+    key: 'CareWorkflows',
+    label: 'CARE Workflows',
+    icon: Zap,
+    description: 'AI-driven customer care triggers and playbooks',
+  },
 ];
 
 // Default nav permissions - most things enabled by default
@@ -268,6 +275,7 @@ const DEFAULT_NAV_PERMISSIONS = {
   DeveloperAI: false, // Off by default - developer only
   ClientRequirements: false, // Off by default - admin only
   Settings: false, // Off by default - requires perm_settings
+  CareWorkflows: false, // Off by default - admin/superadmin only
 };
 
 /**

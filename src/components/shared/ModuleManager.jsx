@@ -304,6 +304,20 @@ const defaultModules = [
     ],
   },
   {
+    id: 'care_workflows',
+    name: 'CARE Workflows',
+    description:
+      'AI-driven care triggers, automations, and playbooks for proactive client engagement',
+    icon: Zap,
+    features: [
+      'C.A.R.E. Trigger Configuration',
+      'Automated Follow-ups',
+      'Playbook Management',
+      'Client Engagement Rules',
+      'Condition-Based Actions',
+    ],
+  },
+  {
     id: 'construction_projects',
     name: 'Project Management',
     description: 'Track projects, assignments, and team resources across your organization',
