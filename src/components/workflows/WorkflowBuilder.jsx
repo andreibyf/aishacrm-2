@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Workflow } from '@/api/entities';
+import { Workflow, Template } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { BACKEND_URL } from '@/api/entities';
 import {
@@ -74,6 +74,10 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
 
   const [autoConnect, setAutoConnect] = useState(true);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
+  const [templateVariablesDrafts, setTemplateVariablesDrafts] = useState({});
+  const [templateVariablesErrors, setTemplateVariablesErrors] = useState({});
 
   // Track the most recently focused text input/textarea inside a node config panel
   // so that clicking an output-preview row can insert {{variable}} at cursor position.
@@ -97,6 +101,64 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     el.setSelectionRange(cursor, cursor);
     el.focus();
   }, []);
+
+  const loadEmailTemplates = useCallback(async () => {
+    setLoadingEmailTemplates(true);
+    try {
+      const rows = await Template.filter({ type: 'email', active: 'all' });
+      setEmailTemplates(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      toast({
+        title: 'Template load failed',
+        description: error?.message || 'Failed to load email templates',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingEmailTemplates(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadEmailTemplates();
+  }, [loadEmailTemplates]);
+
+  const getTemplateVariablesDraft = useCallback(
+    (node) => {
+      const draft = templateVariablesDrafts[node.id];
+      if (typeof draft === 'string') return draft;
+      return JSON.stringify(node.config?.template_variables || {}, null, 2);
+    },
+    [templateVariablesDrafts],
+  );
+
+  const applyTemplateVariablesDraft = useCallback(
+    (node) => {
+      const raw = getTemplateVariablesDraft(node).trim();
+      const parsed = raw ? JSON.parse(raw) : {};
+
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Template variables must be a JSON object');
+      }
+
+      updateNodeConfig(node.id, {
+        ...node.config,
+        template_variables: parsed,
+      });
+
+      setTemplateVariablesErrors((prev) => {
+        if (!prev[node.id]) return prev;
+        const next = { ...prev };
+        delete next[node.id];
+        return next;
+      });
+
+      setTemplateVariablesDrafts((prev) => ({
+        ...prev,
+        [node.id]: JSON.stringify(parsed, null, 2),
+      }));
+    },
+    [getTemplateVariablesDraft],
+  );
 
   // Template handler
   const handleSelectTemplate = (template) => {
@@ -732,16 +794,18 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           description: 'Updated contact record',
           rows: [
             row('id', 'ID', '(existing)'),
-            ...mappings.map((m) => {
-              const targetField = m.target_field || m.contact_field || m.lead_field;
-              const sourceValue = m.source_value || m.webhook_field;
-              if (!targetField) return null;
-              const val = sourceValue
-                ? (resolvePayloadPath(sourceValue, testPayload) ??
-                   resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
-                : null;
-              return row(targetField, targetField, val);
-            }).filter(Boolean),
+            ...mappings
+              .map((m) => {
+                const targetField = m.target_field || m.contact_field || m.lead_field;
+                const sourceValue = m.source_value || m.webhook_field;
+                if (!targetField) return null;
+                const val = sourceValue
+                  ? (resolvePayloadPath(sourceValue, testPayload) ??
+                    resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
+                  : null;
+                return row(targetField, targetField, val);
+              })
+              .filter(Boolean),
             row('updated_at', 'Updated At', '(now)'),
           ],
         };
@@ -819,23 +883,27 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         return {
           description: 'Newly created activity — click any row to insert into a focused field',
           rows: [
-            { field: 'id',   label: 'ID',   value: '(generated)', varPath: 'created_activity.id' },
-            { field: 'type', label: 'Type', value: actType,        varPath: 'created_activity.type' },
-            ...mappings.map((m) => {
-              const targetField = m.target_field || m.activity_field;
-              const sourceValue = m.source_value || m.webhook_field;
-              if (!targetField) return null;
-              const val = sourceValue
-                ? (resolvePayloadPath(sourceValue, testPayload) ??
-                   resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
-                : null;
-              return {
-                field: targetField,
-                label: ENTITY_SCHEMAS.activity.find((s) => s.value === targetField)?.label || targetField,
-                value: val,
-                varPath: `created_activity.${targetField}`,
-              };
-            }).filter(Boolean),
+            { field: 'id', label: 'ID', value: '(generated)', varPath: 'created_activity.id' },
+            { field: 'type', label: 'Type', value: actType, varPath: 'created_activity.type' },
+            ...mappings
+              .map((m) => {
+                const targetField = m.target_field || m.activity_field;
+                const sourceValue = m.source_value || m.webhook_field;
+                if (!targetField) return null;
+                const val = sourceValue
+                  ? (resolvePayloadPath(sourceValue, testPayload) ??
+                    resolvePreviewVar(`{{${sourceValue}}}`, testPayload))
+                  : null;
+                return {
+                  field: targetField,
+                  label:
+                    ENTITY_SCHEMAS.activity.find((s) => s.value === targetField)?.label ||
+                    targetField,
+                  value: val,
+                  varPath: `created_activity.${targetField}`,
+                };
+              })
+              .filter(Boolean),
             {
               field: 'related_to',
               label: 'Related To',
@@ -848,8 +916,18 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
               value: relatedId,
               varPath: 'created_activity.related_id',
             },
-            { field: 'status',       label: 'Status',       value: 'scheduled', varPath: 'created_activity.status' },
-            { field: 'created_date', label: 'Created Date', value: '(now)',      varPath: 'created_activity.created_date' },
+            {
+              field: 'status',
+              label: 'Status',
+              value: 'scheduled',
+              varPath: 'created_activity.status',
+            },
+            {
+              field: 'created_date',
+              label: 'Created Date',
+              value: '(now)',
+              varPath: 'created_activity.created_date',
+            },
           ],
         };
       }
@@ -1425,7 +1503,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map inbound data to lead fields to update</p>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to lead fields to update
+              </p>
               <FieldMappingPanel
                 mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
@@ -2381,9 +2461,86 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           </div>
         );
 
-      case 'send_email':
+      case 'send_email': {
+        const templateSelectValue = node.config?.template_id || '__none__';
+        const templateVariablesDraft = getTemplateVariablesDraft(node);
+        const templateVariablesError = templateVariablesErrors[node.id];
+        const selectedTemplate = emailTemplates.find((t) => t.id === node.config?.template_id);
+        const tokenInsertTarget = node.config?.token_insert_target || 'body';
+        const upstreamVars = getUpstreamVariables(node.id);
+        const tokenMap = new Map();
+
+        upstreamVars.forEach(({ vars }) => {
+          vars.forEach(({ path, label }) => {
+            if (!path || tokenMap.has(path)) return;
+            tokenMap.set(path, label || path);
+          });
+        });
+
+        getAvailableFields().forEach((field) => {
+          if (!field || tokenMap.has(field)) return;
+          tokenMap.set(field, field);
+        });
+
+        const variableTokens = Array.from(tokenMap.entries()).map(([path, label]) => ({
+          path,
+          label,
+        }));
+
+        const appendToken = (currentValue, token) => {
+          const spacer = currentValue && !/\s$/.test(currentValue) ? ' ' : '';
+          return `${currentValue || ''}${spacer}${token}`;
+        };
+
         return (
           <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-slate-200">Structured Template (Optional)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={loadEmailTemplates}
+                  disabled={loadingEmailTemplates}
+                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                >
+                  {loadingEmailTemplates ? 'Loading...' : 'Refresh templates'}
+                </Button>
+              </div>
+              <Select
+                value={templateSelectValue}
+                onValueChange={(value) => {
+                  const nextTemplateId = value === '__none__' ? '' : value;
+                  updateNodeConfig(node.id, {
+                    ...node.config,
+                    template_id: nextTemplateId,
+                  });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="No template" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="__none__">No template (use Body)</SelectItem>
+                  {emailTemplates
+                    .filter((tpl) => tpl.type === 'email')
+                    .map((tpl) => (
+                      <SelectItem key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {selectedTemplate ? (
+                <p className="text-xs text-emerald-400">
+                  Selected template ID: {selectedTemplate.id}
+                </p>
+              ) : null}
+              <p className="text-xs text-slate-500">
+                When a template is selected, the rendered template output becomes the email body.
+              </p>
+            </div>
             <div>
               <Label className="text-slate-200">To</Label>
               <Input
@@ -2409,6 +2566,36 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 className="bg-slate-800 border-slate-700 text-slate-200"
               />
             </div>
+            <div className="space-y-2">
+              <Label className="text-slate-200">Template (optional)</Label>
+              <Select
+                value={templateSelectValue}
+                onValueChange={(value) => {
+                  const nextTemplateId = value === '__none__' ? '' : value;
+                  updateNodeConfig(node.id, {
+                    ...node.config,
+                    template_id: nextTemplateId,
+                  });
+                }}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="No template" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="__none__">No template (use Body)</SelectItem>
+                  {emailTemplates
+                    .filter((tpl) => tpl.type === 'email')
+                    .map((tpl) => (
+                      <SelectItem key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500">
+                If selected, this template is rendered as the final email body.
+              </p>
+            </div>
             <div>
               <Label className="text-slate-200">Body</Label>
               <textarea
@@ -2420,6 +2607,174 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
                 className="w-full min-h-[120px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2"
               />
             </div>
+            {variableTokens.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-xs uppercase tracking-wide">
+                  Quick Insert Tokens
+                </Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        token_insert_target: 'body',
+                      })
+                    }
+                    className={`border-slate-700 hover:bg-slate-700 ${tokenInsertTarget === 'body' ? 'bg-blue-900/50 text-blue-200' : 'bg-slate-800 text-slate-300'}`}
+                  >
+                    Body
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        token_insert_target: 'subject',
+                      })
+                    }
+                    className={`border-slate-700 hover:bg-slate-700 ${tokenInsertTarget === 'subject' ? 'bg-blue-900/50 text-blue-200' : 'bg-slate-800 text-slate-300'}`}
+                  >
+                    Subject
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      updateNodeConfig(node.id, {
+                        ...node.config,
+                        token_insert_target: 'focused',
+                      })
+                    }
+                    className={`border-slate-700 hover:bg-slate-700 ${tokenInsertTarget === 'focused' ? 'bg-blue-900/50 text-blue-200' : 'bg-slate-800 text-slate-300'}`}
+                  >
+                    Focused Field
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {variableTokens.map(({ path, label }) => {
+                    const token = `{{${path}}}`;
+                    return (
+                      <button
+                        key={`body-token-${path}`}
+                        type="button"
+                        title={`Insert ${token} into ${tokenInsertTarget}`}
+                        onClick={() => {
+                          if (tokenInsertTarget === 'focused') {
+                            insertAtFocused(token);
+                            return;
+                          }
+
+                          if (tokenInsertTarget === 'subject') {
+                            updateNodeConfig(node.id, {
+                              ...node.config,
+                              subject: appendToken(node.config?.subject || '', token),
+                            });
+                            return;
+                          }
+
+                          updateNodeConfig(node.id, {
+                            ...node.config,
+                            body: appendToken(node.config?.body || '', token),
+                          });
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-blue-900/40 border border-blue-700/60 text-blue-300 hover:bg-blue-700/50 hover:text-blue-100 transition-colors"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Select Body, Subject, or Focused Field, then click a token to insert.
+                </p>
+              </div>
+            )}
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-slate-200">Template Variables (JSON Object)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    try {
+                      applyTemplateVariablesDraft(node);
+                    } catch (error) {
+                      setTemplateVariablesErrors((prev) => ({
+                        ...prev,
+                        [node.id]: error?.message || 'Invalid JSON object',
+                      }));
+                    }
+                  }}
+                  className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700"
+                >
+                  Apply Variables
+                </Button>
+              </div>
+              <textarea
+                value={templateVariablesDraft}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setTemplateVariablesDrafts((prev) => ({ ...prev, [node.id]: value }));
+                  setTemplateVariablesErrors((prev) => {
+                    if (!prev[node.id]) return prev;
+                    const next = { ...prev };
+                    delete next[node.id];
+                    return next;
+                  });
+                }}
+                onBlur={() => {
+                  try {
+                    applyTemplateVariablesDraft(node);
+                  } catch (error) {
+                    setTemplateVariablesErrors((prev) => ({
+                      ...prev,
+                      [node.id]: error?.message || 'Invalid JSON object',
+                    }));
+                  }
+                }}
+                placeholder='{"contact_name": "{{first_name}}", "booking_link": "{{booking_link}}"}'
+                className="w-full min-h-[100px] rounded-md bg-slate-800 border border-slate-700 text-slate-200 p-2 font-mono text-xs"
+              />
+              {templateVariablesError ? (
+                <p className="text-xs text-red-400 mt-1">{templateVariablesError}</p>
+              ) : (
+                <p className="text-xs text-slate-500 mt-1">
+                  Example: {'{"contact_name": "{{first_name}}", "company": "{{company}}"}'}
+                </p>
+              )}
+              {variableTokens.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-slate-500 mb-1">
+                    Click a token to insert into the currently focused Body or Template Variables
+                    field.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {variableTokens.map(({ path, label }) => {
+                      const token = `{{${path}}}`;
+                      return (
+                        <button
+                          key={`focused-token-${path}`}
+                          type="button"
+                          title={`Insert ${token} into the focused field`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => insertAtFocused(token)}
+                          className="text-xs px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
             <p className="text-xs text-slate-500">
               This queues an email as an Activity with type &quot;email&quot;. Delivery handling can
               be wired later.
@@ -2427,6 +2782,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
             {renderOutputPreview(node)}
           </div>
         );
+      }
 
       case 'initiate_call':
         return (
@@ -2590,7 +2946,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map inbound data to contact fields to update</p>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to contact fields to update
+              </p>
               <FieldMappingPanel
                 mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
@@ -2671,7 +3029,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map inbound data to account fields to update</p>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to account fields to update
+              </p>
               <FieldMappingPanel
                 mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
@@ -2690,7 +3050,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map inbound data to new opportunity fields</p>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to new opportunity fields
+              </p>
               <FieldMappingPanel
                 mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
@@ -2709,7 +3071,9 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           <div className="space-y-4">
             <div>
               <Label className="text-slate-200">Field Mappings</Label>
-              <p className="text-sm text-slate-400 mb-3">Map inbound data to opportunity fields to update</p>
+              <p className="text-sm text-slate-400 mb-3">
+                Map inbound data to opportunity fields to update
+              </p>
               <FieldMappingPanel
                 mappings={normaliseMappings(node.config?.field_mappings || [])}
                 onChange={(m) => updateNodeConfig(node.id, { ...node.config, field_mappings: m })}
@@ -2727,10 +3091,14 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
         // One-time migration: ensure field_mappings key exists so backend
         // knows this node uses the new FieldMappingPanel UX (not legacy cfg.title/details).
         if (!Array.isArray(node.config?.field_mappings)) {
-          setTimeout(() => updateNodeConfig(node.id, {
-            ...node.config,
-            field_mappings: [],
-          }), 0);
+          setTimeout(
+            () =>
+              updateNodeConfig(node.id, {
+                ...node.config,
+                field_mappings: [],
+              }),
+            0,
+          );
         }
         return (
           <div className="space-y-4">

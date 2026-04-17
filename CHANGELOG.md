@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Workflow Builder send_email node now exposes template controls (`src/components/workflows/WorkflowBuilder.jsx`):** Added UI controls for optional structured-template selection (`template_id`) in both the top template section and directly near Subject/Body for visibility, JSON-based `template_variables` editing/apply validation, and quick variable-token chips with an insert target selector (Body, Subject, or Focused Field) so operators can configure template-backed email nodes directly in the node editor instead of hand-editing workflow JSON.
+
 - **Templates manager UX polish (`src/components/settings/TemplatesManager.jsx`):** Added live inline JSON validation feedback, quick editor actions (`Format JSON`, `Reset Example`), and stronger submit guardrails (disabled when name is empty or JSON is invalid) while preserving existing create/update/toggle flows.
 
 - **PR #511 review follow-up (`src/components/settings/TemplatesManager.jsx`, `orchestra/PLAN.md`):** Decoupled template submit availability from list-loading state, moved JSON validation logic to a stable module-level helper to satisfy hook dependency expectations, made `Reset Example` honor the currently selected template type, and normalized new PLAN task headings under `## Active Tasks` to `###` for correct markdown hierarchy.
