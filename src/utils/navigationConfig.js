@@ -43,6 +43,7 @@ export const secondaryNavItems = [
   { href: 'Documentation', label: 'Documentation' },
   { href: 'DeveloperAI', label: 'Developer AI' },
   { href: 'ClientRequirements', label: 'Client Requirements' },
+  { href: 'CareWorkflows', label: 'CARE Workflows' },
 ];
 
 /**
@@ -83,6 +84,7 @@ export const moduleMapping = {
   AuditLog: null,
   UnitTests: null,
   ClientRequirements: null,
+  CareWorkflows: 'CARE Workflows',
 };
 
 /**

@@ -440,6 +440,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       UnitTests: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      CareWorkflows: true,
       ConstructionProjects: true, // Construction staffing module
       Workers: true, // Worker/contractor management
       DuplicateContacts: true,
@@ -474,6 +475,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       UnitTests: true,
       ClientOnboarding: true,
       ClientRequirements: true, // NEW
+      CareWorkflows: true,
       ConstructionProjects: true, // Construction staffing module
       Workers: true, // Worker/contractor management
       DuplicateContacts: true,
@@ -508,6 +510,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       UnitTests: false,
       ClientOnboarding: true,
       ClientRequirements: false,
+      CareWorkflows: false,
       ConstructionProjects: true, // Construction staffing module
       Workers: true, // Worker/contractor management
       DuplicateContacts: true,
