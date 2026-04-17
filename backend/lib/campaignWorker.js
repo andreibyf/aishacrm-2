@@ -18,6 +18,14 @@ let supabase = null;
 const webhookDb = { query: supabaseSqlQuery };
 const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
+export function isCampaignWorkerEnabled(env = process.env) {
+  return env?.CAMPAIGN_WORKER_ENABLED === 'true';
+}
+
+export function hasCampaignWorkerSupabaseConfig(env = process.env) {
+  return Boolean(env?.SUPABASE_URL && env?.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 /**
  * Initialize and start the campaign worker
  */
@@ -25,14 +33,21 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
   if (pool) {
     logger.debug('[CampaignWorker] Ignoring pgPool input; using Supabase client');
   }
-  supabase = getSupabaseClient();
-  const enabled = process.env.CAMPAIGN_WORKER_ENABLED !== 'false';
+  const enabled = isCampaignWorkerEnabled(process.env);
 
   if (!enabled) {
-    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED=false)');
+    logger.info('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
     return;
   }
 
+  if (!hasCampaignWorkerSupabaseConfig(process.env)) {
+    logger.warn(
+      '[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)',
+    );
+    return;
+  }
+
+  supabase = getSupabaseClient();
   logger.info({ intervalMs }, '[CampaignWorker] Starting');
 
   // Run immediately on start

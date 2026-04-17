@@ -19,7 +19,11 @@ import workflowQueue from './services/workflowQueue.js';
 import { initPlaybookQueueProcessor } from './lib/care/carePlaybookExecutor.js';
 
 // Import background workers
-import { startCampaignWorker } from './lib/campaignWorker.js';
+import {
+  hasCampaignWorkerSupabaseConfig,
+  isCampaignWorkerEnabled,
+  startCampaignWorker,
+} from './lib/campaignWorker.js';
 import { startAiTriggersWorker } from './lib/aiTriggersWorker.js';
 import { startEmailWorker } from './workers/emailWorker.js';
 import { startTaskWorkers } from './workers/taskWorkers.js';
@@ -931,10 +935,14 @@ server.listen(PORT, async () => {
   }, 1000); // Delay 1 second to ensure server is fully started
 
   // Start campaign worker if enabled
-  if (process.env.CAMPAIGN_WORKER_ENABLED === 'true' && pgPool) {
+  if (!isCampaignWorkerEnabled(process.env)) {
+    logger.debug('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
+  } else if (!hasCampaignWorkerSupabaseConfig(process.env)) {
+    logger.warn('[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)');
+  } else {
     const campaignInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '5000', 10);
     startCampaignWorker(pgPool, campaignInterval);
-    logger.info('[CampaignWorker] Started');
+    logger.info({ intervalMs: campaignInterval }, '[CampaignWorker] Started');
   }
 
   // Start AI triggers worker if enabled (Phase 3 Autonomous Operations)
