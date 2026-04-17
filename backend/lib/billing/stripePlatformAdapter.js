@@ -92,7 +92,7 @@ export function verifyWebhookSignature({ rawBody, signature }) {
   if (!rawBody) throw new Error('verifyWebhookSignature: rawBody required');
   if (!signature) throw new Error('verifyWebhookSignature: signature required');
 
-  const cfg = requirePlatformBillingConfig();
+  const cfg = requirePlatformBillingConfig({ requireWebhookSecret: true });
   const stripe = new Stripe(cfg.stripeSecretKey, { apiVersion: cfg.stripeApiVersion });
 
   try {
