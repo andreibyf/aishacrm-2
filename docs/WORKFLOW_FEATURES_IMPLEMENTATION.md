@@ -1,6 +1,7 @@
 # Workflow Features Implementation Plan
 
 ## Status: IN PROGRESS
+
 **Created**: December 22, 2025  
 **Purpose**: Add missing workflow features to match documentation  
 **Priority**: Post-deployment enhancement (v3.1.8)
@@ -10,10 +11,11 @@
 ## ✅ COMPLETED
 
 ### 1. Node Library Updates
-- ✅ Added `Wait/Delay` node type  
-- ✅ Added `Send SMS` node type  
-- ✅ Added `Assign Record` node type (round-robin support)  
-- ✅ Added `Update Status` node type  
+
+- ✅ Added `Wait/Delay` node type
+- ✅ Added `Send SMS` node type
+- ✅ Added `Assign Record` node type (round-robin support)
+- ✅ Added `Update Status` node type
 - ✅ Imported necessary icons (Clock, MessageSquare, UserCheck, CheckCircle)
 
 ---
@@ -25,6 +27,7 @@
 **Location**: `WorkflowBuilder.jsx` - `renderNodeConfig()` function
 
 #### A. Wait/Delay Node (`case 'wait':`)
+
 ```javascript
 case 'wait':
   return (
@@ -57,6 +60,7 @@ case 'wait':
 ```
 
 #### B. Send Email Node (`case 'send_email':`)
+
 ```javascript
 case 'send_email':
   return (
@@ -111,7 +115,34 @@ case 'send_email':
   );
 ```
 
+**Structured template mode (email-first)**
+
+Send Email now also supports template rendering via `template_id` while preserving direct `subject`/`body` behavior:
+
+```json
+{
+  "type": "send_email",
+  "config": {
+    "to": "{{email}}",
+    "subject": "Quick follow up",
+    "template_id": "3c2f9c9b-14d7-4a8b-b4c4-27b8d9e7a610",
+    "template_variables": {
+      "contact_name": "{{first_name}}",
+      "company": "{{company}}",
+      "booking_link": "{{booking_link}}"
+    }
+  }
+}
+```
+
+Behavior:
+
+- If `template_id` exists: backend loads the tenant-scoped template, renders HTML, and uses it as the email body.
+- If `template_id` is missing: executor uses existing direct `body` behavior unchanged.
+- Missing template variables resolve to empty string (no runtime throw).
+
 #### C. Send SMS Node (`case 'send_sms':`)
+
 ```javascript
 case 'send_sms':
   return (
@@ -156,6 +187,7 @@ case 'send_sms':
 ```
 
 #### D. Create Activity Node (`case 'create_activity':`)
+
 ```javascript
 case 'create_activity':
   return (
@@ -220,6 +252,7 @@ case 'create_activity':
 ```
 
 #### E. Assign Record Node (`case 'assign_record':`)
+
 ```javascript
 case 'assign_record':
   return (
@@ -264,6 +297,7 @@ case 'assign_record':
 ```
 
 #### F. Update Status Node (`case 'update_status':`)
+
 ```javascript
 case 'update_status':
   return (
@@ -363,7 +397,7 @@ function convertToMilliseconds(value, unit) {
     seconds: 1000,
     minutes: 60000,
     hours: 3600000,
-    days: 86400000
+    days: 86400000,
   };
   return value * (conversions[unit] || 1000);
 }
@@ -378,18 +412,18 @@ async function sendSMS({ to, message }) {
 }
 
 async function resolveAssignment(method, config, context) {
-  switch(method) {
+  switch (method) {
     case 'specific_user':
       return config.user_id;
-    
+
     case 'round_robin':
       // Get next user in rotation for the group
       return await getRoundRobinAssignee(config.group, context.tenant_id);
-    
+
     case 'least_assigned':
       // Get user with fewest assigned records
       return await getLeastAssignedUser(config.group, context.tenant_id);
-    
+
     default:
       return context.current_user_id;
   }
@@ -411,7 +445,7 @@ async function getRoundRobinAssignee(group, tenant_id) {
 
 - [ ] Add `scheduled_trigger` node type
 - [ ] Backend cron processor (node-cron or bull/bee-queue)
-- [ ] Trigger configuration UI (cron expression  builder or simple scheduler)
+- [ ] Trigger configuration UI (cron expression builder or simple scheduler)
 - [ ] Database migrations for scheduled workflows table
 
 ---
@@ -433,10 +467,16 @@ export const workflowTemplates = [
       { type: 'webhook_trigger', config: {} },
       { type: 'find_lead', config: { search_field: 'email', search_value: '{{email}}' } },
       { type: 'condition', config: { field: 'score', operator: '>=', value: 70 } },
-      { type: 'update_lead', config: { field_mappings: [{ lead_field: 'status', webhook_field: 'qualified' }] } },
+      {
+        type: 'update_lead',
+        config: { field_mappings: [{ lead_field: 'status', webhook_field: 'qualified' }] },
+      },
       { type: 'assign_record', config: { method: 'round_robin', group: 'sales_team' } },
-      { type: 'create_activity', config: { activity_type: 'task', subject: 'Follow up with hot lead' } }
-    ]
+      {
+        type: 'create_activity',
+        config: { activity_type: 'task', subject: 'Follow up with hot lead' },
+      },
+    ],
   },
   // Add 10-15 more templates
 ];
@@ -447,19 +487,14 @@ export const workflowTemplates = [
 ## 📊 Implementation Priority
 
 **Phase 1 (Next sprint - v3.1.8):**
+
 1. ✅ Node Library (DONE)
 2. Configuration UI for: Wait, Send Email, Create Activity
 3. Backend execution for: Wait, Send Email, Create Activity
 
-**Phase 2 (v3.2.0):**
-4. Send SMS configuration + backend
-5. Assign Record (round-robin) configuration + backend
-6. Update Status configuration + backend
+**Phase 2 (v3.2.0):** 4. Send SMS configuration + backend 5. Assign Record (round-robin) configuration + backend 6. Update Status configuration + backend
 
-**Phase 3 (v3.3.0):**
-7. Scheduled triggers
-8. Workflow templates library
-9. Advanced conditional branching
+**Phase 3 (v3.3.0):** 7. Scheduled triggers 8. Workflow templates library 9. Advanced conditional branching
 
 ---
 

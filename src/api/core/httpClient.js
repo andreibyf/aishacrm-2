@@ -51,6 +51,7 @@ export const pluralize = (entityName) => {
     systembranding: 'systembrandings',
     synchealth: 'synchealths',
     cronjob: 'cron/jobs', // Backend uses /api/cron/jobs not /api/cronjobs
+    template: 'v2/templates',
   };
 
   if (irregularPlurals[name]) {

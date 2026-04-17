@@ -90,6 +90,7 @@ const TenantIntegrationSettings = lazy(
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import('../components/shared/ModuleManager'));
 const EntityLabelsManager = lazy(() => import('../components/settings/EntityLabelsManager'));
+const TemplatesManager = lazy(() => import('../components/settings/TemplatesManager'));
 const StatusCardsManager = lazy(() => import('../components/settings/StatusCardsManager'));
 const BillingSettings = lazy(() => import('../components/settings/BillingSettings'));
 const CronJobManager = lazy(() => import('../components/settings/CronJobManager'));
@@ -284,6 +285,14 @@ export default function SettingsPage() {
           roles: ['admin'],
         },
         {
+          id: 'templates',
+          label: 'Templates Library',
+          description: 'Manage structured email, SMS, and call templates',
+          icon: FileText,
+          category: 'system',
+          roles: ['admin'],
+        },
+        {
           id: 'status-cards',
           label: 'Status Cards',
           description: 'Customize status card visibility',
@@ -445,6 +454,14 @@ export default function SettingsPage() {
           icon: Tags,
           category: 'system',
           roles: ['superadmin', 'admin'],
+        },
+        {
+          id: 'templates',
+          label: 'Templates Library',
+          description: 'Manage structured email, SMS, and call templates',
+          icon: FileText,
+          category: 'system',
+          roles: ['superadmin'],
         },
         {
           id: 'status-cards',
@@ -1012,6 +1029,22 @@ export default function SettingsPage() {
               <SettingsLoader>
                 <EntityLabelsManager isTenantAdmin={!isSuperadmin} />
               </SettingsLoader>
+            )}
+
+            {activeTab === 'templates' && isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Templates Library</CardTitle>
+                  <CardDescription>
+                    Manage structured templates for email-first campaign and workflow content
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SettingsLoader>
+                    <TemplatesManager />
+                  </SettingsLoader>
+                </CardContent>
+              </Card>
             )}
 
             {activeTab === 'status-cards' && isAdmin && (

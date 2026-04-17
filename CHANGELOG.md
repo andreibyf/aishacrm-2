@@ -9,7 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Structured templates foundation for workflow-driven messaging (`backend/migrations/153_templates_library.sql`, `backend/lib/templates/renderTemplate.js`, `backend/lib/templates/templateService.js`, `backend/routes/templates.v2.js`, `backend/server.js`):** Added a new tenant-scoped `templates` table (UUID tenant isolation, JSONB template payload, active flag, indexes, `updated_at` trigger, RLS policies) and mounted new CRUD endpoints at `/api/v2/templates` with soft delete semantics (`is_active=false`).
+
+- **Email-first structured renderer with interpolation (`backend/lib/templates/renderTemplate.js`):** Added `injectVariables(str, variables)` and `renderTemplate(templateJson, variables)` supporting `text`, `image`, `button`, and `divider` blocks with inline email-safe HTML and absolute-URL checks.
+
+- **Template-aware Send Email workflow execution (`backend/routes/workflows.js`, `backend/services/workflowExecutionService.js`):** Send Email nodes now support optional `template_id` + `template_variables`/`variables`; when provided, template content is loaded tenant-safely and rendered into HTML body while preserving existing direct subject/body behavior.
+
+- **Minimal Templates Library management UI in Settings (`src/components/settings/TemplatesManager.jsx`, `src/pages/Settings.jsx`, `src/api/core/httpClient.js`, `src/api/entities.js`):** Added list/filter/create/edit/toggle workflow for structured templates with JSON editor textarea, using existing entity API pathing and tenant context.
+
+- **Template foundation tests (`backend/__tests__/lib/renderTemplate.test.js`, `backend/__tests__/routes/templates.v2.test.js`):** Added focused tests for variable interpolation, block rendering, URL safety checks, route payload shape, validation, and soft delete behavior.
+
+- **Workflow template-variable coverage + usage docs (`backend/__tests__/routes/workflows.resolveMapping.test.js`, `docs/WORKFLOW_FEATURES_IMPLEMENTATION.md`):** Added unit coverage for `send_email` template variable resolution semantics (payload/nested token interpolation and unresolved value blanking) and documented `template_id` + `template_variables` node configuration for structured email rendering.
+
+- **Workflow template_id integration coverage (`backend/__tests__/routes/workflows.template-email.integration.test.js`):** Added an integration test that creates a tenant template, creates a workflow with `send_email.template_id`, executes it with runtime variables, and verifies rendered HTML is queued in `activities` with `metadata.email.template_id` set.
+
+- **Migration 153 repo-hygiene alignment (`backend/migrations/153_templates_library.sql`):** Updated the migration file to match the successfully applied DB fix set: corrected seed source table to singular `tenant`, removed hardcoded seed UUID in favor of default `gen_random_uuid()` with per-tenant idempotency keyed by `(tenant_id, name)`, and added `tenant_id` foreign key (`REFERENCES tenant(id) ON DELETE CASCADE`) to prevent orphan template rows.
+
 ### Fixed
+
+- **Template API payload hardening (`backend/routes/templates.v2.js`, `backend/__tests__/routes/templates.v2.test.js`):** Added block-level validation for `template_json.blocks` (non-empty array, block-count cap, allowed block types, and required fields per block type) with explicit error messages to prevent malformed templates from being stored and later failing at render time.
+
+- **Workflow send_email guardrails for unresolved recipients (`backend/routes/workflows.js`, `backend/services/workflowExecutionService.js`):** Added recipient normalization and required-recipient checks so email nodes fail with actionable logs when `config.to` resolves to empty values instead of silently queuing invalid email activities.
+
+- **Templates settings UX resilience (`src/components/settings/TemplatesManager.jsx`):** Added inline form error surfacing, disabled controls during save/load operations, and per-row busy-state handling for active toggles to reduce accidental double-submits and improve operator feedback during template edits.
+
+- **Template workflow integration test gating (`backend/__tests__/routes/workflows.template-email.integration.test.js`):** Made the send_email + `template_id` integration test opt-in via `RUN_TEMPLATE_WORKFLOW_INTEGRATION=true` (or CI opt-in) so standard Docker regression runs are stable when no live API endpoint/auth context is provisioned.
+
+- **GHCR deploy timeout hardening for VPS pulls (`.github/workflows/docker-release.yml`):** `deploy-production` image pulls now use `pull_with_retry()` with up to 3 attempts and a longer per-attempt timeout (`25m` via `run_timed`) for each service image. This addresses intermittent `status 124` failures observed when `docker pull` stalls on the VPS during release deploys.
 
 - **Deployment path restored to last known-good `v6.3.4` behavior (`docker-compose.prod.yml`, `.github/workflows/docker-release.yml`):** Removed the backend volume-mounted entrypoint override and the extra SCP/SSH workflow plumbing added after `v6.3.4`. Those changes introduced GHCR deploy regressions on the VPS (workflow syntax issues, SCP overwrite conflicts, stale directory/file conflicts, and permission failures) while `v6.3.4` already deployed successfully using the image-baked backend entrypoint. The deploy path now matches the working baseline again.
 
