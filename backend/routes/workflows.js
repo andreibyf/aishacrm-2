@@ -9,6 +9,8 @@ import Redis from 'ioredis';
 import workflowQueue from '../services/workflowQueue.js';
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { executeWorkflowById as executeWorkflowByIdService } from '../services/workflowExecutionService.js';
+import { renderTemplate } from '../lib/templates/renderTemplate.js';
+import { getTemplateById } from '../lib/templates/templateService.js';
 import logger from '../lib/logger.js';
 
 // PEP Query Node — Phase 5b imports
@@ -362,6 +364,41 @@ export default function createWorkflowRoutes(pgPool) {
         });
       }
 
+      function resolveTemplateVariablesMap(variablesConfig) {
+        if (
+          !variablesConfig ||
+          typeof variablesConfig !== 'object' ||
+          Array.isArray(variablesConfig)
+        ) {
+          return {};
+        }
+        const resolved = {};
+        for (const [key, value] of Object.entries(variablesConfig)) {
+          if (typeof value === 'string') {
+            const out = replaceVariables(value);
+            resolved[key] =
+              typeof out === 'string' && out.startsWith('{{') && out.endsWith('}}') ? '' : out;
+          } else {
+            resolved[key] = value;
+          }
+        }
+        return resolved;
+      }
+
+      function normalizeRecipients(input) {
+        const normalize = (value) =>
+          String(value ?? '')
+            .replace(/^['"]|['"]$/g, '')
+            .trim();
+
+        if (Array.isArray(input)) {
+          return input.map((value) => normalize(replaceVariables(value))).filter(Boolean);
+        }
+
+        const single = normalize(replaceVariables(input));
+        return single ? [single] : [];
+      }
+
       // Node executors using Postgres
       async function execNode(node) {
         const log = {
@@ -468,14 +505,56 @@ export default function createWorkflowRoutes(pgPool) {
               const toRaw = cfg.to || '{{email}}';
               const subjectRaw = cfg.subject || 'Workflow Email';
               const bodyRaw = cfg.body || '';
+              const templateIdRaw = cfg.template_id;
 
-              const toValue = Array.isArray(toRaw)
-                ? toRaw.map((t) => replaceVariables(t))
-                : String(replaceVariables(toRaw))
-                    .replace(/^['"]|['"]$/g, '')
-                    .trim();
+              const recipients = normalizeRecipients(toRaw);
+              const toValue = Array.isArray(toRaw) ? recipients : recipients[0] || '';
+
+              if (recipients.length === 0) {
+                log.status = 'error';
+                log.error = 'send_email requires at least one resolved recipient in config.to';
+                break;
+              }
+
               const subject = String(replaceVariables(subjectRaw));
-              const body = String(replaceVariables(bodyRaw));
+              let body = String(replaceVariables(bodyRaw));
+
+              let resolvedTemplateId = null;
+              if (templateIdRaw) {
+                resolvedTemplateId = String(replaceVariables(String(templateIdRaw))).trim();
+                const unresolvedTemplateId =
+                  !resolvedTemplateId ||
+                  (resolvedTemplateId.startsWith('{{') && resolvedTemplateId.endsWith('}}'));
+                if (unresolvedTemplateId) {
+                  log.status = 'error';
+                  log.error =
+                    'send_email template_id is missing or unresolved; provide a concrete template UUID';
+                  break;
+                }
+
+                const supabase = getSupabaseClient();
+                const template = await getTemplateById(
+                  supabase,
+                  resolvedTemplateId,
+                  workflow.tenant_id,
+                );
+                if (!template) {
+                  log.status = 'error';
+                  log.error = `Template not found: ${resolvedTemplateId}`;
+                  break;
+                }
+
+                const templateVariables = resolveTemplateVariablesMap(
+                  cfg.template_variables || cfg.variables,
+                );
+                body = renderTemplate(template.template_json, templateVariables);
+              }
+
+              if (!body || !String(body).trim()) {
+                log.status = 'error';
+                log.error = 'send_email resolved an empty body';
+                break;
+              }
 
               const lead = context.variables.found_lead;
               const contact = context.variables.found_contact;
@@ -490,6 +569,7 @@ export default function createWorkflowRoutes(pgPool) {
                   cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
                   bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
                   from: cfg.from ? replaceVariables(cfg.from) : undefined,
+                  template_id: resolvedTemplateId || undefined,
                 },
               };
 
@@ -551,8 +631,18 @@ export default function createWorkflowRoutes(pgPool) {
               ph.push(`$${idx++}`);
               for (const m of mappings) {
                 const rm = resolveMapping(m);
-                const isUnresolved = typeof rm?.resolved === 'string' && rm.resolved.startsWith('{{') && rm.resolved.endsWith('}}');
-                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '' && !isUnresolved) {
+                const isUnresolved =
+                  typeof rm?.resolved === 'string' &&
+                  rm.resolved.startsWith('{{') &&
+                  rm.resolved.endsWith('}}');
+                if (
+                  rm &&
+                  rm.targetField &&
+                  rm.resolved !== null &&
+                  rm.resolved !== undefined &&
+                  rm.resolved !== '' &&
+                  !isUnresolved
+                ) {
                   cols.push(rm.targetField);
                   vals.push(rm.resolved);
                   ph.push('$' + idx++);
@@ -577,7 +667,13 @@ export default function createWorkflowRoutes(pgPool) {
               let idx = 1;
               for (const m of mappings) {
                 const rm = resolveMapping(m);
-                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== ('{{' + rm.targetField + '}}')) {
+                if (
+                  rm &&
+                  rm.targetField &&
+                  rm.resolved !== null &&
+                  rm.resolved !== undefined &&
+                  rm.resolved !== '{{' + rm.targetField + '}}'
+                ) {
                   sets.push(rm.targetField + ' = $' + idx++);
                   vals.push(rm.resolved);
                 }
@@ -626,7 +722,13 @@ export default function createWorkflowRoutes(pgPool) {
               let idx = 1;
               for (const m of mappings) {
                 const rm = resolveMapping(m);
-                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== ('{{' + rm.targetField + '}}')) {
+                if (
+                  rm &&
+                  rm.targetField &&
+                  rm.resolved !== null &&
+                  rm.resolved !== undefined &&
+                  rm.resolved !== '{{' + rm.targetField + '}}'
+                ) {
                   sets.push(rm.targetField + ' = $' + idx++);
                   vals.push(rm.resolved);
                 }
@@ -712,7 +814,8 @@ export default function createWorkflowRoutes(pgPool) {
               for (const m of mappings) {
                 if (m.opportunity_field && m.webhook_field) {
                   const v = replaceVariables(`{{${m.webhook_field}}}`);
-                  const vUnresolved = typeof v === 'string' && v.startsWith('{{') && v.endsWith('}}');
+                  const vUnresolved =
+                    typeof v === 'string' && v.startsWith('{{') && v.endsWith('}}');
                   if (v !== null && v !== undefined && v !== '' && !vUnresolved) {
                     cols.push(m.opportunity_field);
                     vals.push(v);
@@ -782,12 +885,21 @@ export default function createWorkflowRoutes(pgPool) {
               const resolvedFields = {};
               for (const m of fieldMappings) {
                 const rm = resolveMapping(m);
-                if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '') {
+                if (
+                  rm &&
+                  rm.targetField &&
+                  rm.resolved !== null &&
+                  rm.resolved !== undefined &&
+                  rm.resolved !== ''
+                ) {
                   resolvedFields[rm.targetField] = rm.resolved;
                 }
               }
-              const subject = resolvedFields.subject || replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
-              const body = resolvedFields.body || replaceVariables(cfg.details || cfg.description || '');
+              const subject =
+                resolvedFields.subject ||
+                replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
+              const body =
+                resolvedFields.body || replaceVariables(cfg.details || cfg.description || '');
               const status = resolvedFields.status || 'scheduled';
               const due_date = resolvedFields.due_date || null;
               const assigned_to = resolvedFields.assigned_to || null;
@@ -800,12 +912,31 @@ export default function createWorkflowRoutes(pgPool) {
               let related_to = null;
               let related_id = null;
               if (associate === 'auto') {
-                related_to = lead ? 'lead' : contact ? 'contact' : account ? 'account' : opportunity ? 'opportunity' : null;
-                related_id = lead ? lead.id : contact ? contact.id : account ? account.id : opportunity ? opportunity.id : null;
+                related_to = lead
+                  ? 'lead'
+                  : contact
+                    ? 'contact'
+                    : account
+                      ? 'account'
+                      : opportunity
+                        ? 'opportunity'
+                        : null;
+                related_id = lead
+                  ? lead.id
+                  : contact
+                    ? contact.id
+                    : account
+                      ? account.id
+                      : opportunity
+                        ? opportunity.id
+                        : null;
               } else {
                 const entityMap = { lead, contact, account, opportunity };
                 const entity = entityMap[associate];
-                if (entity) { related_to = associate; related_id = entity.id; }
+                if (entity) {
+                  related_to = associate;
+                  related_id = entity.id;
+                }
               }
               // field_mappings can explicitly override related_to / related_id
               if (resolvedFields.related_to) related_to = resolvedFields.related_to;

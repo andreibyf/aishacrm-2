@@ -214,6 +214,7 @@ import createDocumentV2Routes from './routes/documents.v2.js';
 import createCommunicationsV2Routes from './routes/communications.v2.js';
 import createWorkflowTemplateRoutes from './routes/workflow-templates.js';
 import createEmailTemplateRoutes from './routes/email-templates.v2.js';
+import createTemplatesV2Routes from './routes/templates.v2.js';
 import createNotificationRoutes from './routes/notifications.js';
 import createSystemLogRoutes from './routes/system-logs.js';
 import createAuditLogRoutes from './routes/audit-logs.js';
@@ -457,6 +458,14 @@ app.use(
   authenticateRequest,
   validateTenantAccess,
   createEmailTemplateRoutes(measuredPgPool),
+);
+logger.debug('Mounting /api/v2/templates routes');
+app.use(
+  '/api/v2/templates',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createTemplatesV2Routes(measuredPgPool),
 );
 app.use('/api/notifications', defaultLimiter, createNotificationRoutes(measuredPgPool));
 app.use('/api/system-logs', defaultLimiter, createSystemLogRoutes(measuredPgPool));

@@ -8,6 +8,8 @@
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
 import { generateChatCompletion } from '../lib/aiEngine/llmClient.js';
 import { selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
+import { renderTemplate } from '../lib/templates/renderTemplate.js';
+import { getTemplateById } from '../lib/templates/templateService.js';
 import logger from '../lib/logger.js';
 
 // Helper: lift workflow fields from metadata and align shape with frontend expectations
@@ -198,6 +200,41 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
       });
     }
 
+    function resolveTemplateVariablesMap(variablesConfig) {
+      if (
+        !variablesConfig ||
+        typeof variablesConfig !== 'object' ||
+        Array.isArray(variablesConfig)
+      ) {
+        return {};
+      }
+      const resolved = {};
+      for (const [key, value] of Object.entries(variablesConfig)) {
+        if (typeof value === 'string') {
+          const out = replaceVariables(value);
+          resolved[key] =
+            typeof out === 'string' && out.startsWith('{{') && out.endsWith('}}') ? '' : out;
+        } else {
+          resolved[key] = value;
+        }
+      }
+      return resolved;
+    }
+
+    function normalizeRecipients(input) {
+      const normalize = (value) =>
+        String(value ?? '')
+          .replace(/^['"]|['"]$/g, '')
+          .trim();
+
+      if (Array.isArray(input)) {
+        return input.map((value) => normalize(replaceVariables(value))).filter(Boolean);
+      }
+
+      const single = normalize(replaceVariables(input));
+      return single ? [single] : [];
+    }
+
     // Node executor
     async function execNode(node) {
       const log = {
@@ -216,12 +253,18 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
           const raw = m.source_value || '';
           const template = raw.startsWith('{{') ? raw : raw ? `{{${raw}}}` : '';
           const resolved = template ? replaceVariables(template) : '';
-          const isUnresolved = typeof resolved === 'string' && resolved.startsWith('{{') && resolved.endsWith('}}');
-          return isUnresolved || resolved === '' ? null : { field: m.target_field, value: resolved };
+          const isUnresolved =
+            typeof resolved === 'string' && resolved.startsWith('{{') && resolved.endsWith('}}');
+          return isUnresolved || resolved === ''
+            ? null
+            : { field: m.target_field, value: resolved };
         }
         const legacyField =
-          m.lead_field || m.contact_field || m.account_field ||
-          m.opportunity_field || m.activity_field;
+          m.lead_field ||
+          m.contact_field ||
+          m.account_field ||
+          m.opportunity_field ||
+          m.activity_field;
         const legacySrc = m.webhook_field;
         if (legacyField && legacySrc) {
           const resolved = replaceVariables(`{{${legacySrc}}}`);
@@ -498,14 +541,55 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const toRaw = cfg.to || '{{email}}';
             const subjectRaw = cfg.subject || 'Workflow Email';
             const bodyRaw = cfg.body || '';
+            const templateIdRaw = cfg.template_id;
 
-            const toValue = Array.isArray(toRaw)
-              ? toRaw.map((t) => replaceVariables(t))
-              : String(replaceVariables(toRaw))
-                  .replace(/^['"]|['"]$/g, '')
-                  .trim();
+            const recipients = normalizeRecipients(toRaw);
+            const toValue = Array.isArray(toRaw) ? recipients : recipients[0] || '';
+
+            if (recipients.length === 0) {
+              log.status = 'error';
+              log.error = 'send_email requires at least one resolved recipient in config.to';
+              break;
+            }
+
             const subject = String(replaceVariables(subjectRaw));
-            const body = String(replaceVariables(bodyRaw));
+            let body = String(replaceVariables(bodyRaw));
+
+            let resolvedTemplateId = null;
+            if (templateIdRaw) {
+              resolvedTemplateId = String(replaceVariables(String(templateIdRaw))).trim();
+              const unresolvedTemplateId =
+                !resolvedTemplateId ||
+                (resolvedTemplateId.startsWith('{{') && resolvedTemplateId.endsWith('}}'));
+              if (unresolvedTemplateId) {
+                log.status = 'error';
+                log.error =
+                  'send_email template_id is missing or unresolved; provide a concrete template UUID';
+                break;
+              }
+
+              const template = await getTemplateById(
+                supabase,
+                resolvedTemplateId,
+                workflow.tenant_id,
+              );
+              if (!template) {
+                log.status = 'error';
+                log.error = `Template not found: ${resolvedTemplateId}`;
+                break;
+              }
+
+              const templateVariables = resolveTemplateVariablesMap(
+                cfg.template_variables || cfg.variables,
+              );
+              body = renderTemplate(template.template_json, templateVariables);
+            }
+
+            if (!body || !String(body).trim()) {
+              log.status = 'error';
+              log.error = 'send_email resolved an empty body';
+              break;
+            }
 
             logger.info(
               `[WorkflowExecution] 📧 Email variables resolved: to="${toValue}", subject="${subject}", toRaw="${toRaw}"`,
@@ -531,6 +615,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                 cc: cfg.cc ? replaceVariables(cfg.cc) : undefined,
                 bcc: cfg.bcc ? replaceVariables(cfg.bcc) : undefined,
                 from: cfg.from ? replaceVariables(cfg.from) : undefined,
+                template_id: resolvedTemplateId || undefined,
               },
             };
 
@@ -903,10 +988,16 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
             const campaignName = context.payload?.campaign?.name || null;
             const defaultSubject = campaignName ? `Campaign: ${campaignName}` : 'Workflow activity';
             const defaultDetails = campaignName ? `Dispatched via campaign: ${campaignName}` : '';
-            const subject = mappedFields.subject ??
-              (!hasMappingConfig ? replaceVariables(cfg.title || cfg.subject || defaultSubject) : null);
-            const description = mappedFields.body ??
-              (!hasMappingConfig ? replaceVariables(cfg.details || cfg.description || defaultDetails) : null);
+            const subject =
+              mappedFields.subject ??
+              (!hasMappingConfig
+                ? replaceVariables(cfg.title || cfg.subject || defaultSubject)
+                : null);
+            const description =
+              mappedFields.body ??
+              (!hasMappingConfig
+                ? replaceVariables(cfg.details || cfg.description || defaultDetails)
+                : null);
 
             const lead = context.variables.found_lead;
             const contact = context.variables.found_contact;
@@ -1017,32 +1108,65 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               if (finalRelatedTo && finalRelatedId) {
                 try {
                   const nameQueries = {
-                    lead: supabase.from('leads').select('first_name, last_name, company').eq('id', finalRelatedId).single(),
-                    contact: supabase.from('contacts').select('first_name, last_name').eq('id', finalRelatedId).single(),
-                    account: supabase.from('accounts').select('name').eq('id', finalRelatedId).single(),
-                    opportunity: supabase.from('opportunities').select('name').eq('id', finalRelatedId).single(),
-                    bizdev_source: supabase.from('bizdev_sources').select('contact_person, company_name').eq('id', finalRelatedId).single(),
+                    lead: supabase
+                      .from('leads')
+                      .select('first_name, last_name, company')
+                      .eq('id', finalRelatedId)
+                      .single(),
+                    contact: supabase
+                      .from('contacts')
+                      .select('first_name, last_name')
+                      .eq('id', finalRelatedId)
+                      .single(),
+                    account: supabase
+                      .from('accounts')
+                      .select('name')
+                      .eq('id', finalRelatedId)
+                      .single(),
+                    opportunity: supabase
+                      .from('opportunities')
+                      .select('name')
+                      .eq('id', finalRelatedId)
+                      .single(),
+                    bizdev_source: supabase
+                      .from('bizdev_sources')
+                      .select('contact_person, company_name')
+                      .eq('id', finalRelatedId)
+                      .single(),
                   };
                   const nameQuery = nameQueries[finalRelatedTo];
                   if (nameQuery) {
                     const { data: nameData } = await nameQuery;
                     if (nameData) {
                       if (finalRelatedTo === 'lead') {
-                        const person = `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim();
-                        resolvedRelatedName = nameData.company && person ? `${nameData.company} (${person})` : nameData.company || person || null;
+                        const person =
+                          `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim();
+                        resolvedRelatedName =
+                          nameData.company && person
+                            ? `${nameData.company} (${person})`
+                            : nameData.company || person || null;
                       } else if (finalRelatedTo === 'bizdev_source') {
                         const person = nameData.contact_person || '';
-                        resolvedRelatedName = nameData.company_name && person ? `${nameData.company_name} (${person})` : nameData.company_name || person || null;
+                        resolvedRelatedName =
+                          nameData.company_name && person
+                            ? `${nameData.company_name} (${person})`
+                            : nameData.company_name || person || null;
                       } else if (finalRelatedTo === 'contact') {
-                        resolvedRelatedName = `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim() || null;
+                        resolvedRelatedName =
+                          `${nameData.first_name || ''} ${nameData.last_name || ''}`.trim() || null;
                       } else {
                         resolvedRelatedName = nameData.name || null;
                       }
                     }
                   }
-                } catch (_) { /* non-fatal */ }
+                } catch (_) {
+                  /* non-fatal */
+                }
                 if (resolvedRelatedName) {
-                  await supabase.from('activities').update({ related_name: resolvedRelatedName }).eq('id', actData.id);
+                  await supabase
+                    .from('activities')
+                    .update({ related_name: resolvedRelatedName })
+                    .eq('id', actData.id);
                   actData.related_name = resolvedRelatedName;
                 }
               }

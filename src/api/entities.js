@@ -45,6 +45,7 @@ export const ApiKey = createEntity('ApiKey');
 export const CashFlow = createEntity('CashFlow');
 export const PerformanceLog = createEntity('PerformanceLog');
 export const EmailTemplate = createEntity('EmailTemplate');
+export const Template = createEntity('Template');
 export const SystemBranding = createEntity('SystemBranding');
 export const Checkpoint = createEntity('Checkpoint');
 export const SyncHealth = createEntity('SyncHealth');

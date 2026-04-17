@@ -46,7 +46,10 @@ function buildExecutor(payload = {}, variables = {}) {
         let value = context.variables[parts[0]];
         for (let i = 1; i < parts.length; i++) {
           if (value && value[parts[i]] !== undefined) value = value[parts[i]];
-          else { value = undefined; break; }
+          else {
+            value = undefined;
+            break;
+          }
         }
         if (value !== undefined) return value;
       } else if (context.variables && context.variables[trimmed] !== undefined) {
@@ -84,11 +87,18 @@ function buildExecutor(payload = {}, variables = {}) {
     const resolvedFields = {};
     for (const m of fieldMappings) {
       const rm = resolveMapping(m);
-      if (rm && rm.targetField && rm.resolved !== null && rm.resolved !== undefined && rm.resolved !== '') {
+      if (
+        rm &&
+        rm.targetField &&
+        rm.resolved !== null &&
+        rm.resolved !== undefined &&
+        rm.resolved !== ''
+      ) {
         resolvedFields[rm.targetField] = rm.resolved;
       }
     }
-    const subject = resolvedFields.subject || replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
+    const subject =
+      resolvedFields.subject || replaceVariables(cfg.title || cfg.subject || 'Workflow activity');
     const body = resolvedFields.body || replaceVariables(cfg.details || cfg.description || '');
     const status = resolvedFields.status || 'scheduled';
     const due_date = resolvedFields.due_date || null;
@@ -103,12 +113,31 @@ function buildExecutor(payload = {}, variables = {}) {
     let related_to = null;
     let related_id = null;
     if (associate === 'auto') {
-      related_to = lead ? 'lead' : contact ? 'contact' : account ? 'account' : opportunity ? 'opportunity' : null;
-      related_id = lead ? lead.id : contact ? contact.id : account ? account.id : opportunity ? opportunity.id : null;
+      related_to = lead
+        ? 'lead'
+        : contact
+          ? 'contact'
+          : account
+            ? 'account'
+            : opportunity
+              ? 'opportunity'
+              : null;
+      related_id = lead
+        ? lead.id
+        : contact
+          ? contact.id
+          : account
+            ? account.id
+            : opportunity
+              ? opportunity.id
+              : null;
     } else {
       const entityMap = { lead, contact, account, opportunity };
       const entity = entityMap[associate];
-      if (entity) { related_to = associate; related_id = entity.id; }
+      if (entity) {
+        related_to = associate;
+        related_id = entity.id;
+      }
     }
     if (resolvedFields.related_to) related_to = resolvedFields.related_to;
     if (resolvedFields.related_id) related_id = resolvedFields.related_id;
@@ -124,13 +153,21 @@ function buildExecutor(payload = {}, variables = {}) {
 describe('resolveMapping', () => {
   it('new shape: resolves source_value token from payload', () => {
     const { resolveMapping } = buildExecutor({ email: 'jane@example.com' });
-    const result = resolveMapping({ target_field: 'email', source_type: 'token', source_value: 'email' });
+    const result = resolveMapping({
+      target_field: 'email',
+      source_type: 'token',
+      source_value: 'email',
+    });
     assert.deepEqual(result, { targetField: 'email', resolved: 'jane@example.com' });
   });
 
   it('new shape: resolves dotted source_value from context.variables', () => {
     const { resolveMapping } = buildExecutor({}, { found_lead: { email: 'lead@example.com' } });
-    const result = resolveMapping({ target_field: 'email', source_type: 'token', source_value: 'found_lead.email' });
+    const result = resolveMapping({
+      target_field: 'email',
+      source_type: 'token',
+      source_value: 'found_lead.email',
+    });
     assert.deepEqual(result, { targetField: 'email', resolved: 'lead@example.com' });
   });
 
@@ -181,7 +218,10 @@ describe('resolveMapping', () => {
 
 describe('create_activity field resolution', () => {
   it('resolves subject and body from field_mappings', () => {
-    const { resolveActivityFields } = buildExecutor({ subject_val: 'Follow up', body_val: 'Hello' });
+    const { resolveActivityFields } = buildExecutor({
+      subject_val: 'Follow up',
+      body_val: 'Hello',
+    });
     const result = resolveActivityFields({
       type: 'task',
       field_mappings: [
@@ -233,28 +273,37 @@ describe('create_activity field resolution', () => {
   });
 
   it('auto-detect association: picks found_lead when present', () => {
-    const { resolveActivityFields } = buildExecutor({}, {
-      found_lead: { id: 'lead-1' },
-    });
+    const { resolveActivityFields } = buildExecutor(
+      {},
+      {
+        found_lead: { id: 'lead-1' },
+      },
+    );
     const result = resolveActivityFields({ associate: 'auto', field_mappings: [] });
     assert.equal(result.related_to, 'lead');
     assert.equal(result.related_id, 'lead-1');
   });
 
   it('auto-detect association: falls back to found_contact when no lead', () => {
-    const { resolveActivityFields } = buildExecutor({}, {
-      found_contact: { id: 'contact-1' },
-    });
+    const { resolveActivityFields } = buildExecutor(
+      {},
+      {
+        found_contact: { id: 'contact-1' },
+      },
+    );
     const result = resolveActivityFields({ associate: 'auto', field_mappings: [] });
     assert.equal(result.related_to, 'contact');
     assert.equal(result.related_id, 'contact-1');
   });
 
   it('explicit association: uses specified entity type', () => {
-    const { resolveActivityFields } = buildExecutor({}, {
-      found_lead: { id: 'lead-1' },
-      found_contact: { id: 'contact-1' },
-    });
+    const { resolveActivityFields } = buildExecutor(
+      {},
+      {
+        found_lead: { id: 'lead-1' },
+        found_contact: { id: 'contact-1' },
+      },
+    );
     const result = resolveActivityFields({ associate: 'contact', field_mappings: [] });
     assert.equal(result.related_to, 'contact');
     assert.equal(result.related_id, 'contact-1');
@@ -281,5 +330,89 @@ describe('create_activity field resolution', () => {
     const result = resolveActivityFields({ associate: 'auto', field_mappings: [] });
     assert.equal(result.related_to, null);
     assert.equal(result.related_id, null);
+  });
+});
+
+// ─── send_email template variables resolution ───────────────────────────────
+
+describe('send_email template variables map resolution', () => {
+  function buildTemplateVarResolver(payload = {}, variables = {}) {
+    const context = { payload, variables };
+
+    function replaceVariables(template) {
+      if (typeof template !== 'string') return template;
+      return template.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
+        const trimmed = String(variable).trim();
+        if (context.payload && context.payload[trimmed] !== undefined) {
+          return context.payload[trimmed];
+        }
+        const parts = trimmed.split('.');
+        if (parts.length > 1) {
+          let value = context.variables[parts[0]];
+          for (let i = 1; i < parts.length; i++) {
+            if (value && value[parts[i]] !== undefined) value = value[parts[i]];
+            else {
+              value = undefined;
+              break;
+            }
+          }
+          if (value !== undefined) return value;
+        } else if (context.variables && context.variables[trimmed] !== undefined) {
+          return context.variables[trimmed];
+        }
+        return match;
+      });
+    }
+
+    function resolveTemplateVariablesMap(variablesConfig) {
+      if (
+        !variablesConfig ||
+        typeof variablesConfig !== 'object' ||
+        Array.isArray(variablesConfig)
+      ) {
+        return {};
+      }
+      const resolved = {};
+      for (const [key, value] of Object.entries(variablesConfig)) {
+        if (typeof value === 'string') {
+          const out = replaceVariables(value);
+          resolved[key] =
+            typeof out === 'string' && out.startsWith('{{') && out.endsWith('}}') ? '' : out;
+        } else {
+          resolved[key] = value;
+        }
+      }
+      return resolved;
+    }
+
+    return { resolveTemplateVariablesMap };
+  }
+
+  it('resolves payload and nested context tokens while blanking unresolved values', () => {
+    const { resolveTemplateVariablesMap } = buildTemplateVarResolver(
+      { booking_link: 'https://book.example', contact_name: 'Ari' },
+      { found_lead: { company: 'Acme Inc' } },
+    );
+
+    const result = resolveTemplateVariablesMap({
+      booking_link: '{{booking_link}}',
+      contact_name: '{{contact_name}}',
+      company: '{{found_lead.company}}',
+      missing_value: '{{does_not_exist}}',
+    });
+
+    assert.equal(result.booking_link, 'https://book.example');
+    assert.equal(result.contact_name, 'Ari');
+    assert.equal(result.company, 'Acme Inc');
+    assert.equal(result.missing_value, '');
+  });
+
+  it('returns empty object for invalid template_variables payload', () => {
+    const { resolveTemplateVariablesMap } = buildTemplateVarResolver();
+
+    assert.deepEqual(resolveTemplateVariablesMap(null), {});
+    assert.deepEqual(resolveTemplateVariablesMap(undefined), {});
+    assert.deepEqual(resolveTemplateVariablesMap([]), {});
+    assert.deepEqual(resolveTemplateVariablesMap('bad-input'), {});
   });
 });
