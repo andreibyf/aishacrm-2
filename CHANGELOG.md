@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Campaign worker startup now gates on Supabase config instead of `pgPool` (`backend/lib/campaignWorker.js`, `backend/server.js`, `backend/__tests__/lib/campaignWorker.test.js`):** Aligned backend startup with the worker’s real dependency path by requiring explicit opt-in plus `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, distinguishing env opt-out from missing Supabase credentials in logs, and adding focused unit coverage for the startup helpers.
+- **Campaign worker startup now requires explicit opt-in and Supabase config (`backend/lib/campaignWorker.js`, `backend/server.js`, `backend/__tests__/lib/campaignWorker.test.js`):** Standardized campaign worker enablement so startup only proceeds when `CAMPAIGN_WORKER_ENABLED=true` and `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY` are present, aligned backend startup with the worker’s real dependency path instead of `pgPool`, distinguished env opt-out from missing Supabase credentials in logs, and locked the behavior with focused unit coverage for the startup helpers.
 
 - **Workflow send_email output preview now shows resolved payload values (`src/components/workflows/WorkflowBuilder.jsx`):** Replaced placeholder preview rows (`sent/message_id`) with runtime-like resolved preview fields for `to`, `subject`, and `body`. Added a body preview mode toggle (`Text` / `HTML`) so operators can switch between plain resolved content and rendered structured template output before execution. When `template_id` is selected, preview resolves template variables and supports `text`, `image`, `button`, and `divider` blocks.
 

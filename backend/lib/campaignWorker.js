@@ -25,7 +25,6 @@ export function isCampaignWorkerEnabled(env = process.env) {
 export function hasCampaignWorkerSupabaseConfig(env = process.env) {
   return Boolean(env?.SUPABASE_URL && env?.SUPABASE_SERVICE_ROLE_KEY);
 }
-
 /**
  * Initialize and start the campaign worker
  */

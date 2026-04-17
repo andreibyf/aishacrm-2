@@ -37,3 +37,13 @@ test('hasCampaignWorkerSupabaseConfig requires both Supabase env vars', () => {
   );
   assert.equal(hasCampaignWorkerSupabaseConfig({}), false);
 });
+
+test('campaign worker enablement helper ignores unrelated env values', () => {
+  assert.equal(
+    isCampaignWorkerEnabled({
+      CAMPAIGN_WORKER_INTERVAL_MS: '5000',
+      NODE_ENV: 'development',
+    }),
+    false,
+  );
+});
