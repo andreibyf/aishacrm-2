@@ -78,6 +78,7 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
   const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
   const [templateVariablesDrafts, setTemplateVariablesDrafts] = useState({});
   const [templateVariablesErrors, setTemplateVariablesErrors] = useState({});
+  const [sendEmailPreviewMode, setSendEmailPreviewMode] = useState('text');
 
   // Track the most recently focused text input/textarea inside a node config panel
   // so that clicking an output-preview row can insert {{variable}} at cursor position.
@@ -619,6 +620,150 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
     return path.split('.').reduce((obj, key) => (obj != null ? obj[key] : undefined), payload);
   };
 
+  const applyVariableMap = (template, variables = {}) => {
+    if (typeof template !== 'string') return '';
+    return template.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (match, key) => {
+      const value = variables[key];
+      return value === undefined || value === null ? match : String(value);
+    });
+  };
+
+  const resolveTemplateVariablesForPreview = (variablesConfig, payload) => {
+    if (!variablesConfig || typeof variablesConfig !== 'object' || Array.isArray(variablesConfig)) {
+      return {};
+    }
+    const resolved = {};
+    for (const [key, value] of Object.entries(variablesConfig)) {
+      resolved[key] =
+        typeof value === 'string' ? resolvePreviewVar(value, payload) : String(value ?? '');
+    }
+    return resolved;
+  };
+
+  const resolveTemplateStringForPreview = (input, templateVariables, payload) => {
+    const mapped = applyVariableMap(String(input || ''), templateVariables);
+    return resolvePreviewVar(mapped, payload);
+  };
+
+  const renderStructuredTemplatePreview = (templateJson, templateVariables, payload) => {
+    const blocks = Array.isArray(templateJson?.blocks) ? templateJson.blocks : [];
+    if (!blocks.length) return '';
+
+    const lines = blocks
+      .map((block) => {
+        switch (block?.type) {
+          case 'text':
+            return resolveTemplateStringForPreview(block.content || '', templateVariables, payload);
+          case 'image': {
+            const url = resolveTemplateStringForPreview(
+              block.url || '',
+              templateVariables,
+              payload,
+            );
+            return url ? `[Image] ${url}` : '';
+          }
+          case 'button': {
+            const text = resolveTemplateStringForPreview(
+              block.text || 'Open',
+              templateVariables,
+              payload,
+            );
+            const url = resolveTemplateStringForPreview(
+              block.url || '',
+              templateVariables,
+              payload,
+            );
+            return url ? `[Button] ${text} -> ${url}` : `[Button] ${text}`;
+          }
+          case 'divider':
+            return '---';
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean);
+
+    return lines.join('\n');
+  };
+
+  const escapePreviewHtml = (value) =>
+    String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  const isAbsoluteHttpUrlForPreview = (url) => {
+    if (typeof url !== 'string' || !url.trim()) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const renderStructuredTemplateHtmlPreview = (templateJson, templateVariables, payload) => {
+    const blocks = Array.isArray(templateJson?.blocks) ? templateJson.blocks : [];
+    if (!blocks.length) return '';
+
+    const rendered = blocks
+      .map((block) => {
+        switch (block?.type) {
+          case 'text': {
+            const raw = resolveTemplateStringForPreview(
+              block.content || '',
+              templateVariables,
+              payload,
+            );
+            const html = escapePreviewHtml(raw).replace(/\n/g, '<br />');
+            return `<p style="margin:0 0 12px 0;line-height:1.5;color:#e2e8f0;">${html}</p>`;
+          }
+          case 'image': {
+            const url = resolveTemplateStringForPreview(
+              block.url || '',
+              templateVariables,
+              payload,
+            ).trim();
+            if (!isAbsoluteHttpUrlForPreview(url)) return '';
+            const alt = escapePreviewHtml(
+              resolveTemplateStringForPreview(block.alt || '', templateVariables, payload),
+            );
+            return `<div style="margin:0 0 12px 0;"><img src="${escapePreviewHtml(url)}" alt="${alt}" style="max-width:100%;height:auto;border-radius:6px;" /></div>`;
+          }
+          case 'button': {
+            const text = escapePreviewHtml(
+              resolveTemplateStringForPreview(block.text || 'Open', templateVariables, payload),
+            );
+            const url = resolveTemplateStringForPreview(
+              block.url || '',
+              templateVariables,
+              payload,
+            ).trim();
+            if (!isAbsoluteHttpUrlForPreview(url)) {
+              return `<div style="margin:0 0 12px 0;"><span style="display:inline-block;background:#1e293b;color:#f8fafc;padding:8px 12px;border-radius:6px;">${text}</span></div>`;
+            }
+            return `<div style="margin:0 0 12px 0;"><a href="${escapePreviewHtml(url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:8px 12px;border-radius:6px;">${text}</a></div>`;
+          }
+          case 'divider':
+            return '<hr style="border:0;border-top:1px solid #334155;margin:12px 0;" />';
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean)
+      .join('');
+
+    return `<div style="font-family:Arial,Helvetica,sans-serif;padding:8px 10px;">${rendered}</div>`;
+  };
+
+  const compactPreviewText = (value, max = 500) => {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+  };
+
   // Generate output preview for a node
   const generateNodeOutputPreview = (node) => {
     if (!node) return null;
@@ -998,15 +1143,66 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           ],
         };
 
-      case 'send_email':
+      case 'send_email': {
+        const toRaw = cfg.to || '{{email}}';
+        const toResolved = Array.isArray(toRaw)
+          ? toRaw
+              .map((entry) => resolvePreviewVar(String(entry), testPayload))
+              .filter(Boolean)
+              .join(', ')
+          : resolvePreviewVar(String(toRaw), testPayload);
+        const subjectResolved = resolvePreviewVar(
+          String(cfg.subject || 'Workflow Email'),
+          testPayload,
+        );
+
+        const selectedTemplate = emailTemplates.find((tpl) => tpl.id === cfg.template_id);
+        const templateVariables = resolveTemplateVariablesForPreview(
+          cfg.template_variables || cfg.variables,
+          testPayload,
+        );
+
+        const bodyFromTemplate = selectedTemplate
+          ? renderStructuredTemplatePreview(
+              selectedTemplate.template_json,
+              templateVariables,
+              testPayload,
+            )
+          : '';
+        const bodyResolved = selectedTemplate
+          ? bodyFromTemplate
+          : resolvePreviewVar(String(cfg.body || ''), testPayload);
+
+        const bodyHtmlPreview = selectedTemplate
+          ? renderStructuredTemplateHtmlPreview(
+              selectedTemplate.template_json,
+              templateVariables,
+              testPayload,
+            )
+          : `<div style="font-family:Arial,Helvetica,sans-serif;padding:8px 10px;color:#e2e8f0;line-height:1.5;">${escapePreviewHtml(bodyResolved || '').replace(/\n/g, '<br />')}</div>`;
+
         return {
-          description: 'Email send result',
+          description: selectedTemplate
+            ? 'Resolved email payload preview using selected structured template'
+            : 'Resolved email payload preview from current node fields',
           rows: [
-            row('sent', 'Sent', 'true'),
-            row('message_id', 'Message ID', '(generated)'),
-            row('error', 'Error', null),
+            row('to', 'To', compactPreviewText(toResolved)),
+            row('subject', 'Subject', compactPreviewText(subjectResolved)),
+            row(
+              'body_source',
+              'Body Source',
+              selectedTemplate ? `template: ${selectedTemplate.name}` : 'body field',
+            ),
+            row('body_preview', 'Body Preview', compactPreviewText(bodyResolved, 1200)),
+            row('template_id', 'Template ID', selectedTemplate ? selectedTemplate.id : null),
+            row('template_name', 'Template Name', selectedTemplate ? selectedTemplate.name : null),
           ],
+          emailPreview: {
+            text: bodyResolved || '',
+            html: bodyHtmlPreview,
+          },
         };
+      }
 
       case 'initiate_call':
         return {
@@ -1061,6 +1257,48 @@ export default function WorkflowBuilder({ workflow, onSave, onCancel }) {
           {hasAnyValue && <span className="text-xs text-emerald-400 ml-auto">live data</span>}
         </div>
         <p className="text-xs text-slate-400 mb-2">{preview.description}</p>
+
+        {node?.type === 'send_email' && preview.emailPreview && (
+          <div className="mb-3 border border-slate-700 rounded bg-slate-900/50">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
+              <p className="text-xs text-slate-300">Body Render Preview</p>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSendEmailPreviewMode('text')}
+                  className={`h-7 px-2 border-slate-700 ${sendEmailPreviewMode === 'text' ? 'bg-blue-900/50 text-blue-200' : 'bg-slate-800 text-slate-300'}`}
+                >
+                  Text
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSendEmailPreviewMode('html')}
+                  className={`h-7 px-2 border-slate-700 ${sendEmailPreviewMode === 'html' ? 'bg-blue-900/50 text-blue-200' : 'bg-slate-800 text-slate-300'}`}
+                >
+                  HTML
+                </Button>
+              </div>
+            </div>
+            {sendEmailPreviewMode === 'html' ? (
+              <div
+                className="p-3 max-h-64 overflow-auto bg-slate-950"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    preview.emailPreview.html ||
+                    '<div style="color:#94a3b8;font-style:italic;">not set</div>',
+                }}
+              />
+            ) : (
+              <pre className="p-3 max-h-64 overflow-auto text-xs font-mono whitespace-pre-wrap text-slate-200 bg-slate-950">
+                {preview.emailPreview.text || 'not set'}
+              </pre>
+            )}
+          </div>
+        )}
 
         {preview.rows?.length > 0 && (
           <div className="bg-slate-950 border border-slate-700 rounded overflow-hidden">
