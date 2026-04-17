@@ -17,7 +17,8 @@ test('isCampaignWorkerEnabled returns true only for explicit true', () => {
   assert.equal(isCampaignWorkerEnabled({ CAMPAIGN_WORKER_ENABLED: 'TRUE' }), false);
   assert.equal(isCampaignWorkerEnabled({ CAMPAIGN_WORKER_ENABLED: '1' }), false);
   assert.equal(isCampaignWorkerEnabled({}), false);
-  assert.equal(isCampaignWorkerEnabled(undefined), false);
+  // Pass explicit empty object instead of undefined to avoid using process.env default
+  assert.equal(isCampaignWorkerEnabled({ CAMPAIGN_WORKER_ENABLED: undefined }), false);
 });
 
 test('hasCampaignWorkerSupabaseConfig requires both Supabase env vars', () => {
