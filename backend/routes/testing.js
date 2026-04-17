@@ -467,6 +467,17 @@ export default function createTestingRoutes(_pgPool) {
         for (let i = 200; i < 300; i++) expectedStatuses.push(i);
       }
 
+      // Build auth headers using service role key (preferred) or anon key.
+      // The authenticate middleware accepts `Authorization: Bearer <key>` and grants
+      // superadmin access when the key matches SUPABASE_SERVICE_ROLE_KEY, which means
+      // 401 responses from authenticated scans are genuine failures, not just "protected".
+      const scanAuthKey =
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || null;
+      const scanAuthHeaders = scanAuthKey
+        ? { Authorization: `Bearer ${scanAuthKey}`, apikey: scanAuthKey }
+        : {};
+      const scanIsAuthenticated = !!scanAuthKey;
+
       // Optional health probe to validate reachability
       let probeOk = false;
       try {
@@ -642,7 +653,7 @@ export default function createTestingRoutes(_pgPool) {
           try {
             const fetchOpts = {
               method: ep.method,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...scanAuthHeaders },
               signal: AbortSignal.timeout(5000), // 5s timeout per request
             };
             if (ep.body) fetchOpts.body = JSON.stringify(ep.body);
@@ -666,10 +677,14 @@ export default function createTestingRoutes(_pgPool) {
           } else if (expectedStatuses.includes(statusCode)) {
             classification = 'PASS';
             passed++;
-          } else if (statusCode === 401 || statusCode === 403) {
-            // Auth-required endpoints (not failures - they exist and are protected)
+          } else if ((statusCode === 401 || statusCode === 403) && !scanIsAuthenticated) {
+            // Unauthenticated scan: 401/403 means the endpoint exists and is protected (not a failure)
             classification = 'PROTECTED';
             protectedCount++;
+          } else if ((statusCode === 401 || statusCode === 403) && scanIsAuthenticated) {
+            // Authenticated scan: 401/403 is a real failure (auth should have worked)
+            classification = 'FAIL';
+            failed++;
           } else if (statusCode >= 200 && statusCode < 600) {
             // Responsive but unexpected status (e.g., 404, 400, 500)
             classification = 'WARN';
@@ -717,6 +732,7 @@ export default function createTestingRoutes(_pgPool) {
             protected: protectedCount,
             network_failures: networkFailures,
             probe_ok: probeOk,
+            authenticated_scan: scanIsAuthenticated,
             avg_latency_ms: results.length ? Math.round(totalLatency / results.length) : 0,
             max_latency_ms: maxLatency,
             expected_statuses: expectedStatuses,

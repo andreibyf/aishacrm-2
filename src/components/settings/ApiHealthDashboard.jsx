@@ -1679,21 +1679,24 @@ export default function ApiHealthDashboard() {
           </CardContent>
         </Card>
 
-        {/* Protected endpoints badge (from Full Scan, informational) */}
-        {fullScanResults?.summary?.protected !== undefined && (
-          <Card className="bg-blue-900/20 border-blue-700">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-blue-300">
-                Protected (401/403)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-300">
-                {fullScanResults.summary.protected || 0}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Protected endpoints badge (from Full Scan, informational - only relevant for unauthenticated scans) */}
+        {fullScanResults?.summary?.protected !== undefined &&
+          fullScanResults.summary.protected > 0 && (
+            <Card className="bg-blue-900/20 border-blue-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-blue-300">
+                  {fullScanResults.summary.authenticated_scan
+                    ? 'Role-Gated (403)'
+                    : 'Protected (401/403)'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-300">
+                  {fullScanResults.summary.protected || 0}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         <Card className="bg-amber-900/20 border-amber-700">
           <CardHeader className="pb-2">
@@ -2005,7 +2008,14 @@ export default function ApiHealthDashboard() {
                 latency {fullScanResults.summary.max_latency_ms}ms | Avg latency{' '}
                 {fullScanResults.summary.avg_latency_ms}ms | Expected statuses:{' '}
                 {fullScanResults.summary.expected_statuses.join(', ')} |
-                <span className="text-blue-400">Protected (401/403) = auth-required endpoints</span>
+                {fullScanResults.summary.authenticated_scan ? (
+                  <span className="text-green-400"> Authenticated scan (401 = real failure)</span>
+                ) : (
+                  <span className="text-blue-400">
+                    {' '}
+                    Protected (401/403) = auth-required endpoints
+                  </span>
+                )}
               </div>
             </div>
           </CardContent>

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Authenticated API full-scan (`backend/routes/testing.js`):** The `/full-scan` endpoint now reads `SUPABASE_SERVICE_ROLE_KEY` (falls back to `SUPABASE_ANON_KEY`) and includes `Authorization: Bearer <key>` + `apikey` headers on every probe request. When authenticated, 401/403 responses are classified as `FAIL` instead of `PROTECTED`, giving accurate health signal. Summary now includes `authenticated_scan: boolean`. Falls back to unauthenticated scanning (old behavior) if no key is available.
+
+- **API Health Dashboard scan legend (`src/components/settings/ApiHealthDashboard.jsx`):** Protected card only renders when count > 0; label changes to "Role-Gated (403)" during authenticated scans; footer legend updates to "Authenticated scan (401 = real failure)".
+
 - **Structured templates foundation for workflow-driven messaging (`backend/migrations/153_templates_library.sql`, `backend/lib/templates/renderTemplate.js`, `backend/lib/templates/templateService.js`, `backend/routes/templates.v2.js`, `backend/server.js`):** Added a new tenant-scoped `templates` table (UUID tenant isolation, JSONB template payload, active flag, indexes, `updated_at` trigger, RLS policies) and mounted new CRUD endpoints at `/api/v2/templates` with soft delete semantics (`is_active=false`).
 
 - **Email-first structured renderer with interpolation (`backend/lib/templates/renderTemplate.js`):** Added `injectVariables(str, variables)` and `renderTemplate(templateJson, variables)` supporting `text`, `image`, `button`, and `divider` blocks with inline email-safe HTML and absolute-URL checks.
