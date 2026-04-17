@@ -17,7 +17,9 @@ const CHANNEL_PATTERNS = [
 ];
 
 function normalizePrompt(prompt = '') {
-  return String(prompt || '').slice(0, MAX_PROMPT_LENGTH).toLowerCase();
+  return String(prompt || '')
+    .slice(0, MAX_PROMPT_LENGTH)
+    .toLowerCase();
 }
 
 function tokenizePrompt(text) {

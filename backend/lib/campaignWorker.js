@@ -15,11 +15,16 @@ import { getSupabaseClient, query as supabaseSqlQuery } from './supabase-db.js';
 
 let workerInterval = null;
 let supabase = null;
+let getSupabaseClientImpl = getSupabaseClient;
 const webhookDb = { query: supabaseSqlQuery };
 const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
 export function isCampaignWorkerEnabled(env = process.env) {
   return env?.CAMPAIGN_WORKER_ENABLED === 'true';
+}
+
+export function hasCampaignWorkerSupabaseConfig(env = process.env) {
+  return Boolean(env?.SUPABASE_URL && env?.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 /**
@@ -29,7 +34,6 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
   if (pool) {
     logger.debug('[CampaignWorker] Ignoring pgPool input; using Supabase client');
   }
-  supabase = getSupabaseClient();
   const enabled = isCampaignWorkerEnabled(process.env);
 
   if (!enabled) {
@@ -37,6 +41,14 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
     return;
   }
 
+  if (!hasCampaignWorkerSupabaseConfig(process.env)) {
+    logger.warn(
+      '[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)',
+    );
+    return;
+  }
+
+  supabase = getSupabaseClientImpl();
   logger.info({ intervalMs }, '[CampaignWorker] Starting');
 
   // Run immediately on start
@@ -61,6 +73,15 @@ export function stopCampaignWorker() {
     workerInterval = null;
     logger.info('[CampaignWorker] Stopped');
   }
+  supabase = null;
+}
+
+export function __setGetSupabaseClientForTest(fn) {
+  getSupabaseClientImpl = fn;
+}
+
+export function __resetGetSupabaseClientForTest() {
+  getSupabaseClientImpl = getSupabaseClient;
 }
 
 /**
