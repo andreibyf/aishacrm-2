@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mock } from 'node:test';
 
 import {
+  __resetGetSupabaseClientForTest,
+  __setGetSupabaseClientForTest,
   hasCampaignWorkerSupabaseConfig,
   isCampaignWorkerEnabled,
+  startCampaignWorker,
+  stopCampaignWorker,
 } from '../../lib/campaignWorker.js';
 
 test('isCampaignWorkerEnabled returns true only for explicit true', () => {
@@ -46,4 +51,25 @@ test('campaign worker enablement helper ignores unrelated env values', () => {
     }),
     false,
   );
+});
+
+test('startCampaignWorker does not initialize Supabase when config is missing', () => {
+  const originalEnv = { ...process.env };
+  const getClientSpy = mock.fn(() => {
+    throw new Error('getSupabaseClient should not be called without config');
+  });
+
+  __setGetSupabaseClientForTest(getClientSpy);
+  process.env.CAMPAIGN_WORKER_ENABLED = 'true';
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  try {
+    assert.doesNotThrow(() => startCampaignWorker(null, 5));
+    assert.equal(getClientSpy.mock.calls.length, 0);
+  } finally {
+    stopCampaignWorker();
+    __resetGetSupabaseClientForTest();
+    process.env = originalEnv;
+  }
 });

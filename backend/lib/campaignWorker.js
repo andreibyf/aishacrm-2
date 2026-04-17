@@ -15,6 +15,7 @@ import { getSupabaseClient, query as supabaseSqlQuery } from './supabase-db.js';
 
 let workerInterval = null;
 let supabase = null;
+let getSupabaseClientImpl = getSupabaseClient;
 const webhookDb = { query: supabaseSqlQuery };
 const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
@@ -25,6 +26,7 @@ export function isCampaignWorkerEnabled(env = process.env) {
 export function hasCampaignWorkerSupabaseConfig(env = process.env) {
   return Boolean(env?.SUPABASE_URL && env?.SUPABASE_SERVICE_ROLE_KEY);
 }
+
 /**
  * Initialize and start the campaign worker
  */
@@ -46,7 +48,7 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
     return;
   }
 
-  supabase = getSupabaseClient();
+  supabase = getSupabaseClientImpl();
   logger.info({ intervalMs }, '[CampaignWorker] Starting');
 
   // Run immediately on start
@@ -71,6 +73,15 @@ export function stopCampaignWorker() {
     workerInterval = null;
     logger.info('[CampaignWorker] Stopped');
   }
+  supabase = null;
+}
+
+export function __setGetSupabaseClientForTest(fn) {
+  getSupabaseClientImpl = fn;
+}
+
+export function __resetGetSupabaseClientForTest() {
+  getSupabaseClientImpl = getSupabaseClient;
 }
 
 /**
