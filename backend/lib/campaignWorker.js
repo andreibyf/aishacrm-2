@@ -18,6 +18,10 @@ let supabase = null;
 const webhookDb = { query: supabaseSqlQuery };
 const TARGET_BATCH_SIZE = Number(process.env.CAMPAIGN_WORKER_TARGET_BATCH_SIZE || 25);
 
+export function isCampaignWorkerEnabled(env = process.env) {
+  return env?.CAMPAIGN_WORKER_ENABLED === 'true';
+}
+
 /**
  * Initialize and start the campaign worker
  */
@@ -26,10 +30,10 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
     logger.debug('[CampaignWorker] Ignoring pgPool input; using Supabase client');
   }
   supabase = getSupabaseClient();
-  const enabled = process.env.CAMPAIGN_WORKER_ENABLED !== 'false';
+  const enabled = isCampaignWorkerEnabled(process.env);
 
   if (!enabled) {
-    logger.info('[CampaignWorker] Disabled (CAMPAIGN_WORKER_ENABLED=false)');
+    logger.info('[CampaignWorker] Disabled (set CAMPAIGN_WORKER_ENABLED=true to enable)');
     return;
   }
 
