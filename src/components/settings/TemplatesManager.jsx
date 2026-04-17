@@ -24,6 +24,13 @@ const DEFAULT_TEMPLATE_JSON = {
   blocks: [{ type: 'text', content: 'Hi {{contact_name}},' }],
 };
 
+function getDefaultTemplateJson(type = 'email') {
+  return {
+    ...DEFAULT_TEMPLATE_JSON,
+    type,
+  };
+}
+
 function prettyJson(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -34,6 +41,22 @@ function getErrorMessage(error, fallback = 'Unexpected error') {
     return error.message;
   }
   return String(error || fallback);
+}
+
+function validateTemplateJson(parsedTemplate) {
+  if (!parsedTemplate || typeof parsedTemplate !== 'object' || Array.isArray(parsedTemplate)) {
+    return 'template_json must be an object';
+  }
+
+  if (!Array.isArray(parsedTemplate.blocks)) {
+    return 'template_json.blocks must be an array';
+  }
+
+  if (parsedTemplate.blocks.length === 0) {
+    return 'template_json.blocks must include at least one block';
+  }
+
+  return '';
 }
 
 export default function TemplatesManager() {
@@ -49,7 +72,7 @@ export default function TemplatesManager() {
     name: '',
     type: 'email',
     is_active: true,
-    template_json_text: prettyJson(DEFAULT_TEMPLATE_JSON),
+    template_json_text: prettyJson(getDefaultTemplateJson('email')),
   });
 
   const loadTemplates = useCallback(async () => {
@@ -78,7 +101,7 @@ export default function TemplatesManager() {
       name: '',
       type: 'email',
       is_active: true,
-      template_json_text: prettyJson(DEFAULT_TEMPLATE_JSON),
+      template_json_text: prettyJson(getDefaultTemplateJson('email')),
     });
   };
 
@@ -90,24 +113,8 @@ export default function TemplatesManager() {
       name: row.name || '',
       type: row.type || 'email',
       is_active: row.is_active !== false,
-      template_json_text: prettyJson(row.template_json || DEFAULT_TEMPLATE_JSON),
+      template_json_text: prettyJson(row.template_json || getDefaultTemplateJson(row.type || 'email')),
     });
-  };
-
-  const validateTemplateJson = (parsedTemplate) => {
-    if (!parsedTemplate || typeof parsedTemplate !== 'object' || Array.isArray(parsedTemplate)) {
-      return 'template_json must be an object';
-    }
-
-    if (!Array.isArray(parsedTemplate.blocks)) {
-      return 'template_json.blocks must be an array';
-    }
-
-    if (parsedTemplate.blocks.length === 0) {
-      return 'template_json.blocks must include at least one block';
-    }
-
-    return '';
   };
 
   const jsonValidationMessage = useMemo(() => {
@@ -142,9 +149,10 @@ export default function TemplatesManager() {
   };
 
   const resetJsonExample = () => {
+    const currentType = form.type || 'email';
     setForm((prev) => ({
       ...prev,
-      template_json_text: prettyJson(DEFAULT_TEMPLATE_JSON),
+      template_json_text: prettyJson(getDefaultTemplateJson(currentType)),
     }));
     setJsonTouched(false);
     setFormError('');
@@ -396,7 +404,7 @@ export default function TemplatesManager() {
 
         <Button
           type="submit"
-          disabled={saving || loading || !form.name.trim() || Boolean(jsonValidationMessage)}
+          disabled={saving || !form.name.trim() || Boolean(jsonValidationMessage)}
         >
           {saving ? (
             <>

@@ -317,7 +317,7 @@ Allowed:
 
 ## Active Tasks
 
-# BUG-TPL-STAB-001 – Template send_email execution and Templates UI stabilization
+### BUG-TPL-STAB-001 – Template send_email execution and Templates UI stabilization
 
 Status: **Complete ✅** (Apr 16, 2026)
 
@@ -365,7 +365,7 @@ Acceptance Criteria:
   - `docker exec aishacrm-backend npm test`
   - Result: 2223 pass, 0 fail, 10 skipped.
 
-# BUG-TPL-POLISH-002 – TemplatesManager UX polish (non-architectural)
+### BUG-TPL-POLISH-002 – TemplatesManager UX polish (non-architectural)
 
 Status: **Complete ✅** (Apr 16, 2026)
 
