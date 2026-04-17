@@ -18,7 +18,7 @@ const DEFAULT_DUE_DAYS = 14;
 /**
  * Generate an invoice number scoped to tenant.
  * Format: INV-<YYYY>-<6-digit sequence>
- * Sequence is derived from count of existing invoices for the tenant this year.
+ * Uses count+1 with a uniqueness check to handle concurrent creation.
  */
 export async function generateInvoiceNumber(supabase, tenantId) {
   if (!tenantId) throw new Error('generateInvoiceNumber: tenantId required');
@@ -33,8 +33,23 @@ export async function generateInvoiceNumber(supabase, tenantId) {
 
   if (error) throw new Error(`generateInvoiceNumber: ${error.message}`);
 
-  const seq = String((count || 0) + 1).padStart(6, '0');
-  return `INV-${year}-${seq}`;
+  // Try count+1, then increment on collision (handles concurrent inserts)
+  const maxAttempts = 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const seq = String((count || 0) + 1 + attempt).padStart(6, '0');
+    const candidate = `INV-${year}-${seq}`;
+
+    const { data: existing } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('invoice_number', candidate)
+      .maybeSingle();
+
+    if (!existing) return candidate;
+  }
+
+  throw new Error('generateInvoiceNumber: failed to allocate unique number after retries');
 }
 
 function sumLineItems(items) {
@@ -113,15 +128,21 @@ export async function createInvoice(supabase, params) {
 
   if (invErr) throw new Error(`createInvoice: ${invErr.message}`);
 
-  const lineRows = line_items.map((li) => ({
-    invoice_id: invoice.id,
-    item_type: li.item_type,
-    description: li.description,
-    quantity: li.quantity || 1,
-    unit_price_cents: li.unit_price_cents,
-    amount_cents: li.amount_cents ?? (li.quantity || 1) * li.unit_price_cents,
-    metadata: li.metadata || {},
-  }));
+  const lineRows = line_items.map((li) => {
+    if (li.quantity != null && li.quantity <= 0) {
+      throw new Error(`createInvoice: line item quantity must be > 0, got ${li.quantity}`);
+    }
+    const qty = li.quantity || 1;
+    return {
+      invoice_id: invoice.id,
+      item_type: li.item_type,
+      description: li.description,
+      quantity: qty,
+      unit_price_cents: li.unit_price_cents,
+      amount_cents: li.amount_cents ?? qty * li.unit_price_cents,
+      metadata: li.metadata || {},
+    };
+  });
 
   const { data: inserted_items, error: liErr } = await supabase
     .from('invoice_line_items')
@@ -273,17 +294,33 @@ export async function recordPayment(supabase, params) {
   const newBalance = invoice.total_cents - newPaid;
   const newStatus = newBalance <= 0 ? 'paid' : invoice.status;
 
-  const { data: updInvoice, error: updErr } = await supabase
-    .from('invoices')
-    .update({
-      amount_paid_cents: newPaid,
-      balance_due_cents: Math.max(newBalance, 0),
-      status: newStatus,
-    })
-    .eq('id', invoice_id)
-    .select('*')
-    .single();
-  if (updErr) throw new Error(`recordPayment: invoice update: ${updErr.message}`);
+  let updInvoice;
+  try {
+    const { data, error: updErr } = await supabase
+      .from('invoices')
+      .update({
+        amount_paid_cents: newPaid,
+        balance_due_cents: Math.max(newBalance, 0),
+        status: newStatus,
+      })
+      .eq('id', invoice_id)
+      .select('*')
+      .single();
+    if (updErr) throw updErr;
+    updInvoice = data;
+  } catch (invoiceUpdateError) {
+    // Attempt to roll back the payment insert
+    const { error: rollbackErr } = await supabase.from('payments').delete().eq('id', payment.id);
+    if (rollbackErr) {
+      logger.error('recordPayment: failed to roll back payment after invoice update error', {
+        invoice_id,
+        payment_id: payment.id,
+        invoiceUpdateError: invoiceUpdateError.message,
+        rollbackError: rollbackErr.message,
+      });
+    }
+    throw new Error(`recordPayment: invoice update: ${invoiceUpdateError.message}`);
+  }
 
   await logBillingEvent(supabase, {
     tenant_id: invoice.tenant_id,

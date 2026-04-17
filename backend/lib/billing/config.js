@@ -29,19 +29,29 @@ export function getPlatformBillingConfig() {
     stripeWebhookSecret: webhookSecret || null,
     stripeApiVersion: process.env.STRIPE_PLATFORM_API_VERSION || API_VERSION_DEFAULT,
     defaultCurrency: process.env.PLATFORM_BILLING_CURRENCY || CURRENCY_DEFAULT,
-    isConfigured: Boolean(secretKey && webhookSecret),
+    isConfigured: Boolean(secretKey),
   };
 }
 
 /**
- * Throws if platform billing is not configured. Use in code paths that
- * absolutely need a live Stripe connection (checkout creation, webhook verify).
+ * Throws if platform billing is not configured. Accepts options to specify
+ * which secrets are required for the current operation.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.requireWebhookSecret=false] - Also require webhook secret (for webhook handlers)
  */
-export function requirePlatformBillingConfig() {
+export function requirePlatformBillingConfig(options = {}) {
+  const { requireWebhookSecret = false } = options;
   const cfg = getPlatformBillingConfig();
-  if (!cfg.isConfigured) {
+  const missing = [];
+
+  if (!cfg.stripeSecretKey) missing.push('STRIPE_PLATFORM_SECRET_KEY');
+  if (requireWebhookSecret && !cfg.stripeWebhookSecret)
+    missing.push('STRIPE_PLATFORM_WEBHOOK_SECRET');
+
+  if (missing.length > 0) {
     throw new Error(
-      'Platform billing not configured: STRIPE_PLATFORM_SECRET_KEY and STRIPE_PLATFORM_WEBHOOK_SECRET must be set in Doppler',
+      `Platform billing not configured: ${missing.join(' and ')} must be set in Doppler`,
     );
   }
   return cfg;

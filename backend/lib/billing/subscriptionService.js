@@ -139,11 +139,14 @@ export async function changePlan(supabase, params) {
   }
 
   // Validate new plan exists before canceling old one
-  const { data: newPlan } = await supabase
+  const { data: newPlan, error: newPlanError } = await supabase
     .from('billing_plans')
     .select('id, code, billing_interval, amount_cents, is_active')
     .eq('code', plan_code)
     .maybeSingle();
+  if (newPlanError) {
+    throw new Error(`changePlan: ${newPlanError.message}`);
+  }
   if (!newPlan || !newPlan.is_active) {
     throw new Error(`changePlan: plan "${plan_code}" not found or inactive`);
   }
@@ -152,13 +155,26 @@ export async function changePlan(supabase, params) {
   }
 
   // Cancel existing
-  await supabase
+  const { error: cancelError } = await supabase
     .from('tenant_subscriptions')
     .update({ status: 'canceled', canceled_at: new Date().toISOString() })
     .eq('id', existing.id);
+  if (cancelError) {
+    throw new Error(`changePlan: failed to cancel existing subscription: ${cancelError.message}`);
+  }
 
-  // Create new
-  const newSub = await assignPlan(supabase, { tenant_id, plan_code, actor_id, request_id });
+  // Create new -- rollback cancel on failure
+  let newSub;
+  try {
+    newSub = await assignPlan(supabase, { tenant_id, plan_code, actor_id, request_id });
+  } catch (assignErr) {
+    // Attempt to restore old subscription
+    await supabase
+      .from('tenant_subscriptions')
+      .update({ status: existing.status, canceled_at: null })
+      .eq('id', existing.id);
+    throw new Error(`changePlan: assignPlan failed, rolled back cancel: ${assignErr.message}`);
+  }
 
   await logBillingEvent(supabase, {
     tenant_id,

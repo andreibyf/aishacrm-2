@@ -30,7 +30,7 @@ describe('billingAccountService -- getOrCreateBillingAccount', () => {
     const account = await getOrCreateBillingAccount(mock, TENANT);
 
     assert.equal(account.tenant_id, TENANT);
-    assert.equal(account.billing_exempt, undefined); // not set until exempt=true
+    assert.equal(account.billing_exempt, false); // schema default on create
     assert.equal(mock.db.billing_accounts.length, 1);
   });
 

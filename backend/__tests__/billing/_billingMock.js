@@ -159,13 +159,20 @@ export function createBillingMock(initial = {}) {
               }
             }
           }
-          const stamped = rows.map((r) => ({
-            id: r.id || genId(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            amount_paid_cents: 0,
-            ...r,
-          }));
+          const stamped = rows.map((r) => {
+            // Apply schema defaults per table
+            const defaults = {
+              id: genId(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              amount_paid_cents: 0,
+            };
+            if (table === 'billing_accounts') {
+              defaults.billing_exempt = false;
+              defaults.currency = 'usd';
+            }
+            return { ...defaults, ...r };
+          });
           ensure(table).push(...stamped);
           return {
             select: () => ({

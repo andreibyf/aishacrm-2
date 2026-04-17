@@ -73,9 +73,10 @@ export function computeBillingState({ billingAccount, subscription }) {
     return BILLING_STATES.BILLING_EXEMPT;
   }
   if (!subscription || subscription.status === 'canceled') {
+    // No subscription yet = default active (tenant is on a free/implicit tier).
+    // Once a plan is assigned, the subscription row drives state.
+    // Canceled subscription = canceled.
     return subscription ? BILLING_STATES.CANCELED : BILLING_STATES.ACTIVE;
-    // No subscription yet = default active. Once a plan is assigned,
-    // the subscription row drives state.
   }
   if (subscription.status === 'draft') return BILLING_STATES.ACTIVE;
   if (VALID_STATES.has(subscription.status)) return subscription.status;
@@ -93,7 +94,11 @@ export function computeBillingState({ billingAccount, subscription }) {
 export async function syncTenantBillingState(supabase, tenantId) {
   if (!tenantId) throw new Error('syncTenantBillingState: tenantId required');
 
-  const [{ data: tenantRow, error: tErr }, { data: account }, { data: subs }] = await Promise.all([
+  const [
+    { data: tenantRow, error: tErr },
+    { data: account, error: acctErr },
+    { data: subs, error: subsErr },
+  ] = await Promise.all([
     supabase.from('tenant').select('billing_state').eq('id', tenantId).single(),
     supabase
       .from('billing_accounts')
@@ -109,6 +114,10 @@ export async function syncTenantBillingState(supabase, tenantId) {
   ]);
 
   if (tErr) throw new Error(`syncTenantBillingState: tenant lookup failed: ${tErr.message}`);
+  if (acctErr)
+    throw new Error(`syncTenantBillingState: billing_accounts lookup failed: ${acctErr.message}`);
+  if (subsErr)
+    throw new Error(`syncTenantBillingState: subscription lookup failed: ${subsErr.message}`);
 
   const subscription = subs && subs.length > 0 ? subs[0] : null;
   const computed = computeBillingState({ billingAccount: account, subscription });
