@@ -12,6 +12,7 @@
 import logger from '../logger.js';
 import { logBillingEvent, BILLING_EVENTS } from './billingEventLogger.js';
 import { syncTenantBillingState } from './billingStateMachine.js';
+import { BillingError, BILLING_ERROR_CODES } from './errors.js';
 
 const DEFAULT_DUE_DAYS = 14;
 
@@ -53,7 +54,15 @@ export async function generateInvoiceNumber(supabase, tenantId) {
 }
 
 function sumLineItems(items) {
-  return items.reduce((s, li) => s + (li.amount_cents ?? li.quantity * li.unit_price_cents), 0);
+  return items.reduce((s, li) => {
+    if (li.amount_cents != null) return s + li.amount_cents;
+    // Default quantity to 1 (matches normalization below in createInvoice),
+    // and default unit_price_cents to 0 to avoid NaN propagation if a
+    // caller accidentally omits it.
+    const qty = li.quantity ?? 1;
+    const unit = li.unit_price_cents ?? 0;
+    return s + qty * unit;
+  }, 0);
 }
 
 /**
@@ -86,9 +95,17 @@ export async function createInvoice(supabase, params) {
     request_id,
   } = params;
 
-  if (!tenant_id) throw new Error('createInvoice: tenant_id required');
+  if (!tenant_id) {
+    throw new BillingError('createInvoice: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
   if (!Array.isArray(line_items) || line_items.length === 0) {
-    throw new Error('createInvoice: at least one line_item required');
+    throw new BillingError('createInvoice: at least one line_item required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
   }
 
   // Exemption guard
@@ -98,11 +115,19 @@ export async function createInvoice(supabase, params) {
     .eq('tenant_id', tenant_id)
     .maybeSingle();
   if (account?.billing_exempt === true) {
-    throw new Error('createInvoice: tenant is billing-exempt; no invoice created');
+    throw new BillingError('createInvoice: tenant is billing-exempt; no invoice created', {
+      statusCode: 409,
+      code: BILLING_ERROR_CODES.EXEMPT,
+    });
   }
 
   const subtotal = sumLineItems(line_items);
-  if (subtotal < 0) throw new Error('createInvoice: subtotal cannot be negative');
+  if (subtotal < 0) {
+    throw new BillingError('createInvoice: subtotal cannot be negative', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
   const total = subtotal + tax_total_cents;
 
   const invoice_number = await generateInvoiceNumber(supabase, tenant_id);
@@ -130,16 +155,20 @@ export async function createInvoice(supabase, params) {
 
   const lineRows = line_items.map((li) => {
     if (li.quantity != null && li.quantity <= 0) {
-      throw new Error(`createInvoice: line item quantity must be > 0, got ${li.quantity}`);
+      throw new BillingError(`createInvoice: line item quantity must be > 0, got ${li.quantity}`, {
+        statusCode: 400,
+        code: BILLING_ERROR_CODES.INVALID_INPUT,
+      });
     }
     const qty = li.quantity || 1;
+    const unit = li.unit_price_cents ?? 0;
     return {
       invoice_id: invoice.id,
       item_type: li.item_type,
       description: li.description,
       quantity: qty,
-      unit_price_cents: li.unit_price_cents,
-      amount_cents: li.amount_cents ?? qty * li.unit_price_cents,
+      unit_price_cents: unit,
+      amount_cents: li.amount_cents ?? qty * unit,
       metadata: li.metadata || {},
     };
   });
@@ -177,16 +206,29 @@ export async function createInvoice(supabase, params) {
  * Issue a draft invoice (draft -> open). Emits invoice.sent event.
  */
 export async function issueInvoice(supabase, { invoice_id, actor_id, request_id }) {
-  if (!invoice_id) throw new Error('issueInvoice: invoice_id required');
+  if (!invoice_id) {
+    throw new BillingError('issueInvoice: invoice_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const { data: invoice, error: selErr } = await supabase
     .from('invoices')
     .select('*')
     .eq('id', invoice_id)
     .single();
-  if (selErr || !invoice) throw new Error('issueInvoice: invoice not found');
+  if (selErr || !invoice) {
+    throw new BillingError('issueInvoice: invoice not found', {
+      statusCode: 404,
+      code: BILLING_ERROR_CODES.NOT_FOUND,
+    });
+  }
   if (invoice.status !== 'draft') {
-    throw new Error(`issueInvoice: invoice is ${invoice.status}, must be draft`);
+    throw new BillingError(`issueInvoice: invoice is ${invoice.status}, must be draft`, {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVOICE_STATE,
+    });
   }
 
   const { data: updated, error: updErr } = await supabase
@@ -240,9 +282,17 @@ export async function recordPayment(supabase, params) {
     request_id,
   } = params;
 
-  if (!invoice_id) throw new Error('recordPayment: invoice_id required');
+  if (!invoice_id) {
+    throw new BillingError('recordPayment: invoice_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
   if (!amount_cents || amount_cents <= 0) {
-    throw new Error('recordPayment: amount_cents must be > 0');
+    throw new BillingError('recordPayment: amount_cents must be > 0', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
   }
 
   const { data: invoice, error: invErr } = await supabase
@@ -250,9 +300,17 @@ export async function recordPayment(supabase, params) {
     .select('*')
     .eq('id', invoice_id)
     .single();
-  if (invErr || !invoice) throw new Error('recordPayment: invoice not found');
+  if (invErr || !invoice) {
+    throw new BillingError('recordPayment: invoice not found', {
+      statusCode: 404,
+      code: BILLING_ERROR_CODES.NOT_FOUND,
+    });
+  }
   if (invoice.status === 'void' || invoice.status === 'uncollectible') {
-    throw new Error(`recordPayment: invoice is ${invoice.status}`);
+    throw new BillingError(`recordPayment: invoice is ${invoice.status}`, {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVOICE_STATE,
+    });
   }
 
   // Idempotency check
@@ -356,16 +414,36 @@ export async function recordPayment(supabase, params) {
  * Void an invoice. Only valid for non-paid invoices. Clears balance_due.
  */
 export async function voidInvoice(supabase, { invoice_id, actor_id, request_id, reason }) {
-  if (!invoice_id) throw new Error('voidInvoice: invoice_id required');
-  if (!actor_id) throw new Error('voidInvoice: actor_id required');
+  if (!invoice_id) {
+    throw new BillingError('voidInvoice: invoice_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!actor_id) {
+    throw new BillingError('voidInvoice: actor_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const { data: invoice, error: selErr } = await supabase
     .from('invoices')
     .select('*')
     .eq('id', invoice_id)
     .single();
-  if (selErr || !invoice) throw new Error('voidInvoice: invoice not found');
-  if (invoice.status === 'paid') throw new Error('voidInvoice: cannot void a paid invoice');
+  if (selErr || !invoice) {
+    throw new BillingError('voidInvoice: invoice not found', {
+      statusCode: 404,
+      code: BILLING_ERROR_CODES.NOT_FOUND,
+    });
+  }
+  if (invoice.status === 'paid') {
+    throw new BillingError('voidInvoice: cannot void a paid invoice', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVOICE_PAID,
+    });
+  }
   if (invoice.status === 'void') return invoice; // idempotent
 
   const { data: voided, error: updErr } = await supabase

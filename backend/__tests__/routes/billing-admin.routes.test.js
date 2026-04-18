@@ -147,7 +147,7 @@ describe('Subscription management', () => {
     const res = await request(buildApp(superadmin))
       .post(`/api/billing-admin/tenants/${TENANT}/subscription`)
       .send({ plan_code: 'growth_monthly' });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 409); // PR #517: CONFLICT is the correct code
     assert.match(res.body.message, /already has/);
   });
 
@@ -231,7 +231,7 @@ describe('Invoice management', () => {
     assert.equal(res.body.data.invoice.total_cents, 4900);
   });
 
-  it('POST returns 400 when tenant is exempt', async () => {
+  it('POST returns 409 when tenant is exempt', async () => {
     await request(buildApp(superadmin))
       .post(`/api/billing-admin/tenants/${TENANT}/exemption`)
       .send({ reason: 'comp' });
@@ -242,7 +242,7 @@ describe('Invoice management', () => {
           { item_type: 'subscription', description: 'x', quantity: 1, unit_price_cents: 100 },
         ],
       });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 409); // PR #517: EXEMPT -> 409 Conflict
     assert.match(res.body.message, /exempt/);
   });
 
@@ -308,5 +308,76 @@ describe('GET /tenants/:tenantId/events audit trail', () => {
     assert.ok(res.body.data.length > 0);
     const types = res.body.data.map((e) => e.event_type);
     assert.ok(types.includes('plan.assigned'));
+  });
+});
+
+describe('GET /tenants/:tenantId -- unknown tenant (PR #517 issue 1)', () => {
+  it('returns 404 for unknown tenant (not 500)', async () => {
+    const UNKNOWN = '99999999-9999-9999-9999-999999999999';
+    const res = await request(buildApp(superadmin)).get(`/api/billing-admin/tenants/${UNKNOWN}`);
+    assert.equal(res.status, 404);
+    assert.equal(res.body.status, 'error');
+    assert.match(res.body.message, /Tenant not found/);
+    // No billing_accounts row should have been created for the unknown tenant
+    const created = mockClient.db.billing_accounts.find((a) => a.tenant_id === UNKNOWN);
+    assert.equal(created, undefined, 'billing_accounts must not be created for unknown tenant');
+  });
+
+  it('returns 200 with billing summary when tenant exists', async () => {
+    const res = await request(buildApp(superadmin)).get(`/api/billing-admin/tenants/${TENANT}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'success');
+    assert.equal(res.body.data.tenant.id, TENANT);
+    assert.ok(res.body.data.billing_account);
+  });
+});
+
+describe('BillingError code surfacing in responses (PR #517 issue 4)', () => {
+  it('POST subscription twice -> 409 CONFLICT with code in body', async () => {
+    await request(buildApp(superadmin))
+      .post(`/api/billing-admin/tenants/${TENANT}/subscription`)
+      .send({ plan_code: 'starter_monthly' });
+
+    const res = await request(buildApp(superadmin))
+      .post(`/api/billing-admin/tenants/${TENANT}/subscription`)
+      .send({ plan_code: 'growth_monthly' });
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.code, 'CONFLICT');
+    assert.match(res.body.message, /already has an active subscription/);
+  });
+
+  it('POST invoice on billing-exempt tenant -> 409 EXEMPT', async () => {
+    // Mark tenant billing-exempt
+    await request(buildApp(superadmin))
+      .post(`/api/billing-admin/tenants/${TENANT}/exemption`)
+      .send({ reason: 'pilot account' });
+
+    const res = await request(buildApp(superadmin))
+      .post(`/api/billing-admin/tenants/${TENANT}/invoices`)
+      .send({
+        line_items: [
+          { item_type: 'subscription', description: 'x', quantity: 1, unit_price_cents: 100 },
+        ],
+      });
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.code, 'EXEMPT');
+  });
+
+  it('POST subscription with missing plan_code -> 400 INVALID_INPUT', async () => {
+    const res = await request(buildApp(superadmin))
+      .post(`/api/billing-admin/tenants/${TENANT}/subscription`)
+      .send({});
+    assert.equal(res.status, 400);
+    assert.equal(res.body.code, 'INVALID_INPUT');
+  });
+
+  it('POST void on missing invoice -> 404 NOT_FOUND', async () => {
+    const res = await request(buildApp(superadmin))
+      .post(`/api/billing-admin/invoices/00000000-0000-0000-0000-000000000000/void`)
+      .send({ reason: 'test' });
+    assert.equal(res.status, 404);
+    assert.equal(res.body.code, 'NOT_FOUND');
   });
 });

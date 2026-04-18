@@ -356,3 +356,130 @@ describe('invoiceService -- voidInvoice', () => {
     await assert.rejects(() => voidInvoice(mock, { invoice_id: invoice.id }), /actor_id required/);
   });
 });
+
+describe('invoiceService -- sumLineItems NaN safety (PR #517 issue 6)', () => {
+  it('does NOT produce NaN when amount_cents and quantity are both missing', async () => {
+    const mock = fresh();
+    // Line item missing BOTH amount_cents and quantity -- previously this
+    // reduced to `undefined * N` => NaN propagating into subtotal/total.
+    // Fixed behaviour: treat missing quantity as 1.
+    const { invoice } = await createInvoice(mock, {
+      tenant_id: TENANT,
+      line_items: [{ item_type: 'subscription', description: 'S', unit_price_cents: 4900 }],
+    });
+    assert.equal(invoice.subtotal_cents, 4900);
+    assert.equal(invoice.total_cents, 4900);
+    assert.ok(!Number.isNaN(invoice.subtotal_cents), 'subtotal must not be NaN');
+  });
+
+  it('treats missing unit_price_cents as 0 (no NaN propagation)', async () => {
+    const mock = fresh();
+    const { invoice } = await createInvoice(mock, {
+      tenant_id: TENANT,
+      line_items: [
+        { item_type: 'subscription', description: 'S', unit_price_cents: 500 },
+        { item_type: 'adjustment', description: 'Free item', quantity: 2 },
+      ],
+    });
+    // 500 + (2 * 0) == 500
+    assert.equal(invoice.subtotal_cents, 500);
+  });
+
+  it('prefers explicit amount_cents over quantity*unit_price_cents', async () => {
+    const mock = fresh();
+    const { invoice } = await createInvoice(mock, {
+      tenant_id: TENANT,
+      line_items: [
+        {
+          item_type: 'adjustment',
+          description: 'Override',
+          quantity: 10,
+          unit_price_cents: 999,
+          amount_cents: 1234,
+        },
+      ],
+    });
+    assert.equal(invoice.subtotal_cents, 1234);
+  });
+});
+
+describe('invoiceService -- BillingError propagation (PR #517 issue 4)', () => {
+  it('throws BillingError with code=INVALID_INPUT on missing tenant_id', async () => {
+    const mock = fresh();
+    const { BillingError, BILLING_ERROR_CODES } = await import('../../lib/billing/errors.js');
+    await assert.rejects(
+      () =>
+        createInvoice(mock, {
+          line_items: [{ item_type: 's', description: 'x', quantity: 1, unit_price_cents: 1 }],
+        }),
+      (err) =>
+        err instanceof BillingError &&
+        err.statusCode === 400 &&
+        err.code === BILLING_ERROR_CODES.INVALID_INPUT,
+    );
+  });
+
+  it('throws BillingError with code=EXEMPT when tenant is billing-exempt', async () => {
+    const mock = fresh();
+    mock.db.billing_accounts = [
+      {
+        id: 'ba',
+        tenant_id: TENANT,
+        billing_exempt: true,
+        exempt_reason: 'pilot',
+        exempt_set_by: 'u',
+        exempt_set_at: new Date().toISOString(),
+      },
+    ];
+    const { BillingError, BILLING_ERROR_CODES } = await import('../../lib/billing/errors.js');
+    await assert.rejects(
+      () =>
+        createInvoice(mock, {
+          tenant_id: TENANT,
+          line_items: [{ item_type: 's', description: 'x', quantity: 1, unit_price_cents: 1 }],
+        }),
+      (err) =>
+        err instanceof BillingError &&
+        err.statusCode === 409 &&
+        err.code === BILLING_ERROR_CODES.EXEMPT,
+    );
+  });
+
+  it('throws BillingError with code=NOT_FOUND when voiding a missing invoice', async () => {
+    const mock = fresh();
+    const { BillingError, BILLING_ERROR_CODES } = await import('../../lib/billing/errors.js');
+    await assert.rejects(
+      () =>
+        voidInvoice(mock, {
+          invoice_id: '00000000-0000-0000-0000-000000000000',
+          actor_id: ACTOR,
+        }),
+      (err) =>
+        err instanceof BillingError &&
+        err.statusCode === 404 &&
+        err.code === BILLING_ERROR_CODES.NOT_FOUND,
+    );
+  });
+
+  it('throws BillingError with code=INVOICE_PAID when voiding a paid invoice', async () => {
+    const mock = fresh();
+    const { invoice } = await createInvoice(mock, {
+      tenant_id: TENANT,
+      line_items: [{ item_type: 's', description: 'x', quantity: 1, unit_price_cents: 100 }],
+    });
+    await issueInvoice(mock, { invoice_id: invoice.id, actor_id: ACTOR });
+    await recordPayment(mock, {
+      invoice_id: invoice.id,
+      amount_cents: 100,
+      provider_payment_intent_id: 'pi_paid',
+    });
+    const { BillingError, BILLING_ERROR_CODES } = await import('../../lib/billing/errors.js');
+    await assert.rejects(
+      () => voidInvoice(mock, { invoice_id: invoice.id, actor_id: ACTOR }),
+      (err) =>
+        err instanceof BillingError &&
+        err.statusCode === 400 &&
+        err.code === BILLING_ERROR_CODES.INVOICE_PAID,
+    );
+  });
+});

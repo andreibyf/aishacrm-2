@@ -13,13 +13,19 @@
 import logger from '../logger.js';
 import { logBillingEvent, BILLING_EVENTS } from './billingEventLogger.js';
 import { syncTenantBillingState } from './billingStateMachine.js';
+import { BillingError, BILLING_ERROR_CODES } from './errors.js';
 
 /**
  * Get the billing_account row for a tenant (creates it empty on first access).
  * @returns {Promise<object>} billing_accounts row
  */
 export async function getOrCreateBillingAccount(supabase, tenantId) {
-  if (!tenantId) throw new Error('getOrCreateBillingAccount: tenantId required');
+  if (!tenantId) {
+    throw new BillingError('getOrCreateBillingAccount: tenantId required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const { data: existing, error: selErr } = await supabase
     .from('billing_accounts')
@@ -57,7 +63,12 @@ export async function getOrCreateBillingAccount(supabase, tenantId) {
  * Does NOT touch billing_exempt -- use setExemption() for that.
  */
 export async function updateBillingProfile(supabase, tenantId, updates) {
-  if (!tenantId) throw new Error('updateBillingProfile: tenantId required');
+  if (!tenantId) {
+    throw new BillingError('updateBillingProfile: tenantId required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const allowed = [
     'billing_contact_name',
@@ -78,12 +89,18 @@ export async function updateBillingProfile(supabase, tenantId, updates) {
   const forbidden = ['billing_exempt', 'exempt_reason', 'exempt_set_by', 'exempt_set_at'];
   for (const k of forbidden) {
     if (updates[k] !== undefined) {
-      throw new Error(`updateBillingProfile: use setExemption() to modify ${k}`);
+      throw new BillingError(`updateBillingProfile: use setExemption() to modify ${k}`, {
+        statusCode: 400,
+        code: BILLING_ERROR_CODES.INVALID_INPUT,
+      });
     }
   }
 
   if (Object.keys(clean).length === 0) {
-    throw new Error('updateBillingProfile: no updatable fields provided');
+    throw new BillingError('updateBillingProfile: no updatable fields provided', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
   }
 
   // Ensure account exists
@@ -113,9 +130,24 @@ export async function updateBillingProfile(supabase, tenantId, updates) {
  * @returns {Promise<{account: object, stateChange: object}>}
  */
 export async function setExemption(supabase, { tenant_id, reason, actor_id, request_id }) {
-  if (!tenant_id) throw new Error('setExemption: tenant_id required');
-  if (!reason || !reason.trim()) throw new Error('setExemption: reason required');
-  if (!actor_id) throw new Error('setExemption: actor_id required');
+  if (!tenant_id) {
+    throw new BillingError('setExemption: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!reason || !reason.trim()) {
+    throw new BillingError('setExemption: reason required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!actor_id) {
+    throw new BillingError('setExemption: actor_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   await getOrCreateBillingAccount(supabase, tenant_id);
 
@@ -161,8 +193,18 @@ export async function setExemption(supabase, { tenant_id, reason, actor_id, requ
  * @returns {Promise<{account: object, stateChange: object}>}
  */
 export async function removeExemption(supabase, { tenant_id, actor_id, request_id }) {
-  if (!tenant_id) throw new Error('removeExemption: tenant_id required');
-  if (!actor_id) throw new Error('removeExemption: actor_id required');
+  if (!tenant_id) {
+    throw new BillingError('removeExemption: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!actor_id) {
+    throw new BillingError('removeExemption: actor_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const { data: current } = await supabase
     .from('billing_accounts')
@@ -171,7 +213,10 @@ export async function removeExemption(supabase, { tenant_id, actor_id, request_i
     .maybeSingle();
 
   if (!current || !current.billing_exempt) {
-    throw new Error('removeExemption: tenant is not currently exempt');
+    throw new BillingError('removeExemption: tenant is not currently exempt', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.CONFLICT,
+    });
   }
 
   const { data: account, error } = await supabase

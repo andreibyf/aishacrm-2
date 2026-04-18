@@ -525,3 +525,240 @@ describe('customer.subscription.deleted', () => {
     assert.equal(mockClient.db.tenant_subscriptions[0].status, 'active');
   });
 });
+
+describe('Webhook preflight: missing webhook secret (PR #517 issue 7)', () => {
+  it('returns 503 when STRIPE_PLATFORM_WEBHOOK_SECRET is missing (not 400)', async () => {
+    process.env.STRIPE_PLATFORM_SECRET_KEY = 'sk_test_placeholder';
+    delete process.env.STRIPE_PLATFORM_WEBHOOK_SECRET;
+    // Previously: verifyWebhookSignature would throw on missing secret and
+    // the catch mapped it to 400 "Invalid signature" — misleading operators.
+    // Fixed: explicit preflight returns 503 misconfiguration.
+    const res = await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from('{}'));
+    assert.equal(res.status, 503);
+    assert.match(res.body.error, /webhook secret not configured/i);
+  });
+});
+
+describe('checkout.session.completed assignPlan error propagation (PR #517 issue 3)', () => {
+  it('re-throws non-race assignPlan errors -> 500 so Stripe retries', async () => {
+    // Set up: NO matching plan so assignPlan will throw an INACTIVE_PLAN
+    // BillingError (message: plan "ghost_plan" not found or inactive).
+    // Previously the catch swallowed this as "race" and returned 200.
+    stubbedEvent = {
+      id: 'evt_ck_err_1',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_err',
+          metadata: { tenant_id: TENANT, plan_code: 'ghost_plan' },
+          subscription: 'sub_x',
+          payment_intent: null,
+          amount_total: 0,
+        },
+      },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'checkout.session.completed' };
+
+    const res = await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    assert.equal(res.status, 500);
+    assert.match(res.body.error, /not found or inactive/);
+    // No subscription should have been silently "recorded"
+    assert.equal(mockClient.db.tenant_subscriptions.length, 0);
+  });
+
+  it('swallows race error when tenant already has an active subscription', async () => {
+    // Seed an existing active subscription for the tenant
+    mockClient.db.tenant_subscriptions.push({
+      id: 'sub_existing',
+      tenant_id: TENANT,
+      billing_plan_id: 'p1',
+      status: 'active',
+      provider_subscription_id: null,
+      created_at: '2026-01-01',
+    });
+    // Seed an open invoice so the payment recording path has something to attach to
+    mockClient.db.invoices.push({
+      id: 'inv_race',
+      tenant_id: TENANT,
+      status: 'open',
+      total_cents: 4900,
+      amount_paid_cents: 0,
+      balance_due_cents: 4900,
+      currency: 'usd',
+      created_at: '2026-01-01',
+    });
+
+    stubbedEvent = {
+      id: 'evt_ck_race_1',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_race',
+          metadata: { tenant_id: TENANT, plan_code: 'starter_monthly' },
+          subscription: 'sub_new',
+          payment_intent: 'pi_race',
+          amount_total: 4900,
+        },
+      },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'checkout.session.completed' };
+
+    // The webhook checks existingActive first, so it won't even call
+    // assignPlan. This test confirms the happy "already has subscription"
+    // path still returns 200 and records payment.
+    const res = await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    assert.equal(res.status, 200);
+    const payment = mockClient.db.payments.find((p) => p.provider_payment_intent_id === 'pi_race');
+    assert.ok(payment, 'payment must be recorded despite existing subscription');
+  });
+});
+
+describe('customer.subscription.updated event type (PR #517 issue 5)', () => {
+  beforeEach(() => {
+    mockClient.db.tenant_subscriptions.push({
+      id: 'sub_evt_1',
+      tenant_id: TENANT,
+      billing_plan_id: 'p1',
+      status: 'active',
+      provider_subscription_id: 'sub_stripe_evt_1',
+      created_at: '2026-01-01',
+    });
+  });
+
+  it('emits SUBSCRIPTION_STATUS_CHANGED (not RENEWED) on active -> past_due', async () => {
+    stubbedEvent = {
+      id: 'evt_status_1',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_stripe_evt_1', status: 'past_due', cancel_at_period_end: false } },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const evt = mockClient.db.billing_events.find(
+      (e) => e.payload_json?.provider_subscription_id === 'sub_stripe_evt_1',
+    );
+    assert.ok(evt);
+    assert.equal(evt.event_type, 'subscription.status_changed');
+    assert.notEqual(evt.event_type, 'subscription.renewed');
+  });
+
+  it('emits SUBSCRIPTION_STATUS_CHANGED on active -> suspended (unpaid)', async () => {
+    stubbedEvent = {
+      id: 'evt_status_2',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_stripe_evt_1', status: 'unpaid', cancel_at_period_end: false } },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const evt = mockClient.db.billing_events.find(
+      (e) => e.payload_json?.provider_subscription_id === 'sub_stripe_evt_1',
+    );
+    assert.equal(evt.event_type, 'subscription.status_changed');
+  });
+
+  it('emits SUBSCRIPTION_RENEWED on past_due -> active (recovery)', async () => {
+    // Seed local row as past_due first
+    mockClient.db.tenant_subscriptions[mockClient.db.tenant_subscriptions.length - 1].status =
+      'past_due';
+
+    stubbedEvent = {
+      id: 'evt_status_3',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_stripe_evt_1', status: 'active', cancel_at_period_end: false } },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const evt = mockClient.db.billing_events.find(
+      (e) => e.payload_json?.provider_subscription_id === 'sub_stripe_evt_1',
+    );
+    assert.equal(evt.event_type, 'subscription.renewed');
+  });
+
+  it('emits SUBSCRIPTION_CANCELED on any -> canceled', async () => {
+    stubbedEvent = {
+      id: 'evt_status_4',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_stripe_evt_1', status: 'canceled', cancel_at_period_end: false } },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const evt = mockClient.db.billing_events.find(
+      (e) => e.payload_json?.provider_subscription_id === 'sub_stripe_evt_1',
+    );
+    assert.equal(evt.event_type, 'subscription.canceled');
+  });
+});
+
+describe('pickSubscriptionUpdateEventType helper (unit, PR #517 issue 5)', () => {
+  let pickFn;
+  before(async () => {
+    ({ pickSubscriptionUpdateEventType: pickFn } = await import(
+      '../../routes/stripe-platform-webhook.js'
+    ));
+  });
+
+  it('canceled always wins', () => {
+    assert.equal(pickFn({ previous: 'active', next: 'canceled' }), 'subscription.canceled');
+    assert.equal(pickFn({ previous: 'past_due', next: 'canceled' }), 'subscription.canceled');
+    assert.equal(pickFn({ previous: 'suspended', next: 'canceled' }), 'subscription.canceled');
+  });
+
+  it('non-active -> active = renewed', () => {
+    assert.equal(pickFn({ previous: 'past_due', next: 'active' }), 'subscription.renewed');
+    assert.equal(pickFn({ previous: 'suspended', next: 'active' }), 'subscription.renewed');
+    assert.equal(pickFn({ previous: 'draft', next: 'active' }), 'subscription.renewed');
+  });
+
+  it('active -> active is status_changed (same-state update, e.g. cancel_at_period_end flip)', () => {
+    assert.equal(pickFn({ previous: 'active', next: 'active' }), 'subscription.status_changed');
+  });
+
+  it('active -> past_due / suspended = status_changed', () => {
+    assert.equal(pickFn({ previous: 'active', next: 'past_due' }), 'subscription.status_changed');
+    assert.equal(pickFn({ previous: 'active', next: 'suspended' }), 'subscription.status_changed');
+  });
+
+  it('past_due -> suspended = status_changed', () => {
+    assert.equal(
+      pickFn({ previous: 'past_due', next: 'suspended' }),
+      'subscription.status_changed',
+    );
+  });
+});

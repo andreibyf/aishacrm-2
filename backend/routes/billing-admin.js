@@ -29,6 +29,21 @@ import {
   voidInvoice,
   listInvoices,
 } from '../lib/billing/invoiceService.js';
+import { classifyBillingError } from '../lib/billing/errors.js';
+
+/**
+ * Route-local error responder. Prefers BillingError.statusCode; falls
+ * back to the legacy regex pattern for any Error raised by code that
+ * hasn't been migrated to BillingError yet.
+ */
+function respondError(res, err, legacyPattern) {
+  const status = classifyBillingError(err, legacyPattern);
+  res.status(status).json({
+    status: 'error',
+    message: err.message,
+    code: err.code || null,
+  });
+}
 
 export default function createBillingAdminRoutes(_pgPool, opts = {}) {
   const getClient = opts.getSupabaseClient || getSupabaseClient;
@@ -43,14 +58,24 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       const { tenantId } = req.params;
       const supabase = getClient();
 
-      const [{ data: tenant }, account, subscription, invoices] = await Promise.all([
-        supabase.from('tenant').select('id, name, billing_state').eq('id', tenantId).maybeSingle(),
+      // 1) Verify tenant exists BEFORE any billing-side work.
+      //    billing_accounts.tenant_id is FK -> tenant(id); skipping this
+      //    check causes getOrCreateBillingAccount() to 500 on unknown IDs.
+      //    Also capture error so DB failures don't masquerade as 404.
+      const { data: tenant, error: tenantErr } = await supabase
+        .from('tenant')
+        .select('id, name, billing_state')
+        .eq('id', tenantId)
+        .maybeSingle();
+      if (tenantErr) throw new Error(tenantErr.message);
+      if (!tenant) return res.status(404).json({ status: 'error', message: 'Tenant not found' });
+
+      // 2) Tenant confirmed — now fetch billing info in parallel.
+      const [account, subscription, invoices] = await Promise.all([
         getOrCreateBillingAccount(supabase, tenantId),
         getActiveSubscription(supabase, tenantId),
         listInvoices(supabase, tenantId, { limit: 20 }),
       ]);
-
-      if (!tenant) return res.status(404).json({ status: 'error', message: 'Tenant not found' });
 
       res.json({
         status: 'success',
@@ -80,8 +105,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.status(201).json({ status: 'success', data: sub });
     } catch (err) {
       logger.error('[BillingAdmin] POST subscription error', { error: err.message });
-      const code = /already has|not found|inactive|required/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /already has|not found|inactive|required/);
     }
   });
 
@@ -99,8 +123,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: sub });
     } catch (err) {
       logger.error('[BillingAdmin] PUT subscription error', { error: err.message });
-      const code = /no active|already on|not found|inactive|required/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /no active|already on|not found|inactive|required/);
     }
   });
 
@@ -118,8 +141,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: canceled });
     } catch (err) {
       logger.error('[BillingAdmin] DELETE subscription error', { error: err.message });
-      const code = /no active|required/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /no active|required/);
     }
   });
 
@@ -140,8 +162,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: result });
     } catch (err) {
       logger.error('[BillingAdmin] POST exemption error', { error: err.message });
-      const code = /required/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /required/);
     }
   });
 
@@ -157,8 +178,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: result });
     } catch (err) {
       logger.error('[BillingAdmin] DELETE exemption error', { error: err.message });
-      const code = /not currently exempt|required/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /not currently exempt|required/);
     }
   });
 
@@ -184,8 +204,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.status(201).json({ status: 'success', data: result });
     } catch (err) {
       logger.error('[BillingAdmin] POST invoices error', { error: err.message });
-      const code = /exempt|required|negative|quantity/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /exempt|required|negative|quantity/);
     }
   });
 
@@ -200,8 +219,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: invoice });
     } catch (err) {
       logger.error('[BillingAdmin] POST issue error', { error: err.message });
-      const code = /not found|must be draft/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /not found|must be draft/);
     }
   });
 
@@ -221,8 +239,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: result });
     } catch (err) {
       logger.error('[BillingAdmin] POST mark-paid error', { error: err.message });
-      const code = /not found|void|uncollectible|must be|> 0/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /not found|void|uncollectible|must be|> 0/);
     }
   });
 
@@ -239,8 +256,7 @@ export default function createBillingAdminRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: invoice });
     } catch (err) {
       logger.error('[BillingAdmin] POST void error', { error: err.message });
-      const code = /not found|cannot void/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      respondError(res, err, /not found|cannot void/);
     }
   });
 

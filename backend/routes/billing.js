@@ -22,16 +22,27 @@ import { getActiveSubscription } from '../lib/billing/subscriptionService.js';
 import { listInvoices } from '../lib/billing/invoiceService.js';
 import * as stripeAdapter from '../lib/billing/stripePlatformAdapter.js';
 import { getPlatformBillingConfig } from '../lib/billing/config.js';
+import { classifyBillingError } from '../lib/billing/errors.js';
 
-function resolveTenantId(req) {
-  const fromMiddleware = req.tenant?.id;
+export function resolveTenantId(req) {
+  // req.tenant is populated by validateTenantAccess after canonical resolution
+  // of whatever identifier was supplied (UUID, slug, or 'system').
+  // { id: <uuid>, tenant_id: <slug>, name: <string> }
+  const canonicalUuid = req.tenant?.id;
+  const canonicalSlug = req.tenant?.tenant_id;
   const fromRequest = req.query?.tenant_id || req.body?.tenant_id;
-  if (fromMiddleware) {
-    if (fromRequest && fromRequest !== fromMiddleware) {
+
+  if (canonicalUuid) {
+    // Accept match against either the resolved UUID or the resolved slug —
+    // both are canonical forms of the same tenant. This matches how
+    // validateTenantAccess itself compares tenant identifiers.
+    if (fromRequest && fromRequest !== canonicalUuid && fromRequest !== canonicalSlug) {
       return { error: 'tenant_id mismatch' };
     }
-    return { tenant_id: fromMiddleware };
+    // Always return the canonical UUID for downstream DB queries
+    return { tenant_id: canonicalUuid };
   }
+
   if (fromRequest) return { tenant_id: fromRequest };
   return { error: 'tenant_id is required' };
 }
@@ -91,8 +102,12 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
       res.json({ status: 'success', data: updated });
     } catch (err) {
       logger.error('[Billing] PUT /account error', { error: err.message });
-      const code = /setExemption|no updatable/.test(err.message) ? 400 : 500;
-      res.status(code).json({ status: 'error', message: err.message });
+      const status = classifyBillingError(err, /setExemption|no updatable/);
+      res.status(status).json({
+        status: 'error',
+        message: err.message,
+        code: err.code || null,
+      });
     }
   });
 

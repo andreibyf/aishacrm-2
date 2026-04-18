@@ -41,9 +41,14 @@ function mockSupabase({ insertResult = null, insertError = null } = {}) {
 }
 
 describe('billingEventLogger -- BILLING_EVENTS constants', () => {
-  it('exports all 18 canonical event types', () => {
-    // 5 invoice + 3 payment + 3 subscription + 5 tenant + 2 plan = 18
-    assert.equal(VALID_EVENT_TYPES.size, 18);
+  it('exports all 19 canonical event types', () => {
+    // 5 invoice + 3 payment + 4 subscription + 5 tenant + 2 plan = 19
+    assert.equal(VALID_EVENT_TYPES.size, 19);
+  });
+
+  it('includes subscription.status_changed (added PR #517)', () => {
+    assert.ok(VALID_EVENT_TYPES.has('subscription.status_changed'));
+    assert.equal(BILLING_EVENTS.SUBSCRIPTION_STATUS_CHANGED, 'subscription.status_changed');
   });
 
   it('all event types are dotted namespace.action form', () => {
