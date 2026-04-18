@@ -9,6 +9,7 @@
 import logger from '../logger.js';
 import { logBillingEvent, BILLING_EVENTS } from './billingEventLogger.js';
 import { syncTenantBillingState } from './billingStateMachine.js';
+import { BillingError, BILLING_ERROR_CODES } from './errors.js';
 
 function computeRenewalDate(interval, from = new Date()) {
   const d = new Date(from);
@@ -26,7 +27,12 @@ function computeRenewalDate(interval, from = new Date()) {
  * Get the tenant's active (non-canceled) subscription, if any.
  */
 export async function getActiveSubscription(supabase, tenantId) {
-  if (!tenantId) throw new Error('getActiveSubscription: tenantId required');
+  if (!tenantId) {
+    throw new BillingError('getActiveSubscription: tenantId required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
   const { data, error } = await supabase
     .from('tenant_subscriptions')
     .select('*, billing_plans(*)')
@@ -60,8 +66,18 @@ export async function assignPlan(supabase, params) {
     request_id,
   } = params;
 
-  if (!tenant_id) throw new Error('assignPlan: tenant_id required');
-  if (!plan_code) throw new Error('assignPlan: plan_code required');
+  if (!tenant_id) {
+    throw new BillingError('assignPlan: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!plan_code) {
+    throw new BillingError('assignPlan: plan_code required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const { data: plan, error: planErr } = await supabase
     .from('billing_plans')
@@ -70,11 +86,19 @@ export async function assignPlan(supabase, params) {
     .eq('is_active', true)
     .maybeSingle();
   if (planErr) throw new Error(`assignPlan: ${planErr.message}`);
-  if (!plan) throw new Error(`assignPlan: plan "${plan_code}" not found or inactive`);
+  if (!plan) {
+    throw new BillingError(`assignPlan: plan "${plan_code}" not found or inactive`, {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INACTIVE_PLAN,
+    });
+  }
 
   const existing = await getActiveSubscription(supabase, tenant_id);
   if (existing) {
-    throw new Error('assignPlan: tenant already has an active subscription -- use changePlan()');
+    throw new BillingError(
+      'assignPlan: tenant already has an active subscription -- use changePlan()',
+      { statusCode: 409, code: BILLING_ERROR_CODES.CONFLICT },
+    );
   }
 
   const start_date = new Date().toISOString();
@@ -130,12 +154,25 @@ export async function assignPlan(supabase, params) {
 export async function changePlan(supabase, params) {
   const { tenant_id, plan_code, actor_id = null, request_id } = params;
 
-  if (!tenant_id) throw new Error('changePlan: tenant_id required');
-  if (!plan_code) throw new Error('changePlan: plan_code required');
+  if (!tenant_id) {
+    throw new BillingError('changePlan: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!plan_code) {
+    throw new BillingError('changePlan: plan_code required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const existing = await getActiveSubscription(supabase, tenant_id);
   if (!existing) {
-    throw new Error('changePlan: no active subscription -- use assignPlan()');
+    throw new BillingError('changePlan: no active subscription -- use assignPlan()', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.NO_ACTIVE_SUBSCRIPTION,
+    });
   }
 
   // Validate new plan exists before canceling old one
@@ -148,10 +185,16 @@ export async function changePlan(supabase, params) {
     throw new Error(`changePlan: ${newPlanError.message}`);
   }
   if (!newPlan || !newPlan.is_active) {
-    throw new Error(`changePlan: plan "${plan_code}" not found or inactive`);
+    throw new BillingError(`changePlan: plan "${plan_code}" not found or inactive`, {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INACTIVE_PLAN,
+    });
   }
   if (newPlan.id === existing.billing_plan_id) {
-    throw new Error(`changePlan: tenant is already on "${plan_code}"`);
+    throw new BillingError(`changePlan: tenant is already on "${plan_code}"`, {
+      statusCode: 409,
+      code: BILLING_ERROR_CODES.CONFLICT,
+    });
   }
 
   // Cancel existing
@@ -198,11 +241,26 @@ export async function changePlan(supabase, params) {
  * Cancel a tenant's active subscription.
  */
 export async function cancelSubscription(supabase, { tenant_id, actor_id, request_id, reason }) {
-  if (!tenant_id) throw new Error('cancelSubscription: tenant_id required');
-  if (!actor_id) throw new Error('cancelSubscription: actor_id required');
+  if (!tenant_id) {
+    throw new BillingError('cancelSubscription: tenant_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
+  if (!actor_id) {
+    throw new BillingError('cancelSubscription: actor_id required', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.INVALID_INPUT,
+    });
+  }
 
   const existing = await getActiveSubscription(supabase, tenant_id);
-  if (!existing) throw new Error('cancelSubscription: no active subscription');
+  if (!existing) {
+    throw new BillingError('cancelSubscription: no active subscription', {
+      statusCode: 400,
+      code: BILLING_ERROR_CODES.NO_ACTIVE_SUBSCRIPTION,
+    });
+  }
 
   const { data: canceled, error } = await supabase
     .from('tenant_subscriptions')

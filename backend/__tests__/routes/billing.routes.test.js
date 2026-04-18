@@ -291,3 +291,66 @@ describe('POST /api/billing/portal-session', () => {
     assert.match(res.body.message, /No Stripe customer/);
   });
 });
+
+describe('resolveTenantId slug/UUID canonicalisation (PR #517 issue 2)', () => {
+  // After validateTenantAccess resolves the tenant, req.tenant is
+  //   { id: <uuid>, tenant_id: <slug>, name: <string> }.
+  // This test injects req.tenant directly to verify resolveTenantId
+  // accepts requests whose body/query carries the slug form, not just UUID.
+
+  const SLUG = 'acme-corp';
+
+  function buildAppWithCanonicalTenant(user, canonical) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = user;
+      req.tenant = canonical;
+      next();
+    });
+    app.use('/api/billing', createBillingRoutes(null, { getSupabaseClient: () => mockClient }));
+    return app;
+  }
+
+  it('accepts slug in body when middleware has resolved UUID in req.tenant.id', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: SLUG };
+    const app = buildAppWithCanonicalTenant(user, { id: TENANT, tenant_id: SLUG, name: 'Acme' });
+
+    // Previously: body.tenant_id=SLUG !== req.tenant.id=UUID -> 400 mismatch
+    // Now: resolveTenantId accepts either UUID or slug -> 200
+    const res = await request(app).get('/api/billing/account').query({ tenant_id: SLUG });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, 'success');
+    // Downstream DB was queried with canonical UUID, not slug
+    const account = mockClient.db.billing_accounts.find((a) => a.tenant_id === TENANT);
+    assert.ok(account, 'billing_account must be created under canonical UUID');
+  });
+
+  it('accepts UUID in body when middleware has resolved UUID in req.tenant.id', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: SLUG };
+    const app = buildAppWithCanonicalTenant(user, { id: TENANT, tenant_id: SLUG, name: 'Acme' });
+    const res = await request(app).get('/api/billing/account').query({ tenant_id: TENANT });
+    assert.equal(res.status, 200);
+  });
+
+  it('still returns 400 mismatch when body tenant_id is a DIFFERENT tenant', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: SLUG };
+    const app = buildAppWithCanonicalTenant(user, { id: TENANT, tenant_id: SLUG, name: 'Acme' });
+    const res = await request(app)
+      .get('/api/billing/account')
+      .query({ tenant_id: 'different-slug' });
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /tenant_id mismatch/);
+  });
+
+  it('returns 400 tenant_id required when superadmin has no tenant selected', async () => {
+    // Superadmins are the only role that can reach resolveTenantId without
+    // validateTenantAccess having populated req.tenant, because the middleware
+    // only auto-injects tenant_id for non-superadmin roles and 403s admins
+    // without a tenant_uuid.
+    const superadmin = { id: 'sa', role: 'superadmin', tenant_uuid: null, tenant_id: null };
+    const res = await request(buildApp(superadmin)).get('/api/billing/account');
+    assert.equal(res.status, 400);
+    assert.match(res.body.message, /tenant_id is required/);
+  });
+});

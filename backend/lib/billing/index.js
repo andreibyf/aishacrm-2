@@ -19,8 +19,10 @@ export * as eventLogger from './billingEventLogger.js';
 export * as stripe from './stripePlatformAdapter.js';
 export * as providerInterface from './paymentProvider.js';
 export * as config from './config.js';
+export * as errors from './errors.js';
 
 export { BILLING_EVENTS } from './billingEventLogger.js';
+export { BillingError, BILLING_ERROR_CODES, classifyBillingError } from './errors.js';
 export {
   BILLING_STATES,
   computeBillingState,

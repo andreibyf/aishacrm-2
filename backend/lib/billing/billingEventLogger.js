@@ -32,6 +32,7 @@ export const BILLING_EVENTS = Object.freeze({
   SUBSCRIPTION_CREATED: 'subscription.created',
   SUBSCRIPTION_CANCELED: 'subscription.canceled',
   SUBSCRIPTION_RENEWED: 'subscription.renewed',
+  SUBSCRIPTION_STATUS_CHANGED: 'subscription.status_changed',
 
   // Tenant state
   TENANT_SUSPENSION_WARNING: 'tenant.suspension_warning',

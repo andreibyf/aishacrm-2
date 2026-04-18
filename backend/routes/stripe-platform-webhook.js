@@ -35,6 +35,24 @@ import { logBillingEvent, BILLING_EVENTS } from '../lib/billing/billingEventLogg
 import { syncTenantBillingState } from '../lib/billing/billingStateMachine.js';
 import { getPlatformBillingConfig } from '../lib/billing/config.js';
 
+/**
+ * Pick the correct billing event type for a subscription.updated webhook
+ * based on the status transition. Avoids misrepresenting a delinquency
+ * (active -> past_due) as a subscription renewal in the audit trail.
+ *
+ *   * -> canceled                        => SUBSCRIPTION_CANCELED
+ *   non-active -> active                  => SUBSCRIPTION_RENEWED
+ *                                            (recovery from past_due, re-activation, etc.)
+ *   anything else (e.g. active -> past_due,
+ *   active -> suspended, past_due -> suspended,
+ *   cancel_at_period_end flag flip)       => SUBSCRIPTION_STATUS_CHANGED
+ */
+export function pickSubscriptionUpdateEventType({ previous, next }) {
+  if (next === 'canceled') return BILLING_EVENTS.SUBSCRIPTION_CANCELED;
+  if (next === 'active' && previous !== 'active') return BILLING_EVENTS.SUBSCRIPTION_RENEWED;
+  return BILLING_EVENTS.SUBSCRIPTION_STATUS_CHANGED;
+}
+
 export function createStripePlatformWebhookRouter(opts = {}) {
   const getClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const stripeAdapter = opts.stripeAdapter || defaultStripeAdapter;
@@ -47,9 +65,20 @@ export function createStripePlatformWebhookRouter(opts = {}) {
     async (req, res) => {
       const signature = req.headers['stripe-signature'];
 
-      if (!getPlatformBillingConfig().isConfigured) {
+      const cfg = getPlatformBillingConfig();
+      if (!cfg.isConfigured) {
         logger.warn('[StripePlatformWebhook] Received event but platform billing not configured');
         return res.status(503).json({ error: 'Platform billing not configured' });
+      }
+      // Webhook signature verification needs both the secret key and the
+      // webhook secret. Check explicitly here so a missing webhook secret
+      // surfaces as 503 (misconfiguration) rather than 400 (invalid signature)
+      // — otherwise operators get a misleading error during setup.
+      if (!cfg.stripeWebhookSecret) {
+        logger.warn(
+          '[StripePlatformWebhook] STRIPE_PLATFORM_WEBHOOK_SECRET missing — cannot verify signatures',
+        );
+        return res.status(503).json({ error: 'Platform billing webhook secret not configured' });
       }
 
       // Prefer req.rawBody (set by express.json verify callback in initMiddleware) over
@@ -169,8 +198,23 @@ async function handleCheckoutCompleted(supabase, event, normalized, requestId) {
           request_id: requestId,
         });
       } catch (err) {
-        // Race: someone else assigned; log and continue to payment recording
-        logger.warn('[StripePlatformWebhook] assignPlan failed (may be race)', {
+        // Only swallow the known idempotency race: if another worker/webhook
+        // assigned a plan between our SELECT and the INSERT, assignPlan()
+        // re-throws with "tenant already has an active subscription".
+        // All other failures (plan deactivated, transient DB error, RLS
+        // denial, etc.) MUST propagate so Stripe retries the webhook —
+        // otherwise we ack 200 with no local subscription row.
+        const isRace = /already has an active subscription/i.test(err.message);
+        if (!isRace) {
+          logger.error('[StripePlatformWebhook] assignPlan failed (non-race)', {
+            error: err.message,
+            tenant_id: tenantId,
+            plan_code: planCode,
+            session_id: session.id,
+          });
+          throw err;
+        }
+        logger.warn('[StripePlatformWebhook] assignPlan race ignored', {
           error: err.message,
           tenant_id: tenantId,
           plan_code: planCode,
@@ -342,10 +386,10 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
 
   await logBillingEvent(supabase, {
     tenant_id: localSub.tenant_id,
-    event_type:
-      nextStatus === 'canceled'
-        ? BILLING_EVENTS.SUBSCRIPTION_CANCELED
-        : BILLING_EVENTS.SUBSCRIPTION_RENEWED,
+    event_type: pickSubscriptionUpdateEventType({
+      previous: localSub.status,
+      next: nextStatus,
+    }),
     source: 'webhook',
     payload: {
       subscription_id: localSub.id,
