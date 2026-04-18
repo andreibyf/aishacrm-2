@@ -134,6 +134,9 @@ export function initMiddleware(app, pgPool) {
         '/api/whatsapp/webhook',
         '/api/telephony/inbound-webhook',
         '/api/telephony/outbound-webhook',
+        '/api/webhooks/calcom',
+        '/api/webhooks/stripe',
+        '/api/webhooks/stripe-platform',
       ];
       if (webhookPaths.some((p) => req.originalUrl.startsWith(p))) {
         return next();

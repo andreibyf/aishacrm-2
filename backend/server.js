@@ -182,6 +182,8 @@ import createLeadRoutes from './routes/leads.js';
 import createContactRoutes from './routes/contacts.js';
 import createValidationRoutes from './routes/validation.js';
 import createBillingRoutes from './routes/billing.js';
+import createBillingAdminRoutes from './routes/billing-admin.js';
+import { stripePlatformWebhookRouter } from './routes/stripe-platform-webhook.js';
 import createStorageRoutes from './routes/storage.js';
 import createWebhookRoutes from './routes/webhooks.js';
 import createSystemRoutes from './routes/system.js';
@@ -317,6 +319,14 @@ app.use('/api/leads', defaultLimiter, authenticateRequest, createLeadRoutes(meas
 app.use('/api/contacts', defaultLimiter, authenticateRequest, createContactRoutes(measuredPgPool));
 app.use('/api/validation', defaultLimiter, createValidationRoutes(measuredPgPool));
 app.use('/api/billing', defaultLimiter, authenticateRequest, createBillingRoutes(measuredPgPool));
+// Platform billing admin console — superadmin only
+logger.debug('Mounting /api/billing-admin routes');
+app.use(
+  '/api/billing-admin',
+  defaultLimiter,
+  authenticateRequest,
+  createBillingAdminRoutes(measuredPgPool),
+);
 app.use('/api/storage', defaultLimiter, authenticateRequest, createStorageRoutes(measuredPgPool));
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
@@ -592,6 +602,10 @@ app.use('/api/webhooks', defaultLimiter, calcomWebhookRouter);
 // Stripe webhook — no auth middleware; raw body + Stripe-Signature HMAC verification inside handler
 logger.debug('Mounting /api/webhooks/stripe route');
 app.use('/api/webhooks', defaultLimiter, stripeWebhookRouter);
+// Stripe PLATFORM webhook — separate from Cal.com stripe webhook above.
+// Handles AiSHA's own platform billing events (subscription checkouts, renewals).
+logger.debug('Mounting /api/webhooks/stripe-platform route');
+app.use('/api/webhooks', defaultLimiter, stripePlatformWebhookRouter);
 
 // 404 handler - Ensure CORS headers so browser shows real error, not "CORS error"
 app.use((req, res, next) => {
