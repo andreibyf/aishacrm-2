@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useUser } from '@/components/shared/useUser';
@@ -34,12 +35,21 @@ export default function PaymentPortalPage() {
   }, [selectedTenantId, user?.tenant_uuid, user?.tenant_id]);
 
   // Surface Checkout return status from the URL. The backend receives the
-  // Stripe webhook and updates state; we just show a success/cancel note.
+  // Stripe webhook and updates state; here we surface a toast so the user
+  // gets immediate feedback that the redirect completed, and we clean up
+  // the query param so refreshes don't re-trigger the toast.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const result = params.get('checkout');
     if (!result) return;
-    // Clean up the param so refreshes don't re-trigger
+
+    if (result === 'success') {
+      toast.success('Checkout complete. Your subscription will be active within a few seconds.');
+    } else if (result === 'cancel') {
+      toast.info('Checkout canceled. No changes were made to your subscription.');
+    }
+
+    // Clean up the param so refreshes don't re-trigger the toast
     params.delete('checkout');
     const next = `${window.location.pathname}${
       params.toString() ? `?${params.toString()}` : ''

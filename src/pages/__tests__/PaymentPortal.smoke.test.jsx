@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import PaymentPortalPage from '../PaymentPortal';
 
 // Mock the heavy child so this test stays a thin smoke test

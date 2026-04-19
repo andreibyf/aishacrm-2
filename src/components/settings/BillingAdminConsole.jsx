@@ -18,7 +18,7 @@
  * at the hook layer (see useBilling.js JSDoc).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Building2, History, FileText, Ban, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -144,6 +144,38 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
   const [submittingPlan, setSubmittingPlan] = useState(null); // plan_code in flight
   const [redirecting, setRedirecting] = useState(false);
 
+  // Ref to the plan-selector card so we can scroll it into view when a tenant
+  // with no card on file clicks the PaymentMethodCard's "Add payment method"
+  // CTA. Stripe Checkout requires a plan_code, so the shortest valid path to
+  // adding a card is: pick a plan -> complete Checkout -> card is saved.
+  const planSelectorRef = useRef(null);
+
+  // Track which tenant id the currently-loaded data belongs to. When the
+  // picker changes, we use this to detect the stale-data window so the
+  // previous tenant's invoices/subscription don't appear under the
+  // new tenant's header (and, more importantly, so mutation handlers
+  // can't act on stale row ids that resolve to the wrong tenant).
+  //
+  // Codex PR #521 P1: without this, switching tenants in superadmin mode
+  // left the prior tenant's plan/invoices on screen during the refetch
+  // window, and Issue/Void/Cancel would already target the NEW tenant id.
+  const tenantSwitching =
+    isSuperadminMode &&
+    Boolean(tenantId) &&
+    // Any of the primary data hooks still loading against the new tenant,
+    // OR the account data we have is for a different tenant than the one
+    // currently picked (pre-refetch window).
+    (account.loading ||
+      subscription.loading ||
+      invoices.loading ||
+      (account.data && account.data.tenant_id && account.data.tenant_id !== tenantId));
+
+  // Gate that disables destructive/mutation actions while data for the
+  // currently-picked tenant hasn't finished loading. Read by the Issue/
+  // Void per-row buttons, the Cancel subscription CTA, the Create invoice
+  // CTA, and the plan selector's in-flight guard.
+  const mutationsLocked = tenantSwitching || redirecting;
+
   const refreshAll = useCallback(() => {
     account.refetch();
     subscription.refetch();
@@ -203,6 +235,22 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
       toast.error(err.message || 'Failed to open billing portal');
     }
   }, [tenantId]);
+
+  // ------ Handler: tenant has no card on file and clicks "Add payment method".
+  // There's no standalone add-card endpoint -- Stripe Checkout is the canonical
+  // path, and it requires a plan_code. So we scroll the plan selector into
+  // view and prompt the user to pick a plan; completing Checkout will save
+  // the card on Stripe's side.
+  //
+  // Codex PR #521 P1: this unblocks the onboarding/recovery flow that was
+  // previously broken because PaymentMethodCard's CTA disabled itself with
+  // no onAdd callback.
+  const handleAddPaymentMethod = useCallback(() => {
+    toast.info('Select a plan below to add your payment method via Stripe Checkout.');
+    if (planSelectorRef.current) {
+      planSelectorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
 
   // ------ Handlers: subscription lifecycle (superadmin-mode)
   const handleCancelSub = useCallback(
@@ -325,6 +373,20 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
         </div>
       )}
 
+      {/* Tenant-switch indicator: data for the newly-picked tenant is still
+       * loading. Mutation buttons are disabled via `mutationsLocked` while
+       * this is showing, so superadmins can't accidentally act on stale
+       * on-screen rows with the new tenant's id. */}
+      {tenantSwitching && !redirecting && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-900/20 px-3 py-2 text-sm text-amber-200"
+          data-testid="billing-tenant-switching"
+        >
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading billing data for the selected tenant… actions are temporarily disabled.
+        </div>
+      )}
+
       {/* Errors */}
       {account.error && (
         <Card className="bg-rose-900/20 border-rose-700/50">
@@ -390,12 +452,14 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
                 : undefined
             }
             onCancel={
-              isSuperadminMode && subscription.data ? () => setShowCancelSub(true) : undefined
+              isSuperadminMode && subscription.data && !mutationsLocked
+                ? () => setShowCancelSub(true)
+                : undefined
             }
           />
 
           {/* Plan selector (always visible: shows current, lets user choose) */}
-          <Card className="bg-slate-800 border-slate-700">
+          <Card className="bg-slate-800 border-slate-700" ref={planSelectorRef}>
             <CardHeader>
               <CardTitle className="text-slate-100">
                 {subscription.data ? 'Change plan' : 'Choose a plan'}
@@ -416,7 +480,9 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
             </CardContent>
           </Card>
 
-          {/* Payment method (tenant-mode only; superadmin uses the portal too if needed) */}
+          {/* Payment method -- tenant-mode only. Superadmins manage cards via
+           * the Stripe dashboard directly; this card is the tenant's self-service
+           * surface for updating or adding their saved payment method. */}
           {!isSuperadminMode && (
             <PaymentMethodCard
               paymentMethod={
@@ -428,6 +494,7 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
                   : null
               }
               onManage={handleOpenBillingPortal}
+              onAdd={handleAddPaymentMethod}
               loading={redirecting}
             />
           )}
@@ -451,6 +518,7 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
                   onClick={() => setShowCreateInvoice(true)}
                   variant="secondary"
                   data-testid="create-invoice-button"
+                  disabled={mutationsLocked}
                 >
                   Create invoice
                 </Button>
@@ -470,6 +538,7 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
                               size="sm"
                               variant="secondary"
                               onClick={() => handleIssueInvoice(inv.id)}
+                              disabled={mutationsLocked}
                             >
                               Issue
                             </Button>
@@ -479,6 +548,7 @@ export default function BillingAdminConsole({ mode = 'tenant', tenantId: tenantI
                               size="sm"
                               variant="outline"
                               onClick={() => setVoidingInvoice(inv)}
+                              disabled={mutationsLocked}
                             >
                               Void
                             </Button>
