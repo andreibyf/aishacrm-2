@@ -195,21 +195,25 @@ export default defineConfig({
         resolve: sharedResolve,
       },
       {
-        // Platform-level: shared components, hooks, utils, lib, settings
+        // Platform-level: shared components, hooks, utils, lib, settings, billing
         name: 'platform',
         plugins: [react()],
         test: {
           ...sharedConfig,
+          env: { NODE_ENV: 'test' },
           include: [
             'src/components/shared/**/*.test.{js,jsx,ts,tsx}',
             'src/components/shared/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/components/settings/**/*.test.{js,jsx,ts,tsx}',
             'src/components/settings/**/__tests__/**/*.{js,jsx,ts,tsx}',
+            'src/components/billing/**/*.test.{js,jsx,ts,tsx}',
+            'src/components/billing/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/hooks/**/*.test.{js,jsx,ts,tsx}',
             'src/hooks/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/utils/**/*.test.{js,jsx,ts,tsx}',
             'src/lib/**/*.test.{js,jsx,ts,tsx}',
             'src/lib/**/__tests__/**/*.{js,jsx,ts,tsx}',
+            'src/api/__tests__/billing.test.{js,jsx,ts,tsx}',
             'src/__tests__/package-validation.test.js',
           ],
         },
