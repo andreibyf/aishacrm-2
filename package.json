@@ -165,10 +165,10 @@
   },
   "lint-staged": {
     "*.{js,jsx,json,css,md}": [
-      "prettier --write"
+      "npx prettier --write"
     ],
     "*.{js,jsx}": [
-      "eslint --fix"
+      "npx eslint --fix"
     ]
   }
 }

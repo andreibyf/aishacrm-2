@@ -80,7 +80,7 @@ jobs:
         working-directory: backend
         run: |
           # Run migrations to set up test database
-          node -e "
+          node - <<'EOF'
           const fs = require('fs');
           const { Client } = require('pg');
           const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -91,7 +91,7 @@ jobs:
             // CI postgres service does not include Supabase roles by default.
             // Create common roles referenced by RLS/policy migrations.
             await client.query(\`
-              DO $$
+              DO \$\$
               BEGIN
                 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
                   CREATE ROLE service_role;
@@ -103,7 +103,7 @@ jobs:
                   CREATE ROLE anon;
                 END IF;
               END
-              $$;
+              \$\$;
             \`);
 
             const migrations = fs.readdirSync('./migrations')
@@ -122,7 +122,7 @@ jobs:
             console.error(error);
             process.exit(1);
           });
-          "
+          EOF
 
       - name: Start backend server
         working-directory: backend
