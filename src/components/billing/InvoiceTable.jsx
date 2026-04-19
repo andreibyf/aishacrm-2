@@ -20,14 +20,36 @@ import { formatCents, formatDate, statusBadgeClass } from './billingFormatters';
 
 function InvoiceRow({ invoice, onRowClick, renderActions }) {
   const clickable = typeof onRowClick === 'function';
+  const invoiceIdentifier = invoice.invoice_number || invoice.id;
+
+  const activate = () => {
+    if (clickable) onRowClick(invoice);
+  };
+
+  const handleKeyDown = (e) => {
+    if (!clickable) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
+  };
+
   return (
     <TableRow
-      onClick={clickable ? () => onRowClick(invoice) : undefined}
-      className={`border-slate-700 ${clickable ? 'cursor-pointer hover:bg-slate-700/40' : ''}`}
-      data-testid={`invoice-row-${invoice.invoice_number || invoice.id}`}
+      onClick={clickable ? activate : undefined}
+      onKeyDown={clickable ? handleKeyDown : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      role={clickable ? 'button' : undefined}
+      aria-label={clickable ? `Open invoice ${invoiceIdentifier}` : undefined}
+      className={`border-slate-700 ${
+        clickable
+          ? 'cursor-pointer hover:bg-slate-700/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900'
+          : ''
+      }`}
+      data-testid={`invoice-row-${invoiceIdentifier}`}
     >
       <TableCell className="font-mono text-xs text-slate-300">
-        {invoice.invoice_number || invoice.id}
+        {invoiceIdentifier}
       </TableCell>
       <TableCell className="text-slate-300">{formatDate(invoice.issued_at || invoice.created_at)}</TableCell>
       <TableCell className="text-slate-300">{formatDate(invoice.due_at)}</TableCell>

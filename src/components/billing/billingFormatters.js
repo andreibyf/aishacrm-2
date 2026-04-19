@@ -3,7 +3,15 @@
  *
  * Keeping these in one place prevents component-level drift and gives
  * tests a single target for formatting rules.
+ *
+ * Note: formatDate is re-exported from the centralized shared util at
+ * src/utils/dateFormatting.js so billing dates format consistently with
+ * the rest of the app (and handle invalid/missing values uniformly).
  */
+
+// Re-export the shared formatter so billing callers never have to know
+// where it lives.
+export { formatDate } from '@/utils/dateFormatting';
 
 /** Format an integer cent amount as a currency string (default USD). */
 export function formatCents(cents, currency = 'USD') {
@@ -17,20 +25,6 @@ export function formatCents(cents, currency = 'USD') {
   } catch {
     // Fallback for unknown ISO codes
     return `${currency} ${amount.toFixed(2)}`;
-  }
-}
-
-/** Format an ISO date string as a short locale date (e.g. "Apr 18, 2026"). */
-export function formatDate(iso) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return iso;
   }
 }
 
