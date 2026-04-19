@@ -37,7 +37,7 @@ import {
 
   // Icons for components not in outline's tabs array but preserved:
   Globe, // for TimezoneSettings (Regional Settings)
-  CreditCard, // for BillingSettings
+  CreditCard, // for Billing & Platform Billing Administration
   Megaphone, // for SystemAnnouncements
   Bug, // for TestDataManager
   RefreshCw, // for SyncHealthMonitor
@@ -92,7 +92,7 @@ const ModuleManager = lazy(() => import('../components/shared/ModuleManager'));
 const EntityLabelsManager = lazy(() => import('../components/settings/EntityLabelsManager'));
 const TemplatesManager = lazy(() => import('../components/settings/TemplatesManager'));
 const StatusCardsManager = lazy(() => import('../components/settings/StatusCardsManager'));
-const BillingSettings = lazy(() => import('../components/settings/BillingSettings'));
+const BillingAdminConsole = lazy(() => import('../components/settings/BillingAdminConsole'));
 const CronJobManager = lazy(() => import('../components/settings/CronJobManager'));
 const SystemAnnouncements = lazy(() => import('../components/settings/SystemAnnouncements'));
 const SystemLogsViewer = lazy(() => import('../components/settings/SystemLogsViewer'));
@@ -368,6 +368,14 @@ export default function SettingsPage() {
           label: 'Client Management',
           description: 'Manage client tenants and configurations',
           icon: Building2,
+          category: 'clients',
+          roles: ['superadmin'],
+        },
+        {
+          id: 'billing-admin',
+          label: 'Platform Billing',
+          description: 'Subscriptions, invoices, exemptions, and audit events across tenants',
+          icon: CreditCard,
           category: 'clients',
           roles: ['superadmin'],
         },
@@ -806,7 +814,7 @@ export default function SettingsPage() {
               </Card>
             )}
 
-            {activeTab === 'billing' && ( // New tab content
+            {activeTab === 'billing' && ( // Platform billing -- tenant view
               <Card>
                 <CardHeader>
                   <CardTitle>Billing & Subscription</CardTitle>
@@ -815,7 +823,24 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <BillingSettings />
+                  <BillingAdminConsole mode="tenant" tenantId={selectedTenantId} />
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === 'billing-admin' && isSuperadmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-indigo-400" />
+                    Platform Billing Administration
+                  </CardTitle>
+                  <CardDescription>
+                    Manage subscriptions, invoices, exemptions, and audit events across all tenants.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <BillingAdminConsole mode="superadmin" />
                 </CardContent>
               </Card>
             )}
