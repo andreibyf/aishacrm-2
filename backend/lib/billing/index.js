@@ -18,6 +18,7 @@ export * as stateMachine from './billingStateMachine.js';
 export * as eventLogger from './billingEventLogger.js';
 export * as stripe from './stripePlatformAdapter.js';
 export * as providerInterface from './paymentProvider.js';
+export * as planResolver from './planResolver.js';
 export * as config from './config.js';
 export * as errors from './errors.js';
 

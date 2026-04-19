@@ -1,0 +1,42 @@
+[
+  {
+    "plan_code": "starter_monthly",
+    "product_id": "prod_UMnbvKeEfs21xl",
+    "price_id_base": "price_1TO3zwRgJI7U9gSkwp42oMqJ",
+    "price_id_seat": "price_1TO3zwRgJI7U9gSkjFtnnifa",
+    "included_seats": 3,
+    "base_amount_cents": 19900,
+    "seat_amount_cents": 4900,
+    "trial_days": 14
+  },
+  {
+    "plan_code": "growth_monthly",
+    "product_id": "prod_UMnb8UUqfz7pQR",
+    "price_id_base": "price_1TO3zxRgJI7U9gSkIjvTR0t1",
+    "price_id_seat": "price_1TO3zyRgJI7U9gSkvol8NS7J",
+    "included_seats": 5,
+    "base_amount_cents": 29700,
+    "seat_amount_cents": 4900,
+    "trial_days": 14
+  },
+  {
+    "plan_code": "pro_monthly",
+    "product_id": "prod_UMnbpD8Agd9p1i",
+    "price_id_base": "price_1TO3zzRgJI7U9gSkpi4pZ4F5",
+    "price_id_seat": "price_1TO400RgJI7U9gSkzEIvjMir",
+    "included_seats": 10,
+    "base_amount_cents": 49700,
+    "seat_amount_cents": 4900,
+    "trial_days": 14
+  },
+  {
+    "plan_code": "enterprise_monthly",
+    "product_id": "prod_UMnbpVfBSahh2L",
+    "price_id_base": "price_1TO401RgJI7U9gSkFyIgKBCm",
+    "price_id_seat": "price_1TO401RgJI7U9gSkwqlJzcmN",
+    "included_seats": 25,
+    "base_amount_cents": 99700,
+    "seat_amount_cents": 4900,
+    "trial_days": 14
+  }
+]
