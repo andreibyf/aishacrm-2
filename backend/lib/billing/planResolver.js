@@ -108,6 +108,19 @@ export async function resolvePlanByProviderPriceId(supabase, providerPriceId) {
   if (baseErr) throw new Error(`resolvePlanByProviderPriceId: ${baseErr.message}`);
   if (seatErr) throw new Error(`resolvePlanByProviderPriceId: ${seatErr.message}`);
 
+  // Ambiguous match: the same Stripe price ID resolves to both a base-role
+  // row AND a seat-role row (on the same or different plans). The per-column
+  // unique indexes in Migration 155 prevent duplicates WITHIN each column but
+  // not ACROSS both columns. Fail fast rather than silently choosing base.
+  if (baseHit && seatHit) {
+    throw new BillingError(
+      `resolvePlanByProviderPriceId: ambiguous match for ${providerPriceId} ` +
+        `(matches provider_price_id_base on plan ${baseHit.code} and ` +
+        `provider_price_id_seat on plan ${seatHit.code})`,
+      { statusCode: 500, code: BILLING_ERROR_CODES.CONFIGURATION_ERROR },
+    );
+  }
+
   if (baseHit) return { plan: baseHit, role: 'base' };
   if (seatHit) return { plan: seatHit, role: 'seat' };
   return null;
@@ -197,9 +210,14 @@ export function calculateExtraSeatQuantity(plan, requestedSeats) {
  */
 export function buildStripeLineItems(plan, requestedSeats) {
   if (!plan?.provider_price_id_base) {
+    // Server misconfiguration -- a plan row exists in billing_plans but is
+    // missing the Stripe price ID needed to create a checkout session.
+    // Distinct from INVALID_INPUT (client error) so route handlers can
+    // respond with 500 + "contact support" rather than a 400 validation
+    // error that implies the caller passed bad input.
     throw new BillingError(
       `Plan ${plan?.code ?? '(unknown)'} is missing provider_price_id_base -- cannot build Stripe line items`,
-      { statusCode: 500, code: BILLING_ERROR_CODES.INVALID_INPUT },
+      { statusCode: 500, code: BILLING_ERROR_CODES.CONFIGURATION_ERROR },
     );
   }
 

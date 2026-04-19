@@ -22,7 +22,7 @@ import {
   buildStripeLineItems,
   computeMonthlyTotalCents,
 } from '../../lib/billing/planResolver.js';
-import { BillingError } from '../../lib/billing/errors.js';
+import { BillingError, BILLING_ERROR_CODES } from '../../lib/billing/errors.js';
 
 const STARTER = {
   id: 'plan-starter',
@@ -160,6 +160,41 @@ describe('resolvePlanByProviderPriceId', () => {
     await assert.rejects(() => resolvePlanByProviderPriceId(supa, ''), BillingError);
     await assert.rejects(() => resolvePlanByProviderPriceId(supa, 42), BillingError);
   });
+
+  it('throws CONFIGURATION_ERROR when a price ID matches both base and seat columns', async () => {
+    // Synthesize the misconfiguration the 155a CHECK was strengthened to
+    // forbid at the DB layer: one plan uses a price ID as its base, another
+    // plan uses the same price ID as its seat. The DB constraint blocks
+    // new rows, but legacy data could still carry this state -- the
+    // resolver must fail fast rather than silently pick one.
+    const AMBIGUOUS_ID = 'price_ambiguous_shared';
+    const planA = {
+      ...STARTER,
+      id: 'plan-a',
+      code: 'plan_a',
+      provider_price_id_base: AMBIGUOUS_ID,
+      provider_price_id_seat: 'price_a_seat',
+    };
+    const planB = {
+      ...GROWTH,
+      id: 'plan-b',
+      code: 'plan_b',
+      provider_price_id_base: 'price_b_base',
+      provider_price_id_seat: AMBIGUOUS_ID,
+    };
+    const supa = createBillingMock({ billing_plans: [planA, planB] });
+
+    await assert.rejects(
+      () => resolvePlanByProviderPriceId(supa, AMBIGUOUS_ID),
+      (err) => {
+        assert.ok(err instanceof BillingError);
+        assert.equal(err.code, BILLING_ERROR_CODES.CONFIGURATION_ERROR);
+        assert.equal(err.statusCode, 500);
+        assert.match(err.message, /ambiguous match/i);
+        return true;
+      },
+    );
+  });
 });
 
 describe('listActivePlans', () => {
@@ -244,9 +279,17 @@ describe('buildStripeLineItems', () => {
     ]);
   });
 
-  it('throws when plan is missing provider_price_id_base', () => {
+  it('throws CONFIGURATION_ERROR (500) when plan is missing provider_price_id_base', () => {
     const broken = { ...STARTER, provider_price_id_base: null };
-    assert.throws(() => buildStripeLineItems(broken, 1), BillingError);
+    assert.throws(
+      () => buildStripeLineItems(broken, 1),
+      (err) => {
+        assert.ok(err instanceof BillingError);
+        assert.equal(err.code, BILLING_ERROR_CODES.CONFIGURATION_ERROR);
+        assert.equal(err.statusCode, 500);
+        return true;
+      },
+    );
   });
 
   it('propagates seat-quantity errors from calculateExtraSeatQuantity', () => {

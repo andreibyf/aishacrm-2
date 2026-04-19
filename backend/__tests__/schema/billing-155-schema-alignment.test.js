@@ -99,7 +99,7 @@ describe(
   },
 );
 
-describe('Migration 155: CHECK constraints and behavior', { skip: !SHOULD_RUN }, () => {
+describe('Migration 155 + 155a: CHECK constraints and behavior', { skip: !SHOULD_RUN }, () => {
   let supabase;
 
   before(async () => {
@@ -113,7 +113,7 @@ describe('Migration 155: CHECK constraints and behavior', { skip: !SHOULD_RUN },
       .select('code, provider_product_id, provider_price_id_base, provider_price_id_seat')
       .in('code', EXPECTED_PLAN_CODES);
 
-    assert.equal(error, null);
+    assert.equal(error, null, `billing_plans query failed: ${error?.message}`);
     for (const row of data) {
       assert.ok(
         row.provider_product_id?.startsWith('prod_'),
@@ -130,28 +130,93 @@ describe('Migration 155: CHECK constraints and behavior', { skip: !SHOULD_RUN },
     }
   });
 
-  test('provider_prices_together CHECK rejects half-set state', async () => {
-    // Grab any active plan to source valid values from
-    const { data: anyPlan } = await supabase
+  // Helper: snapshot a plan's provider_* columns so tests can restore
+  // state regardless of whether the CHECK rejected their attempted update.
+  async function snapshotPlan(code) {
+    const { data, error } = await supabase
       .from('billing_plans')
-      .select('id, provider_price_id_base, provider_price_id_seat')
-      .eq('code', 'starter_monthly')
+      .select('id, provider_product_id, provider_price_id_base, provider_price_id_seat')
+      .eq('code', code)
       .single();
-    if (!anyPlan) return;
+    assert.equal(error, null, `snapshotPlan(${code}) failed: ${error?.message}`);
+    assert.ok(data, `snapshotPlan(${code}) returned no row`);
+    return data;
+  }
 
-    // Try to set base but null seat -- the CHECK must reject this.
+  async function restorePlan(snapshot) {
     const { error } = await supabase
       .from('billing_plans')
       .update({
-        provider_price_id_base: anyPlan.provider_price_id_base,
-        provider_price_id_seat: null,
+        provider_product_id: snapshot.provider_product_id,
+        provider_price_id_base: snapshot.provider_price_id_base,
+        provider_price_id_seat: snapshot.provider_price_id_seat,
       })
-      .eq('id', anyPlan.id);
+      .eq('id', snapshot.id);
+    assert.equal(error, null, `restorePlan failed: ${error?.message}`);
+  }
 
-    assert.notEqual(
-      error,
-      null,
-      'CHECK billing_plans_provider_prices_together must reject XOR state',
-    );
+  test('155a: base-only plan IS allowed (seat NULL with base set)', async () => {
+    const snap = await snapshotPlan('starter_monthly');
+
+    // Base set, seat NULL -- fixed-seat plan configuration. Must be accepted.
+    const { error } = await supabase
+      .from('billing_plans')
+      .update({ provider_price_id_seat: null })
+      .eq('id', snap.id);
+
+    try {
+      assert.equal(error, null, `CHECK must allow base-only (seat NULL): got ${error?.message}`);
+    } finally {
+      await restorePlan(snap);
+    }
+  });
+
+  test('155a: seat-only plan is REJECTED (seat set, base NULL)', async () => {
+    const snap = await snapshotPlan('starter_monthly');
+
+    const { error } = await supabase
+      .from('billing_plans')
+      .update({ provider_price_id_base: null })
+      .eq('id', snap.id);
+
+    try {
+      assert.notEqual(error, null, 'CHECK must reject seat-only (base NULL, seat set)');
+    } finally {
+      await restorePlan(snap);
+    }
+  });
+
+  test('155a: any price set without a product is REJECTED', async () => {
+    const snap = await snapshotPlan('starter_monthly');
+
+    const { error } = await supabase
+      .from('billing_plans')
+      .update({ provider_product_id: null })
+      .eq('id', snap.id);
+
+    try {
+      assert.notEqual(error, null, 'CHECK must reject price set without provider_product_id');
+    } finally {
+      await restorePlan(snap);
+    }
+  });
+
+  test('155a: base == seat is REJECTED', async () => {
+    const snap = await snapshotPlan('starter_monthly');
+
+    const { error } = await supabase
+      .from('billing_plans')
+      .update({ provider_price_id_seat: snap.provider_price_id_base })
+      .eq('id', snap.id);
+
+    try {
+      assert.notEqual(
+        error,
+        null,
+        'CHECK must reject provider_price_id_base == provider_price_id_seat',
+      );
+    } finally {
+      await restorePlan(snap);
+    }
   });
 });

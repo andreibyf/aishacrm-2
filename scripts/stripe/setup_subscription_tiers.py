@@ -113,8 +113,23 @@ class StripeAPI:
             print(f"  [DRY-RUN] POST {path}")
             for k, v in sorted(params.items()):
                 print(f"             {k} = {v}")
-            # Return a plausible stub so downstream logic keeps working
-            stub_id = "dryrun_" + path.strip("/").replace("/", "_")
+            # If path targets an existing resource (e.g. /products/prod_123),
+            # preserve that real ID so downstream logic (price upserts that
+            # compare price.product to the product_id we return) produces
+            # realistic output instead of false "product drift" warnings.
+            # For creates (/products, /prices) use a path-derived stub.
+            parts = [p for p in path.strip("/").split("/") if p]
+            if len(parts) == 2 and parts[0] in ("products", "prices"):
+                real_id = parts[1]
+                # For price updates, preserve the params we'd have set so the
+                # caller sees the amount/product it would have ended up with.
+                return {
+                    "id": real_id,
+                    "product": params.get("product", real_id),
+                    "unit_amount": int(params.get("unit_amount", 0)) if params.get("unit_amount") else 0,
+                    **params,
+                }
+            stub_id = "dryrun_" + parts[0] if parts else "dryrun_unknown"
             return {"id": stub_id, "product": stub_id, "unit_amount": 0, **params}
         return self._call("POST", path, params)
 

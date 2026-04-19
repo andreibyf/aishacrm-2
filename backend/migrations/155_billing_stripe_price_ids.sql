@@ -4,9 +4,15 @@
 --          pricing, and included seat counts. Backfills the 3 existing plans
 --          with new 2026 prices and adds the Enterprise tier.
 --
--- Impact: ADDITIVE to billing_plans schema (4 new nullable columns).
---         MUTATES seeded rows (updates amount_cents, seat_limit for the
---         existing starter/growth/pro plans; inserts enterprise_monthly).
+-- Impact: Adds 6 new columns to billing_plans:
+--           - 4 nullable TEXT  (provider_product_id, provider_price_id_base,
+--                               provider_price_id_seat, and yes seat_unit_amount_cents)
+--           - 2 NOT NULL INTEGER with defaults (included_seats default 0,
+--             trial_days default 0) -- safe to add since defaults populate
+--             any existing rows
+--         Adds one CHECK constraint and two partial unique indexes.
+--         MUTATES seeded rows (updates amount_cents, included_seats, etc.
+--         on the existing starter/growth/pro plans; inserts enterprise_monthly).
 --
 -- Prereqs:
 --   - Migration 154 applied.
