@@ -239,14 +239,6 @@ export default function SettingsPage() {
         category: 'account',
         roles: ['any'],
       },
-      {
-        id: 'billing',
-        label: 'Billing',
-        description: 'Subscription plan and payment settings',
-        icon: CreditCard,
-        category: 'account',
-        roles: ['any'],
-      },
     ];
 
     // Tenant Admin items
@@ -344,6 +336,15 @@ export default function SettingsPage() {
     // Superadmin items
     if (isSuperadmin) {
       items.push(
+        {
+          id: 'billing',
+          label: 'Billing',
+          description: 'Tenant-scoped subscription plan and payment settings',
+          icon: CreditCard,
+          category: 'account',
+          roles: ['superadmin'],
+        },
+
         // Team
         {
           id: 'users',
@@ -814,12 +815,12 @@ export default function SettingsPage() {
               </Card>
             )}
 
-            {activeTab === 'billing' && ( // Platform billing -- tenant view
+            {activeTab === 'billing' && isSuperadmin && (
               <Card>
                 <CardHeader>
                   <CardTitle>Billing & Subscription</CardTitle>
                   <CardDescription>
-                    Manage your subscription plan and payment settings
+                    Manage the selected tenant&apos;s subscription plan and payment settings
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
