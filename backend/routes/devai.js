@@ -7,6 +7,7 @@
 import express from 'express';
 import { authenticateRequest } from '../middleware/authenticate.js';
 import { isSuperadmin } from '../lib/developerAI.js';
+import { executeDeveloperCapability } from '../lib/developerToolsProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { redactSecretsFromObject, isFileExportable } from '../lib/devaiSecurity.js';
 import fs from 'fs/promises';
@@ -65,6 +66,38 @@ async function logAuditEvent(actor, action, approvalId = null, details = {}) {
     logger.error('[DevAI Audit] Exception logging event:', err);
   }
 }
+
+// ============================================================================
+// POST /api/devai/execute - Execute a Braid developer-tools capability
+// ============================================================================
+router.post('/execute', async (req, res) => {
+  try {
+    const { capability, input = {}, requested_by = null } = req.body || {};
+
+    if (!capability || typeof capability !== 'string') {
+      return res.status(400).json({ error: 'capability is required' });
+    }
+
+    const result = await executeDeveloperCapability(capability, input, requested_by || req.user?.id);
+
+    await logAuditEvent(req.user?.email || req.user?.id || 'unknown', 'developer_capability_execute', null, {
+      capability,
+      requested_by: requested_by || req.user?.id || null,
+      input,
+      result_code: result?.code || null,
+      success: !result?.error,
+    });
+
+    return res.json({
+      status: 'success',
+      capability,
+      result,
+    });
+  } catch (err) {
+    logger.error('[DevAI] Exception in POST /execute:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 /**
  * @openapi
