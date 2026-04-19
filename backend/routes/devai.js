@@ -19,6 +19,101 @@ import logger from '../lib/logger.js';
 
 const execAsync = promisify(exec);
 const router = express.Router();
+const UUID_V4ISH_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isValidUuid(value) {
+  return typeof value === 'string' && UUID_V4ISH_REGEX.test(value);
+}
+
+export function normalizeDeveloperCapabilityRequest(body, fallbackUserId = null) {
+  if (!isPlainObject(body)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Request body must be a JSON object',
+      code: 'INVALID_REQUEST_BODY',
+    };
+  }
+
+  const { capability, input = {}, requested_by = null } = body;
+
+  if (!capability || typeof capability !== 'string') {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'capability is required',
+      code: 'INVALID_CAPABILITY',
+    };
+  }
+
+  if (!isPlainObject(input)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'input must be an object',
+      code: 'INVALID_INPUT',
+    };
+  }
+
+  if (requested_by !== null && requested_by !== undefined && !isValidUuid(requested_by)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'requested_by must be a valid UUID',
+      code: 'INVALID_REQUESTED_BY',
+    };
+  }
+
+  return {
+    ok: true,
+    capability,
+    input,
+    requestedBy: requested_by ?? (isValidUuid(fallbackUserId) ? fallbackUserId : null),
+  };
+}
+
+export function buildDeveloperCapabilityResponse(capability, result) {
+  if (result?.error) {
+    const statusCode =
+      result.code === 'INVALID_INPUT' || result.code === 'UNSUPPORTED_CAPABILITY' ? 400 : 500;
+
+    return {
+      statusCode,
+      body: {
+        status: 'error',
+        capability,
+        error: result.error,
+        code: result.code || 'DEVELOPER_CAPABILITY_ERROR',
+        details: result.details,
+      },
+    };
+  }
+
+  if (result?.type === 'approval_required') {
+    return {
+      statusCode: 202,
+      body: {
+        status: 'approval_required',
+        capability,
+        result,
+      },
+    };
+  }
+
+  return {
+    statusCode: 200,
+    body: {
+      status: 'success',
+      capability,
+      result,
+    },
+  };
+}
 
 // ============================================================================
 // MIDDLEWARE - Superadmin Only
@@ -27,14 +122,14 @@ function requireSuperadmin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  
+
   if (!isSuperadmin(req.user)) {
-    return res.status(403).json({ 
+    return res.status(403).json({
       error: 'Access denied - superadmin role required',
-      userRole: req.user.role 
+      userRole: req.user.role,
     });
   }
-  
+
   next();
 }
 
@@ -49,16 +144,14 @@ async function logAuditEvent(actor, action, approvalId = null, details = {}) {
   try {
     const supabase = getSupabaseClient(true); // Use service role
     const redactedDetails = redactSecretsFromObject(details);
-    
-    const { error } = await supabase
-      .from('devai_audit')
-      .insert({
-        actor,
-        action,
-        approval_id: approvalId,
-        details: redactedDetails,
-      });
-    
+
+    const { error } = await supabase.from('devai_audit').insert({
+      actor,
+      action,
+      approval_id: approvalId,
+      details: redactedDetails,
+    });
+
     if (error) {
       logger.error('[DevAI Audit] Failed to log event:', error);
     }
@@ -72,27 +165,34 @@ async function logAuditEvent(actor, action, approvalId = null, details = {}) {
 // ============================================================================
 router.post('/execute', async (req, res) => {
   try {
-    const { capability, input = {}, requested_by = null } = req.body || {};
-
-    if (!capability || typeof capability !== 'string') {
-      return res.status(400).json({ error: 'capability is required' });
+    const normalized = normalizeDeveloperCapabilityRequest(req.body, req.user?.id);
+    if (!normalized.ok) {
+      return res.status(normalized.statusCode).json({
+        status: 'error',
+        error: normalized.error,
+        code: normalized.code,
+      });
     }
 
-    const result = await executeDeveloperCapability(capability, input, requested_by || req.user?.id);
+    const { capability, input, requestedBy } = normalized;
+    const result = await executeDeveloperCapability(capability, input, requestedBy);
+    const response = buildDeveloperCapabilityResponse(capability, result);
 
-    await logAuditEvent(req.user?.email || req.user?.id || 'unknown', 'developer_capability_execute', null, {
-      capability,
-      requested_by: requested_by || req.user?.id || null,
-      input,
-      result_code: result?.code || null,
-      success: !result?.error,
-    });
+    await logAuditEvent(
+      req.user?.email || req.user?.id || 'unknown',
+      'developer_capability_execute',
+      null,
+      {
+        capability,
+        requested_by: requestedBy,
+        input,
+        result_code: result?.code || null,
+        result_status: response.body.status,
+        success: response.statusCode < 400,
+      },
+    );
 
-    return res.json({
-      status: 'success',
-      capability,
-      result,
-    });
+    return res.status(response.statusCode).json(response.body);
   } catch (err) {
     logger.error('[DevAI] Exception in POST /execute:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -189,12 +289,12 @@ router.get('/approvals', async (req, res) => {
   try {
     const { status } = req.query;
     const supabase = getSupabaseClient(true); // Use service role
-    
+
     let query = supabase
       .from('devai_approvals')
       .select('*')
       .order('created_at', { ascending: false });
-    
+
     if (status) {
       const validStatuses = ['pending', 'approved', 'rejected', 'executed', 'failed'];
       if (!validStatuses.includes(status)) {
@@ -202,21 +302,21 @@ router.get('/approvals', async (req, res) => {
       }
       query = query.eq('status', status);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) {
       logger.error('[DevAI] Error fetching approvals:', error);
       return res.status(500).json({ error: 'Failed to fetch approvals' });
     }
-    
+
     // Redact sensitive data before returning
-    const redactedData = data.map(approval => ({
+    const redactedData = data.map((approval) => ({
       ...approval,
       tool_args: redactSecretsFromObject(approval.tool_args),
       preview: redactSecretsFromObject(approval.preview),
     }));
-    
+
     return res.json({ approvals: redactedData });
   } catch (err) {
     logger.error('[DevAI] Exception in GET /approvals:', err);
@@ -231,24 +331,24 @@ router.get('/approvals/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const supabase = getSupabaseClient(true);
-    
+
     const { data, error } = await supabase
       .from('devai_approvals')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (error || !data) {
       return res.status(404).json({ error: 'Approval not found' });
     }
-    
+
     // Redact sensitive data
     const redacted = {
       ...data,
       tool_args: redactSecretsFromObject(data.tool_args),
       preview: redactSecretsFromObject(data.preview),
     };
-    
+
     return res.json({ approval: redacted });
   } catch (err) {
     logger.error('[DevAI] Exception in GET /approvals/:id:', err);
@@ -263,28 +363,28 @@ router.post('/approvals/:id/approve', async (req, res) => {
   const { id } = req.params;
   const { note } = req.body;
   const userId = req.user.id;
-  
+
   try {
     const supabase = getSupabaseClient(true);
-    
+
     // Fetch the approval
     const { data: approval, error: fetchError } = await supabase
       .from('devai_approvals')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (fetchError || !approval) {
       return res.status(404).json({ error: 'Approval not found' });
     }
-    
+
     if (approval.status !== 'pending') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Can only approve pending requests',
-        currentStatus: approval.status 
+        currentStatus: approval.status,
       });
     }
-    
+
     // Mark as approved
     const approvedAt = new Date().toISOString();
     const { error: approveError } = await supabase
@@ -296,20 +396,20 @@ router.post('/approvals/:id/approve', async (req, res) => {
         note,
       })
       .eq('id', id);
-    
+
     if (approveError) {
       logger.error('[DevAI] Error approving:', approveError);
       return res.status(500).json({ error: 'Failed to approve' });
     }
-    
+
     // Log audit event
     await logAuditEvent(userId, 'approved', id, { tool_name: approval.tool_name });
-    
+
     // Execute the action
     let executionResult;
     try {
       executionResult = await executeApprovedAction(approval);
-      
+
       // Update as executed
       await supabase
         .from('devai_approvals')
@@ -322,21 +422,20 @@ router.post('/approvals/:id/approve', async (req, res) => {
           after_snapshot: executionResult.after_snapshot || null,
         })
         .eq('id', id);
-      
-      await logAuditEvent(userId, 'executed', id, { 
+
+      await logAuditEvent(userId, 'executed', id, {
         tool_name: approval.tool_name,
-        changed_files: executionResult.changed_files 
+        changed_files: executionResult.changed_files,
       });
-      
-      return res.json({ 
-        success: true, 
+
+      return res.json({
+        success: true,
         message: 'Approval executed successfully',
-        result: redactSecretsFromObject(executionResult)
+        result: redactSecretsFromObject(executionResult),
       });
-      
     } catch (execError) {
       logger.error('[DevAI] Execution error:', execError);
-      
+
       // Mark as failed
       await supabase
         .from('devai_approvals')
@@ -346,18 +445,17 @@ router.post('/approvals/:id/approve', async (req, res) => {
           error: execError.message,
         })
         .eq('id', id);
-      
-      await logAuditEvent(userId, 'failed', id, { 
+
+      await logAuditEvent(userId, 'failed', id, {
         tool_name: approval.tool_name,
-        error: execError.message 
+        error: execError.message,
       });
-      
-      return res.status(500).json({ 
-        error: 'Execution failed', 
-        details: execError.message 
+
+      return res.status(500).json({
+        error: 'Execution failed',
+        details: execError.message,
       });
     }
-    
   } catch (err) {
     logger.error('[DevAI] Exception in approve:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -371,28 +469,28 @@ router.post('/approvals/:id/reject', async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const userId = req.user.id;
-  
+
   try {
     const supabase = getSupabaseClient(true);
-    
+
     // Fetch the approval
     const { data: approval, error: fetchError } = await supabase
       .from('devai_approvals')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (fetchError || !approval) {
       return res.status(404).json({ error: 'Approval not found' });
     }
-    
+
     if (approval.status !== 'pending') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Can only reject pending requests',
-        currentStatus: approval.status 
+        currentStatus: approval.status,
       });
     }
-    
+
     // Mark as rejected
     const { error: rejectError } = await supabase
       .from('devai_approvals')
@@ -403,20 +501,19 @@ router.post('/approvals/:id/reject', async (req, res) => {
         rejected_reason: reason || 'No reason provided',
       })
       .eq('id', id);
-    
+
     if (rejectError) {
       logger.error('[DevAI] Error rejecting:', rejectError);
       return res.status(500).json({ error: 'Failed to reject' });
     }
-    
+
     // Log audit event
-    await logAuditEvent(userId, 'rejected', id, { 
+    await logAuditEvent(userId, 'rejected', id, {
       tool_name: approval.tool_name,
-      reason 
+      reason,
     });
-    
+
     return res.json({ success: true, message: 'Approval rejected' });
-    
   } catch (err) {
     logger.error('[DevAI] Exception in reject:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -429,43 +526,43 @@ router.post('/approvals/:id/reject', async (req, res) => {
 router.get('/approvals/:id/export', async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
-  
+
   try {
     const supabase = getSupabaseClient(true);
-    
+
     // Fetch the approval
     const { data: approval, error: fetchError } = await supabase
       .from('devai_approvals')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (fetchError || !approval) {
       return res.status(404).json({ error: 'Approval not found' });
     }
-    
+
     if (approval.status !== 'executed') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Can only export executed approvals',
-        currentStatus: approval.status 
+        currentStatus: approval.status,
       });
     }
-    
+
     // Create export bundle
     const exportPath = await createExportBundle(approval);
-    
+
     // Log audit event
-    await logAuditEvent(userId, 'exported', id, { 
-      tool_name: approval.tool_name 
+    await logAuditEvent(userId, 'exported', id, {
+      tool_name: approval.tool_name,
     });
-    
+
     // Stream the archive to client
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="devai-approval-${id}.tar.gz"`);
-    
+
     const stream = createReadStream(exportPath);
     stream.pipe(res);
-    
+
     // Cleanup temp file after streaming
     stream.on('end', async () => {
       try {
@@ -474,7 +571,6 @@ router.get('/approvals/:id/export', async (req, res) => {
         logger.error('[DevAI] Failed to cleanup export file:', err);
       }
     });
-    
   } catch (_err) {
     logger.error('[DevAI] Exception in export:', _err);
     return res.status(500).json({ error: 'Failed to create export' });
@@ -490,17 +586,17 @@ router.get('/approvals/:id/export', async (req, res) => {
  */
 async function executeApprovedAction(approval) {
   const { tool_name, tool_args } = approval;
-  
+
   switch (tool_name) {
     case 'apply_patch':
       return await applyPatch(tool_args);
-    
+
     case 'write_file':
       return await writeFile(tool_args);
-    
+
     case 'run_command':
       return await runCommand(tool_args);
-    
+
     default:
       throw new Error(`Unknown tool: ${tool_name}`);
   }
@@ -511,24 +607,24 @@ async function executeApprovedAction(approval) {
  */
 async function applyPatch(args) {
   const { patch, target_dir = '/app' } = args;
-  
+
   if (!patch) {
     throw new Error('Patch content required');
   }
-  
+
   // Create temp patch file
   const tempDir = '/tmp/devai-' + Date.now();
   await fs.mkdir(tempDir, { recursive: true });
   const patchFile = path.join(tempDir, 'changes.patch');
   await fs.writeFile(patchFile, patch);
-  
+
   try {
     // Apply patch with git apply (safer than patch command)
     const { stdout, stderr } = await execAsync(
       `git apply --check "${patchFile}" && git apply "${patchFile}"`,
-      { cwd: target_dir }
+      { cwd: target_dir },
     );
-    
+
     // Parse changed files from patch
     const changedFiles = [];
     const filePattern = /^---\s+a\/(.+)$/gm;
@@ -536,7 +632,7 @@ async function applyPatch(args) {
     while ((match = filePattern.exec(patch)) !== null) {
       changedFiles.push(match[1]);
     }
-    
+
     return {
       success: true,
       changed_files: changedFiles,
@@ -555,11 +651,11 @@ async function applyPatch(args) {
  */
 async function writeFile(args) {
   const { file_path, content } = args;
-  
+
   if (!file_path || !content) {
     throw new Error('file_path and content required');
   }
-  
+
   // Read before snapshot
   let beforeContent = null;
   try {
@@ -567,19 +663,19 @@ async function writeFile(args) {
   } catch (_err) {
     // File might not exist yet
   }
-  
+
   // Write new content
   const dir = path.dirname(file_path);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(file_path, content, 'utf-8');
-  
+
   // Generate diff
   let diff = null;
   if (beforeContent) {
     // Simple diff (could use diff library for better formatting)
     diff = `--- ${file_path}\n+++ ${file_path}\n${content}`;
   }
-  
+
   return {
     success: true,
     changed_files: [file_path],
@@ -594,13 +690,13 @@ async function writeFile(args) {
  */
 async function runCommand(args) {
   const { command, cwd = '/app' } = args;
-  
+
   if (!command) {
     throw new Error('Command required');
   }
-  
+
   const { stdout, stderr } = await execAsync(command, { cwd });
-  
+
   return {
     success: true,
     command,
@@ -616,7 +712,7 @@ async function runCommand(args) {
 async function createExportBundle(approval) {
   const tempDir = `/tmp/devai-export-${approval.id}-${Date.now()}`;
   await fs.mkdir(tempDir, { recursive: true });
-  
+
   try {
     // Create manifest
     const manifest = {
@@ -628,28 +724,25 @@ async function createExportBundle(approval) {
       changed_files: approval.changed_files || [],
       excluded_files: [],
     };
-    
-    await fs.writeFile(
-      path.join(tempDir, 'manifest.json'),
-      JSON.stringify(manifest, null, 2)
-    );
-    
+
+    await fs.writeFile(path.join(tempDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
     // Create patch file if diff exists
     if (approval.diff) {
       await fs.writeFile(path.join(tempDir, 'patch.diff'), approval.diff);
     }
-    
+
     // Copy changed files (after state)
     const filesDir = path.join(tempDir, 'files');
     await fs.mkdir(filesDir, { recursive: true });
-    
+
     const changed = approval.changed_files || [];
     for (const file of changed) {
       if (!isFileExportable(file)) {
         manifest.excluded_files.push(file);
         continue;
       }
-      
+
       try {
         const content = await fs.readFile(file, 'utf-8');
         const targetPath = path.join(filesDir, path.basename(file));
@@ -659,19 +752,15 @@ async function createExportBundle(approval) {
         manifest.excluded_files.push(file);
       }
     }
-    
+
     // Update manifest with exclusions
-    await fs.writeFile(
-      path.join(tempDir, 'manifest.json'),
-      JSON.stringify(manifest, null, 2)
-    );
-    
+    await fs.writeFile(path.join(tempDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
     // Create tar.gz archive
     const archivePath = `/tmp/devai-approval-${approval.id}.tar.gz`;
     await execAsync(`tar -czf "${archivePath}" -C "${tempDir}" .`);
-    
+
     return archivePath;
-    
   } finally {
     // Cleanup temp directory
     try {

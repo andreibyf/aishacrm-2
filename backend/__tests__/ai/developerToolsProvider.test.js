@@ -26,13 +26,16 @@ describe('developerToolsProvider', () => {
   });
 
   test('maps list and search capabilities to Developer AI tool schema', () => {
-    assert.deepEqual(mapDeveloperCapability('dev:list_files', { path: 'backend', recursive: true }), {
-      toolName: 'list_directory',
-      toolArgs: {
-        dir_path: 'backend',
-        recursive: true,
+    assert.deepEqual(
+      mapDeveloperCapability('dev:list_files', { path: 'backend', recursive: true }),
+      {
+        toolName: 'list_directory',
+        toolArgs: {
+          dir_path: 'backend',
+          recursive: true,
+        },
       },
-    });
+    );
 
     assert.deepEqual(
       mapDeveloperCapability('dev:search_code', {
@@ -112,5 +115,21 @@ describe('developerToolsProvider', () => {
 
     assert.equal(result.code, 'UNSUPPORTED_CAPABILITY');
     assert.match(result.error, /Unsupported developer-tools capability/);
+  });
+
+  test('rejects invalid capability input before calling downstream executor', async () => {
+    const calls = [];
+    const executeDeveloperCapability = createDeveloperCapabilityExecutor(async (...args) => {
+      calls.push(args);
+      return { ok: true };
+    });
+
+    const result = await executeDeveloperCapability('dev:read_file', {
+      startLine: 10,
+    });
+
+    assert.equal(result.code, 'INVALID_INPUT');
+    assert.match(result.error, /path must be a non-empty string/);
+    assert.deepEqual(calls, []);
   });
 });

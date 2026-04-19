@@ -17,9 +17,72 @@ export const DEVELOPER_CAPABILITY_TO_TOOL = {
   'dev:read_logs': 'read_logs',
 };
 
+function invalidInput(error, details = {}) {
+  return {
+    error,
+    code: 'INVALID_INPUT',
+    details,
+  };
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function requireNonEmptyString(value, fieldName) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return invalidInput(`${fieldName} must be a non-empty string`, { field: fieldName });
+  }
+
+  return null;
+}
+
+function validateOptionalString(value, fieldName) {
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    return invalidInput(`${fieldName} must be a string`, { field: fieldName });
+  }
+
+  return null;
+}
+
+function validateOptionalBoolean(value, fieldName) {
+  if (value !== undefined && value !== null && typeof value !== 'boolean') {
+    return invalidInput(`${fieldName} must be a boolean`, { field: fieldName });
+  }
+
+  return null;
+}
+
+function validateOptionalInteger(value, fieldName) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!Number.isInteger(value) || value < 1) {
+    return invalidInput(`${fieldName} must be a positive integer`, { field: fieldName });
+  }
+
+  return null;
+}
+
 export function mapDeveloperCapability(capability, input = {}) {
+  if (!isPlainObject(input)) {
+    return invalidInput('input must be an object', { capability });
+  }
+
+  const stringErrorFor = (value, fieldName) => requireNonEmptyString(value, fieldName);
+  const optionalStringErrorFor = (value, fieldName) => validateOptionalString(value, fieldName);
+  const optionalBooleanErrorFor = (value, fieldName) => validateOptionalBoolean(value, fieldName);
+  const optionalIntegerErrorFor = (value, fieldName) => validateOptionalInteger(value, fieldName);
+
   switch (capability) {
-    case 'dev:read_file':
+    case 'dev:read_file': {
+      const error =
+        stringErrorFor(input.path, 'path') ||
+        optionalIntegerErrorFor(input.startLine, 'startLine') ||
+        optionalIntegerErrorFor(input.endLine, 'endLine');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -28,8 +91,13 @@ export function mapDeveloperCapability(capability, input = {}) {
           end_line: input.endLine,
         },
       };
+    }
 
-    case 'dev:list_files':
+    case 'dev:list_files': {
+      const error =
+        stringErrorFor(input.path, 'path') || optionalBooleanErrorFor(input.recursive, 'recursive');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -37,8 +105,16 @@ export function mapDeveloperCapability(capability, input = {}) {
           recursive: input.recursive,
         },
       };
+    }
 
-    case 'dev:search_code':
+    case 'dev:search_code': {
+      const error =
+        stringErrorFor(input.query, 'query') ||
+        optionalStringErrorFor(input.path, 'path') ||
+        optionalStringErrorFor(input.filePattern, 'filePattern') ||
+        optionalBooleanErrorFor(input.caseInsensitive, 'caseInsensitive');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -48,8 +124,15 @@ export function mapDeveloperCapability(capability, input = {}) {
           case_insensitive: input.caseInsensitive,
         },
       };
+    }
 
-    case 'dev:run_safe_command':
+    case 'dev:run_safe_command': {
+      const error =
+        stringErrorFor(input.command, 'command') ||
+        optionalStringErrorFor(input.workingDirectory, 'workingDirectory') ||
+        optionalStringErrorFor(input.reason, 'reason');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -58,8 +141,15 @@ export function mapDeveloperCapability(capability, input = {}) {
           reason: input.reason || 'Requested through Braid developer-tools provider',
         },
       };
+    }
 
-    case 'dev:apply_patch':
+    case 'dev:apply_patch': {
+      const error =
+        stringErrorFor(input.patch, 'patch') ||
+        optionalStringErrorFor(input.targetDir, 'targetDir') ||
+        optionalStringErrorFor(input.description, 'description');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -68,8 +158,17 @@ export function mapDeveloperCapability(capability, input = {}) {
           description: input.description || 'Patch proposed through Braid developer-tools provider',
         },
       };
+    }
 
-    case 'dev:read_logs':
+    case 'dev:read_logs': {
+      const error =
+        stringErrorFor(input.target, 'target') ||
+        optionalIntegerErrorFor(input.tail, 'tail') ||
+        optionalStringErrorFor(input.filter, 'filter') ||
+        optionalBooleanErrorFor(input.analyzePatterns, 'analyzePatterns') ||
+        optionalIntegerErrorFor(input.sinceMinutes, 'sinceMinutes');
+      if (error) return error;
+
       return {
         toolName: DEVELOPER_CAPABILITY_TO_TOOL[capability],
         toolArgs: {
@@ -80,6 +179,7 @@ export function mapDeveloperCapability(capability, input = {}) {
           since_minutes: input.sinceMinutes,
         },
       };
+    }
 
     default:
       return null;
@@ -95,6 +195,10 @@ export function createDeveloperCapabilityExecutor(executor = executeDeveloperToo
         error: `Unsupported developer-tools capability: ${capability}`,
         code: 'UNSUPPORTED_CAPABILITY',
       };
+    }
+
+    if (mapped.error) {
+      return mapped;
     }
 
     return executor(mapped.toolName, mapped.toolArgs, userId);
