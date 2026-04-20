@@ -1,0 +1,94 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: ai-infra  (rare-change, infrastructure tier)
+# Services: ollama, litellm
+# Cadence:  seldom. Bumped for Ollama/LiteLLM image upgrades, model changes,
+#           or LiteLLM config rewrites. Not tied to app or Braid release cycle.
+#
+# NOTE ON CURRENT STATE:
+#   - Today in production, Ollama runs as a STANDALONE Dockhand-managed
+#     container (aishacrm-ollama) that is NOT defined in any repo compose.
+#     It is listed here so Coolify can pick it up as part of the ai-infra
+#     domain when migration happens. Do not apply this compose on top of
+#     the existing standalone container without coordination.
+#   - LiteLLM today is defined in the root docker-compose.prod.yml. That
+#     definition remains authoritative until Coolify cuts over.
+#
+# Model preload:
+#   The Ollama entrypoint pulls llama3.2:3b and qwen2.5-coder:3b on first run.
+#   Prod has historically run llama3.1:8b for summaries per SUMMARY_LLM_MODEL.
+#   Set OLLAMA_PRELOAD_MODELS to override (see .env.example pattern in the
+#   existing root docker-compose.yml).
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aishacrm-ollama
+    restart: unless-stopped
+    # Keep llama3.2:3b + qwen2.5-coder:3b preloaded; matches existing dev compose.
+    # If prod needs llama3.1:8b (per Doppler SUMMARY_LLM_MODEL), add it here or
+    # add a post-start init script in Coolify.
+    entrypoint: >
+      sh -c "ollama serve & sleep 5 && ollama pull llama3.2:3b && ollama pull qwen2.5-coder:3b && ollama run llama3.2:3b 'ready' && wait"
+    environment:
+      - OLLAMA_NUM_CTX=1024
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Memory cap matches current prod Dockhand container (8GB).
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+
+  litellm:
+    image: ghcr.io/andreibyf/aishacrm-2-litellm:latest
+    container_name: aishacrm-litellm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4002:4000"
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+    volumes:
+      # Config lives at repo root; path relative to this compose file.
+      - ../../../litellm_config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  aishanet:
+    external: true

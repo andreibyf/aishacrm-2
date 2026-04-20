@@ -1,0 +1,86 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: scheduling  STAGING LANE  (Phase C — do NOT deploy for
+#                                                Phase A smoke test)
+# Services: calcom, calcom-db
+#
+# Isolated staging Cal.com with its own Postgres and its own public URL.
+# Never points Cal.com at the prod scheduler hostname.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-staging-calcom-db
+    restart: unless-stopped
+    networks:
+      - aishanet-staging
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER_STAGING:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD_STAGING}
+      POSTGRES_DB: ${CALCOM_DB_NAME_STAGING:-calcom_staging}
+    volumes:
+      - calcom_db_data_staging:/var/lib/postgresql/data
+      # Same init script as prod — relative to repo root.
+      - ../../../scripts/calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER_STAGING:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  calcom:
+    # Pin to the same known-good digest as prod to keep staging/prod aligned
+    # during migration testing. Bump both together when validating upgrades.
+    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
+    container_name: aishacrm-staging-calcom
+    restart: unless-stopped
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet-staging
+    environment:
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER_STAGING:-calcom}:${CALCOM_DB_PASSWORD_STAGING}@aishacrm-staging-calcom-db:5432/${CALCOM_DB_NAME_STAGING:-calcom_staging}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER_STAGING:-calcom}:${CALCOM_DB_PASSWORD_STAGING}@aishacrm-staging-calcom-db:5432/${CALCOM_DB_NAME_STAGING:-calcom_staging}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET_STAGING}
+      # MUST be the staging hostname — never prod.
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL_STAGING:-https://staging-scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL_STAGING:-https://staging-scheduler.aishacrm.com}
+      - NEXTAUTH_URL_INTERNAL=http://aishacrm-staging-calcom:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY_STAGING}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL_STAGING:-https://staging-scheduler.aishacrm.com}
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES_STAGING:-"staging-scheduler.aishacrm.com"}
+      - CALCOM_LICENSE_KEY=${CALCOM_LICENSE_KEY:-59c0bed7-8b21-4280-8514-e022fbfc24c7}
+      # SMTP: default to blank so staging cannot send real email unless you
+      # deliberately wire up a sandbox SMTP.
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM_STAGING:-noreply-staging@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST_STAGING:-}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT_STAGING:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER_STAGING:-}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD_STAGING:-}
+    ports:
+      - "127.0.0.1:3102:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  calcom_db_data_staging:
+    driver: local
+
+networks:
+  aishanet-staging:
+    external: true

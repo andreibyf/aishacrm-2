@@ -1,0 +1,134 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: aisha-app  (fast-change path)
+# Services: frontend, backend, aisha-comms
+# Cadence:  every tag → GHCR → auto-deploy
+#
+# Separation status:
+#   - This file is an INITIAL SPLIT. Production today is still served by
+#     ../../../docker-compose.prod.yml at the repo root. Do NOT delete that file.
+#   - Once Coolify picks this split up in a future migration, this file will be
+#     authoritative for the fast-change path only.
+#
+# Cross-domain dependencies (runtime wiring):
+#   - redis-memory, redis-cache           → data-support domain
+#   - braid-mcp-server                    → ai-runtime domain
+#   - litellm                             → ai-infra domain
+#   - calcom (callback URL only)          → scheduling domain
+#
+# All containers attach to the external 'aishanet' Docker network so services
+# can resolve each other by container_name across deployment domains.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    container_name: aishacrm-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4001:3001"
+    environment:
+      # Doppler injects secrets at runtime via backend entrypoint (doppler run)
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://scheduler.aishacrm.com}
+      # Cross-domain wiring → data-support
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+      - REDIS_CACHE_URL=redis://aishacrm-redis-cache:6379
+      # Cross-domain wiring → ai-runtime
+      - BRAID_MCP_URL=${BRAID_MCP_URL:-http://braid-mcp-server:8000}
+      - MCP_NODE_HEALTH_URL=${MCP_NODE_HEALTH_URL:-http://braid-mcp-server:8000/health}
+      - MCP_NODE_ID=${MCP_NODE_ID:-aishacrm-backend-prod}
+      # PEP Custom Query — use Groq in prod (Ollama lives in ai-infra for local LLMs only)
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      # Cross-domain wiring → ai-infra (LiteLLM proxy)
+      - LITELLM_BASE_URL=http://litellm:4000
+      - TELEMETRY_ENABLED=false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+  aisha-comms:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    container_name: aishacrm-comms
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["npm", "run", "worker:communications"]
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+      - REDIS_CACHE_URL=redis://aishacrm-redis-cache:6379
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
+      - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const configured=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(configured)&&configured>0?configured:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\""
+      ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
+    container_name: aishacrm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "4000:3000"
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL:-https://api.aishacrm.com}
+      - VITE_CALCOM_URL=${VITE_CALCOM_URL:-https://scheduler.aishacrm.com}
+      - VITE_OPENREPLAY_PROJECT_KEY=${VITE_OPENREPLAY_PROJECT_KEY:-}
+      - VITE_OPENREPLAY_INGEST_POINT=${VITE_OPENREPLAY_INGEST_POINT:-}
+      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-https://replay.aishacrm.com}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+networks:
+  aishanet:
+    external: true

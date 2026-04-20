@@ -1,0 +1,84 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: ai-infra  STAGING LANE  (Phase C — do NOT deploy for
+#                                              Phase A smoke test)
+# Services: ollama, litellm
+#
+# Fully isolated staging Ollama (dedicated model volume) and staging LiteLLM.
+# Cheaper memory cap than prod — the staging Ollama is for smoke/behavior
+# testing, not throughput.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aishacrm-staging-ollama
+    restart: unless-stopped
+    # Preload only the lightest model for smoke testing. If you need to
+    # validate prod parity (llama3.1:8b), override via OLLAMA_PRELOAD_MODEL
+    # and bump the memory cap below.
+    entrypoint: >
+      sh -c "ollama serve & sleep 5 && ollama pull llama3.2:3b && ollama run llama3.2:3b 'ready' && wait"
+    environment:
+      - OLLAMA_NUM_CTX=1024
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=1
+    ports:
+      - "127.0.0.1:11534:11434"
+    volumes:
+      # Separate model cache from prod so staging never blocks on prod pulls.
+      - ollama_data_staging:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet-staging
+
+  litellm:
+    image: ghcr.io/andreibyf/aishacrm-2-litellm:${IMAGE_TAG:-latest}
+    container_name: aishacrm-staging-litellm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4102:4000"
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN_STAGING:-}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG_STAGING:-stg_stg}
+    volumes:
+      # Same config file as prod — repo root. If your staging LiteLLM needs
+      # different provider keys or model aliases, point this at a separate
+      # file instead.
+      - ../../../litellm_config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet-staging
+
+volumes:
+  ollama_data_staging:
+    driver: local
+
+networks:
+  aishanet-staging:
+    external: true

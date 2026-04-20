@@ -1,0 +1,109 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: ai-runtime  (mid-change tier)
+# Services: braid-mcp-server, braid-mcp-1, braid-mcp-2
+# Cadence:  follows Braid tool-registry and DSL evolution. Deployed less often
+#           than the core app but more often than AI infrastructure.
+#
+# This compose mirrors braid-mcp-node-server/docker-compose.prod.yml but lives
+# under the Coolify deployment split so all domains share one layout.
+#
+# Cross-domain wiring:
+#   - aishacrm-backend     → consumed by MCP nodes as CRM_BACKEND_URL
+#   - aishacrm-redis-memory → session state (REDIS_URL)
+#
+# Image source: same GHCR image (aishacrm-2-mcp:latest) as today. Upstream
+# CI (docker-release.yml) publishes the image on tag push.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  braid-mcp-server:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:latest
+    container_name: braid-mcp-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      NODE_ENV: production
+      MCP_ROLE: server
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+  braid-mcp-1:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:latest
+    container_name: braid-mcp-1
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    environment:
+      NODE_ENV: production
+      MCP_ROLE: node
+      MCP_NODE_ID: "1"
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
+      MCP_SERVER_URL: http://braid-mcp-server:8000
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+  braid-mcp-2:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:latest
+    container_name: braid-mcp-2
+    restart: unless-stopped
+    depends_on:
+      - braid-mcp-server
+    environment:
+      NODE_ENV: production
+      MCP_ROLE: node
+      MCP_NODE_ID: "2"
+      DOPPLER_TOKEN: ${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      DOPPLER_PROJECT: ${DOPPLER_PROJECT:-aishacrm}
+      DOPPLER_CONFIG: ${DOPPLER_CONFIG:-prd_prd}
+      MCP_SERVER_URL: http://braid-mcp-server:8000
+      CRM_BACKEND_URL: http://aishacrm-backend:3001
+      REDIS_URL: redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+networks:
+  aishanet:
+    external: true

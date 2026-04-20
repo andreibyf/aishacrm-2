@@ -1,0 +1,148 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: aisha-app  STAGING LANE
+# Services: frontend, backend  (comms is Phase B — commented out below)
+#
+# Deployed alongside production on the same VPS. Uses:
+#   - container prefix   aishacrm-staging-*
+#   - network            aishanet-staging (external; create with
+#                        `docker network create aishanet-staging`)
+#   - Doppler config     stg_stg
+#   - host port offset   +100 from prod (frontend 4100, backend 4101)
+#
+# See deploy/coolify/STAGING.md for the full strategy and Phase A/B/C
+# rollout sequence.
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  backend:
+    # IMAGE_TAG lets you smoke-test a specific build without touching prod.
+    # Default :latest matches what docker-release.yml publishes on tag push.
+    image: ghcr.io/andreibyf/aishacrm-2-backend:${IMAGE_TAG:-latest}
+    container_name: aishacrm-staging-backend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4101:3001"
+    environment:
+      # Doppler — staging config, staging token
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN_STAGING:-}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG_STAGING:-stg_stg}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      # Staging URLs — do NOT point these at prod hostnames
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL_STAGING:-https://staging-scheduler.aishacrm.com}
+      # Cross-domain wiring → data-support (STAGING)
+      - REDIS_URL=redis://aishacrm-staging-redis-memory:6379
+      - REDIS_CACHE_URL=redis://aishacrm-staging-redis-cache:6379
+      # Cross-domain wiring → ai-runtime (STAGING)
+      # If staging ai-runtime is not yet deployed, these hostnames will not
+      # resolve and related features will be disabled. That is intentional
+      # for Phase A.
+      - BRAID_MCP_URL=${BRAID_MCP_URL_STAGING:-http://braid-mcp-staging-server:8000}
+      - MCP_NODE_HEALTH_URL=${MCP_NODE_HEALTH_URL_STAGING:-http://braid-mcp-staging-server:8000/health}
+      - MCP_NODE_ID=${MCP_NODE_ID_STAGING:-aishacrm-backend-staging}
+      # PEP — still use Groq in staging (keeps behaviour close to prod)
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      # Cross-domain wiring → ai-infra (STAGING). Same Phase A caveat as above.
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL_STAGING:-http://aishacrm-staging-litellm:4000}
+      - TELEMETRY_ENABLED=false
+      # Phase A safety: disable background workers and outbound triggers.
+      # Flip to true in stg_stg Doppler config only when you're deliberately
+      # exercising those code paths.
+      - AI_TRIGGERS_WORKER_ENABLED=${AI_TRIGGERS_WORKER_ENABLED_STAGING:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet-staging
+
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:${IMAGE_TAG:-latest}
+    container_name: aishacrm-staging-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "127.0.0.1:4100:3000"
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN_STAGING:-}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG_STAGING:-stg_stg}
+      # Browser-facing staging URLs. The frontend bundle MUST NOT resolve to
+      # prod origins — run `grep -r "api.aishacrm.com" dist/` post-build to
+      # verify.
+      - VITE_AISHACRM_BACKEND_URL=${VITE_AISHACRM_BACKEND_URL_STAGING:-https://staging-api.aishacrm.com}
+      - VITE_CALCOM_URL=${VITE_CALCOM_URL_STAGING:-https://staging-scheduler.aishacrm.com}
+      # OpenReplay on staging: leave blank to disable the tracker entirely.
+      # The SDK is in the bundle either way; empty env vars short-circuit it.
+      - VITE_OPENREPLAY_PROJECT_KEY=
+      - VITE_OPENREPLAY_INGEST_POINT=
+      - VITE_OPENREPLAY_DASHBOARD_URL=
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet-staging
+
+  # ── Phase B — uncomment when ready ─────────────────────────────────────────
+  # Do NOT uncomment until you've confirmed staging comms will not drain prod
+  # queues. Either scope it to a test tenant or keep
+  # AI_TRIGGERS_WORKER_ENABLED=false in stg_stg Doppler.
+  #
+  # aisha-comms:
+  #   image: ghcr.io/andreibyf/aishacrm-2-backend:${IMAGE_TAG:-latest}
+  #   container_name: aishacrm-staging-comms
+  #   restart: unless-stopped
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
+  #   command: ["npm", "run", "worker:communications"]
+  #   environment:
+  #     - DOPPLER_TOKEN=${DOPPLER_TOKEN_STAGING:-}
+  #     - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+  #     - DOPPLER_CONFIG=${DOPPLER_CONFIG_STAGING:-stg_stg}
+  #     - NODE_ENV=production
+  #     - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+  #     - REDIS_URL=redis://aishacrm-staging-redis-memory:6379
+  #     - REDIS_CACHE_URL=redis://aishacrm-staging-redis-cache:6379
+  #     - CRM_BACKEND_URL=http://aishacrm-staging-backend:3001
+  #     - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
+  #     - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
+  #   healthcheck:
+  #     test: [
+  #       "CMD-SHELL",
+  #       "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const configured=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(configured)&&configured>0?configured:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\""
+  #     ]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 20s
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+  #   networks:
+  #     - aishanet-staging
+
+networks:
+  aishanet-staging:
+    external: true

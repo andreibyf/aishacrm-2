@@ -1,0 +1,68 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: data-support
+# Services: redis-memory, redis-cache
+# Cadence:  very rare. Only bumped on Redis major versions or sizing changes.
+#
+# Both Redis instances attach to the external 'aishanet' network so services
+# in the aisha-app, ai-runtime, and ai-infra domains can reach them by
+# container_name. Consumers connect via:
+#   redis-memory : redis://aishacrm-redis-memory:6379
+#   redis-cache  : redis://aishacrm-redis-cache:6379
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  redis-memory:
+    image: redis:7-alpine
+    container_name: aishacrm-redis-memory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_memory_data:/data
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: aishacrm-redis-cache
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis_cache_data:/data
+    command: redis-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet
+
+volumes:
+  redis_memory_data:
+    driver: local
+  redis_cache_data:
+    driver: local
+
+networks:
+  aishanet:
+    external: true

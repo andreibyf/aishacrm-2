@@ -1,0 +1,69 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: data-support  STAGING LANE
+# Services: redis-memory, redis-cache
+#
+# Ephemeral staging Redis. Dedicated volumes, no shared state with prod.
+# Host port offset +100 from prod (6379→6479, 6380→6480).
+#
+# Deploy order for Phase A:
+#   1. data-support  (this file)      ← first
+#   2. aisha-app     (staging compose) ← then
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  redis-memory:
+    image: redis:7-alpine
+    container_name: aishacrm-staging-redis-memory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6479:6379"
+    volumes:
+      - redis_memory_data_staging:/data
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet-staging
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: aishacrm-staging-redis-cache
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6480:6379"
+    volumes:
+      - redis_cache_data_staging:/data
+    command: redis-server --save "" --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - aishanet-staging
+
+volumes:
+  # Separate volumes from prod so staging cannot corrupt prod data.
+  redis_memory_data_staging:
+    driver: local
+  redis_cache_data_staging:
+    driver: local
+
+networks:
+  aishanet-staging:
+    external: true

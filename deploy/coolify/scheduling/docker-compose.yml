@@ -1,0 +1,99 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Deployment domain: scheduling  (mid-change tier)
+# Services: calcom, calcom-db
+# Cadence:  quarterly-ish — Cal.com image digest bumps, schema migrations, SMTP
+#           or encryption-key rotations. Not tied to core app release tags.
+#
+# Caddy:    intentionally NOT included. No Caddy files exist in this repo. If
+#           the production VPS uses Caddy in front of scheduler.aishacrm.com,
+#           that config lives outside the repo and should stay that way until
+#           someone commits it deliberately.
+#
+# DB isolation: Cal.com uses its own Postgres (calcom-db), NOT Supabase. Sharing
+#               the AiSHA Supabase DB is unsupported (RLS conflicts with Cal.com's
+#               raw Prisma/pg connections).
+#
+# Image pinning: the Cal.com image is pinned to a known-good digest from the
+#                existing docker-compose.prod.yml. To upgrade, follow the same
+#                verification process used there (Host table, _user_eventtype,
+#                ALLOWED_HOSTNAMES).
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-calcom-db
+    restart: unless-stopped
+    networks:
+      - aishanet
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - calcom_db_data:/var/lib/postgresql/data
+      # Init script runs once on fresh volume creation (idempotent backfill).
+      # Path is relative to the project root because Coolify typically sets
+      # build context at the repo root; adjust if Coolify uses this folder
+      # as the context instead.
+      - ../../../scripts/calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  calcom:
+    # Pinned digest matches docker-compose.prod.yml (2026-04-07 known-good).
+    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
+    container_name: aishacrm-calcom
+    restart: unless-stopped
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet
+    environment:
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      # Cal.com parses this as JSON.parse(`[${ALLOWED_HOSTNAMES}]`) — must be
+      # quoted: "scheduler.aishacrm.com" (include the surrounding quotes).
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"scheduler.aishacrm.com"}
+      - CALCOM_LICENSE_KEY=${CALCOM_LICENSE_KEY:-59c0bed7-8b21-4280-8514-e022fbfc24c7}
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+    ports:
+      - "127.0.0.1:3002:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  calcom_db_data:
+    driver: local
+
+networks:
+  aishanet:
+    external: true
