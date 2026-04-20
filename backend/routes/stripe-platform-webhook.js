@@ -328,12 +328,13 @@ async function handlePaymentFailed(supabase, event, normalized, _requestId) {
  * past_due, etc.). We locate the local subscription row by
  * provider_subscription_id and sync BOTH its status AND its billing_plan_id.
  *
- * Plan mapping: when the subscription's current Stripe Price ID differs from
- * our local billing_plan_id, we resolve it via planResolver and update.
- * Ambiguous matches (same price ID used as base on one plan and seat on
- * another) throw CONFIGURATION_ERROR; we log and keep processing the status
- * change instead of failing the whole webhook — status syncing is more
- * important than perfect plan mapping in the face of misconfiguration.
+ * Plan mapping: Stripe does not guarantee ordering of items.data[], so we
+ * scan every item and prefer a role=base match. A role=seat-only match is
+ * recorded for audit but does not promote the plan (seat prices are
+ * reusable across plans). Ambiguous matches (same price ID used as base on
+ * one plan and seat on another) throw CONFIGURATION_ERROR; we log and keep
+ * processing -- status syncing is more important than perfect plan mapping
+ * in the face of misconfiguration.
  */
 async function handleSubscriptionUpdated(supabase, event, requestId) {
   const stripeSub = event.data.object;
@@ -372,48 +373,74 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
   else if (stripeStatus === 'canceled') nextStatus = 'canceled';
   // incomplete / incomplete_expired = pre-activation, leave row alone
 
-  // Resolve plan from the subscription's primary Stripe Price ID. Stripe
-  // wraps line items under `items.data[]`; the first entry with a role=base
-  // price is what we map to billing_plans.code. If resolution yields a
-  // different plan than the one stored locally, we'll patch billing_plan_id
-  // below. Defensive: tolerate missing items (older webhook payload shapes,
-  // test fixtures) by leaving plan mapping untouched.
+  // Resolve plan from the subscription's Stripe Price IDs. Stripe does NOT
+  // guarantee ordering within `items.data[]` -- a subscription with both a
+  // base line and a seat line can have either one first. We therefore scan
+  // every item, preferring a role=base match (which is what identifies the
+  // plan). A role=seat match is kept only as a "resolved but not promotable"
+  // fallback for logging/audit, since the same seat price can be reused
+  // across plans and cannot disambiguate on its own.
+  //
+  // Defensive: tolerate missing items (older webhook payload shapes, test
+  // fixtures) by leaving plan mapping untouched.
   let nextPlanId = localSub.billing_plan_id;
   let resolvedPlanCode = null;
   let resolvedPlanRole = null;
-  const primaryPriceId = stripeSub.items?.data?.[0]?.price?.id || null;
-  if (primaryPriceId) {
+  let primaryPriceId = null; // the price id we ultimately used for resolution
+  const priceIds = Array.isArray(stripeSub.items?.data)
+    ? stripeSub.items.data.map((it) => it?.price?.id).filter((id) => typeof id === 'string' && id)
+    : [];
+
+  for (const priceId of priceIds) {
     try {
-      const match = await resolvePlanByProviderPriceId(supabase, primaryPriceId);
-      if (match?.plan) {
-        resolvedPlanCode = match.plan.code;
-        resolvedPlanRole = match.role;
-        // Only promote to nextPlanId when we matched the BASE price -- seat
-        // line items don't identify the plan on their own (same seat price
-        // is reusable across plans), so we avoid spuriously changing
-        // billing_plan_id just because a seat line item came first.
-        if (match.role === 'base' && match.plan.id !== localSub.billing_plan_id) {
-          nextPlanId = match.plan.id;
-        }
-      } else {
+      const match = await resolvePlanByProviderPriceId(supabase, priceId);
+      if (!match?.plan) {
+        // Unknown price id -- note it as the "primary" only if nothing
+        // resolved yet, so at least some stripe_price_id makes it into the
+        // audit payload.
+        if (primaryPriceId === null) primaryPriceId = priceId;
         logger.info('[StripePlatformWebhook] subscription.updated: price_id not in billing_plans', {
           provider_subscription_id: providerSubId,
-          stripe_price_id: primaryPriceId,
+          stripe_price_id: priceId,
         });
+        continue;
+      }
+
+      // Base match wins unconditionally -- record it and stop scanning.
+      if (match.role === 'base') {
+        resolvedPlanCode = match.plan.code;
+        resolvedPlanRole = 'base';
+        primaryPriceId = priceId;
+        if (match.plan.id !== localSub.billing_plan_id) {
+          nextPlanId = match.plan.id;
+        }
+        break;
+      }
+
+      // Seat match: remember it only if we haven't seen any resolvable
+      // match yet. Do NOT promote to nextPlanId -- seat prices are reusable
+      // across plans and cannot identify the plan on their own. Continue
+      // scanning in case a base match appears in a later item.
+      if (resolvedPlanCode === null) {
+        resolvedPlanCode = match.plan.code;
+        resolvedPlanRole = match.role;
+        primaryPriceId = priceId;
       }
     } catch (err) {
       // Ambiguous-match (CONFIGURATION_ERROR) and any other resolver error:
       // log loudly but do NOT abort the webhook. Status sync still runs.
+      // Continue scanning remaining items -- a later one might resolve cleanly.
       const isConfig = err?.code === BILLING_ERROR_CODES.CONFIGURATION_ERROR;
       logger[isConfig ? 'error' : 'warn'](
         '[StripePlatformWebhook] subscription.updated: plan resolution failed',
         {
           provider_subscription_id: providerSubId,
-          stripe_price_id: primaryPriceId,
+          stripe_price_id: priceId,
           error: err.message,
           code: err.code || null,
         },
       );
+      if (primaryPriceId === null) primaryPriceId = priceId;
     }
   }
 

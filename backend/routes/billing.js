@@ -191,8 +191,13 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
   // ==========================================================================
   // POST /api/billing/checkout-session — create Stripe Checkout for plan purchase
   // Body: { plan_code, seats?, success_url, cancel_url }
-  //   - seats: integer >= 0, extra seats beyond plan.included_seats. Defaults
-  //     to 0 (buyer gets included_seats only).
+  //   - seats: TOTAL number of user seats the tenant wants to purchase
+  //     (integer >= 0). Not "extra beyond included" -- the total. If seats
+  //     <= plan.included_seats, only the base line item is charged; if
+  //     seats > plan.included_seats, an additional seat line item is added
+  //     for the overage (quantity = seats - included_seats). Defaults to 0,
+  //     which means "only the included seats" (same as seats=included_seats
+  //     from a billing perspective).
   //   - Uses planResolver.buildStripeLineItems to assemble real Stripe Price
   //     IDs (base + optional seat) and plan.trial_days for the trial window.
   // ==========================================================================

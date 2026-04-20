@@ -86,8 +86,18 @@ export async function createCheckoutSession({
       if (!item || typeof item.price !== 'string' || !item.price) {
         throw new Error('createCheckoutSession: each line_item requires a price id');
       }
-      if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity < 0)) {
-        throw new Error('createCheckoutSession: line_item quantity must be a non-negative integer');
+      // Stripe rejects quantity=0 at the API, so we reject it up front to
+      // surface a clearer error at our layer. Missing quantity is OK --
+      // Stripe defaults to 1.
+      if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity <= 0)) {
+        throw new Error('createCheckoutSession: line_item quantity must be a positive integer');
+      }
+    }
+    // Validate trial_period_days early when Shape A is in use, so the error
+    // surfaces before any SDK call. Missing/undefined is fine (no trial).
+    if (trial_period_days !== undefined && trial_period_days !== null) {
+      if (!Number.isInteger(trial_period_days) || trial_period_days < 0) {
+        throw new Error('createCheckoutSession: trial_period_days must be a non-negative integer');
       }
     }
   } else if (!amount_cents || amount_cents <= 0) {
@@ -111,8 +121,9 @@ export async function createCheckoutSession({
       cancel_url,
     };
     if (resolvedMode === 'subscription' && trial_period_days > 0) {
+      // Already validated as a non-negative integer up front.
       params.subscription_data = {
-        trial_period_days: Number(trial_period_days),
+        trial_period_days,
         metadata,
       };
     }

@@ -226,28 +226,62 @@ describe('stripePlatformAdapter -- createCheckoutSession input validation', () =
     );
   });
 
-  it('rejects non-integer or negative line_item quantity', async () => {
+  it('rejects non-integer, negative, or zero line_item quantity', async () => {
+    // Stripe Checkout rejects quantity=0 at the API level; we reject earlier
+    // for a clearer error. Non-integer and negative are also rejected.
+    for (const badQty of [1.5, -1, 0]) {
+      await assert.rejects(
+        () =>
+          adapter.createCheckoutSession({
+            customer_id: 'cus_1',
+            line_items: [{ price: 'price_1', quantity: badQty }],
+            mode: 'subscription',
+            success_url: 'https://s',
+            cancel_url: 'https://c',
+          }),
+        /quantity must be a positive integer/,
+        `quantity=${badQty} must be rejected`,
+      );
+    }
+  });
+
+  it('rejects non-integer or negative trial_period_days', async () => {
+    for (const badTrial of [7.5, -1, '14']) {
+      await assert.rejects(
+        () =>
+          adapter.createCheckoutSession({
+            customer_id: 'cus_1',
+            line_items: [{ price: 'price_1', quantity: 1 }],
+            mode: 'subscription',
+            trial_period_days: badTrial,
+            success_url: 'https://s',
+            cancel_url: 'https://c',
+          }),
+        /trial_period_days must be a non-negative integer/,
+        `trial_period_days=${JSON.stringify(badTrial)} must be rejected`,
+      );
+    }
+  });
+
+  it('accepts trial_period_days=0 (validation passes, no trial applied)', async () => {
+    // 0 passes validation; the SDK-call branch only attaches subscription_data
+    // when trial > 0. Failure will come from requirePlatformBillingConfig()
+    // since no Stripe key is in env -- we only assert trial validation itself
+    // did NOT reject.
     await assert.rejects(
       () =>
         adapter.createCheckoutSession({
           customer_id: 'cus_1',
-          line_items: [{ price: 'price_1', quantity: 1.5 }],
+          line_items: [{ price: 'price_1', quantity: 1 }],
           mode: 'subscription',
+          trial_period_days: 0,
           success_url: 'https://s',
           cancel_url: 'https://c',
         }),
-      /quantity must be a non-negative integer/,
-    );
-    await assert.rejects(
-      () =>
-        adapter.createCheckoutSession({
-          customer_id: 'cus_1',
-          line_items: [{ price: 'price_1', quantity: -1 }],
-          mode: 'subscription',
-          success_url: 'https://s',
-          cancel_url: 'https://c',
-        }),
-      /quantity must be a non-negative integer/,
+      (err) => {
+        assert.doesNotMatch(err.message, /trial_period_days/);
+        return true;
+      },
     );
   });
 

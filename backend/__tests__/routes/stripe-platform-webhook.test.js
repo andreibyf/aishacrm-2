@@ -1065,3 +1065,176 @@ describe('customer.subscription.updated — plan mapping (PR #523)', () => {
     );
   });
 });
+
+/**
+ * customer.subscription.updated — PR #524 review: items.data ordering
+ *
+ * Regression test for the bug Codex+Copilot flagged: Stripe does not
+ * guarantee ordering of items.data[], so a subscription with both a base
+ * AND a seat line item can have the seat listed first. The old code
+ * inspected only items.data[0], so seat-first ordering would miss the
+ * base match and skip plan mapping entirely.
+ */
+describe('customer.subscription.updated — items.data ordering (PR #524)', () => {
+  beforeEach(() => {
+    mockClient.db.billing_plans = [
+      {
+        id: 'p_starter',
+        code: 'starter_monthly',
+        name: 'Starter',
+        amount_cents: 19900,
+        currency: 'usd',
+        billing_interval: 'month',
+        is_active: true,
+        provider_product_id: 'prod_starter',
+        provider_price_id_base: 'price_starter_base',
+        provider_price_id_seat: 'price_starter_seat',
+        included_seats: 3,
+        seat_unit_amount_cents: 4900,
+        trial_days: 14,
+      },
+      {
+        id: 'p_growth',
+        code: 'growth_monthly',
+        name: 'Growth',
+        amount_cents: 29700,
+        currency: 'usd',
+        billing_interval: 'month',
+        is_active: true,
+        provider_product_id: 'prod_growth',
+        provider_price_id_base: 'price_growth_base',
+        provider_price_id_seat: 'price_growth_seat',
+        included_seats: 5,
+        seat_unit_amount_cents: 4900,
+        trial_days: 14,
+      },
+    ];
+    mockClient.db.tenant_subscriptions.push({
+      id: 'sub_local_order',
+      tenant_id: TENANT,
+      billing_plan_id: 'p_starter',
+      status: 'active',
+      provider_subscription_id: 'sub_stripe_order',
+      created_at: '2026-01-01',
+    });
+  });
+
+  it('resolves plan when SEAT line is items.data[0] and base is items.data[1]', async () => {
+    // The regression scenario: Stripe puts the Growth SEAT price first,
+    // Growth BASE second. Old code stopped at index 0, missed the base,
+    // and never changed billing_plan_id. New code scans all items and
+    // picks the base-role match.
+    stubbedEvent = {
+      id: 'evt_order_1',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_stripe_order',
+          status: 'active',
+          cancel_at_period_end: false,
+          items: {
+            data: [
+              { price: { id: 'price_growth_seat' } }, // seat first
+              { price: { id: 'price_growth_base' } }, // base second
+            ],
+          },
+        },
+      },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    const res = await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    assert.equal(res.status, 200);
+    const local = mockClient.db.tenant_subscriptions.find((s) => s.id === 'sub_local_order');
+    assert.equal(
+      local.billing_plan_id,
+      'p_growth',
+      'base match at index 1 must still promote the plan',
+    );
+    const planChangedEvt = mockClient.db.billing_events.find(
+      (e) => e.event_type === 'plan.changed',
+    );
+    assert.ok(planChangedEvt, 'plan.changed event must be emitted when base is found past index 0');
+    assert.equal(planChangedEvt.payload_json.stripe_price_id, 'price_growth_base');
+    assert.equal(planChangedEvt.payload_json.new_plan_code, 'growth_monthly');
+  });
+
+  it('prefers base match over earlier seat match even when both resolve', async () => {
+    // Another ordering check: Starter seat first (belongs to current plan,
+    // would resolve to role=seat), then Growth base. We must still promote
+    // to Growth, not stay on Starter just because seat-role matched first.
+    stubbedEvent = {
+      id: 'evt_order_2',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_stripe_order',
+          status: 'active',
+          cancel_at_period_end: false,
+          items: {
+            data: [
+              { price: { id: 'price_starter_seat' } }, // resolves role=seat on Starter
+              { price: { id: 'price_growth_base' } }, // resolves role=base on Growth
+            ],
+          },
+        },
+      },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const local = mockClient.db.tenant_subscriptions.find((s) => s.id === 'sub_local_order');
+    assert.equal(local.billing_plan_id, 'p_growth', 'base match must win over earlier seat match');
+  });
+
+  it('falls back to seat-only audit when no base item is present at all', async () => {
+    // Pure seat-only line items -- unlikely in practice but defensible.
+    // Must NOT change billing_plan_id (seat prices are reusable), but
+    // should record the resolved seat match in the audit payload.
+    stubbedEvent = {
+      id: 'evt_order_3',
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_stripe_order',
+          status: 'past_due', // status DOES change, so handler writes
+          cancel_at_period_end: false,
+          items: {
+            data: [{ price: { id: 'price_growth_seat' } }],
+          },
+        },
+      },
+    };
+    stubbedNormalized = { tenant_id: TENANT, type: 'customer.subscription.updated' };
+
+    await request(buildApp())
+      .post('/api/webhooks/stripe-platform')
+      .set('stripe-signature', 'sig')
+      .set('content-type', 'application/json')
+      .send(Buffer.from(JSON.stringify(stubbedEvent)));
+
+    const local = mockClient.db.tenant_subscriptions.find((s) => s.id === 'sub_local_order');
+    assert.equal(local.billing_plan_id, 'p_starter', 'seat-only match must not change plan');
+    assert.equal(
+      mockClient.db.billing_events.filter((e) => e.event_type === 'plan.changed').length,
+      0,
+    );
+    // The status-change event payload should still carry the seat-resolved
+    // audit so operators can see which price id Stripe is billing.
+    const statusEvt = mockClient.db.billing_events.find(
+      (e) => e.payload_json?.provider_subscription_id === 'sub_stripe_order',
+    );
+    assert.equal(statusEvt.payload_json.stripe_price_id, 'price_growth_seat');
+    assert.equal(statusEvt.payload_json.resolved_plan_role, 'seat');
+  });
+});
