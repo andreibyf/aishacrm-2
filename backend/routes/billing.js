@@ -20,9 +20,10 @@ import {
 } from '../lib/billing/billingAccountService.js';
 import { getActiveSubscription } from '../lib/billing/subscriptionService.js';
 import { listInvoices } from '../lib/billing/invoiceService.js';
-import * as stripeAdapter from '../lib/billing/stripePlatformAdapter.js';
+import * as defaultStripeAdapter from '../lib/billing/stripePlatformAdapter.js';
 import { getPlatformBillingConfig } from '../lib/billing/config.js';
-import { classifyBillingError } from '../lib/billing/errors.js';
+import { BillingError, classifyBillingError } from '../lib/billing/errors.js';
+import { resolvePlanByCode, buildStripeLineItems } from '../lib/billing/planResolver.js';
 
 export function resolveTenantId(req) {
   // req.tenant is populated by validateTenantAccess after canonical resolution
@@ -49,6 +50,10 @@ export function resolveTenantId(req) {
 
 export default function createBillingRoutes(_pgPool, opts = {}) {
   const getClient = opts.getSupabaseClient || getSupabaseClient;
+  // Allow injecting a stripe adapter stub for route tests without having to
+  // set up real Stripe credentials in env. Defaults to the real adapter
+  // module imported above. Used by /checkout-session and /portal-session.
+  const stripeAdapter = opts.stripeAdapter || defaultStripeAdapter;
   const router = express.Router();
   router.use(validateTenantAccess);
 
@@ -185,7 +190,11 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
 
   // ==========================================================================
   // POST /api/billing/checkout-session — create Stripe Checkout for plan purchase
-  // Body: { plan_code, success_url, cancel_url }
+  // Body: { plan_code, seats?, success_url, cancel_url }
+  //   - seats: integer >= 0, extra seats beyond plan.included_seats. Defaults
+  //     to 0 (buyer gets included_seats only).
+  //   - Uses planResolver.buildStripeLineItems to assemble real Stripe Price
+  //     IDs (base + optional seat) and plan.trial_days for the trial window.
   // ==========================================================================
   router.post('/checkout-session', async (req, res) => {
     try {
@@ -197,6 +206,17 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
         return res.status(400).json({
           status: 'error',
           message: 'plan_code, success_url, and cancel_url are required',
+        });
+      }
+
+      // seats defaults to 0 (= only included_seats). Explicit 0 allowed.
+      // Non-negative integer required; anything else is a 400.
+      const rawSeats = req.body.seats;
+      const seats = rawSeats === undefined || rawSeats === null ? 0 : Number(rawSeats);
+      if (!Number.isInteger(seats) || seats < 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'seats must be a non-negative integer',
         });
       }
 
@@ -218,15 +238,16 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
         });
       }
 
-      // Load plan
-      const { data: plan, error: planErr } = await supabase
-        .from('billing_plans')
-        .select('*')
-        .eq('code', plan_code)
-        .eq('is_active', true)
-        .maybeSingle();
-      if (planErr) throw new Error(planErr.message);
+      // Load plan via planResolver (active-only by default; also enforces
+      // the type-check on plan_code via BillingError).
+      const plan = await resolvePlanByCode(supabase, plan_code);
       if (!plan) return res.status(404).json({ status: 'error', message: 'Plan not found' });
+
+      // Build Stripe line_items from resolved Price IDs. Throws BillingError
+      // with code CONFIGURATION_ERROR (500) if provider_price_id_base missing
+      // -- caller-facing message will make it clear this is a server-side
+      // misconfiguration, not bad input.
+      const line_items = buildStripeLineItems(plan, seats);
 
       // Create-or-reuse Stripe customer
       let customerId = account.provider_customer_id;
@@ -242,18 +263,31 @@ export default function createBillingRoutes(_pgPool, opts = {}) {
 
       const session = await stripeAdapter.createCheckoutSession({
         customer_id: customerId,
-        amount_cents: plan.amount_cents,
-        currency: plan.currency,
-        description: `${plan.name} — ${plan.billing_interval}`,
+        line_items,
+        mode: 'subscription',
+        trial_period_days: plan.trial_days || 0,
         success_url,
         cancel_url,
-        metadata: { tenant_id, plan_code, plan_id: plan.id, source: 'platform_billing' },
+        metadata: {
+          tenant_id,
+          plan_code,
+          plan_id: plan.id,
+          seats: String(seats),
+          source: 'platform_billing',
+        },
       });
 
       res.json({ status: 'success', data: { url: session.url, session_id: session.id } });
     } catch (err) {
       logger.error('[Billing] POST /checkout-session error', { error: err.message });
-      res.status(500).json({ status: 'error', message: err.message });
+      // BillingError carries its own statusCode (400 for validation, 500 for
+      // CONFIGURATION_ERROR, etc.). Everything else falls back to 500.
+      const status = err instanceof BillingError ? err.statusCode || 500 : 500;
+      res.status(status).json({
+        status: 'error',
+        message: err.message,
+        code: err.code || null,
+      });
     }
   });
 

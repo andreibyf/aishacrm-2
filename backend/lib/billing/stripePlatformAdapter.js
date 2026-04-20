@@ -29,11 +29,37 @@ export async function createCustomer({ billing_email, company_name, metadata = {
   return { id: customer.id };
 }
 
+/**
+ * Create a Stripe Checkout Session for platform billing.
+ *
+ * Two input shapes supported (pick one):
+ *
+ *   A) line_items + mode (preferred for subscription checkouts):
+ *      createCheckoutSession({
+ *        customer_id, line_items: [{ price, quantity }, ...],
+ *        mode: 'subscription', trial_period_days, success_url, cancel_url, metadata
+ *      })
+ *
+ *   B) amount_cents (legacy one-time payment shape, retained for back-compat):
+ *      createCheckoutSession({
+ *        customer_id, amount_cents, currency, description,
+ *        success_url, cancel_url, metadata
+ *      })
+ *
+ * If `line_items` is provided it wins. `trial_period_days` only applies to
+ * `mode: 'subscription'`.
+ */
 export async function createCheckoutSession({
   customer_id,
+  // Shape A (preferred)
+  line_items,
+  mode,
+  trial_period_days,
+  // Shape B (legacy)
   amount_cents,
   currency,
   description,
+  // Common
   success_url,
   cancel_url,
   metadata = {},
@@ -41,13 +67,63 @@ export async function createCheckoutSession({
   if (!success_url || !cancel_url) {
     throw new Error('createCheckoutSession: success_url and cancel_url required');
   }
-  if (!amount_cents || amount_cents <= 0) {
-    throw new Error('createCheckoutSession: amount_cents must be > 0');
+
+  // ---------- INPUT VALIDATION (runs before any SDK/env access) ----------
+  // Validation must NOT require the Stripe client or platform config to be
+  // available -- otherwise on a misconfigured server (no STRIPE_PLATFORM_*
+  // env), a genuinely bad request surfaces as "STRIPE not configured" and
+  // masks the real caller error. Also makes this function unit-testable
+  // without stubbing Stripe.
+  const hasLineItems = Array.isArray(line_items) && line_items.length > 0;
+  if (hasLineItems) {
+    const resolvedMode = mode || 'subscription';
+    if (resolvedMode !== 'subscription' && resolvedMode !== 'payment') {
+      throw new Error(
+        `createCheckoutSession: unsupported mode '${resolvedMode}' (expected subscription|payment)`,
+      );
+    }
+    for (const item of line_items) {
+      if (!item || typeof item.price !== 'string' || !item.price) {
+        throw new Error('createCheckoutSession: each line_item requires a price id');
+      }
+      if (item.quantity !== undefined && (!Number.isInteger(item.quantity) || item.quantity < 0)) {
+        throw new Error('createCheckoutSession: line_item quantity must be a non-negative integer');
+      }
+    }
+  } else if (!amount_cents || amount_cents <= 0) {
+    throw new Error('createCheckoutSession: provide either line_items[] or amount_cents > 0');
   }
 
+  // ---------- SDK CALL (validation passed) ----------
   const stripe = getStripeClient();
   const cfg = requirePlatformBillingConfig();
 
+  // Shape A: real Stripe Prices passed directly.
+  if (hasLineItems) {
+    const resolvedMode = mode || 'subscription';
+    const params = {
+      mode: resolvedMode,
+      payment_method_types: ['card'],
+      customer: customer_id || undefined,
+      line_items,
+      metadata,
+      success_url,
+      cancel_url,
+    };
+    if (resolvedMode === 'subscription' && trial_period_days > 0) {
+      params.subscription_data = {
+        trial_period_days: Number(trial_period_days),
+        metadata,
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(params);
+    return { id: session.id, url: session.url };
+  }
+
+  // Shape B: legacy ad-hoc amount_cents path. Retained so existing callers
+  // (e.g. manual invoice collection) keep working. Validation of
+  // amount_cents > 0 already happened up front.
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],

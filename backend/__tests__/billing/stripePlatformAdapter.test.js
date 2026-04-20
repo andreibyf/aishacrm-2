@@ -113,3 +113,164 @@ describe('stripePlatformAdapter -- normalizePaymentEvent', () => {
     assert.equal(normalized.raw_object_id, 'obj_xyz');
   });
 });
+
+describe('stripePlatformAdapter -- createCheckoutSession input validation', () => {
+  // These tests target the input-validation branches that run BEFORE any
+  // Stripe SDK call. We do NOT mock Stripe here -- we expect validation to
+  // throw synchronously (well, from async fn: reject) before the adapter
+  // would call into the SDK. This keeps the tests hermetic and fast while
+  // still covering the Shape A / Shape B branch logic added in this PR.
+
+  it('rejects when success_url or cancel_url missing (both shapes)', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: 'price_1', quantity: 1 }],
+          mode: 'subscription',
+          cancel_url: 'https://c',
+        }),
+      /success_url and cancel_url required/,
+    );
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          amount_cents: 4900,
+          success_url: 'https://s',
+        }),
+      /success_url and cancel_url required/,
+    );
+  });
+
+  it('rejects when neither line_items[] nor amount_cents provided', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /provide either line_items\[\] or amount_cents > 0/,
+    );
+  });
+
+  it('rejects amount_cents <= 0 when falling back to Shape B', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          amount_cents: 0,
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /provide either line_items\[\] or amount_cents > 0/,
+    );
+  });
+
+  it('rejects empty line_items array (falls through to Shape B validation)', async () => {
+    // line_items=[] is not "provided" for Shape A purposes; Shape B kicks in
+    // and fails on missing amount_cents. This is intentional and documents
+    // the fallback behavior.
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [],
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /provide either line_items\[\] or amount_cents > 0/,
+    );
+  });
+
+  it('rejects unsupported mode in Shape A', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: 'price_1', quantity: 1 }],
+          mode: 'setup',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /unsupported mode 'setup'/,
+    );
+  });
+
+  it('rejects line_item missing a price id', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ quantity: 1 }],
+          mode: 'subscription',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /each line_item requires a price id/,
+    );
+  });
+
+  it('rejects line_item with empty-string price id', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: '', quantity: 1 }],
+          mode: 'subscription',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /each line_item requires a price id/,
+    );
+  });
+
+  it('rejects non-integer or negative line_item quantity', async () => {
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: 'price_1', quantity: 1.5 }],
+          mode: 'subscription',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /quantity must be a non-negative integer/,
+    );
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: 'price_1', quantity: -1 }],
+          mode: 'subscription',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      /quantity must be a non-negative integer/,
+    );
+  });
+
+  it('accepts line_item with omitted quantity (Stripe defaults to 1)', async () => {
+    // Should NOT throw from our validation -- it's only rejected if the
+    // user explicitly sends a bad quantity. Will ultimately fail at the
+    // requirePlatformBillingConfig() step since no Stripe key is in env,
+    // but that's past the validation branch we care about here.
+    await assert.rejects(
+      () =>
+        adapter.createCheckoutSession({
+          customer_id: 'cus_1',
+          line_items: [{ price: 'price_1' }],
+          mode: 'subscription',
+          success_url: 'https://s',
+          cancel_url: 'https://c',
+        }),
+      // Any error OTHER than our validation messages means validation passed.
+      (err) => {
+        assert.doesNotMatch(err.message, /quantity must be/);
+        assert.doesNotMatch(err.message, /each line_item requires/);
+        return true;
+      },
+    );
+  });
+});

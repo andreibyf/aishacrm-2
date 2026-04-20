@@ -34,6 +34,8 @@ import { assignPlan } from '../lib/billing/subscriptionService.js';
 import { logBillingEvent, BILLING_EVENTS } from '../lib/billing/billingEventLogger.js';
 import { syncTenantBillingState } from '../lib/billing/billingStateMachine.js';
 import { getPlatformBillingConfig } from '../lib/billing/config.js';
+import { resolvePlanByProviderPriceId } from '../lib/billing/planResolver.js';
+import { BILLING_ERROR_CODES } from '../lib/billing/errors.js';
 
 /**
  * Pick the correct billing event type for a subscription.updated webhook
@@ -324,11 +326,14 @@ async function handlePaymentFailed(supabase, event, normalized, _requestId) {
  * customer.subscription.updated — fires when a tenant changes their plan via
  * the Stripe Customer Portal, or when Stripe-side status flips (active →
  * past_due, etc.). We locate the local subscription row by
- * provider_subscription_id and sync its status.
+ * provider_subscription_id and sync BOTH its status AND its billing_plan_id.
  *
- * Plan changes made IN the portal are not mapped to our plan_code here —
- * that's deferred to the dunning worker (Phase 2), which will cross-reference
- * Stripe price IDs to billing_plans.code.
+ * Plan mapping: when the subscription's current Stripe Price ID differs from
+ * our local billing_plan_id, we resolve it via planResolver and update.
+ * Ambiguous matches (same price ID used as base on one plan and seat on
+ * another) throw CONFIGURATION_ERROR; we log and keep processing the status
+ * change instead of failing the whole webhook — status syncing is more
+ * important than perfect plan mapping in the face of misconfiguration.
  */
 async function handleSubscriptionUpdated(supabase, event, requestId) {
   const stripeSub = event.data.object;
@@ -367,8 +372,55 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
   else if (stripeStatus === 'canceled') nextStatus = 'canceled';
   // incomplete / incomplete_expired = pre-activation, leave row alone
 
-  if (nextStatus === localSub.status && !cancelAtPeriodEnd) {
-    logger.debug('[StripePlatformWebhook] subscription.updated no-op (status unchanged)', {
+  // Resolve plan from the subscription's primary Stripe Price ID. Stripe
+  // wraps line items under `items.data[]`; the first entry with a role=base
+  // price is what we map to billing_plans.code. If resolution yields a
+  // different plan than the one stored locally, we'll patch billing_plan_id
+  // below. Defensive: tolerate missing items (older webhook payload shapes,
+  // test fixtures) by leaving plan mapping untouched.
+  let nextPlanId = localSub.billing_plan_id;
+  let resolvedPlanCode = null;
+  let resolvedPlanRole = null;
+  const primaryPriceId = stripeSub.items?.data?.[0]?.price?.id || null;
+  if (primaryPriceId) {
+    try {
+      const match = await resolvePlanByProviderPriceId(supabase, primaryPriceId);
+      if (match?.plan) {
+        resolvedPlanCode = match.plan.code;
+        resolvedPlanRole = match.role;
+        // Only promote to nextPlanId when we matched the BASE price -- seat
+        // line items don't identify the plan on their own (same seat price
+        // is reusable across plans), so we avoid spuriously changing
+        // billing_plan_id just because a seat line item came first.
+        if (match.role === 'base' && match.plan.id !== localSub.billing_plan_id) {
+          nextPlanId = match.plan.id;
+        }
+      } else {
+        logger.info('[StripePlatformWebhook] subscription.updated: price_id not in billing_plans', {
+          provider_subscription_id: providerSubId,
+          stripe_price_id: primaryPriceId,
+        });
+      }
+    } catch (err) {
+      // Ambiguous-match (CONFIGURATION_ERROR) and any other resolver error:
+      // log loudly but do NOT abort the webhook. Status sync still runs.
+      const isConfig = err?.code === BILLING_ERROR_CODES.CONFIGURATION_ERROR;
+      logger[isConfig ? 'error' : 'warn'](
+        '[StripePlatformWebhook] subscription.updated: plan resolution failed',
+        {
+          provider_subscription_id: providerSubId,
+          stripe_price_id: primaryPriceId,
+          error: err.message,
+          code: err.code || null,
+        },
+      );
+    }
+  }
+
+  const planChanged = nextPlanId !== localSub.billing_plan_id;
+
+  if (nextStatus === localSub.status && !cancelAtPeriodEnd && !planChanged) {
+    logger.debug('[StripePlatformWebhook] subscription.updated no-op (status + plan unchanged)', {
       tenant_id: localSub.tenant_id,
       status: stripeStatus,
     });
@@ -377,6 +429,7 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
 
   const patch = { status: nextStatus };
   if (nextStatus === 'canceled') patch.canceled_at = new Date().toISOString();
+  if (planChanged) patch.billing_plan_id = nextPlanId;
 
   const { error: updErr } = await supabase
     .from('tenant_subscriptions')
@@ -398,9 +451,32 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
       cancel_at_period_end: cancelAtPeriodEnd,
       previous_status: localSub.status,
       new_status: nextStatus,
+      stripe_price_id: primaryPriceId,
+      resolved_plan_code: resolvedPlanCode,
+      resolved_plan_role: resolvedPlanRole,
     },
     request_id: requestId,
   });
+
+  // Separate PLAN_CHANGED event when the billing_plan_id actually moved.
+  // Kept distinct from the status-change event so dashboards/audit filtering
+  // can surface plan migrations independently of dunning state changes.
+  if (planChanged) {
+    await logBillingEvent(supabase, {
+      tenant_id: localSub.tenant_id,
+      event_type: BILLING_EVENTS.PLAN_CHANGED,
+      source: 'webhook',
+      payload: {
+        subscription_id: localSub.id,
+        provider_subscription_id: providerSubId,
+        previous_plan_id: localSub.billing_plan_id,
+        new_plan_id: nextPlanId,
+        new_plan_code: resolvedPlanCode,
+        stripe_price_id: primaryPriceId,
+      },
+      request_id: requestId,
+    });
+  }
 
   await syncTenantBillingState(supabase, localSub.tenant_id);
 
@@ -408,6 +484,8 @@ async function handleSubscriptionUpdated(supabase, event, requestId) {
     tenant_id: localSub.tenant_id,
     from: localSub.status,
     to: nextStatus,
+    plan_changed: planChanged,
+    new_plan_code: planChanged ? resolvedPlanCode : null,
   });
 }
 
