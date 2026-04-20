@@ -354,3 +354,255 @@ describe('resolveTenantId slug/UUID canonicalisation (PR #517 issue 2)', () => {
     assert.match(res.body.message, /tenant_id is required/);
   });
 });
+
+/**
+ * POST /api/billing/checkout-session — planResolver wiring (PR #523)
+ *
+ * Verifies that the checkout-session route now uses planResolver.buildStripeLineItems
+ * and passes trial_period_days to the Stripe adapter. Uses a stubbed stripeAdapter
+ * injected via opts.stripeAdapter to avoid hitting real Stripe.
+ */
+describe('POST /api/billing/checkout-session — planResolver wiring', () => {
+  const PLAN_WITH_SEATS = {
+    id: 'p_growth',
+    code: 'growth_monthly',
+    name: 'Growth',
+    amount_cents: 29700,
+    currency: 'usd',
+    billing_interval: 'month',
+    is_active: true,
+    provider_product_id: 'prod_growth',
+    provider_price_id_base: 'price_growth_base',
+    provider_price_id_seat: 'price_growth_seat',
+    included_seats: 5,
+    seat_unit_amount_cents: 4900,
+    trial_days: 14,
+  };
+  const PLAN_NO_SEATS = {
+    id: 'p_solo',
+    code: 'solo_monthly',
+    name: 'Solo',
+    amount_cents: 4900,
+    currency: 'usd',
+    billing_interval: 'month',
+    is_active: true,
+    provider_product_id: 'prod_solo',
+    provider_price_id_base: 'price_solo_base',
+    provider_price_id_seat: null,
+    included_seats: 1,
+    seat_unit_amount_cents: null,
+    trial_days: 0,
+  };
+  const PLAN_MISCONFIGURED = {
+    id: 'p_broken',
+    code: 'broken_monthly',
+    name: 'Broken',
+    amount_cents: 9900,
+    currency: 'usd',
+    billing_interval: 'month',
+    is_active: true,
+    // No provider_price_id_base -- triggers CONFIGURATION_ERROR in
+    // planResolver.buildStripeLineItems
+    provider_product_id: null,
+    provider_price_id_base: null,
+    provider_price_id_seat: null,
+    included_seats: 3,
+    seat_unit_amount_cents: null,
+    trial_days: 0,
+  };
+
+  // Tracks the arguments passed to the stubbed Stripe adapter so we can
+  // assert we called it with the right shape. Reset per-test in beforeEach.
+  let createCheckoutSessionCalls;
+  let stripeAdapterStub;
+
+  beforeEach(() => {
+    createCheckoutSessionCalls = [];
+    stripeAdapterStub = {
+      createCustomer: async ({ metadata }) => ({ id: `cus_${metadata?.tenant_id || 'x'}` }),
+      createCheckoutSession: async (args) => {
+        createCheckoutSessionCalls.push(args);
+        return { id: 'cs_stub', url: 'https://stripe.test/checkout/cs_stub' };
+      },
+      createPortalSession: async () => ({ url: 'https://stripe.test/portal' }),
+      verifyWebhookSignature: () => ({ event: {} }),
+      normalizePaymentEvent: () => null,
+    };
+
+    mockClient = createBillingMock({
+      tenant: [{ id: TENANT, name: 'Acme', billing_state: 'active' }],
+      billing_plans: [PLAN_WITH_SEATS, PLAN_NO_SEATS, PLAN_MISCONFIGURED],
+      billing_accounts: [],
+      tenant_subscriptions: [],
+      invoices: [],
+      invoice_line_items: [],
+      billing_events: [],
+    });
+
+    // Platform billing config must be "configured" so the route gets past the
+    // 503 guard. Easiest: set the env vars the config module reads.
+    process.env.STRIPE_PLATFORM_SECRET_KEY = 'sk_test_stub';
+    process.env.STRIPE_PLATFORM_WEBHOOK_SECRET = 'whsec_stub';
+  });
+
+  function buildAppWithAdapter(user) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = user;
+      next();
+    });
+    app.use(
+      '/api/billing',
+      createBillingRoutes(null, {
+        getSupabaseClient: () => mockClient,
+        stripeAdapter: stripeAdapterStub,
+      }),
+    );
+    return app;
+  }
+
+  it('builds Stripe line_items from plan price IDs (no extra seats)', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'growth_monthly',
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.status, 'success');
+    assert.equal(res.body.data.url, 'https://stripe.test/checkout/cs_stub');
+
+    // Exactly one createCheckoutSession call, shape A
+    assert.equal(createCheckoutSessionCalls.length, 1);
+    const call = createCheckoutSessionCalls[0];
+    assert.equal(call.mode, 'subscription');
+    assert.equal(call.trial_period_days, 14);
+    assert.deepEqual(call.line_items, [{ price: 'price_growth_base', quantity: 1 }]);
+    assert.equal(call.metadata.plan_code, 'growth_monthly');
+    assert.equal(call.metadata.seats, '0');
+  });
+
+  it('adds a seat line item when seats > included_seats', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'growth_monthly',
+        seats: 8, // 3 extra beyond included_seats=5
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 200);
+    assert.equal(createCheckoutSessionCalls.length, 1);
+    const call = createCheckoutSessionCalls[0];
+    assert.deepEqual(call.line_items, [
+      { price: 'price_growth_base', quantity: 1 },
+      { price: 'price_growth_seat', quantity: 3 },
+    ]);
+    assert.equal(call.metadata.seats, '8');
+  });
+
+  it('omits seat line item when requested seats <= included_seats', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'growth_monthly',
+        seats: 3, // less than included_seats=5
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 200);
+    const call = createCheckoutSessionCalls[0];
+    assert.equal(call.line_items.length, 1);
+    assert.equal(call.line_items[0].price, 'price_growth_base');
+  });
+
+  it('omits trial_period_days when plan.trial_days is 0 (still valid)', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'solo_monthly',
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 200);
+    const call = createCheckoutSessionCalls[0];
+    assert.equal(call.trial_period_days, 0);
+    // Solo plan has no seat price id -- line_items should contain only base
+    assert.deepEqual(call.line_items, [{ price: 'price_solo_base', quantity: 1 }]);
+  });
+
+  it('returns 400 when seats is not a non-negative integer', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    for (const bad of [-1, 1.5, 'three', {}]) {
+      const res = await request(buildAppWithAdapter(user))
+        .post('/api/billing/checkout-session')
+        .query({ tenant_id: TENANT })
+        .send({
+          tenant_id: TENANT,
+          plan_code: 'growth_monthly',
+          seats: bad,
+          success_url: 'https://app.test/success',
+          cancel_url: 'https://app.test/cancel',
+        });
+      assert.equal(res.status, 400, `seats=${JSON.stringify(bad)} must return 400`);
+      assert.match(res.body.message, /seats must be a non-negative integer/);
+    }
+    // Stripe adapter should NEVER be called when validation fails
+    assert.equal(createCheckoutSessionCalls.length, 0);
+  });
+
+  it('returns 500 CONFIGURATION_ERROR when plan is missing provider_price_id_base', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'broken_monthly',
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 500);
+    assert.equal(res.body.status, 'error');
+    assert.equal(res.body.code, 'CONFIGURATION_ERROR');
+    assert.match(res.body.message, /provider_price_id_base/);
+    // Stripe adapter never called -- we failed before reaching it
+    assert.equal(createCheckoutSessionCalls.length, 0);
+  });
+
+  it('returns 404 when plan_code is not found or inactive', async () => {
+    const user = { id: 'u1', role: 'admin', tenant_uuid: TENANT, tenant_id: TENANT };
+    const res = await request(buildAppWithAdapter(user))
+      .post('/api/billing/checkout-session')
+      .query({ tenant_id: TENANT })
+      .send({
+        tenant_id: TENANT,
+        plan_code: 'does_not_exist',
+        success_url: 'https://app.test/success',
+        cancel_url: 'https://app.test/cancel',
+      });
+
+    assert.equal(res.status, 404);
+    assert.match(res.body.message, /Plan not found/);
+    assert.equal(createCheckoutSessionCalls.length, 0);
+  });
+});
