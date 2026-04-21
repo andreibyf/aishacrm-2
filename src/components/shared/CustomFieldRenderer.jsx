@@ -81,7 +81,7 @@ export function CustomFieldRenderer({ field, value, onChange, className = '' }) 
     const baseProps = {
       id: field.field_name,
       type: getInputType(),
-      value: value || '',
+      value: value ?? '',
       onChange: handleChange,
       placeholder: field.placeholder || field.help_text || '',
       required: field.is_required || false,
@@ -114,7 +114,7 @@ export function CustomFieldRenderer({ field, value, onChange, className = '' }) 
         return (
           <Textarea
             id={field.field_name}
-            value={value || ''}
+            value={value ?? ''}
             onChange={handleChange}
             placeholder={field.placeholder || field.help_text || ''}
             required={field.is_required}
@@ -125,7 +125,7 @@ export function CustomFieldRenderer({ field, value, onChange, className = '' }) 
 
       case 'select':
         return (
-          <Select value={value || ''} onValueChange={handleChange}>
+          <Select value={value ?? ''} onValueChange={handleChange}>
             <SelectTrigger className="bg-white border-slate-300 text-slate-900 dark:bg-slate-700 dark:border-slate-600 dark:text-white">
               <SelectValue placeholder={field.placeholder || 'Select an option'} />
             </SelectTrigger>

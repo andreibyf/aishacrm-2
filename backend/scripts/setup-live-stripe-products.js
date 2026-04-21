@@ -186,7 +186,7 @@ async function main() {
   if (!key.startsWith('sk_live_')) {
     exitWith(
       1,
-      `STRIPE_PLATFORM_SECRET_KEY is not a live-mode key (starts with '${key.slice(0, 8)}'). This script is live-only.`,
+      `STRIPE_PLATFORM_SECRET_KEY is not a live-mode key (expected prefix: sk_live_). This script is live-only.`,
     );
   }
 

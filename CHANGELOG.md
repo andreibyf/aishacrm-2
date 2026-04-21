@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+<<<<<<< Updated upstream
+
 - **Platform billing UI wired into Payment Portal and Settings (`src/components/settings/BillingAdminConsole.jsx`, `src/pages/PaymentPortal.jsx`, `src/pages/Settings.jsx`, `src/components/settings/__tests__/BillingAdminConsole.test.jsx`, `src/pages/__tests__/PaymentPortal.smoke.test.jsx`, `tests/e2e/billing.spec.ts`):** Assembled the PR #519 billing components (`PlanSelector`, `CurrentSubscriptionCard`, `PaymentMethodCard`, `InvoiceTable`, `InvoiceDetailSheet`, `BillingEventTimeline`, 4 dialog components) into a single dual-mode `BillingAdminConsole` that renders either a tenant-facing billing surface (`mode="tenant"`: exempt banner OR subscription card + plan selector + payment method + invoices with click-to-drawer) or a full superadmin admin surface (`mode="superadmin"`: tenant picker via `Tenant.list()`, direct plan `assignPlan`/`changePlan` without Stripe Checkout, exemption toggle, subscription Cancel dialog, invoice Create/Issue/Void actions, and audit event timeline). Rewrote `src/pages/PaymentPortal.jsx` as a thin role-gated frame that resolves `effectiveTenantId` from (in order) `selectedTenantId` > `user.tenant_uuid` > `user.tenant_id` and delegates to `<BillingAdminConsole mode="tenant" />`; removed the old Cal.com `StripeSettings` render -- that tenant-Stripe credential UI still exists on disk and should move to Settings -> Client Integrations as a follow-up. Wired `<BillingAdminConsole mode="tenant" />` into the existing `activeTab === 'billing'` block in `src/pages/Settings.jsx` (replaces the deleted Base44-era `BillingSettings` component) and added a new superadmin-only `'billing-admin'` menu item under the Clients category that renders `<BillingAdminConsole mode="superadmin" />`. Deleted `src/components/settings/BillingSettings.jsx` (21 KB, last surviving reference was its own lazy import in Settings). Added 10 new unit tests across 2 files: 6 covering `BillingAdminConsole` (tenant-mode empty state, exempt-banner short-circuit, plan selector + invoices render for non-exempt tenant with no active sub, tenant Checkout redirect payload shape, superadmin tenant-picker empty state, superadmin direct `assignPlan` on plan select) and 4 covering `PaymentPortal` (loading-state render, delegates to console in tenant mode, prefers context tenant over user tenant, null fallback). Unit test suite grew from 78 to 88 passing across 10 files. Added `tests/e2e/billing.spec.ts` with 5 Playwright specs: 3 backend-API contract tests (`GET /api/billing/plans` returns 3 seeded plans with required fields, `GET /api/billing/account` + `GET /api/billing/invoices` return expected shape for the dev tenant) and 2 UI tests (PaymentPortal page mounts `billing-admin-console` or shows empty-tenant frame; Settings -> Platform Billing card appears under the Clients category and opens the superadmin tenant picker).
 
 ### Fixed
@@ -372,8 +374,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [6.0.6] - 2026-04-06
-
-### Added
 
 ### Added
 

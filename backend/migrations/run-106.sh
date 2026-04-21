@@ -8,9 +8,14 @@ export SB_PROJECT_DEV=efzqxjpfewkrgpdootte    # Dev/QA
 # SQL file to execute
 SQL_FILE="./106_field_customization.sql"
 
-# Database connection strings
-export MAIN_DB_URL="postgresql://postgres:Aml834VyYYH6humU@db.${SB_PROJECT}.supabase.co:5432/postgres"
-export DEV_DB_URL="postgresql://postgres:Aml834VyYYH6humU@db.${SB_PROJECT_DEV}.supabase.co:5432/postgres"
+# Database connection strings - MUST be provided via environment variables
+# Usage: MAIN_DB_URL="postgresql://..." DEV_DB_URL="postgresql://..." ./run-106.sh
+# Or use Doppler: doppler run --project aishacrm --config prd_prd -- ./run-106.sh
+if [ -z "${MAIN_DB_URL:-}" ] || [ -z "${DEV_DB_URL:-}" ]; then
+  echo "ERROR: MAIN_DB_URL and DEV_DB_URL must be set via environment or Doppler"
+  echo "Example: doppler run --project aishacrm --config prd_prd -- ./run-106.sh"
+  exit 1
+fi
 
 # Branches to apply migration to (space-separated)
 # Start with "dev" only for testing, then change to "main dev" for production

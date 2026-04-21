@@ -179,7 +179,8 @@ export default function createFieldCustomizationRoutes(_pgPool, opts = {}) {
         .eq('tenant_id', tenantId)
         .single();
 
-      if (error) throw error;
+      // PGRST116 = no rows returned by .single() — this is a 404, not a 500
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (!data) {
         return res.status(404).json({
