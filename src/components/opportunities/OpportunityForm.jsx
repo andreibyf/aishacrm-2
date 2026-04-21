@@ -74,6 +74,15 @@ export default function OpportunityForm({
   const isB2C = currentTenant?.business_model === 'b2c';
   const isSuperadmin = currentUser?.role === 'superadmin';
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
+  const labelClass = 'text-slate-700 dark:text-slate-300';
+  const inputClass =
+    'bg-white border-slate-300 text-slate-900 placeholder:text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder:text-slate-400';
+  const selectTriggerClass =
+    'bg-white border-slate-300 text-slate-900 dark:bg-slate-700 dark:border-slate-600 dark:text-white';
+  const selectContentClass =
+    'bg-white border-slate-300 text-slate-900 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200';
+  const selectItemClass =
+    'text-slate-900 hover:bg-slate-100 focus:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
 
   // Load custom fields for Opportunity entity
   const { customFields } = useCustomFields('Opportunity');
@@ -325,7 +334,7 @@ export default function OpportunityForm({
 
   return (
     <>
-      <div className="space-y-6 p-1 bg-slate-800">
+      <div className="space-y-6 p-1 bg-white dark:bg-slate-800">
         {' '}
         {/* Modified wrapper div to match outline styling */}
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -333,7 +342,7 @@ export default function OpportunityForm({
           {/* Modified form class to match outline styling */}
           <div className="grid grid-cols-1 gap-4">
             <div>
-              <Label htmlFor="opp-name" className="text-slate-300">
+              <Label htmlFor="opp-name" className={labelClass}>
                 {isB2C ? 'Deal Name' : 'Opportunity Name'} <span className="text-red-400">*</span>
               </Label>
               <Input
@@ -342,14 +351,14 @@ export default function OpportunityForm({
                 value={formData.name}
                 onChange={(e) => handleChange('name', e.target.value)}
                 required
-                className="bg-slate-700 border-slate-600 text-white"
+                className={inputClass}
                 placeholder="Enter opportunity name"
               />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="opp-amount" className="text-slate-300">
+              <Label htmlFor="opp-amount" className={labelClass}>
                 Value
               </Label>
               <Input
@@ -359,13 +368,13 @@ export default function OpportunityForm({
                 step="0.01"
                 value={formData.amount}
                 onChange={(e) => handleChange('amount', e.target.value)}
-                className="bg-slate-700 border-slate-600 text-white"
+                className={inputClass}
                 placeholder="0.00"
               />
             </div>
 
             <div>
-              <Label htmlFor="opp-close-date" className="text-slate-300">
+              <Label htmlFor="opp-close-date" className={labelClass}>
                 Expected Close Date
               </Label>
               <Input
@@ -374,34 +383,30 @@ export default function OpportunityForm({
                 type="date"
                 value={formData.close_date}
                 onChange={(e) => handleChange('close_date', e.target.value)}
-                className="bg-slate-700 border-slate-600 text-white"
+                className={inputClass}
               />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="opp-stage" className="text-slate-300">
+              <Label htmlFor="opp-stage" className={labelClass}>
                 Stage
               </Label>
               <Select
                 value={formData.stage}
                 onValueChange={(value) => handleChange('stage', value)}
               >
-                <SelectTrigger id="opp-stage" className="bg-slate-700 border-slate-600 text-white">
+                <SelectTrigger id="opp-stage" className={selectTriggerClass}>
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
                 <SelectContent
-                  className="bg-slate-800 border-slate-600 text-slate-200"
+                  className={selectContentClass}
                   position="popper"
                   sideOffset={5}
                   style={{ zIndex: 2147483647 }}
                 >
                   {filteredStageOptions.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                    >
+                    <SelectItem key={option.value} value={option.value} className={selectItemClass}>
                       {option.label}
                     </SelectItem>
                   ))}
@@ -410,35 +415,26 @@ export default function OpportunityForm({
             </div>
 
             <div>
-              <Label htmlFor="opp-type" className="text-slate-300">
+              <Label htmlFor="opp-type" className={labelClass}>
                 Type
               </Label>
               <Select value={formData.type} onValueChange={(value) => handleChange('type', value)}>
-                <SelectTrigger id="opp-type" className="bg-slate-700 border-slate-600 text-white">
+                <SelectTrigger id="opp-type" className={selectTriggerClass}>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent
-                  className="bg-slate-800 border-slate-600 text-slate-200"
+                  className={selectContentClass}
                   position="popper"
                   sideOffset={5}
                   style={{ zIndex: 2147483647 }}
                 >
-                  <SelectItem
-                    value="new_business"
-                    className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                  >
+                  <SelectItem value="new_business" className={selectItemClass}>
                     New Business
                   </SelectItem>
-                  <SelectItem
-                    value="existing_business"
-                    className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                  >
+                  <SelectItem value="existing_business" className={selectItemClass}>
                     Existing Business
                   </SelectItem>
-                  <SelectItem
-                    value="renewal"
-                    className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                  >
+                  <SelectItem value="renewal" className={selectItemClass}>
                     Renewal
                   </SelectItem>
                 </SelectContent>
@@ -448,7 +444,7 @@ export default function OpportunityForm({
           {/* Account (Optional) */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="opp-account" className="text-slate-300">
+              <Label htmlFor="opp-account" className={labelClass}>
                 {isB2C ? 'Customer' : 'Account'}
               </Label>
               <Button
@@ -467,13 +463,13 @@ export default function OpportunityForm({
               onChange={(value) => handleChange('account_id', value)}
               accounts={accounts}
               placeholder="Search for account (optional)"
-              className="bg-slate-700 border-slate-600 text-white"
+              className={inputClass}
             />
           </div>
           {/* Contact (Optional) */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="opp-contact" className="text-slate-300">
+              <Label htmlFor="opp-contact" className={labelClass}>
                 Contact
               </Label>
               {formData.account_id && (
@@ -494,12 +490,12 @@ export default function OpportunityForm({
               onChange={(value) => handleChange('contact_id', value)}
               contacts={filteredContacts}
               placeholder="Search for contact (optional)"
-              className="bg-slate-700 border-slate-600 text-white"
+              className={inputClass}
             />
           </div>
           {/* Lead (Optional) - always show, even if no leads exist */}
           <div>
-            <Label htmlFor="opp-lead" className="text-slate-300">
+            <Label htmlFor="opp-lead" className={labelClass}>
               Related Lead
             </Label>
             <Select
@@ -508,27 +504,20 @@ export default function OpportunityForm({
                 handleChange('lead_id', value === '__none__' ? null : value)
               }
             >
-              <SelectTrigger id="opp-lead" className="bg-slate-700 border-slate-600 text-white">
+              <SelectTrigger id="opp-lead" className={selectTriggerClass}>
                 <SelectValue placeholder="Select lead (optional)" />
               </SelectTrigger>
               <SelectContent
-                className="bg-slate-800 border-slate-600 text-slate-200"
+                className={selectContentClass}
                 position="popper"
                 sideOffset={5}
                 style={{ zIndex: 2147483647 }}
               >
-                <SelectItem
-                  value="__none__"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="__none__" className={selectItemClass}>
                   None
                 </SelectItem>
                 {filteredLeads.map((lead) => (
-                  <SelectItem
-                    key={lead.id}
-                    value={lead.id}
-                    className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                  >
+                  <SelectItem key={lead.id} value={lead.id} className={selectItemClass}>
                     {lead.first_name} {lead.last_name} {lead.company ? `- ${lead.company}` : ''}
                   </SelectItem>
                 ))}
@@ -553,68 +542,44 @@ export default function OpportunityForm({
           />
           {/* Lead Source */}
           <div>
-            <Label htmlFor="opp-source" className="text-slate-300">
+            <Label htmlFor="opp-source" className={labelClass}>
               Lead Source
             </Label>
             <Select
               value={formData.lead_source}
               onValueChange={(value) => handleChange('lead_source', value)}
             >
-              <SelectTrigger id="opp-source" className="bg-slate-700 border-slate-600 text-white">
+              <SelectTrigger id="opp-source" className={selectTriggerClass}>
                 <SelectValue placeholder="Select source" />
               </SelectTrigger>
               <SelectContent
-                className="bg-slate-800 border-slate-600 text-slate-200"
+                className={selectContentClass}
                 position="popper"
                 sideOffset={5}
                 style={{ zIndex: 2147483647 }}
               >
-                <SelectItem
-                  value="website"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="website" className={selectItemClass}>
                   Website
                 </SelectItem>
-                <SelectItem
-                  value="referral"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="referral" className={selectItemClass}>
                   Referral
                 </SelectItem>
-                <SelectItem
-                  value="cold_call"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="cold_call" className={selectItemClass}>
                   Cold Call
                 </SelectItem>
-                <SelectItem
-                  value="email"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="email" className={selectItemClass}>
                   Email
                 </SelectItem>
-                <SelectItem
-                  value="social_media"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="social_media" className={selectItemClass}>
                   Social Media
                 </SelectItem>
-                <SelectItem
-                  value="trade_show"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="trade_show" className={selectItemClass}>
                   Trade Show
                 </SelectItem>
-                <SelectItem
-                  value="advertising"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="advertising" className={selectItemClass}>
                   Advertising
                 </SelectItem>
-                <SelectItem
-                  value="other"
-                  className="text-slate-200 hover:bg-slate-700 focus:bg-slate-700"
-                >
+                <SelectItem value="other" className={selectItemClass}>
                   Other
                 </SelectItem>
               </SelectContent>
@@ -622,7 +587,7 @@ export default function OpportunityForm({
           </div>
           {/* Description */}
           <div>
-            <Label htmlFor="opp-description" className="text-slate-300">
+            <Label htmlFor="opp-description" className={labelClass}>
               Description
             </Label>
             <Textarea
@@ -630,14 +595,14 @@ export default function OpportunityForm({
               name="description"
               value={formData.description}
               onChange={(e) => handleChange('description', e.target.value)}
-              className="bg-slate-700 border-slate-600 text-white"
+              className={inputClass}
               rows={3}
               placeholder="Describe the opportunity..."
             />
           </div>
           {/* Next Step */}
           <div>
-            <Label htmlFor="opp-next-step" className="text-slate-300">
+            <Label htmlFor="opp-next-step" className={labelClass}>
               Next Step
             </Label>
             <Input
@@ -645,13 +610,13 @@ export default function OpportunityForm({
               name="next_step"
               value={formData.next_step}
               onChange={(e) => handleChange('next_step', e.target.value)}
-              className="bg-slate-700 border-slate-600 text-white"
+              className={inputClass}
               placeholder="What's the next action?"
             />
           </div>
           {/* Competitor */}
           <div>
-            <Label htmlFor="opp-competitor" className="text-slate-300">
+            <Label htmlFor="opp-competitor" className={labelClass}>
               Competitor
             </Label>
             <Input
@@ -659,18 +624,18 @@ export default function OpportunityForm({
               name="competitor"
               value={formData.competitor}
               onChange={(e) => handleChange('competitor', e.target.value)}
-              className="bg-slate-700 border-slate-600 text-white"
+              className={inputClass}
               placeholder="Who are you competing against?"
             />
           </div>
           {/* Tags */}
           <div>
-            <Label className="text-slate-300">Tags</Label>
+            <Label className={labelClass}>Tags</Label>
             <TagInput
               value={formData.tags}
               onChange={(value) => handleChange('tags', value)}
               placeholder="Add tags..."
-              className="bg-slate-700 border-slate-600"
+              className="bg-white border-slate-300 text-slate-900 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
             />
           </div>
           {/* Custom Fields */}

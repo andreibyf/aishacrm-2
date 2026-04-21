@@ -34,6 +34,9 @@ import { useOpportunitiesBulkOps } from '@/hooks/useOpportunitiesBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function OpportunitiesPage() {
+  const VIEW_MODE_STORAGE_KEY = 'aisha:opportunities:viewMode';
+  const DESKTOP_DEFAULT_VIEW_MODE = 'table';
+  const VALID_VIEW_MODES = ['table', 'grid', 'kanban'];
   const { plural: opportunitiesLabel, singular: opportunityLabel } =
     useEntityLabel('opportunities');
   const loadingToast = useLoadingToast();
@@ -52,9 +55,12 @@ export default function OpportunitiesPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
-  const [viewMode, setViewMode] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'table',
-  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return DESKTOP_DEFAULT_VIEW_MODE;
+    if (window.innerWidth < 640) return 'grid';
+    const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE;
+  });
   const [selectedOpportunities, setSelectedOpportunities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -62,10 +68,23 @@ export default function OpportunitiesPage() {
   // Auto-switch to card view on mobile screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
-    const handler = (e) => setViewMode(e.matches ? 'grid' : 'table');
+    const handler = (e) => {
+      if (e.matches) {
+        setViewMode('grid');
+        return;
+      }
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      setViewMode(VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE);
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth < 640) return;
+    if (!VALID_VIEW_MODES.includes(viewMode)) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);

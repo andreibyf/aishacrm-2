@@ -40,6 +40,9 @@ import { useActivitiesBulkOps } from '@/hooks/useActivitiesBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function ActivitiesPage() {
+  const VIEW_MODE_STORAGE_KEY = 'aisha:activities:viewMode';
+  const DESKTOP_DEFAULT_VIEW_MODE = 'list';
+  const VALID_VIEW_MODES = ['list', 'grid'];
   const { plural: activitiesLabel, singular: activityLabel } = useEntityLabel('activities');
   const loadingToast = useLoadingToast();
   const { user } = useUser();
@@ -59,9 +62,12 @@ export default function ActivitiesPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
-  const [viewMode, setViewMode] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
-  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return DESKTOP_DEFAULT_VIEW_MODE;
+    if (window.innerWidth < 640) return 'grid';
+    const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE;
+  });
   const [selectedActivities, setSelectedActivities] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -69,10 +75,23 @@ export default function ActivitiesPage() {
   // Auto-switch to card view on mobile screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
-    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    const handler = (e) => {
+      if (e.matches) {
+        setViewMode('grid');
+        return;
+      }
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      setViewMode(VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE);
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth < 640) return;
+    if (!VALID_VIEW_MODES.includes(viewMode)) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);

@@ -45,10 +45,45 @@ async function createEmployee(payload) {
 }
 
 async function deleteEmployee(id) {
+  // Prefer direct Supabase delete when service-role creds are available —
+  // the /api/employees/:id DELETE route requires auth and silently fails without it,
+  // which was the root cause of the dev-env employees-table leak (sync-employee-*@example.com rows).
+  if (supabase) {
+    const { error } = await supabase.from('employees').delete().eq('id', id);
+    return error ? 500 : 204;
+  }
   const res = await fetch(`${BASE_URL}/api/employees/${id}?tenant_id=${TENANT_ID}`, {
     method: 'DELETE',
   });
   return res.status;
+}
+
+/**
+ * Belt-and-suspenders sweep: remove any employees matching this suite's test-email patterns
+ * for the test tenant. Catches rows orphaned by aborted runs, early-return skips, or
+ * mid-test process kills. Requires Supabase service-role creds; no-op otherwise.
+ *
+ * Exported (via module-scope) for use in the cleanup-behaviour test cases below.
+ */
+async function sweepLeakedTestEmployees() {
+  if (!supabase) return { swept: 0, skipped: true };
+  const patterns = [
+    'sync-employee-%@example.com',
+    'sync-linked-%@example.com',
+    'employee-test-%@example.com',
+    'new-hire-test-%@example.com',
+  ];
+  let swept = 0;
+  for (const pat of patterns) {
+    const { data, error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('tenant_id', TENANT_ID)
+      .like('email', pat)
+      .select('id');
+    if (!error && Array.isArray(data)) swept += data.length;
+  }
+  return { swept, skipped: false };
 }
 
 describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
@@ -79,6 +114,18 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
     }
     if (supabase && createdUserIds.length > 0) {
       await supabase.from('users').delete().in('id', createdUserIds);
+    }
+    // Belt-and-suspenders: sweep any leaked test rows by email pattern (handles early-return skips,
+    // aborted runs, etc.). Idempotent and tenant-scoped.
+    try {
+      const { swept } = await sweepLeakedTestEmployees();
+      if (swept > 0) {
+         
+        console.warn(`[cleanup] sweepLeakedTestEmployees removed ${swept} orphan rows`);
+      }
+    } catch (err) {
+       
+      console.warn('[cleanup] sweepLeakedTestEmployees failed:', err?.message || err);
     }
   });
 
@@ -508,7 +555,12 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
         role: 'Sales Rep',
         status: 'active',
         tenant_id: TENANT_ID,
-        metadata: { user_email: linkedUserEmail },
+        // IMPORTANT: spread TestFactory defaults (is_test_data, test_run_id, etc.)
+        // rather than overriding them with a bare { user_email } object.
+        metadata: {
+          ...TestFactory.employee({}).metadata,
+          user_email: linkedUserEmail,
+        },
       });
 
       const { data: employee, error: employeeErr } = await supabase
@@ -518,6 +570,9 @@ describe('Employee Routes', { skip: !SHOULD_RUN }, () => {
         .single();
 
       assert.ok(!employeeErr, `should create linked employee: ${employeeErr?.message}`);
+      // Push the id IMMEDIATELY — before any assertion or early-return skip path — so the
+      // after() cleanup hook always has it. (Previously this push ran, but the cleanup itself
+      // was broken because it went through the unauthenticated API DELETE route.)
       createdIds.push(employee.id);
 
       const cookie = createAuthCookie({
