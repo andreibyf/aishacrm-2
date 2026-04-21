@@ -685,7 +685,11 @@ export default function UniversalDetailPanel({
   const renderContactInfo = () => {
     const infoFields = [];
 
-    if (entity.email) {
+    // Guard: these fields must be strings. Some entities (e.g. Activity of type
+    // 'email') carry objects at entity.email (shape { to, subject }) via
+    // expandMetadata spreading metadata keys at the top level. Rendering an
+    // object as a React child throws React error #31.
+    if (typeof entity.email === 'string' && entity.email) {
       infoFields.push(
         <div key="email" className="flex items-center gap-3">
           <Mail className="w-4 h-4 text-slate-400 dark:text-slate-400" />
@@ -702,7 +706,7 @@ export default function UniversalDetailPanel({
       );
     }
 
-    if (entity.phone) {
+    if (typeof entity.phone === 'string' && entity.phone) {
       infoFields.push(
         <div key="phone" className="flex items-center gap-3">
           <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
@@ -719,7 +723,7 @@ export default function UniversalDetailPanel({
       );
     }
 
-    if (entity.mobile) {
+    if (typeof entity.mobile === 'string' && entity.mobile) {
       infoFields.push(
         <div key="mobile" className="flex items-center gap-3">
           <Phone className="w-4 h-4 text-slate-400 dark:text-slate-400" />
@@ -758,12 +762,31 @@ export default function UniversalDetailPanel({
         // Skip rendering if value is null or undefined
         if (value === null || typeof value === 'undefined') return;
 
+        // Safety check: If value is a plain object (not a React element), serialize it
+        // This prevents "Objects are not valid as a React child" errors
+        let safeValue = value;
+        if (
+          value !== null &&
+          typeof value === 'object' &&
+          !value.$$typeof && // Not a React element
+          !(value instanceof Date) &&
+          !Array.isArray(value)
+        ) {
+          safeValue = (
+            <pre className="text-xs text-slate-400 whitespace-pre-wrap">
+              {JSON.stringify(value, null, 2)}
+            </pre>
+          );
+        }
+
         detailFields.push(
           <div key={`display-${label}`} className="grid grid-cols-2 gap-4 items-center">
             <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
               {label}
             </Label>
-            <div className="text-lg text-slate-900 dark:text-slate-100 font-medium">{value}</div>
+            <div className="text-lg text-slate-900 dark:text-slate-100 font-medium">
+              {safeValue}
+            </div>
           </div>,
         );
       });
@@ -856,8 +879,23 @@ export default function UniversalDetailPanel({
           value = (
             <Badge className={getStatusColor(value)}>{String(value).replace(/_/g, ' ')}</Badge>
           );
+        } else if (
+          typeof value === 'object' &&
+          value !== null &&
+          !Array.isArray(value) &&
+          !(value instanceof Date)
+        ) {
+          // Safety: If value is still an object at this point, serialize it to prevent React errors
+          value = (
+            <pre className="text-xs text-slate-400 whitespace-pre-wrap">
+              {JSON.stringify(value, null, 2)}
+            </pre>
+          );
         } else if (typeof value === 'string') {
           value = String(value).replace(/_/g, ' ');
+        } else {
+          // Final fallback: convert any other type to string
+          value = String(value);
         }
 
         detailFields.push(

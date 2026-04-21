@@ -5,15 +5,15 @@ import { getRuntimeEnv, shouldDisableSecureMode } from '@/utils/runtimeEnv';
 
 /**
  * OpenReplay Session Replay & Co-browsing Hook
- * 
+ *
  * Provides session replay and live co-browsing (Assist) functionality.
- * 
+ *
  * OpenReplay Features:
  * - Session Replay: Record user sessions with full context
  * - Assist: Live co-browsing with remote control
  * - DevTools: Network, console, performance metrics
  * - Privacy Controls: Data sanitization & masking
- * 
+ *
  * @returns {Object} OpenReplay instance and control functions
  */
 export function useOpenReplay() {
@@ -38,6 +38,19 @@ export function useOpenReplay() {
         ingestPoint: ingestPoint || undefined, // Use default cloud if not specified
         // Docker local uses a production build on http://localhost, so allow insecure mode there too.
         __DISABLE_SECURE_MODE: shouldDisableSecureMode(),
+        // Canvas recording configuration
+        captureCanvasMedia: true,
+        captureIFrames: true,
+        // Privacy settings - mask sensitive data
+        obscureTextEmails: false,
+        obscureTextNumbers: false,
+        obscureInputEmails: false,
+        obscureInputNumbers: false,
+        // Ensure full DOM snapshot, not partial canvas
+        snapshot: {
+          quality: 'high',
+          privacy: 'plain',
+        },
       });
 
       // Enable Assist plugin for live co-browsing (cursor visibility + remote control workflow)
@@ -45,7 +58,10 @@ export function useOpenReplay() {
         tracker.use(trackerAssist());
         console.info('[OpenReplay] Assist plugin enabled');
       } catch (assistErr) {
-        console.warn('[OpenReplay] Assist plugin init failed, continuing without Assist:', assistErr);
+        console.warn(
+          '[OpenReplay] Assist plugin init failed, continuing without Assist:',
+          assistErr,
+        );
       }
 
       // Start tracking session
@@ -88,7 +104,7 @@ export function useOpenReplay() {
 
     try {
       trackerRef.current.setUserID(userId);
-      
+
       // Set metadata
       if (userInfo.email) {
         trackerRef.current.setMetadata('email', userInfo.email);

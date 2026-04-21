@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Activity } from '@/api/entities';
 import { format } from 'date-fns';
 import UniversalDetailPanel from '../shared/UniversalDetailPanel';
+import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
+import ErrorBoundary from '../shared/ErrorBoundary';
 import {
   getCurrentTimezoneOffset,
   getTimezoneDisplayName,
@@ -278,19 +280,31 @@ const ActivityDetailPanel = ({
       : [];
 
   return (
-    <UniversalDetailPanel
-      entity={activity}
-      entityType="activity"
-      open={open}
-      onOpenChange={onOpenChange}
-      onEdit={onEdit}
-      onDelete={onDelete}
-      user={user}
-      displayData={displayData}
-      customActions={customActions}
-      customSections={customSections}
-      showNotes={true}
-    />
+    <ErrorBoundary
+      variant="inline"
+      label={`ActivityDetailPanel[id=${activity?.id}, type=${activity?.type}]`}
+    >
+      <UniversalDetailPanel
+        entity={activity}
+        entityType="activity"
+        open={open}
+        onOpenChange={onOpenChange}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        user={user}
+        displayData={displayData}
+        customActions={customActions}
+        customSections={[
+          {
+            content: (
+              <CustomFieldsDisplay entityType="Activity" metadata={activity.metadata} showHeader />
+            ),
+          },
+          ...customSections,
+        ]}
+        showNotes={true}
+      />
+    </ErrorBoundary>
   );
 };
 

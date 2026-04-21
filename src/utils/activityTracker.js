@@ -3,7 +3,7 @@ import { getBackendUrl } from '@/api/backendUrl';
 
 /**
  * Activity Tracker Singleton
- * 
+ *
  * Provides a simple interface to emit activity events without React hooks.
  * Can be used from anywhere in the app (API functions, event handlers, etc.)
  */
@@ -23,6 +23,17 @@ function getCookie(name) {
 }
 
 /**
+ * Check if auth cookies are ready
+ * @returns {boolean} True if auth cookies are available
+ */
+function hasAuthCookies() {
+  const token =
+    getCookie('aisha_access_token') || getCookie('aisha_access') || getCookie('aisha_accessToken');
+
+  return !!token;
+}
+
+/**
  * Initialize socket connection (called automatically on first emit)
  */
 function getSocket() {
@@ -35,13 +46,18 @@ function getSocket() {
     return socketInstance;
   }
 
+  // IMPORTANT: Don't attempt connection if auth cookies aren't ready yet
+  // This prevents "Authentication required" errors during initial page load
+  if (!hasAuthCookies()) {
+    console.debug('ActivityTracker: Auth cookies not ready, deferring connection');
+    return null;
+  }
+
   connectionAttempted = true;
 
   const backendUrl = getBackendUrl();
   const token =
-    getCookie('aisha_access_token') ||
-    getCookie('aisha_access') ||
-    getCookie('aisha_accessToken');
+    getCookie('aisha_access_token') || getCookie('aisha_access') || getCookie('aisha_accessToken');
 
   const socketOptions = {
     transports: ['websocket', 'polling'],
@@ -64,6 +80,15 @@ function getSocket() {
 
   socketInstance.on('disconnect', (reason) => {
     console.log('ActivityTracker: Disconnected', reason);
+  });
+
+  socketInstance.on('connect_error', (err) => {
+    console.warn('ActivityTracker: Connection error:', err.message);
+    // Reset connection flag to allow retry on next emit
+    if (err.message === 'Authentication required') {
+      connectionAttempted = false;
+      socketInstance = null;
+    }
   });
 
   return socketInstance;

@@ -1,151 +1,57 @@
-
 import { useState, useEffect } from 'react';
-import { FieldCustomization as FieldCustomizationEntity } from "@/api/entities";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  Save, 
-  X, 
+import { FieldCustomization as FieldCustomizationEntity } from '@/api/entities';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Save,
+  X,
   Settings2,
   Users,
   Building2,
   TrendingUp,
   Target,
-  Calendar
-} from "lucide-react";
+  Calendar,
+  Loader2,
+  Info,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { CardDescription } from "@/components/ui/card"; // Import CardDescription
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 const entityIcons = {
   Contact: Users,
   Account: Building2,
   Lead: TrendingUp,
   Opportunity: Target,
-  Activity: Calendar
-};
-
-const defaultFields = {
-  Contact: [
-    { field_name: 'first_name', field_label: 'First Name', field_type: 'text', is_required: true },
-    { field_name: 'last_name', field_label: 'Last Name', field_type: 'text', is_required: true },
-    { field_name: 'email', field_label: 'Email', field_type: 'email', is_required: true },
-    { field_name: 'phone', field_label: 'Phone', field_type: 'phone' },
-    { field_name: 'job_title', field_label: 'Job Title', field_type: 'text' },
-    { field_name: 'status', field_label: 'Status', field_type: 'select', options: [
-      { value: 'prospect', label: 'Prospect' },
-      { value: 'customer', label: 'Customer' },
-      { value: 'active', label: 'Active' },
-      { value: 'inactive', label: 'Inactive' }
-    ]}
-  ],
-  Account: [
-    { field_name: 'name', field_label: 'Account Name', field_type: 'text', is_required: true },
-    { field_name: 'type', field_label: 'Account Type', field_type: 'select', options: [
-      { value: 'prospect', label: 'Prospect' },
-      { value: 'customer', label: 'Customer' },
-      { value: 'partner', label: 'Partner' },
-      { value: 'competitor', label: 'Competitor' },
-      { value: 'vendor', label: 'Vendor' }
-    ]},
-    { field_name: 'industry', field_label: 'Industry', field_type: 'select', options: [
-      { value: 'aerospace_and_defense', label: 'Aerospace & Defense' },
-      { value: 'agriculture', label: 'Agriculture' },
-      { value: 'automotive', label: 'Automotive' },
-      { value: 'banking_and_financial_services', label: 'Banking & Financial Services' },
-      { value: 'construction', label: 'Construction' },
-      { value: 'consumer_goods', label: 'Consumer Goods' },
-      { value: 'education', label: 'Education' },
-      { value: 'energy_and_utilities', label: 'Energy & Utilities' },
-      { value: 'entertainment_and_media', label: 'Entertainment & Media' },
-      { value: 'government_and_public_sector', label: 'Government & Public Sector' },
-      { value: 'green_energy_and_solar', label: 'Green Energy & Solar' },
-      { value: 'healthcare_and_life_sciences', label: 'Healthcare & Life Sciences' },
-      { value: 'hospitality_and_travel', label: 'Hospitality & Travel' },
-      { value: 'information_technology', label: 'Information Technology (IT) & Software' },
-      { value: 'insurance', label: 'Insurance' },
-      { value: 'legal_services', label: 'Legal Services' },
-      { value: 'logistics_and_transportation', label: 'Logistics & Transportation' },
-      { value: 'manufacturing', label: 'Manufacturing' },
-      { value: 'marketing_advertising_pr', label: 'Marketing, Advertising & PR' },
-      { value: 'media_and_publishing', label: 'Media & Publishing' },
-      { value: 'mining_and_metals', label: 'Mining & Metals' },
-      { value: 'nonprofit_and_ngos', label: 'Nonprofit & NGOs' },
-      { value: 'pharmaceuticals_and_biotechnology', label: 'Pharmaceuticals & Biotechnology' },
-      { value: 'professional_services', label: 'Professional Services (Consulting, Accounting, HR)' },
-      { value: 'real_estate', label: 'Real Estate' },
-      { value: 'retail_and_wholesale', label: 'Retail & Wholesale' },
-      { value: 'telecommunications', label: 'Telecommunications' },
-      { value: 'textiles_and_apparel', label: 'Textiles & Apparel' }
-    ]}
-  ],
-  Lead: [
-    { field_name: 'first_name', field_label: 'First Name', field_type: 'text', is_required: true },
-    { field_name: 'last_name', field_label: 'Last Name', field_type: 'text', is_required: true },
-    { field_name: 'email', field_label: 'Email', field_type: 'email', is_required: true },
-    { field_name: 'status', field_label: 'Status', field_type: 'select', options: [
-      { value: 'new', label: 'New' },
-      { value: 'contacted', label: 'Contacted' },
-      { value: 'qualified', label: 'Qualified' },
-      { value: 'unqualified', label: 'Unqualified' },
-      { value: 'converted', label: 'Converted' },
-      { value: 'lost', label: 'Lost' }
-    ]},
-    { field_name: 'source', field_label: 'Lead Source', field_type: 'select', options: [
-      { value: 'website', label: 'Website' },
-      { value: 'referral', label: 'Referral' },
-      { value: 'cold_call', label: 'Cold Call' },
-      { value: 'email', label: 'Email' },
-      { value: 'social_media', label: 'Social Media' },
-      { value: 'other', label: 'Other' }
-    ]}
-  ],
-  Opportunity: [
-    { field_name: 'name', field_label: 'Opportunity Name', field_type: 'text', is_required: true },
-    { field_name: 'stage', field_label: 'Stage', field_type: 'select', options: [
-      { value: 'prospecting', label: 'Prospecting' },
-      { value: 'qualification', label: 'Qualification' },
-      { value: 'proposal', label: 'Proposal' },
-      { value: 'negotiation', label: 'Negotiation' },
-      { value: 'closed_won', label: 'Closed Won' },
-      { value: 'closed_lost', label: 'Closed Lost' }
-    ]},
-    { field_name: 'amount', field_label: 'Amount', field_type: 'number' }
-  ],
-  Activity: [
-    { field_name: 'type', field_label: 'Activity Type', field_type: 'select', options: [
-      { value: 'call', label: 'Call' },
-      { value: 'email', label: 'Email' },
-      { value: 'meeting', label: 'Meeting' },
-      { value: 'task', label: 'Task' }
-    ]},
-    { field_name: 'subject', field_label: 'Subject', field_type: 'text', is_required: true },
-    { field_name: 'status', field_label: 'Status', field_type: 'select', options: [
-      { value: 'scheduled', label: 'Scheduled' },
-      { value: 'completed', label: 'Completed' },
-      { value: 'cancelled', label: 'Cancelled' }
-    ]}
-  ]
+  Activity: Calendar,
 };
 
 export default function FieldCustomization() {
   const [customizations, setCustomizations] = useState([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [activeEntity, setActiveEntity] = useState('Contact');
   const [editingField, setEditingField] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
@@ -156,76 +62,95 @@ export default function FieldCustomization() {
 
   const loadCustomizations = async () => {
     try {
+      setLoading(true);
       const data = await FieldCustomizationEntity.list();
       setCustomizations(data);
+      toast.success('Custom fields loaded successfully');
     } catch (error) {
-      console.error("Error loading customizations:", error);
+      console.error('Error loading customizations:', error);
+      toast.error(`Failed to load custom fields: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const getFieldsForEntity = (entityName) => {
-    const customFields = customizations.filter(c => c.entity_name === entityName);
-    const defaultFieldsForEntity = defaultFields[entityName] || [];
-    
-    // Merge custom fields with defaults, prioritizing customizations
-    const mergedFields = defaultFieldsForEntity.map(defaultField => {
-      const customField = customFields.find(c => c.field_name === defaultField.field_name);
-      return customField || { ...defaultField, entity_name: entityName };
-    });
-
-    // Add any custom fields that don't exist in defaults
-    const customOnlyFields = customFields.filter(c => 
-      !defaultFieldsForEntity.some(d => d.field_name === c.field_name)
+    // Only return custom fields with custom_ prefix
+    const customFields = customizations.filter(
+      (c) => c.entity_name === entityName && c.field_name.startsWith('custom_'),
     );
 
-    return [...mergedFields, ...customOnlyFields].sort((a, b) => 
-      (a.display_order || 0) - (b.display_order || 0)
-    );
+    return customFields.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
   };
 
   const handleSaveField = async (fieldData) => {
     try {
-      const existingCustomization = customizations.find(c => 
-        c.entity_name === activeEntity && c.field_name === fieldData.field_name
+      setIsSaving(true);
+      const existingCustomization = customizations.find(
+        (c) => c.entity_name === activeEntity && c.field_name === fieldData.field_name,
       );
 
       if (existingCustomization) {
         await FieldCustomizationEntity.update(existingCustomization.id, fieldData);
+        toast.success('Custom field updated successfully');
       } else {
         await FieldCustomizationEntity.create({ ...fieldData, entity_name: activeEntity });
+        toast.success('Custom field created successfully');
       }
 
       await loadCustomizations();
       setShowDialog(false);
       setEditingField(null);
     } catch (error) {
-      console.error("Error saving field customization:", error);
+      console.error('Error saving field customization:', error);
+      toast.error(`Failed to save custom field: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDeleteField = async (fieldName) => {
-    if (!confirm("Are you sure you want to delete this field customization?")) return;
-    
+    if (!confirm('Are you sure you want to delete this field customization?')) return;
+
     try {
-      const customization = customizations.find(c => 
-        c.entity_name === activeEntity && c.field_name === fieldName
+      const customization = customizations.find(
+        (c) => c.entity_name === activeEntity && c.field_name === fieldName,
       );
-      
+
       if (customization) {
         await FieldCustomizationEntity.delete(customization.id);
+        toast.success('Custom field deleted successfully');
         await loadCustomizations();
       }
     } catch (error) {
-      console.error("Error deleting field customization:", error);
+      console.error('Error deleting field customization:', error);
+      toast.error(`Failed to delete custom field: ${error.message}`);
     }
   };
 
   const entities = ['Contact', 'Account', 'Lead', 'Opportunity', 'Activity'];
 
+  if (loading) {
+    return (
+      <Card className="bg-slate-800 border-slate-700">
+        <CardContent className="p-8 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-400 mr-2" />
+          <span className="text-slate-300">Loading custom fields...</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      <Alert className="bg-blue-900/20 border-blue-500">
+        <Info className="h-4 w-4 text-blue-400" />
+        <AlertDescription className="text-slate-300">
+          <strong>Note:</strong> This section is for adding <strong>custom fields</strong> only
+          (e.g., custom_region, custom_priority). To rename navigation menu items or form titles
+          (e.g., "Accounts" → "Clients"), use <strong>Settings → Navigation Labels</strong> instead.
+        </AlertDescription>
+      </Alert>
       <Card className="bg-slate-800 border-slate-700">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-slate-100">
@@ -239,10 +164,14 @@ export default function FieldCustomization() {
         <CardContent>
           <Tabs value={activeEntity} onValueChange={setActiveEntity}>
             <TabsList className="grid w-full grid-cols-5 bg-slate-700">
-              {entities.map(entity => {
+              {entities.map((entity) => {
                 const Icon = entityIcons[entity];
                 return (
-                  <TabsTrigger key={entity} value={entity} className="flex items-center gap-2 text-slate-300 data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                  <TabsTrigger
+                    key={entity}
+                    value={entity}
+                    className="flex items-center gap-2 text-slate-300 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                  >
                     <Icon className="w-4 h-4" />
                     {entity}
                   </TabsTrigger>
@@ -250,13 +179,16 @@ export default function FieldCustomization() {
               })}
             </TabsList>
 
-            {entities.map(entity => (
+            {entities.map((entity) => (
               <TabsContent key={entity} value={entity} className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold text-slate-100">{entity} Fields</h3>
                   <Dialog open={showDialog} onOpenChange={setShowDialog}>
                     <DialogTrigger asChild>
-                      <Button onClick={() => setEditingField(null)} className="bg-blue-600 hover:bg-blue-700">
+                      <Button
+                        onClick={() => setEditingField(null)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
                         <Plus className="w-4 h-4 mr-2" />
                         Add Custom Field
                       </Button>
@@ -271,13 +203,14 @@ export default function FieldCustomization() {
                         field={editingField}
                         onSave={handleSaveField}
                         onCancel={() => setShowDialog(false)}
+                        isSaving={isSaving}
                       />
                     </DialogContent>
                   </Dialog>
                 </div>
 
                 <div className="grid gap-4">
-                  {getFieldsForEntity(entity).map(field => (
+                  {getFieldsForEntity(entity).map((field) => (
                     <FieldItem
                       key={field.field_name}
                       field={field}
@@ -302,29 +235,42 @@ function FieldItem({ field, onEdit, onDelete }) {
   const isCustomized = field.id; // Has ID means it's been customized
 
   return (
-    <Card className={`border bg-slate-700 ${isCustomized ? 'border-blue-500 bg-blue-900/20' : 'border-slate-600'}`}>
+    <Card
+      className={`border bg-slate-700 ${isCustomized ? 'border-blue-500 bg-blue-900/20' : 'border-slate-600'}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <h4 className="font-medium text-slate-200">{field.field_label}</h4>
-              <Badge variant="outline" className="bg-slate-600 text-slate-300 border-slate-500">{field.field_type}</Badge>
+              <h4 className="font-medium text-slate-200">{field.label}</h4>
+              <Badge variant="outline" className="bg-slate-600 text-slate-300 border-slate-500">
+                {field.field_type}
+              </Badge>
               {field.is_required && <Badge variant="destructive">Required</Badge>}
               {isCustomized && <Badge className="bg-blue-600 text-white">Custom</Badge>}
             </div>
             <p className="text-sm text-slate-400">
-              Field name: <code className="bg-slate-600 text-slate-200 px-1 rounded">{field.field_name}</code>
+              Field name:{' '}
+              <code className="bg-slate-600 text-slate-200 px-1 rounded">{field.field_name}</code>
             </p>
-            {field.help_text && (
-              <p className="text-sm text-slate-400 mt-1">{field.help_text}</p>
-            )}
+            {field.help_text && <p className="text-sm text-slate-400 mt-1">{field.help_text}</p>}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onEdit(field)} className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(field)}
+              className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500"
+            >
               <Pencil className="w-4 h-4" />
             </Button>
             {isCustomized && (
-              <Button variant="outline" size="sm" onClick={onDelete} className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDelete}
+                className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500"
+              >
                 <Trash2 className="w-4 h-4" />
               </Button>
             )}
@@ -335,40 +281,55 @@ function FieldItem({ field, onEdit, onDelete }) {
   );
 }
 
-function FieldEditor({ field, onSave, onCancel }) {
+function FieldEditor({ field, onSave, onCancel, isSaving = false }) {
   const [formData, setFormData] = useState({
     field_name: field?.field_name || '',
-    field_label: field?.field_label || '',
+    label: field?.label || '',
     field_type: field?.field_type || 'text',
     is_required: field?.is_required || false,
     is_visible: field?.is_visible !== false,
     placeholder: field?.placeholder || '',
     help_text: field?.help_text || '',
     options: field?.options || [],
-    display_order: field?.display_order || 0
+    display_order: field?.display_order || 0,
   });
 
   const [newOption, setNewOption] = useState({ value: '', label: '' });
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+
+    // Ensure custom fields are marked as custom and set metadata flag
+    const fieldData = {
+      ...formData,
+      // Ensure field_name starts with custom_ prefix for easy identification
+      field_name: formData.field_name.startsWith('custom_')
+        ? formData.field_name
+        : `custom_${formData.field_name}`,
+      metadata: {
+        ...(formData.metadata || {}),
+        is_custom: true,
+        field_type: formData.field_type,
+      },
+    };
+
+    onSave(fieldData);
   };
 
   const addOption = () => {
     if (newOption.value && newOption.label) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        options: [...prev.options, newOption]
+        options: [...prev.options, newOption],
       }));
       setNewOption({ value: '', label: '' });
     }
   };
 
   const removeOption = (index) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      options: prev.options.filter((_, i) => i !== index)
+      options: prev.options.filter((_, i) => i !== index),
     }));
   };
 
@@ -381,17 +342,20 @@ function FieldEditor({ field, onSave, onCancel }) {
           <Label className="text-slate-200">Field Name (Technical)</Label>
           <Input
             value={formData.field_name}
-            onChange={(e) => setFormData(prev => ({ ...prev, field_name: e.target.value }))}
-            placeholder="e.g., custom_field_1"
+            onChange={(e) => setFormData((prev) => ({ ...prev, field_name: e.target.value }))}
+            placeholder="e.g., project_code"
             required
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
           />
+          <p className="text-xs text-slate-400 mt-1">
+            Will be prefixed with &quot;custom_&quot; if not already
+          </p>
         </div>
         <div>
           <Label className="text-slate-200">Display Label</Label>
           <Input
-            value={formData.field_label}
-            onChange={(e) => setFormData(prev => ({ ...prev, field_label: e.target.value }))}
+            value={formData.label}
+            onChange={(e) => setFormData((prev) => ({ ...prev, label: e.target.value }))}
             placeholder="e.g., Custom Field"
             required
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
@@ -402,20 +366,50 @@ function FieldEditor({ field, onSave, onCancel }) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-slate-200">Field Type</Label>
-          <Select value={formData.field_type} onValueChange={(value) => setFormData(prev => ({ ...prev, field_type: value }))}>
+          <Select
+            value={formData.field_type}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, field_type: value }))}
+          >
             <SelectTrigger className="bg-slate-700 border-slate-600 text-slate-200">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-slate-800 border-slate-700">
-              <SelectItem value="text" className="text-slate-200 hover:bg-slate-700">Text</SelectItem>
-              <SelectItem value="email" className="text-slate-200 hover:bg-slate-700">Email</SelectItem>
-              <SelectItem value="phone" className="text-slate-200 hover:bg-slate-700">Phone</SelectItem>
-              <SelectItem value="textarea" className="text-slate-200 hover:bg-slate-700">Textarea</SelectItem>
-              <SelectItem value="select" className="text-slate-200 hover:bg-slate-700">Select Dropdown</SelectItem>
-              <SelectItem value="multiselect" className="text-slate-200 hover:bg-slate-700">Multi-Select</SelectItem>
-              <SelectItem value="date" className="text-slate-200 hover:bg-slate-700">Date</SelectItem>
-              <SelectItem value="number" className="text-slate-200 hover:bg-slate-700">Number</SelectItem>
-              <SelectItem value="checkbox" className="text-slate-200 hover:bg-slate-700">Checkbox</SelectItem>
+              <SelectItem value="text" className="text-slate-200 hover:bg-slate-700">
+                Text
+              </SelectItem>
+              <SelectItem value="email" className="text-slate-200 hover:bg-slate-700">
+                Email
+              </SelectItem>
+              <SelectItem value="phone" className="text-slate-200 hover:bg-slate-700">
+                Phone
+              </SelectItem>
+              <SelectItem value="url" className="text-slate-200 hover:bg-slate-700">
+                URL
+              </SelectItem>
+              <SelectItem value="textarea" className="text-slate-200 hover:bg-slate-700">
+                Long Text (Textarea)
+              </SelectItem>
+              <SelectItem value="select" className="text-slate-200 hover:bg-slate-700">
+                Dropdown (Select)
+              </SelectItem>
+              <SelectItem value="multiselect" className="text-slate-200 hover:bg-slate-700">
+                Multi-Select
+              </SelectItem>
+              <SelectItem value="checkbox" className="text-slate-200 hover:bg-slate-700">
+                Checkbox (Yes/No)
+              </SelectItem>
+              <SelectItem value="date" className="text-slate-200 hover:bg-slate-700">
+                Date
+              </SelectItem>
+              <SelectItem value="datetime" className="text-slate-200 hover:bg-slate-700">
+                Date & Time
+              </SelectItem>
+              <SelectItem value="number" className="text-slate-200 hover:bg-slate-700">
+                Number
+              </SelectItem>
+              <SelectItem value="currency" className="text-slate-200 hover:bg-slate-700">
+                Currency
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -424,7 +418,9 @@ function FieldEditor({ field, onSave, onCancel }) {
           <Input
             type="number"
             value={formData.display_order}
-            onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))
+            }
             className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
           />
         </div>
@@ -434,7 +430,7 @@ function FieldEditor({ field, onSave, onCancel }) {
         <Label className="text-slate-200">Placeholder Text</Label>
         <Input
           value={formData.placeholder}
-          onChange={(e) => setFormData(prev => ({ ...prev, placeholder: e.target.value }))}
+          onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
           placeholder="Enter placeholder text..."
           className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
         />
@@ -444,7 +440,7 @@ function FieldEditor({ field, onSave, onCancel }) {
         <Label className="text-slate-200">Help Text</Label>
         <Textarea
           value={formData.help_text}
-          onChange={(e) => setFormData(prev => ({ ...prev, help_text: e.target.value }))}
+          onChange={(e) => setFormData((prev) => ({ ...prev, help_text: e.target.value }))}
           placeholder="Optional help text to show below the field"
           rows={2}
           className="bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
@@ -455,14 +451,16 @@ function FieldEditor({ field, onSave, onCancel }) {
         <div className="flex items-center space-x-2">
           <Switch
             checked={formData.is_required}
-            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_required: checked }))}
+            onCheckedChange={(checked) =>
+              setFormData((prev) => ({ ...prev, is_required: checked }))
+            }
           />
           <Label className="text-slate-200">Required</Label>
         </div>
         <div className="flex items-center space-x-2">
           <Switch
             checked={formData.is_visible}
-            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_visible: checked }))}
+            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, is_visible: checked }))}
           />
           <Label className="text-slate-200">Visible</Label>
         </div>
@@ -474,9 +472,23 @@ function FieldEditor({ field, onSave, onCancel }) {
           <div className="space-y-2 mt-2">
             {formData.options.map((option, index) => (
               <div key={index} className="flex items-center gap-2">
-                <Input value={option.value} readOnly className="flex-1 bg-slate-700 border-slate-600 text-slate-200" />
-                <Input value={option.label} readOnly className="flex-1 bg-slate-700 border-slate-600 text-slate-200" />
-                <Button type="button" variant="outline" size="sm" onClick={() => removeOption(index)} className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500">
+                <Input
+                  value={option.value}
+                  readOnly
+                  className="flex-1 bg-slate-700 border-slate-600 text-slate-200"
+                />
+                <Input
+                  value={option.label}
+                  readOnly
+                  className="flex-1 bg-slate-700 border-slate-600 text-slate-200"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeOption(index)}
+                  className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500"
+                >
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -485,16 +497,22 @@ function FieldEditor({ field, onSave, onCancel }) {
               <Input
                 placeholder="Value"
                 value={newOption.value}
-                onChange={(e) => setNewOption(prev => ({ ...prev, value: e.target.value }))}
+                onChange={(e) => setNewOption((prev) => ({ ...prev, value: e.target.value }))}
                 className="flex-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
               />
               <Input
                 placeholder="Label"
                 value={newOption.label}
-                onChange={(e) => setNewOption(prev => ({ ...prev, label: e.target.value }))}
+                onChange={(e) => setNewOption((prev) => ({ ...prev, label: e.target.value }))}
                 className="flex-1 bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-400 focus:border-slate-500"
               />
-              <Button type="button" variant="outline" size="sm" onClick={addOption} className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addOption}
+                className="bg-slate-600 border-slate-500 text-slate-200 hover:bg-slate-500"
+              >
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
@@ -503,12 +521,24 @@ function FieldEditor({ field, onSave, onCancel }) {
       )}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={isSaving}
+          className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
+        >
           Cancel
         </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-          <Save className="w-4 h-4 mr-2" />
-          Save Field
+        <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            'Save Field'
+          )}
         </Button>
       </div>
     </form>

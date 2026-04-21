@@ -30,6 +30,8 @@ import { checkDuplicateBeforeCreate } from '@/api/functions';
 import { useApiManager } from '../shared/ApiManager';
 import AssignmentField from '../shared/AssignmentField';
 import { DenormalizationHelper } from '../shared/DenormalizationHelper';
+import { useCustomFields } from '@/hooks/useCustomFields';
+import { CustomFieldsSection } from '@/components/shared/CustomFieldRenderer';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 
 // New imports for error logging
@@ -109,6 +111,26 @@ export default function ContactForm({
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
   const [createdAccount, setCreatedAccount] = useState(null); // Store newly created account for immediate display
+
+  // Custom fields for Contact entity. Values live at contact.metadata.custom.<field_name>.
+  const { customFields } = useCustomFields('Contact');
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  useEffect(() => {
+    if (contact && customFields.length > 0) {
+      const nested = contact?.metadata?.custom || {};
+      const flat = contact?.metadata || {};
+      const customValues = {};
+      customFields.forEach((field) => {
+        if (nested[field.field_name] !== undefined) {
+          customValues[field.field_name] = nested[field.field_name];
+        } else if (flat[field.field_name] !== undefined) {
+          customValues[field.field_name] = flat[field.field_name];
+        }
+      });
+      setCustomFieldValues(customValues);
+    }
+  }, [contact, customFields]);
 
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
@@ -500,6 +522,18 @@ export default function ContactForm({
       setSubmitProgress('Enriching contact data...');
       // Use tenant_id from user context, selectedTenantId, or null (backend will handle)
       const tenantId = user?.tenant_id || selectedTenantId || null;
+
+      // Nest custom field values under metadata.custom per the custom-fields design.
+      // DO NOT spread at the top level — PostgREST treats unknown top-level keys as
+      // real columns and rejects with a 500.
+      submissionData.metadata = {
+        ...(submissionData.metadata || {}),
+        custom: {
+          ...((submissionData.metadata && submissionData.metadata.custom) || {}),
+          ...customFieldValues,
+        },
+      };
+
       const enrichedData = await DenormalizationHelper.enrichContact(submissionData, tenantId);
       logDev('[ContactForm] Data enriched successfully');
 
@@ -1048,6 +1082,14 @@ export default function ContactForm({
               <span className="text-xs text-amber-400 ml-2">(For Superadmin cleanup purposes)</span>
             </div>
           )}
+
+          <CustomFieldsSection
+            fields={customFields}
+            values={customFieldValues}
+            onChange={(fieldName, value) => {
+              setCustomFieldValues((prev) => ({ ...prev, [fieldName]: value }));
+            }}
+          />
 
           <div className="flex justify-end gap-3 pt-6 border-t border-slate-700">
             <Button

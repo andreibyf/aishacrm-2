@@ -23,6 +23,8 @@ import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Mail, Phone, Loader2, FileText } from 'lucide-react'; // NEW: Add FileText icon
 import { toast } from 'sonner';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+import { useCustomFields } from '@/hooks/useCustomFields';
+import { CustomFieldsSection } from '@/components/shared/CustomFieldRenderer';
 
 function formatGenerationTimestamp(value) {
   if (!value) return 'Not requested yet';
@@ -83,6 +85,30 @@ export default function ActivityForm({
   const [aiEmailGenerationState, setAiEmailGenerationState] = useState(
     activity?.metadata?.ai_email_generation || null,
   );
+
+  // Load custom fields for Activity entity
+  const { customFields } = useCustomFields('Activity');
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  // Load custom field values from activity on mount or when custom fields change.
+  // Values live under metadata.custom.<field_name> by design; flat-on-metadata and
+  // top-level are retained as fallbacks for any residual/older-shape records.
+  useEffect(() => {
+    if (activity && customFields.length > 0) {
+      const nested = activity?.metadata?.custom || {};
+      const customValues = {};
+      customFields.forEach((field) => {
+        if (nested[field.field_name] !== undefined) {
+          customValues[field.field_name] = nested[field.field_name];
+        } else if (activity.metadata && activity.metadata[field.field_name] !== undefined) {
+          customValues[field.field_name] = activity.metadata[field.field_name];
+        } else if (activity[field.field_name] !== undefined) {
+          customValues[field.field_name] = activity[field.field_name];
+        }
+      });
+      setCustomFieldValues(customValues);
+    }
+  }, [activity, customFields]);
 
   // Initialize form data using a function, memoized with useCallback
   const getInitialFormData = useCallback(() => {
@@ -563,6 +589,16 @@ export default function ActivityForm({
         due_date: processedData.due_date,
         due_time: processedData.due_time,
         created_by: createdBy,
+        // Nest custom field values under metadata.custom per the custom-fields design.
+        // DO NOT spread customFieldValues at the top level — PostgREST will try to
+        // write them as real columns and reject unknown keys with a 500.
+        metadata: {
+          ...(processedData.metadata || {}),
+          custom: {
+            ...((processedData.metadata && processedData.metadata.custom) || {}),
+            ...customFieldValues,
+          },
+        },
       };
 
       if (processedData.type === 'scheduled_ai_call') {
@@ -1224,6 +1260,17 @@ export default function ActivityForm({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Custom Fields */}
+        {customFields && customFields.length > 0 && (
+          <CustomFieldsSection
+            fields={customFields}
+            values={customFieldValues}
+            onChange={(fieldName, value) => {
+              setCustomFieldValues((prev) => ({ ...prev, [fieldName]: value }));
+            }}
+          />
         )}
 
         {/* ONLY show test data toggle to Superadmin */}

@@ -86,7 +86,7 @@ export default function OpportunityTable({
                 Opportunity
               </TableHead>
               <TableHead className="text-center p-3 font-medium text-slate-300">Stage</TableHead>
-              <TableHead className="text-right p-3 font-medium text-slate-300">Amount</TableHead>
+              <TableHead className="text-right p-3 font-medium text-slate-300">Value</TableHead>
               <TableHead className="text-center p-3 font-medium text-slate-300">
                 Probability
               </TableHead>
