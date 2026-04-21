@@ -42,6 +42,9 @@ import { useLeadsBulkOps } from '@/hooks/useLeadsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function LeadsPage() {
+  const VIEW_MODE_STORAGE_KEY = 'aisha:leads:viewMode';
+  const DESKTOP_DEFAULT_VIEW_MODE = 'list';
+  const VALID_VIEW_MODES = ['list', 'grid'];
   const { user } = useUser();
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
@@ -55,9 +58,12 @@ export default function LeadsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
-  const [viewMode, setViewMode] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
-  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return DESKTOP_DEFAULT_VIEW_MODE;
+    if (window.innerWidth < 640) return 'grid';
+    const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE;
+  });
   const [isImportOpen, setIsImportOpen] = useState(false);
   // Removed local user state; using global context
   const { selectedTenantId } = useTenant();
@@ -70,10 +76,23 @@ export default function LeadsPage() {
   // Auto-switch to card view on mobile screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
-    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    const handler = (e) => {
+      if (e.matches) {
+        setViewMode('grid');
+        return;
+      }
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      setViewMode(VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE);
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth < 640) return;
+    if (!VALID_VIEW_MODES.includes(viewMode)) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
   const { startProgress, updateProgress, completeProgress } = useProgress();
   const [isConversionDialogOpen, setIsConversionDialogOpen] = useState(false);
   const [showTestData, setShowTestData] = useState(true); // Default to showing all data including test data

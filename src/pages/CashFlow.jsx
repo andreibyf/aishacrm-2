@@ -28,6 +28,14 @@ function ensurePlain(obj) {
   return obj;
 }
 
+function sortTransactionsByDateDesc(items) {
+  return [...items].sort((a, b) => {
+    const aDate = new Date(a?.transaction_date || 0).getTime();
+    const bDate = new Date(b?.transaction_date || 0).getTime();
+    return bDate - aDate;
+  });
+}
+
 function CashFlowPage() {
   const { selectedTenantId } = useTenant();
   const [transactions, setTransactions] = useState([]);
@@ -173,11 +181,38 @@ function CashFlowPage() {
     logger.debug('CashFlowForm closed', 'CashFlowPage');
   };
 
-  const handleFormSubmit = async () => {
+  const handleFormSubmit = async (savedTransaction = null) => {
     setShowForm(false);
     setEditingTransaction(null);
-    logger.info('CashFlowForm submitted, refetching transactions', 'CashFlowPage');
-    await fetchTransactions();
+
+    if (savedTransaction && typeof savedTransaction === 'object') {
+      const nextTx = ensurePlain(savedTransaction);
+      const txTypeMatches = filters.type === 'all' || nextTx.transaction_type === filters.type;
+      const searchMatches =
+        !filters.searchTerm ||
+        String(nextTx.description || '')
+          .toLowerCase()
+          .includes(filters.searchTerm.toLowerCase());
+
+      if (txTypeMatches && searchMatches) {
+        setTransactions((prev) => {
+          const idx = prev.findIndex((t) => t.id === nextTx.id);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], ...nextTx };
+            return sortTransactionsByDateDesc(updated);
+          }
+          return sortTransactionsByDateDesc([nextTx, ...prev]);
+        });
+      }
+    }
+
+    logger.info('CashFlowForm submitted, refreshing transactions in background', 'CashFlowPage');
+    fetchTransactions().catch((error) => {
+      logger.error('Background refresh failed after cash flow save', 'CashFlowPage', {
+        error: error?.message,
+      });
+    });
   };
 
   const calculateSummary = (data) => {

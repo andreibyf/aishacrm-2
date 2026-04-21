@@ -34,6 +34,9 @@ import { useContactsBulkOps } from '@/hooks/useContactsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function ContactsPage() {
+  const VIEW_MODE_STORAGE_KEY = 'aisha:contacts:viewMode';
+  const DESKTOP_DEFAULT_VIEW_MODE = 'list';
+  const VALID_VIEW_MODES = ['list', 'grid'];
   const { plural: contactsLabel, singular: contactLabel } = useEntityLabel('contacts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const loadingToast = useLoadingToast();
@@ -52,9 +55,12 @@ export default function ContactsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
-  const [viewMode, setViewMode] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
-  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return DESKTOP_DEFAULT_VIEW_MODE;
+    if (window.innerWidth < 640) return 'grid';
+    const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE;
+  });
   const [selectedContacts, setSelectedContacts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -62,10 +68,23 @@ export default function ContactsPage() {
   // Auto-switch to card view on mobile screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
-    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    const handler = (e) => {
+      if (e.matches) {
+        setViewMode('grid');
+        return;
+      }
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      setViewMode(VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE);
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth < 640) return;
+    if (!VALID_VIEW_MODES.includes(viewMode)) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);

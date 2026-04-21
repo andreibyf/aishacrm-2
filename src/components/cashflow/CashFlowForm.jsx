@@ -140,17 +140,18 @@ export default function CashFlowForm({ transaction, onSubmit, onCancel }) {
       };
 
       const transId = safeGet(transaction, 'id');
+      let savedRecord;
       if (transId) {
-        await CashFlow.update(transId, transactionData);
+        savedRecord = await CashFlow.update(transId, transactionData);
         logger.info('Cash flow transaction updated successfully', 'CashFlowForm', {
           transactionId: transId,
         });
       } else {
-        await CashFlow.create(transactionData);
+        savedRecord = await CashFlow.create(transactionData);
         logger.info('Cash flow transaction created successfully', 'CashFlowForm');
       }
 
-      onSubmit();
+      onSubmit(savedRecord);
     } catch (error) {
       logger.error('Failed to save cash flow transaction', 'CashFlowForm', {
         error: error.message,
