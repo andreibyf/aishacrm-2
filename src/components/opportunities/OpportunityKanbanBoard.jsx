@@ -259,7 +259,7 @@ export default function OpportunityKanbanBoard({
   return (
     <div>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-slate-200">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
             <DialogTitle className="text-slate-100">
               {editingOpportunity ? 'Edit Opportunity' : 'Add New Opportunity'}

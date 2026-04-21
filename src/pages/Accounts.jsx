@@ -31,6 +31,9 @@ import { useAccountsBulkOps } from '@/hooks/useAccountsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
 
 export default function AccountsPage() {
+  const VIEW_MODE_STORAGE_KEY = 'aisha:accounts:viewMode';
+  const DESKTOP_DEFAULT_VIEW_MODE = 'list';
+  const VALID_VIEW_MODES = ['list', 'grid'];
   const { plural: accountsLabel, singular: accountLabel } = useEntityLabel('accounts');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
@@ -48,9 +51,12 @@ export default function AccountsPage() {
   const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [viewMode, setViewMode] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth < 640 ? 'grid' : 'list',
-  );
+  const [viewMode, setViewMode] = useState(() => {
+    if (typeof window === 'undefined') return DESKTOP_DEFAULT_VIEW_MODE;
+    if (window.innerWidth < 640) return 'grid';
+    const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE;
+  });
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [selectAllMode, setSelectAllMode] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -58,10 +64,23 @@ export default function AccountsPage() {
   // Auto-switch to card view on mobile screens
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
-    const handler = (e) => setViewMode(e.matches ? 'grid' : 'list');
+    const handler = (e) => {
+      if (e.matches) {
+        setViewMode('grid');
+        return;
+      }
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      setViewMode(VALID_VIEW_MODES.includes(saved) ? saved : DESKTOP_DEFAULT_VIEW_MODE);
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.innerWidth < 640) return;
+    if (!VALID_VIEW_MODES.includes(viewMode)) return;
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [showTestData] = useState(true);
