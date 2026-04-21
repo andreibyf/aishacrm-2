@@ -220,14 +220,16 @@ export default function createFieldCustomizationRoutes(_pgPool, opts = {}) {
    *             properties:
    *               entity_name:
    *                 type: string
-   *                 enum: [Opportunity, Activity]
+   *                 enum: [Opportunity, Activity, Contact, Lead, Account]
+   *                 description: Which CRM entity this custom field belongs to. Must match the DB CHECK constraint on field_customization.entity_type.
    *               field_name:
    *                 type: string
    *               label:
    *                 type: string
    *               field_type:
    *                 type: string
-   *                 enum: [text, number, date, currency]
+   *                 enum: [text, number, date, currency, select, multiselect, checkbox, email, phone, url, textarea, datetime]
+   *                 description: Input type for the custom field. Controls both the edit-form renderer and the detail-panel formatter.
    *               is_visible:
    *                 type: boolean
    *               is_required:

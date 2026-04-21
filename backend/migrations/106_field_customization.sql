@@ -15,10 +15,9 @@
 --
 -- Date: 2026-04-21
 
--- 1. Clean up any non-conforming rows that would block NOT NULL constraints
-DELETE FROM field_customization WHERE tenant_id IS NULL;
-
--- 2. Fresh-install path: create table if missing
+-- 1. Fresh-install path: create table if missing
+--    Must come BEFORE any DML (e.g. cleanup DELETE) so this migration is
+--    idempotent on fresh environments where field_customization doesn't yet exist.
 CREATE TABLE IF NOT EXISTS field_customization (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
@@ -32,6 +31,10 @@ CREATE TABLE IF NOT EXISTS field_customization (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 2. Clean up any non-conforming rows that would block NOT NULL constraints
+--    (safe to run after CREATE TABLE IF NOT EXISTS — table is guaranteed to exist)
+DELETE FROM field_customization WHERE tenant_id IS NULL;
 
 -- 3. Drop legacy column no longer in spec
 ALTER TABLE field_customization DROP COLUMN IF EXISTS created_date;

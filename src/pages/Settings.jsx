@@ -1075,7 +1075,9 @@ export default function SettingsPage() {
                     Field Customization
                   </CardTitle>
                   <CardDescription>
-                    Add custom fields (text, number, date, currency) to Opportunities and Activities
+                    Add custom fields across Opportunities, Activities, Contacts, Leads, and
+                    Accounts with multiple field types (text, number, date, currency, select,
+                    multiselect, checkbox, email, phone, url, textarea, datetime)
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
