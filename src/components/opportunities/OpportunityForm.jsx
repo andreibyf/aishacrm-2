@@ -23,6 +23,8 @@ import LinkContactDialog from '../shared/LinkContactDialog';
 import { toast } from 'sonner';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import AssignmentField from '../shared/AssignmentField';
+import { useCustomFields } from '@/hooks/useCustomFields';
+import { CustomFieldsSection } from '@/components/shared/CustomFieldRenderer';
 
 export default function OpportunityForm({
   opportunity: opportunityProp,
@@ -81,6 +83,29 @@ export default function OpportunityForm({
     'bg-white border-slate-300 text-slate-900 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200';
   const selectItemClass =
     'text-slate-900 hover:bg-slate-100 focus:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 dark:focus:bg-slate-700';
+
+  // Load custom fields for Opportunity entity
+  const { customFields } = useCustomFields('Opportunity');
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  // Pre-populate custom field values from opportunity.metadata.custom when
+  // editing an existing record. Values live under metadata.custom.<field_name>
+  // by design — any residual flat keys from earlier shape are a fallback.
+  useEffect(() => {
+    if (opportunity && customFields.length > 0) {
+      const nested = opportunity?.metadata?.custom || {};
+      const flat = opportunity?.metadata || {};
+      const customValues = {};
+      customFields.forEach((field) => {
+        if (nested[field.field_name] !== undefined) {
+          customValues[field.field_name] = nested[field.field_name];
+        } else if (flat[field.field_name] !== undefined) {
+          customValues[field.field_name] = flat[field.field_name];
+        }
+      });
+      setCustomFieldValues(customValues);
+    }
+  }, [opportunity, customFields]);
 
   // Filter stage options based on card visibility and apply custom labels
   // Keep hidden stages if the current opportunity has them
@@ -235,10 +260,24 @@ export default function OpportunityForm({
     setIsSubmitting(true);
     try {
       const tenantId = selectedTenantId || currentUser?.tenant_id;
+
+      // Nest custom field values under metadata.custom per the custom-fields design.
+      // DO NOT spread customFieldValues at the top level of the payload — PostgREST
+      // treats any top-level key as a real column and rejects unknown keys with 500
+      // ("Could not find the 'custom_foo' column of 'opportunities' ...").
+      const metadata = {
+        ...(formData.metadata || {}),
+        custom: {
+          ...((formData.metadata && formData.metadata.custom) || {}),
+          ...customFieldValues,
+        },
+      };
+
       const payload = {
         ...formData,
         tenant_id: tenantId,
         amount: parseFloat(formData.amount) || 0,
+        metadata,
         // Remove empty optional fields
         account_id: formData.account_id || undefined,
         contact_id: formData.contact_id || undefined,
@@ -320,7 +359,7 @@ export default function OpportunityForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="opp-amount" className={labelClass}>
-                Amount
+                Value
               </Label>
               <Input
                 id="opp-amount"
@@ -599,6 +638,16 @@ export default function OpportunityForm({
               className="bg-white border-slate-300 text-slate-900 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
             />
           </div>
+          {/* Custom Fields */}
+          {customFields && customFields.length > 0 && (
+            <CustomFieldsSection
+              fields={customFields}
+              values={customFieldValues}
+              onChange={(fieldName, value) => {
+                setCustomFieldValues((prev) => ({ ...prev, [fieldName]: value }));
+              }}
+            />
+          )}
           {/* Test Data Toggle (Admin only) */}
           {isSuperadmin && (
             <div className="flex items-center space-x-2 p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">

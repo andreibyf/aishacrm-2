@@ -90,6 +90,7 @@ const TenantIntegrationSettings = lazy(
 // System Configuration - lazy loaded
 const ModuleManager = lazy(() => import('../components/shared/ModuleManager'));
 const EntityLabelsManager = lazy(() => import('../components/settings/EntityLabelsManager'));
+const FieldCustomization = lazy(() => import('../components/settings/FieldCustomization'));
 const TemplatesManager = lazy(() => import('../components/settings/TemplatesManager'));
 const StatusCardsManager = lazy(() => import('../components/settings/StatusCardsManager'));
 const BillingAdminConsole = lazy(() => import('../components/settings/BillingAdminConsole'));
@@ -270,8 +271,8 @@ export default function SettingsPage() {
         },
         {
           id: 'entity-labels',
-          label: 'Entity Labels',
-          description: 'Customize terminology for your organization',
+          label: 'Navigation Labels',
+          description: 'Customize terminology for navigation menu and form titles',
           icon: Tags,
           category: 'system',
           roles: ['admin'],
@@ -458,9 +459,18 @@ export default function SettingsPage() {
         },
         {
           id: 'entity-labels',
-          label: 'Entity Labels',
-          description: 'Customize terminology per tenant',
+          label: 'Navigation Labels',
+          description: 'Customize terminology for navigation menu and form titles',
           icon: Tags,
+          category: 'system',
+          roles: ['superadmin', 'admin'],
+        },
+        {
+          id: 'field-customization',
+          label: 'Field Customization',
+          description:
+            'Add custom fields: text, email, phone, textarea, dropdown, checkbox, date, number, currency',
+          icon: Puzzle,
           category: 'system',
           roles: ['superadmin', 'admin'],
         },
@@ -1055,6 +1065,27 @@ export default function SettingsPage() {
               <SettingsLoader>
                 <EntityLabelsManager isTenantAdmin={!isSuperadmin} />
               </SettingsLoader>
+            )}
+
+            {activeTab === 'field-customization' && isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Puzzle className="w-5 h-5 text-purple-400" />
+                    Field Customization
+                  </CardTitle>
+                  <CardDescription>
+                    Add custom fields across Opportunities, Activities, Contacts, Leads, and
+                    Accounts with multiple field types (text, number, date, currency, select,
+                    multiselect, checkbox, email, phone, url, textarea, datetime)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SettingsLoader>
+                    <FieldCustomization />
+                  </SettingsLoader>
+                </CardContent>
+              </Card>
             )}
 
             {activeTab === 'templates' && isAdmin && (

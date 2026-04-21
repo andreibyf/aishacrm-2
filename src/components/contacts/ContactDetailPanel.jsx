@@ -3,6 +3,8 @@ import UniversalDetailPanel from '../shared/UniversalDetailPanel';
 import BookingWidget from '../scheduling/BookingWidget';
 import { Star, Phone, Mail, CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
+import ErrorBoundary from '../shared/ErrorBoundary';
 import {
   Dialog,
   DialogContent,
@@ -183,53 +185,65 @@ export default function ContactDetailPanel({
 
   return (
     <>
-      <UniversalDetailPanel
-        entity={contact}
-        entityType="contact"
-        open={open}
-        onOpenChange={onOpenChange}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        user={user}
-        displayData={{
-          'Account Name': accountId ? (
-            <button
-              onClick={handleViewAccount}
-              className="text-blue-400 hover:text-blue-300 hover:underline text-left mt-1 cursor-pointer"
-            >
-              {accountName || contact.account_name || 'Unknown Account'}
-            </button>
-          ) : accountName || contact.account_name ? (
-            <p className="text-slate-200 font-medium mt-1">{accountName || contact.account_name}</p>
-          ) : (
-            <p className="text-slate-500 italic mt-1">No account linked</p>
-          ),
-          'Assigned To': (
-            <p className="text-slate-200 font-medium mt-1">
-              {assignedUserName || contact.assigned_to_name || contact.assigned_to || 'Unassigned'}
-            </p>
-          ),
-        }}
-        customActions={customActions}
-        showNotes={true}
-        customSections={[
-          {
-            title: 'Session Booking',
-            icon: <CalendarCheck className="w-4 h-4" />,
-            content: (
-              <BookingWidget
-                contactName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
-                contactEmail={contact.email}
-                contactId={contact.id}
-                tenantId={contact.tenant_id || user?.tenant_id}
-                assignedTo={contact.assigned_to}
-                fallbackLinkedUserId={user?.id || user?.user_id}
-                fallbackUserEmail={user?.email}
-              />
+      <ErrorBoundary variant="inline" label={`ContactDetailPanel[id=${contact?.id}]`}>
+        <UniversalDetailPanel
+          entity={contact}
+          entityType="contact"
+          open={open}
+          onOpenChange={onOpenChange}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          user={user}
+          displayData={{
+            'Account Name': accountId ? (
+              <button
+                onClick={handleViewAccount}
+                className="text-blue-400 hover:text-blue-300 hover:underline text-left mt-1 cursor-pointer"
+              >
+                {accountName || contact.account_name || 'Unknown Account'}
+              </button>
+            ) : accountName || contact.account_name ? (
+              <p className="text-slate-200 font-medium mt-1">
+                {accountName || contact.account_name}
+              </p>
+            ) : (
+              <p className="text-slate-500 italic mt-1">No account linked</p>
             ),
-          },
-        ]}
-      />
+            'Assigned To': (
+              <p className="text-slate-200 font-medium mt-1">
+                {assignedUserName ||
+                  contact.assigned_to_name ||
+                  contact.assigned_to ||
+                  'Unassigned'}
+              </p>
+            ),
+          }}
+          customActions={customActions}
+          showNotes={true}
+          customSections={[
+            {
+              content: (
+                <CustomFieldsDisplay entityType="Contact" metadata={contact.metadata} showHeader />
+              ),
+            },
+            {
+              title: 'Session Booking',
+              icon: <CalendarCheck className="w-4 h-4" />,
+              content: (
+                <BookingWidget
+                  contactName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+                  contactEmail={contact.email}
+                  contactId={contact.id}
+                  tenantId={contact.tenant_id || user?.tenant_id}
+                  assignedTo={contact.assigned_to}
+                  fallbackLinkedUserId={user?.id || user?.user_id}
+                  fallbackUserEmail={user?.email}
+                />
+              ),
+            },
+          ]}
+        />
+      </ErrorBoundary>
 
       <Dialog open={showCallDialog} onOpenChange={setShowCallDialog}>
         <DialogContent className="bg-slate-800 border-slate-700 text-slate-200">

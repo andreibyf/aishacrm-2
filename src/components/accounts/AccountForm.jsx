@@ -23,6 +23,8 @@ import { useUser } from '@/components/shared/useUser.js';
 import { useEntityForm } from '@/hooks/useEntityForm';
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { toast } from 'sonner';
+import { useCustomFields } from '@/hooks/useCustomFields';
+import { CustomFieldsSection } from '@/components/shared/CustomFieldRenderer';
 import { useMemo } from 'react';
 
 const industries = [
@@ -101,6 +103,30 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
   const { isCardVisible, getCardLabel } = useStatusCardPreferences();
 
   const isSuperadmin = currentUser?.role === 'superadmin';
+
+  // Custom fields for Account entity. Values live at account.metadata.custom.<field_name>.
+  const { customFields } = useCustomFields('Account');
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  // The source record is `legacyAccount || initialData` — captured as `account` in
+  // the form's typical unified-contract pattern. AccountForm uses `legacyAccount`
+  // directly in some paths; we read both for safety.
+  useEffect(() => {
+    const src = legacyAccount || initialData;
+    if (src && customFields.length > 0) {
+      const nested = src?.metadata?.custom || {};
+      const flat = src?.metadata || {};
+      const customValues = {};
+      customFields.forEach((field) => {
+        if (nested[field.field_name] !== undefined) {
+          customValues[field.field_name] = nested[field.field_name];
+        } else if (flat[field.field_name] !== undefined) {
+          customValues[field.field_name] = flat[field.field_name];
+        }
+      });
+      setCustomFieldValues(customValues);
+    }
+  }, [legacyAccount, initialData, customFields]);
 
   // Filter account type options based on card visibility and apply custom labels
   // Keep hidden types if the current account has them
@@ -219,6 +245,17 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
           payload[key] = null;
         }
       });
+
+      // Nest custom field values under metadata.custom per the custom-fields design.
+      // DO NOT spread at the top level — PostgREST will try to write each as a real
+      // column and reject unknown keys with a 500.
+      payload.metadata = {
+        ...(payload.metadata || {}),
+        custom: {
+          ...((payload.metadata && payload.metadata.custom) || {}),
+          ...customFieldValues,
+        },
+      };
 
       // Call Account.create or Account.update directly
       console.log('[AccountForm] Submitting payload:', payload);
@@ -445,6 +482,14 @@ export default function AccountForm({ account: legacyAccount, initialData, onSub
             <span className="text-xs text-amber-400 ml-2">(For Superadmin cleanup purposes)</span>
           </div>
         )}
+
+        <CustomFieldsSection
+          fields={customFields}
+          values={customFieldValues}
+          onChange={(fieldName, value) => {
+            setCustomFieldValues((prev) => ({ ...prev, [fieldName]: value }));
+          }}
+        />
 
         <div className="flex items-center justify-between pt-6 border-t border-slate-600">
           <p className="text-xs text-slate-400">

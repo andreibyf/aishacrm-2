@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
+import ErrorBoundary from '../shared/ErrorBoundary';
 
 import {
   DropdownMenu,
@@ -193,7 +195,7 @@ export default function OpportunityDetailPanel({
         subject: `Follow up: ${localOpportunity.name}`,
         description:
           `Follow up on opportunity for ${getAccountName() || 'Unknown Account'}\n` +
-          `Amount: $${(localOpportunity.amount || 0).toLocaleString()}\n` +
+          `Value: $${(localOpportunity.amount || 0).toLocaleString()}\n` +
           `Stage: ${localOpportunity.stage?.replace(/_/g, ' ')}`,
         status: 'scheduled',
         priority: 'normal',
@@ -280,375 +282,396 @@ export default function OpportunityDetailPanel({
   if (!localOpportunity) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-900 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
-      {/* Header */}
-      <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-6 z-10">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold text-slate-100 mb-2">{localOpportunity.name}</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1">
-                <Badge
-                  className={`${getStageColor(localOpportunity.stage)} contrast-badge border font-semibold`}
-                  data-variant="status"
-                  data-status={localOpportunity.stage}
-                >
-                  {getStageLabel(localOpportunity.stage)}
-                </Badge>
-                <StatusHelper statusKey={`opportunity_${localOpportunity.stage}`} />
+    <ErrorBoundary variant="inline" label={`OpportunityDetailPanel[id=${localOpportunity?.id}]`}>
+      <div className="fixed inset-y-0 right-0 w-full md:w-2/3 lg:w-1/2 bg-slate-900 shadow-2xl z-50 overflow-y-auto border-l border-slate-700">
+        {/* Header */}
+        <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-6 z-10">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-slate-100 mb-2">{localOpportunity.name}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <Badge
+                    className={`${getStageColor(localOpportunity.stage)} contrast-badge border font-semibold`}
+                    data-variant="status"
+                    data-status={localOpportunity.stage}
+                  >
+                    {getStageLabel(localOpportunity.stage)}
+                  </Badge>
+                  <StatusHelper statusKey={`opportunity_${localOpportunity.stage}`} />
+                </div>
+                {localOpportunity.type && (
+                  <Badge variant="outline" className="border-slate-600 text-slate-300">
+                    {localOpportunity.type?.replace(/_/g, ' ')}
+                  </Badge>
+                )}
+                {localOpportunity.lead_source && (
+                  <Badge variant="outline" className="border-slate-600 text-slate-300">
+                    {localOpportunity.lead_source}
+                  </Badge>
+                )}
               </div>
-              {localOpportunity.type && (
-                <Badge variant="outline" className="border-slate-600 text-slate-300">
-                  {localOpportunity.type?.replace(/_/g, ' ')}
-                </Badge>
-              )}
-              {localOpportunity.lead_source && (
-                <Badge variant="outline" className="border-slate-600 text-slate-300">
-                  {localOpportunity.lead_source}
-                </Badge>
-              )}
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-300 hover:bg-slate-700"
+              aria-label="Close Panel"
+            >
+              <X className="w-5 h-5" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-300 hover:bg-slate-700"
-            aria-label="Close Panel"
-          >
-            <X className="w-5 h-5" />
-          </Button>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={handleCreateActivity}
+              disabled={creatingActivity}
+              className="bg-blue-600 hover:bg-blue-700"
+              size="sm"
+            >
+              {creatingActivity ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  Create Activity
+                </>
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(localOpportunity)}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                >
+                  Change Stage
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-slate-800 border-slate-700 text-slate-200">
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('prospecting')}
+                  className="hover:bg-slate-700"
+                >
+                  Prospecting
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('qualification')}
+                  className="hover:bg-slate-700"
+                >
+                  Qualification
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('proposal')}
+                  className="hover:bg-slate-700"
+                >
+                  Proposal
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('negotiation')}
+                  className="hover:bg-slate-700"
+                >
+                  Negotiation
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-slate-700" />
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('closed_won')}
+                  className="hover:bg-slate-700"
+                >
+                  {getStageLabel('closed_won')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleStageUpdate('closed_lost')}
+                  className="hover:bg-slate-700"
+                >
+                  {getStageLabel('closed_lost')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              className="border-red-600 text-red-400 hover:bg-red-900/30"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={handleCreateActivity}
-            disabled={creatingActivity}
-            className="bg-blue-600 hover:bg-blue-700"
-            size="sm"
-          >
-            {creatingActivity ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <CalendarIcon className="w-4 h-4 mr-2" />
-                Create Activity
-              </>
-            )}
-          </Button>
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Key Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="bg-slate-700/50 border-slate-600">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-400 mb-1">Value</p>
+                <p className="text-2xl font-bold text-slate-100">
+                  ${(localOpportunity.amount || 0).toLocaleString()}
+                </p>
+              </CardContent>
+            </Card>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEdit(localOpportunity)}
-            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Edit
-          </Button>
+            <Card className="bg-slate-700/50 border-slate-600">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-400 mb-1">Close Date</p>
+                <p className="text-lg font-semibold text-slate-100">
+                  {localOpportunity.close_date
+                    ? format(new Date(localOpportunity.close_date), 'MMM d, yyyy')
+                    : 'Not set'}
+                </p>
+              </CardContent>
+            </Card>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-slate-600 text-slate-300 hover:bg-slate-700"
-              >
-                Change Stage
-                <ChevronDown className="w-4 h-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-slate-800 border-slate-700 text-slate-200">
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('prospecting')}
-                className="hover:bg-slate-700"
-              >
-                Prospecting
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('qualification')}
-                className="hover:bg-slate-700"
-              >
-                Qualification
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('proposal')}
-                className="hover:bg-slate-700"
-              >
-                Proposal
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('negotiation')}
-                className="hover:bg-slate-700"
-              >
-                Negotiation
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-slate-700" />
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('closed_won')}
-                className="hover:bg-slate-700"
-              >
-                {getStageLabel('closed_won')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleStageUpdate('closed_lost')}
-                className="hover:bg-slate-700"
-              >
-                {getStageLabel('closed_lost')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <Card className="bg-slate-700/50 border-slate-600">
+              <CardContent className="p-4">
+                <p className="text-xs text-slate-400 mb-1">Probability</p>
+                <p className="text-2xl font-bold text-slate-100">
+                  {localOpportunity.probability || 0}%
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDelete}
-            className="border-red-600 text-red-400 hover:bg-red-900/30"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Delete
-          </Button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="p-6 space-y-6">
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Relationships */}
           <Card className="bg-slate-700/50 border-slate-600">
-            <CardContent className="p-4">
-              <p className="text-xs text-slate-400 mb-1">Amount</p>
-              <p className="text-2xl font-bold text-slate-100">
-                ${(localOpportunity.amount || 0).toLocaleString()}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-700/50 border-slate-600">
-            <CardContent className="p-4">
-              <p className="text-xs text-slate-400 mb-1">Close Date</p>
-              <p className="text-lg font-semibold text-slate-100">
-                {localOpportunity.close_date
-                  ? format(new Date(localOpportunity.close_date), 'MMM d, yyyy')
-                  : 'Not set'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-700/50 border-slate-600">
-            <CardContent className="p-4">
-              <p className="text-xs text-slate-400 mb-1">Probability</p>
-              <p className="text-2xl font-bold text-slate-100">
-                {localOpportunity.probability || 0}%
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Relationships */}
-        <Card className="bg-slate-700/50 border-slate-600">
-          <CardHeader>
-            <CardTitle className="text-slate-200">Relationships</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-start gap-3">
-              <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
-              <div>
-                <p className="text-xs text-slate-400">Account</p>
-                <p className="text-sm text-slate-200">{getAccountName()}</p>
+            <CardHeader>
+              <CardTitle className="text-slate-200">Relationships</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Building2 className="w-4 h-4 text-slate-400 mt-0.5" />
+                <div>
+                  <p className="text-xs text-slate-400">Account</p>
+                  <p className="text-sm text-slate-200">{getAccountName()}</p>
+                </div>
               </div>
-            </div>
 
-            {localOpportunity.contact_id && (
+              {localOpportunity.contact_id && (
+                <div className="flex items-start gap-3">
+                  <User className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Primary Contact</p>
+                    <p className="text-sm text-slate-200">{getContactName()}</p>
+                  </div>
+                </div>
+              )}
+
+              {localOpportunity.lead_id && (
+                <div className="flex items-start gap-3">
+                  <Users className="w-4 h-4 text-slate-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-slate-400">Related Lead</p>
+                    <p className="text-sm text-slate-200">{getLeadName()}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-start gap-3">
                 <User className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
-                  <p className="text-xs text-slate-400">Primary Contact</p>
-                  <p className="text-sm text-slate-200">{getContactName()}</p>
+                  <p className="text-xs text-slate-400">Assigned To</p>
+                  <p className="text-sm text-slate-200">{getAssignedToName()}</p>
                 </div>
               </div>
-            )}
-
-            {localOpportunity.lead_id && (
-              <div className="flex items-start gap-3">
-                <Users className="w-4 h-4 text-slate-400 mt-0.5" />
-                <div>
-                  <p className="text-xs text-slate-400">Related Lead</p>
-                  <p className="text-sm text-slate-200">{getLeadName()}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-start gap-3">
-              <User className="w-4 h-4 text-slate-400 mt-0.5" />
-              <div>
-                <p className="text-xs text-slate-400">Assigned To</p>
-                <p className="text-sm text-slate-200">{getAssignedToName()}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Related Activities */}
-        <Card className="bg-slate-700/50 border-slate-600">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-slate-200 flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-blue-400" />
-                Activities ({relatedActivities.length})
-              </CardTitle>
-              {loadingActivities && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingActivities && relatedActivities.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-blue-400" />
-                <p className="text-sm">Loading activities...</p>
-              </div>
-            ) : relatedActivities.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">No activities yet</p>
-                <p className="text-xs mt-1">Create an activity to track follow-ups</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {relatedActivities.map((activity) => {
-                  const ActivityIcon = getActivityTypeIcon(activity.type);
-                  return (
-                    <Link
-                      key={activity.id}
-                      to={createPageUrl(`Activities?id=${activity.id}`)}
-                      className="block"
-                    >
-                      <div className="p-3 bg-slate-800 border border-slate-600 rounded-lg hover:border-blue-500 transition-colors cursor-pointer">
-                        <div className="flex items-start gap-3">
-                          <ActivityIcon className="w-4 h-4 text-slate-400 mt-1" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-medium text-slate-200 truncate">
-                                {activity.subject}
-                              </p>
-                              <Badge
-                                className={`${getActivityStatusColor(
-                                  activity.status,
-                                )} contrast-badge text-xs flex-shrink-0 border`}
-                                data-variant="status"
-                                data-status={activity.status}
-                              >
-                                {activity.status}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                              <span className="capitalize">{activity.type}</span>
-                              {activity.due_date && (
-                                <>
-                                  <span>•</span>
-                                  <span>{format(new Date(activity.due_date), 'MMM d, yyyy')}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Description */}
-        {localOpportunity.description && (
-          <Card className="bg-slate-700/50 border-slate-600">
-            <CardHeader>
-              <CardTitle className="text-slate-200">Description</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-300 whitespace-pre-wrap">
-                {localOpportunity.description}
-              </p>
             </CardContent>
           </Card>
-        )}
 
-        {/* Additional Details */}
-        <Card className="bg-slate-700/50 border-slate-600">
-          <CardHeader>
-            <CardTitle className="text-slate-200">Additional Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {localOpportunity.next_step && (
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Next Step</p>
-                <p className="text-sm text-slate-200">{localOpportunity.next_step}</p>
+          {/* Related Activities */}
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-slate-200 flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-blue-400" />
+                  Activities ({relatedActivities.length})
+                </CardTitle>
+                {loadingActivities && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
               </div>
-            )}
-
-            {localOpportunity.competitor && (
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Competitor</p>
-                <p className="text-sm text-slate-200">{localOpportunity.competitor}</p>
-              </div>
-            )}
-
-            {localOpportunity.tags && localOpportunity.tags.length > 0 && (
-              <div>
-                <p className="text-xs text-slate-400 mb-2">Tags</p>
-                <div className="flex flex-wrap gap-1">
-                  {localOpportunity.tags.map((tag, idx) => (
-                    <Badge
-                      key={idx}
-                      variant="outline"
-                      className="border-slate-600 text-slate-300 text-xs"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
+            </CardHeader>
+            <CardContent>
+              {loadingActivities && relatedActivities.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-blue-400" />
+                  <p className="text-sm">Loading activities...</p>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              ) : relatedActivities.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">No activities yet</p>
+                  <p className="text-xs mt-1">Create an activity to track follow-ups</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {relatedActivities.map((activity) => {
+                    const ActivityIcon = getActivityTypeIcon(activity.type);
+                    return (
+                      <Link
+                        key={activity.id}
+                        to={createPageUrl(`Activities?id=${activity.id}`)}
+                        className="block"
+                      >
+                        <div className="p-3 bg-slate-800 border border-slate-600 rounded-lg hover:border-blue-500 transition-colors cursor-pointer">
+                          <div className="flex items-start gap-3">
+                            <ActivityIcon className="w-4 h-4 text-slate-400 mt-1" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-slate-200 truncate">
+                                  {activity.subject}
+                                </p>
+                                <Badge
+                                  className={`${getActivityStatusColor(
+                                    activity.status,
+                                  )} contrast-badge text-xs flex-shrink-0 border`}
+                                  data-variant="status"
+                                  data-status={activity.status}
+                                >
+                                  {activity.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+                                <span className="capitalize">{activity.type}</span>
+                                {activity.due_date && (
+                                  <>
+                                    <span>•</span>
+                                    <span>
+                                      {format(new Date(activity.due_date), 'MMM d, yyyy')}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Metadata */}
-        <Card className="bg-slate-700/50 border-slate-600">
-          <CardHeader>
-            <CardTitle className="text-slate-200 text-sm">Record Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Created:</span>
-              <span>
-                {localOpportunity.created_date
-                  ? format(new Date(localOpportunity.created_date), 'MMM d, yyyy h:mm a')
-                  : 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Last Updated:</span>
-              <span>
-                {localOpportunity.updated_date
-                  ? format(new Date(localOpportunity.updated_date), 'MMM d, yyyy h:mm a')
-                  : 'N/A'}
-              </span>
-            </div>
-            {localOpportunity.created_by && (
-              <div className="flex justify-between">
-                <span>Created By:</span>
-                <span>{localOpportunity.created_by}</span>
-              </div>
+          {/* Description */}
+          {localOpportunity.description && (
+            <Card className="bg-slate-700/50 border-slate-600">
+              <CardHeader>
+                <CardTitle className="text-slate-200">Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap">
+                  {localOpportunity.description}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Additional Details */}
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200">Additional Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {localOpportunity.next_step && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Next Step</p>
+                  <p className="text-sm text-slate-200">{localOpportunity.next_step}</p>
+                </div>
+              )}
+
+              {localOpportunity.competitor && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">Competitor</p>
+                  <p className="text-sm text-slate-200">{localOpportunity.competitor}</p>
+                </div>
+              )}
+
+              {localOpportunity.tags && localOpportunity.tags.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">Tags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {localOpportunity.tags.map((tag, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className="border-slate-600 text-slate-300 text-xs"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Custom Fields (tenant-defined via Settings → Field Customization).
+            Renders null when there are no defined custom fields or no stored values. */}
+          {localOpportunity.metadata?.custom &&
+            Object.keys(localOpportunity.metadata.custom).length > 0 && (
+              <Card className="bg-slate-700/50 border-slate-600">
+                <CardHeader>
+                  <CardTitle className="text-slate-200">Additional Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CustomFieldsDisplay
+                    entityType="Opportunity"
+                    metadata={localOpportunity.metadata}
+                  />
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
+
+          {/* Metadata */}
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200 text-sm">Record Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs text-slate-400">
+              <div className="flex justify-between">
+                <span>Created:</span>
+                <span>
+                  {localOpportunity.created_date
+                    ? format(new Date(localOpportunity.created_date), 'MMM d, yyyy h:mm a')
+                    : 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Last Updated:</span>
+                <span>
+                  {localOpportunity.updated_date
+                    ? format(new Date(localOpportunity.updated_date), 'MMM d, yyyy h:mm a')
+                    : 'N/A'}
+                </span>
+              </div>
+              {localOpportunity.created_by && (
+                <div className="flex justify-between">
+                  <span>Created By:</span>
+                  <span>{localOpportunity.created_by}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }

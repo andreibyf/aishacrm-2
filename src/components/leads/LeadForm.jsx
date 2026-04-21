@@ -14,6 +14,8 @@ import { getTenantFilter } from '../shared/tenantUtils';
 import { useTenant } from '../shared/tenantContext';
 import PhoneInput from '../shared/PhoneInput';
 import AddressFields from '../shared/AddressFields';
+import { useCustomFields } from '@/hooks/useCustomFields';
+import { CustomFieldsSection } from '@/components/shared/CustomFieldRenderer';
 import { Label } from '@/components/ui/label';
 import { generateUniqueId } from '@/api/functions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -113,6 +115,27 @@ export default function LeadForm({
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Custom fields for Lead entity (user-defined via Settings → Field Customization).
+  // Values are stored at lead.metadata.custom.<field_name> by design.
+  const { customFields } = useCustomFields('Lead');
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
+  useEffect(() => {
+    if (lead && customFields.length > 0) {
+      const nested = lead?.metadata?.custom || {};
+      const flat = lead?.metadata || {};
+      const customValues = {};
+      customFields.forEach((field) => {
+        if (nested[field.field_name] !== undefined) {
+          customValues[field.field_name] = nested[field.field_name];
+        } else if (flat[field.field_name] !== undefined) {
+          customValues[field.field_name] = flat[field.field_name];
+        }
+      });
+      setCustomFieldValues(customValues);
+    }
+  }, [lead, customFields]);
   const [loading, setLoading] = useState(true);
   const { selectedTenantId } = useTenant();
   const [allTags, setAllTags] = useState([]);
@@ -447,6 +470,17 @@ export default function LeadForm({
       submissionData.do_not_text = !!submissionData.do_not_text;
 
       console.log('LeadForm.Submit: Saving lead to database:', submissionData);
+
+      // Nest custom field values under metadata.custom per the custom-fields design.
+      // DO NOT spread customFieldValues at the top level — PostgREST will try to
+      // write each as a real column and reject unknown keys with a 500.
+      submissionData.metadata = {
+        ...(submissionData.metadata || {}),
+        custom: {
+          ...((submissionData.metadata && submissionData.metadata.custom) || {}),
+          ...customFieldValues,
+        },
+      };
 
       // Perform persistence internally (unified contract pattern)
       let result;
@@ -847,6 +881,14 @@ export default function LeadForm({
             <span className="text-xs text-amber-400 ml-2">(For admin cleanup purposes)</span>
           </div>
         )}
+
+        <CustomFieldsSection
+          fields={customFields}
+          values={customFieldValues}
+          onChange={(fieldName, value) => {
+            setCustomFieldValues((prev) => ({ ...prev, [fieldName]: value }));
+          }}
+        />
 
         <div className="flex justify-end gap-3 pt-6 border-t border-slate-600">
           <Button

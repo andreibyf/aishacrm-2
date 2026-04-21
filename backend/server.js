@@ -226,6 +226,7 @@ import createSystemLogRoutes from './routes/system-logs.js';
 import createAuditLogRoutes from './routes/audit-logs.js';
 import createModuleSettingsRoutes from './routes/modulesettings.js';
 import createEntityLabelsRoutes from './routes/entitylabels.js';
+import createFieldCustomizationRoutes from './routes/fieldcustomization.js';
 import createTenantIntegrationRoutes from './routes/tenant-integrations.js';
 import createBizDevSourceRoutes from './routes/bizdevsources.js';
 import createTenantRoutes from './routes/tenants.js';
@@ -492,6 +493,12 @@ app.use(
 );
 app.use('/api/modulesettings', defaultLimiter, createModuleSettingsRoutes(measuredPgPool));
 app.use('/api/entity-labels', defaultLimiter, createEntityLabelsRoutes(measuredPgPool));
+app.use(
+  '/api/fieldcustomizations',
+  defaultLimiter,
+  authenticateRequest,
+  createFieldCustomizationRoutes(measuredPgPool),
+);
 app.use(
   '/api/tenantintegrations',
   defaultLimiter,
