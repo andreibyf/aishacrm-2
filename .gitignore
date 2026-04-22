@@ -209,3 +209,5 @@ Aider-Codex Orchestration.md
 # Session fix scripts and temp files
 fix_*.py
 tmp/
+_settings_head.txt
+test_output.txt
