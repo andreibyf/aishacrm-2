@@ -278,6 +278,15 @@ export default function SettingsPage() {
           roles: ['admin'],
         },
         {
+          id: 'field-customization',
+          label: 'Field Customization',
+          description:
+            'Add custom fields: text, email, phone, textarea, dropdown, checkbox, date, number, currency',
+          icon: Puzzle,
+          category: 'system',
+          roles: ['admin'],
+        },
+        {
           id: 'templates',
           label: 'Templates Library',
           description: 'Manage structured email, SMS, and call templates',

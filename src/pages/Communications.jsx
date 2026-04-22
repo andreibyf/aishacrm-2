@@ -598,11 +598,11 @@ export default function CommunicationsPage() {
   if (!effectiveTenantId) {
     return (
       <div className="mx-auto max-w-5xl">
-        <Card className="border-slate-800 bg-slate-900 text-slate-100">
+        <Card className="border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
           <CardContent className="p-8 text-center">
-            <Inbox className="mx-auto mb-4 h-10 w-10 text-slate-500" />
+            <Inbox className="mx-auto mb-4 h-10 w-10 text-gray-500 dark:text-slate-500" />
             <h2 className="text-xl font-semibold">Select a tenant to view communications</h2>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
               The communications inbox is tenant-scoped and needs an active tenant context.
             </p>
           </CardContent>
@@ -612,7 +612,7 @@ export default function CommunicationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 text-slate-100">
+    <div className="mx-auto max-w-7xl space-y-6 text-gray-900 dark:text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">
@@ -622,22 +622,22 @@ export default function CommunicationsPage() {
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">
             {workspaceView === 'queue' ? 'Lead Capture Queue' : 'Inbox'}
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-400">
+          <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-slate-400">
             {workspaceView === 'queue'
               ? 'Review unknown inbound senders, inspect source message context, and promote only when the CRM entity should be created.'
               : 'Review tenant email threads, filter by mailbox or linked CRM entity, and work through unread, open, and closed views.'}
           </p>
         </div>
         <div className="flex gap-2">
-          <div className="inline-flex rounded-xl border border-slate-800 bg-slate-950 p-1">
+          <div className="inline-flex rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-100 dark:bg-slate-950 p-1">
             <Button
               type="button"
               variant="ghost"
               onClick={() => setWorkspaceView('inbox')}
               className={`h-9 px-3 text-sm ${
                 workspaceView === 'inbox'
-                  ? 'bg-cyan-500 text-slate-950 hover:bg-cyan-400'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-cyan-500 text-white hover:bg-cyan-400'
+                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-800'
               }`}
             >
               Inbox
@@ -648,8 +648,8 @@ export default function CommunicationsPage() {
               onClick={() => setWorkspaceView('queue')}
               className={`h-9 px-3 text-sm ${
                 workspaceView === 'queue'
-                  ? 'bg-cyan-500 text-slate-950 hover:bg-cyan-400'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-cyan-500 text-white hover:bg-cyan-400'
+                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-800'
               }`}
             >
               Lead Capture Queue
@@ -659,7 +659,7 @@ export default function CommunicationsPage() {
             <Button
               onClick={() => setComposerOpen((current) => !current)}
               variant="outline"
-              className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+              className="border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800"
             >
               <SquarePen className="mr-2 h-4 w-4" />
               {composerOpen ? 'Hide Composer' : 'Compose'}
@@ -668,7 +668,7 @@ export default function CommunicationsPage() {
           <Button
             onClick={handleRefresh}
             variant="outline"
-            className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+            className="border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -677,7 +677,7 @@ export default function CommunicationsPage() {
       </div>
 
       {workspaceView === 'inbox' && composerOpen && (
-        <Card className="border-slate-800 bg-slate-900 text-slate-100">
+        <Card className="border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Compose Outbound Email</CardTitle>
           </CardHeader>
@@ -690,7 +690,7 @@ export default function CommunicationsPage() {
                   value={composeForm.mailboxId}
                   onChange={(event) => handleComposeChange('mailboxId', event.target.value)}
                   placeholder={DEFAULT_MAILBOX_ID}
-                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                  className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -701,7 +701,7 @@ export default function CommunicationsPage() {
                   value={composeForm.to}
                   onChange={(event) => handleComposeChange('to', event.target.value)}
                   placeholder="recipient@example.com"
-                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                  className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                 />
               </div>
             </div>
@@ -714,7 +714,7 @@ export default function CommunicationsPage() {
                   value={composeForm.subject}
                   onChange={(event) => handleComposeChange('subject', event.target.value)}
                   placeholder="Intro from AiSHA CRM"
-                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                  className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                 />
               </div>
               <div className="space-y-2">
@@ -725,11 +725,11 @@ export default function CommunicationsPage() {
                 >
                   <SelectTrigger
                     id="communications-compose-related-to"
-                    className="border-slate-700 bg-slate-950"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                  <SelectContent className="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                     {COMPOSE_ENTITY_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -748,7 +748,7 @@ export default function CommunicationsPage() {
                   value={composeForm.body}
                   onChange={(event) => handleComposeChange('body', event.target.value)}
                   placeholder="Write the email body here."
-                  className="min-h-[160px] border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                  className="min-h-[160px] border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                 />
               </div>
               <div className="space-y-2">
@@ -761,7 +761,7 @@ export default function CommunicationsPage() {
                   placeholder="Optional UUID"
                   className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-gray-500 dark:text-slate-500">
                   Queueing uses the existing activity email worker. Link a CRM entity when you want
                   the email tracked directly against it.
                 </p>
@@ -798,7 +798,7 @@ export default function CommunicationsPage() {
 
       {workspaceView === 'inbox' ? (
         <>
-          <Card className="border-slate-800 bg-slate-900 text-slate-100">
+          <Card className="border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Filters</CardTitle>
             </CardHeader>
@@ -806,10 +806,13 @@ export default function CommunicationsPage() {
               <div className="space-y-2">
                 <Label htmlFor="communications-view">View</Label>
                 <Select value={view} onValueChange={setView}>
-                  <SelectTrigger id="communications-view" className="border-slate-700 bg-slate-950">
+                  <SelectTrigger
+                    id="communications-view"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950"
+                  >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                  <SelectContent className="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                     {VIEW_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -824,11 +827,11 @@ export default function CommunicationsPage() {
                 <Select value={deliveryState} onValueChange={setDeliveryState}>
                   <SelectTrigger
                     id="communications-delivery-state"
-                    className="border-slate-700 bg-slate-950"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                  <SelectContent className="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                     {DELIVERY_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -843,11 +846,11 @@ export default function CommunicationsPage() {
                 <Select value={mailboxId} onValueChange={setMailboxId}>
                   <SelectTrigger
                     id="communications-mailbox"
-                    className="border-slate-700 bg-slate-950"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                  <SelectContent className="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                     <SelectItem value="all">All mailboxes</SelectItem>
                     {mailboxOptions.map((option) => (
                       <SelectItem key={option} value={option}>
@@ -863,11 +866,11 @@ export default function CommunicationsPage() {
                 <Select value={entityType} onValueChange={setEntityType}>
                   <SelectTrigger
                     id="communications-entity-type"
-                    className="border-slate-700 bg-slate-950"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-slate-900 text-slate-100">
+                  <SelectContent className="border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                     {ENTITY_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -880,14 +883,14 @@ export default function CommunicationsPage() {
               <div className="space-y-2">
                 <Label htmlFor="communications-entity-id">Entity ID</Label>
                 <div className="relative">
-                  <Link2 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                  <Link2 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-500 dark:text-slate-500" />
                   <Input
                     id="communications-entity-id"
                     value={entityId}
                     onChange={(event) => setEntityId(event.target.value)}
                     placeholder="Optional UUID"
                     disabled={entityType === 'all'}
-                    className="border-slate-700 bg-slate-950 pl-9 text-slate-100 placeholder:text-slate-500"
+                    className="border-gray-300 dark:border-slate-700 bg-gray-50 dark:bg-slate-950 pl-9 text-gray-900 dark:text-slate-100 placeholder:text-gray-500 dark:placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -895,10 +898,13 @@ export default function CommunicationsPage() {
           </Card>
 
           <div className="grid gap-6 xl:grid-cols-[360px,1fr]">
-            <Card className="border-slate-800 bg-slate-900 text-slate-100">
+            <Card className="border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
                 <CardTitle className="text-base">Threads</CardTitle>
-                <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+                <Badge
+                  variant="secondary"
+                  className="bg-gray-200 dark:bg-slate-800 text-gray-800 dark:text-slate-200"
+                >
                   {threads.length}
                 </Badge>
               </CardHeader>
@@ -908,11 +914,11 @@ export default function CommunicationsPage() {
                     {[1, 2, 3].map((item) => (
                       <div
                         key={item}
-                        className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                        className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 p-4"
                       >
-                        <div className="h-4 w-2/3 animate-pulse rounded bg-slate-800" />
-                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
-                        <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-slate-800" />
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
+                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
+                        <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
                       </div>
                     ))}
                   </div>
@@ -924,12 +930,12 @@ export default function CommunicationsPage() {
                     </div>
                   </div>
                 ) : threads.length === 0 ? (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
-                    <Search className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                    <p className="text-sm font-medium text-slate-200">
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 p-8 text-center">
+                    <Search className="mx-auto mb-3 h-8 w-8 text-gray-500 dark:text-slate-500" />
+                    <p className="text-sm font-medium text-gray-800 dark:text-slate-200">
                       No threads matched these filters.
                     </p>
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-2 text-sm text-gray-500 dark:text-slate-500">
                       Try a different mailbox, entity, or view.
                     </p>
                   </div>
@@ -944,15 +950,17 @@ export default function CommunicationsPage() {
                         className={`w-full rounded-2xl border p-4 text-left transition ${
                           isSelected
                             ? 'border-cyan-400/60 bg-cyan-400/10 shadow-[0_0_0_1px_rgba(34,211,238,0.18)]'
-                            : 'border-slate-800 bg-slate-950 hover:border-slate-700 hover:bg-slate-900'
+                            : 'border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 hover:border-gray-300 dark:hover:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-900'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-100">
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-slate-100">
                               {thread.subject || '(no subject)'}
                             </p>
-                            <p className="mt-1 text-xs text-slate-400">{thread.mailbox_id}</p>
+                            <p className="mt-1 text-xs text-gray-600 dark:text-slate-400">
+                              {thread.mailbox_id}
+                            </p>
                           </div>
                           <Badge
                             variant="secondary"
@@ -969,7 +977,7 @@ export default function CommunicationsPage() {
                             {thread.status || 'open'}
                           </Badge>
                         </div>
-                        <p className="mt-3 line-clamp-2 text-sm text-slate-400">
+                        <p className="mt-3 line-clamp-2 text-sm text-gray-600 dark:text-slate-400">
                           {summarizeMessage(thread.latest_message)}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -977,13 +985,13 @@ export default function CommunicationsPage() {
                             <Badge
                               key={`${thread.id}-${link.entity_type}-${link.entity_id}`}
                               variant="outline"
-                              className="border-slate-700 text-slate-300"
+                              className="border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300"
                             >
                               {link.entity_type}
                             </Badge>
                           ))}
                         </div>
-                        <p className="mt-3 text-xs text-slate-500">
+                        <p className="mt-3 text-xs text-gray-500 dark:text-slate-500">
                           Last message {formatDateTime(thread.last_message_at)}
                         </p>
                       </button>
@@ -993,7 +1001,7 @@ export default function CommunicationsPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-slate-800 bg-slate-900 text-slate-100">
+            <Card className="border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Conversation</CardTitle>
               </CardHeader>
@@ -1003,11 +1011,11 @@ export default function CommunicationsPage() {
                     {[1, 2].map((item) => (
                       <div
                         key={item}
-                        className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
+                        className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 p-5"
                       >
-                        <div className="h-4 w-1/3 animate-pulse rounded bg-slate-800" />
-                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-slate-800" />
-                        <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-slate-800" />
+                        <div className="h-4 w-1/3 animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
+                        <div className="mt-3 h-3 w-full animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
+                        <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-gray-300 dark:bg-slate-800" />
                       </div>
                     ))}
                   </div>
@@ -1019,28 +1027,31 @@ export default function CommunicationsPage() {
                     </div>
                   </div>
                 ) : !selectedThread ? (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
-                    <Inbox className="mx-auto mb-3 h-8 w-8 text-slate-500" />
-                    <p className="text-sm font-medium text-slate-200">
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 p-8 text-center">
+                    <Inbox className="mx-auto mb-3 h-8 w-8 text-gray-500 dark:text-slate-500" />
+                    <p className="text-sm font-medium text-gray-800 dark:text-slate-200">
                       Select a thread to inspect the conversation.
                     </p>
                   </div>
                 ) : (
                   <>
-                    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
+                    <div className="rounded-2xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <h2 className="text-xl font-semibold">
                             {selectedThread.subject || '(no subject)'}
                           </h2>
-                          <p className="mt-2 text-sm text-slate-400">
+                          <p className="mt-2 text-sm text-gray-600 dark:text-slate-400">
                             Mailbox {selectedThread.mailbox_id}
                             {selectedThread.mailbox_address
                               ? ` · ${selectedThread.mailbox_address}`
                               : ''}
                           </p>
                         </div>
-                        <Badge variant="secondary" className="bg-slate-800 text-slate-200">
+                        <Badge
+                          variant="secondary"
+                          className="bg-gray-200 dark:bg-slate-800 text-gray-800 dark:text-slate-200"
+                        >
                           {selectedThread.status || 'open'}
                         </Badge>
                       </div>
@@ -1098,7 +1109,7 @@ export default function CommunicationsPage() {
                             )
                           }
                           disabled={statusSubmitting}
-                          className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                          className="border-gray-300 dark:border-slate-700 bg-transparent text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                         >
                           {statusSubmitting && selectedThread.status === 'unread'
                             ? 'Marking Read...'
@@ -1117,7 +1128,7 @@ export default function CommunicationsPage() {
                             )
                           }
                           disabled={statusSubmitting}
-                          className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800"
+                          className="border-gray-300 dark:border-slate-700 bg-transparent text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
                         >
                           {statusSubmitting && selectedThread.status === 'closed'
                             ? 'Reopening...'
@@ -1158,18 +1169,24 @@ export default function CommunicationsPage() {
                           {purgeSubmitting ? 'Purging...' : 'Purge Thread'}
                         </Button>
                         {replayError ? (
-                          <span className="text-sm text-red-300">{replayError}</span>
+                          <span className="text-sm text-red-500 dark:text-red-300">
+                            {replayError}
+                          </span>
                         ) : stateValue(selectedThread.state, 'replay')?.replay_job_id ? (
-                          <span className="text-sm text-slate-400">
+                          <span className="text-sm text-gray-600 dark:text-slate-400">
                             Latest replay job{' '}
                             {stateValue(selectedThread.state, 'replay').replay_job_id}
                           </span>
                         ) : null}
                         {statusError ? (
-                          <span className="text-sm text-red-300">{statusError}</span>
+                          <span className="text-sm text-red-500 dark:text-red-300">
+                            {statusError}
+                          </span>
                         ) : null}
                         {purgeError ? (
-                          <span className="text-sm text-red-300">{purgeError}</span>
+                          <span className="text-sm text-red-500 dark:text-red-300">
+                            {purgeError}
+                          </span>
                         ) : null}
                       </div>
 
