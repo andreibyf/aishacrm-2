@@ -81,11 +81,25 @@
   html {
     font-size: 16px; /* Base font size - increase for larger text */
   }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
   body {
     @apply bg-background text-foreground text-base;
     font-size: 1rem; /* 16px base */
     line-height: 1.6;
   }
+}
+
+/* Chart container guard — never let charts render into 0-height boxes.
+   Apply .chart-container to any wrapper around a Recharts ResponsiveContainer
+   (or other auto-sizing chart) that lives inside a flex/grid parent. */
+.chart-container {
+  width: 100%;
+  height: 300px;
+  min-height: 200px;
 }
 
 /* AiSHA UI Action Animations */

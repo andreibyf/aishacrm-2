@@ -31,6 +31,9 @@ export function useOpenReplay() {
       return;
     }
 
+    let startTimer = null;
+    let onLoad = null;
+
     try {
       // Initialize tracker
       const tracker = new Tracker({
@@ -82,24 +85,40 @@ export function useOpenReplay() {
         );
       }
 
-      // Start tracking session
-      tracker.start({
-        userID: undefined, // Will be set after auth
-        metadata: {
-          environment: import.meta.env.MODE,
-        },
-      });
-
       trackerRef.current = tracker;
-      setIsInitialized(true);
 
-      // Get session URL for sharing
-      const url = tracker.getSessionURL();
-      if (url) {
-        setSessionUrl(url);
+      // Defer tracker.start() until after page load + a short settle delay.
+      // Starting before layout settles is the root cause of many replay
+      // rendering glitches (zoomed-in playback, missing CSS, 0-height charts).
+      const beginTracking = () => {
+        startTimer = setTimeout(() => {
+          if (!trackerRef.current) return;
+          try {
+            tracker.start({
+              userID: undefined, // Will be set after auth
+              metadata: {
+                environment: import.meta.env.MODE,
+              },
+            });
+            setIsInitialized(true);
+
+            const url = tracker.getSessionURL();
+            if (url) setSessionUrl(url);
+
+            console.info('[OpenReplay] Session tracking started');
+          } catch (startErr) {
+            console.error('[OpenReplay] tracker.start() failed:', startErr);
+            setError(startErr.message);
+          }
+        }, 2000); // give layout time to settle
+      };
+
+      if (document.readyState === 'complete') {
+        beginTracking();
+      } else {
+        onLoad = beginTracking;
+        window.addEventListener('load', onLoad, { once: true });
       }
-
-      console.info('[OpenReplay] Session tracking started');
     } catch (err) {
       console.error('[OpenReplay] Initialization failed:', err);
       setError(err.message);
@@ -107,6 +126,8 @@ export function useOpenReplay() {
 
     // Cleanup on unmount
     return () => {
+      if (startTimer) clearTimeout(startTimer);
+      if (onLoad) window.removeEventListener('load', onLoad);
       if (trackerRef.current) {
         trackerRef.current.stop();
         trackerRef.current = null;
