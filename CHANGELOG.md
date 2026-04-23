@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Backend test suite: 2 failing tests under Node.js native test runner (`backend/__tests__/middleware/rateLimiter.refresh.test.js`, `backend/__tests__/routes/auth.aisha_exp.test.js`):** Both tests were authored against Vitest but execute under `node --test` per `backend/package.json` test script. Converted both to Node.js native APIs: replaced `vitest` imports with `node:test` + `node:assert`, swapped `expect()` chains for `assert` equivalents, and replaced the `@/` path aliases with relative imports (Node's ESM resolver does not honor the `@/` alias). In `rateLimiter.refresh.test.js`, sub-tests now use unique `X-Forwarded-For` IPs so each test gets its own bucket in the in-memory rate-limit store. In `auth.aisha_exp.test.js`, removed `vi.mock()` calls (Node 20 lacks `mock.module()`) and tightened the logout-cookie assertion to match `res.clearCookie('aisha_access', { path: '/' })` semantics in [`backend/routes/auth.js`](backend/routes/auth.js) (cleared cookies do not carry HttpOnly; the meaningful contract is that `aisha_exp` is never HttpOnly). Suite now reports 2517 passed / 0 failed / 12 skipped.
+
 ### Added
 
 <<<<<<< Updated upstream
