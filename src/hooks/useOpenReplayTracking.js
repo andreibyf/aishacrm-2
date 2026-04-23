@@ -4,7 +4,7 @@ import { useUser } from '@/components/shared/useUser';
 
 /**
  * OpenReplay Session Tracking Integration
- * 
+ *
  * Automatically initializes OpenReplay tracker and sets user identity.
  * Should be mounted once at app root level.
  */
@@ -17,14 +17,19 @@ export function useOpenReplayTracking() {
   useEffect(() => {
     if (!isInitialized || !user) return;
 
-    setUserInfo(user.id, {
+    // OpenReplay displays `userID` as the session identifier in the dashboard.
+    // Prefer email (or name) over the internal UUID so sessions are recognizable.
+    const displayId = user.email || user.name || user.id;
+
+    setUserInfo(displayId, {
       email: user.email,
       name: user.name || user.email,
       role: user.role,
       tenantId: user.tenant_id,
+      userId: user.id,
     });
 
-    console.info('[OpenReplay] User identity set:', user.email);
+    console.info('[OpenReplay] User identity set:', displayId);
   }, [isInitialized, user, setUserInfo]);
 
   // Log errors
@@ -51,7 +56,12 @@ export function useOpenReplayTracking() {
       const target = event.target?.closest?.('button, a, [role="button"], input, select, textarea');
       if (!target) return;
 
-      const text = (target.textContent || target.ariaLabel || target.getAttribute?.('aria-label') || '').trim();
+      const text = (
+        target.textContent ||
+        target.ariaLabel ||
+        target.getAttribute?.('aria-label') ||
+        ''
+      ).trim();
       const boundedText = text.length > 80 ? `${text.slice(0, 77)}...` : text;
 
       trackEvent('ui_click', {

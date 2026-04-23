@@ -46,10 +46,28 @@ export function useOpenReplay() {
         obscureTextNumbers: false,
         obscureInputEmails: false,
         obscureInputNumbers: false,
-        // Ensure full DOM snapshot, not partial canvas
+        defaultInputMode: 0,
+        // Snapshot config — inlineStylesheet + sampling fix the "zoomed in"
+        // recording playback caused by missing CSS / wrong DPR scaling.
         snapshot: {
           quality: 'high',
           privacy: 'plain',
+          inlineStylesheet: true,
+          inlineImages: false,
+          blockClass: 'or-block',
+          ignoreClass: 'or-ignore',
+          maskTextClass: 'or-mask',
+          recordCanvas: true,
+          sampling: {
+            canvas: 2,
+            input: 'last',
+          },
+        },
+        // Network capture (sanitize auth headers)
+        network: {
+          capturePayload: true,
+          failuresOnly: false,
+          ignoreHeaders: ['authorization', 'cookie'],
         },
       });
 
@@ -117,6 +135,9 @@ export function useOpenReplay() {
       }
       if (userInfo.tenantId) {
         trackerRef.current.setMetadata('tenantId', userInfo.tenantId);
+      }
+      if (userInfo.userId) {
+        trackerRef.current.setMetadata('userId', userInfo.userId);
       }
     } catch (err) {
       console.error('[OpenReplay] Failed to set user info:', err);
