@@ -603,7 +603,7 @@ export default function createDocumentV2Routes(_pgPool) {
    *       200:
    *         description: List of documents with AI enrichment
    */
-  router.get('/', cacheList('documents', 180), async (req, res) => {
+  router.get('/', cacheList('documents', 5), async (req, res) => {
     try {
       const { tenant_id, related_type, related_id } = req.query;
 

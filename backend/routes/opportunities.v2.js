@@ -205,7 +205,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   };
 
   // GET /api/v2/opportunities/stats - aggregate counts by stage (optimized)
-  router.get('/stats', cacheList('opportunities', 60), async (req, res) => {
+  router.get('/stats', cacheList('opportunities', 5), async (req, res) => {
     try {
       const { tenant_id, stage: _stage, assigned_to, assigned_to_team, is_test_data } = req.query;
 
@@ -304,7 +304,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/count - get total count (optimized)
-  router.get('/count', cacheList('opportunities', 120), async (req, res) => {
+  router.get('/count', cacheList('opportunities', 5), async (req, res) => {
     try {
       const { tenant_id, stage, assigned_to, assigned_to_team, is_test_data, filter } = req.query;
 
@@ -411,7 +411,7 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities - list opportunities (v2 shape, internal pilot)
-  router.get('/', cacheList('opportunities', 30), async (req, res) => {
+  router.get('/', cacheList('opportunities', 5), async (req, res) => {
     try {
       const {
         tenant_id,
@@ -1042,6 +1042,11 @@ export default function createOpportunityV2Routes(_pgPool) {
   });
 
   // GET /api/v2/opportunities/:id - fetch single opportunity (v2 shape)
+  // IMPORTANT: Must mirror the LIST endpoint's JOIN shape so that account_name,
+  // contact_name, assigned_to_name, etc. are present on BOTH list and detail responses.
+  // A mismatch between list (joined) and detail (bare) causes the customer name to
+  // flicker when the user navigates between list and detail views (list-cache vs
+  // detail-cache race). Keep this select in sync with the list endpoint.
   router.get('/:id', cacheDetail('opportunities', 60), async (req, res) => {
     try {
       const { id } = req.params;
@@ -1055,7 +1060,9 @@ export default function createOpportunityV2Routes(_pgPool) {
 
       const { data, error } = await supabase
         .from('opportunities')
-        .select('*')
+        .select(
+          '*, employee:employees!opportunities_assigned_to_fkey(id, first_name, last_name, email), account:accounts!opportunities_account_id_fkey(id, name), contact:contacts!opportunities_contact_id_fkey(id, first_name, last_name, email), team:teams!opportunities_assigned_to_team_fkey(id, name)',
+        )
         .eq('tenant_id', tenant_id)
         .eq('id', id)
         .single();
@@ -1065,7 +1072,30 @@ export default function createOpportunityV2Routes(_pgPool) {
       }
       if (error) throw new Error(error.message);
 
-      const opportunity = expandMetadata(data);
+      // Denormalize FK-joined fields — MUST match the list endpoint's shape.
+      const expanded = expandMetadata(data);
+      if (data.employee) {
+        expanded.assigned_to_name =
+          `${data.employee.first_name || ''} ${data.employee.last_name || ''}`.trim();
+        expanded.assigned_to_email = data.employee.email;
+      }
+      if (data.account) {
+        expanded.account_name = data.account.name;
+      }
+      if (data.contact) {
+        expanded.contact_name =
+          `${data.contact.first_name || ''} ${data.contact.last_name || ''}`.trim();
+        expanded.contact_email = data.contact.email;
+      }
+      if (data.team) {
+        expanded.assigned_to_team_name = data.team.name;
+      }
+      delete expanded.employee;
+      delete expanded.account;
+      delete expanded.contact;
+      delete expanded.team;
+
+      const opportunity = expanded;
 
       // Build AI context for single opportunity fetch
       const aiContext = await buildOpportunityAiContext(opportunity, {});

@@ -15,7 +15,7 @@ export default function createSyncHealthRoutes(_pgPool) {
   router.use(validateTenantAccess);
 
   // GET /api/synchealths - List sync health records
-  router.get('/', cacheList('synchealths', 180), async (req, res) => {
+  router.get('/', cacheList('synchealths', 5), async (req, res) => {
     try {
       const { limit = 50, offset = 0 } = req.query;
 

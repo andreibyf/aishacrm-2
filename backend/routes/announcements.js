@@ -124,7 +124,7 @@ export default function createAnnouncementRoutes(_pgPool) {
    */
 
   // GET /api/announcements - List announcements
-  router.get('/', cacheList('announcements', 180), async (req, res) => {
+  router.get('/', cacheList('announcements', 5), async (req, res) => {
     try {
       const { is_active, limit = 50, offset = 0 } = req.query;
 

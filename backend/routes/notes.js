@@ -56,7 +56,7 @@ export default function createNoteRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Success'
    */
   // GET /api/notes - List notes
-  router.get('/', cacheList('notes', 120), async (req, res) => {
+  router.get('/', cacheList('notes', 5), async (req, res) => {
     try {
       const { related_type, related_id } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);

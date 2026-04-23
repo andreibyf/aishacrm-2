@@ -90,8 +90,8 @@ jobs:
 
             // CI postgres service does not include Supabase roles by default.
             // Create common roles referenced by RLS/policy migrations.
-            await client.query(\`
-              DO \$\$
+            await client.query(`
+              DO $$
               BEGIN
                 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
                   CREATE ROLE service_role;
@@ -103,8 +103,8 @@ jobs:
                   CREATE ROLE anon;
                 END IF;
               END
-              \$\$;
-            \`);
+              $$;
+            `);
 
             const migrations = fs.readdirSync('./migrations')
               .filter(f => f.endsWith('.sql'))
@@ -112,7 +112,7 @@ jobs:
             
             for (const file of migrations) {
               console.log('Running migration:', file);
-              const sql = fs.readFileSync(\`./migrations/\${file}\`, 'utf8');
+              const sql = fs.readFileSync(`./migrations/${file}`, 'utf8');
               await client.query(sql);
             }
             await client.end();

@@ -97,7 +97,7 @@ export default function createCashFlowRoutes(_pgPool) {
   router.use(enforceEmployeeDataScope);
 
   // GET /api/cashflow - List cash flow records
-  router.get('/', cacheList('cashflow', 180), async (req, res) => {
+  router.get('/', cacheList('cashflow', 5), async (req, res) => {
     try {
       const { limit = 50, offset = 0, type } = req.query;
 

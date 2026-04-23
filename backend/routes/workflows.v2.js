@@ -1,11 +1,11 @@
 /**
  * Workflows v2 API Routes
- * 
+ *
  * Enhanced workflow endpoints with AI-powered analytics:
  * - Workflow health analysis and optimization suggestions
  * - Execution pattern insights and predictions
  * - Node performance metrics and bottleneck detection
- * 
+ *
  * All endpoints return aiContext with predictions and suggestions.
  */
 
@@ -22,7 +22,9 @@ const SLOW_THRESHOLD_MS = parseInt(process.env.AI_CONTEXT_SLOW_THRESHOLD_MS || '
  */
 function warnIfSlow(operation, processingTime) {
   if (processingTime > SLOW_THRESHOLD_MS) {
-    logger.warn(`[workflows.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`);
+    logger.warn(
+      `[workflows.v2] SLOW: ${operation} took ${processingTime}ms (threshold: ${SLOW_THRESHOLD_MS}ms)`,
+    );
   }
 }
 
@@ -44,9 +46,10 @@ function normalizeWorkflow(row) {
 
   return {
     ...row,
-    trigger: row.trigger_type || row.trigger_config
-      ? { type: row.trigger_type || 'webhook', config: row.trigger_config || {} }
-      : undefined,
+    trigger:
+      row.trigger_type || row.trigger_config
+        ? { type: row.trigger_type || 'webhook', config: row.trigger_config || {} }
+        : undefined,
     nodes: meta.nodes || [],
     connections: meta.connections || [],
     webhook_url: meta.webhook_url || null,
@@ -91,8 +94,9 @@ function analyzeWorkflowStructure(workflow) {
   }
 
   // Check for trigger node
-  const triggerNodes = nodes.filter(n => 
-    n.type === 'webhook_trigger' || n.type === 'schedule_trigger' || n.type === 'manual_trigger'
+  const triggerNodes = nodes.filter(
+    (n) =>
+      n.type === 'webhook_trigger' || n.type === 'schedule_trigger' || n.type === 'manual_trigger',
   );
   if (triggerNodes.length === 0 && nodes.length > 0) {
     issues.push({ type: 'no_trigger', severity: 'high', message: 'No trigger node found' });
@@ -106,22 +110,23 @@ function analyzeWorkflowStructure(workflow) {
 
   // Check for orphan nodes (no incoming or outgoing connections)
   const connectedNodeIds = new Set();
-  connections.forEach(c => {
+  connections.forEach((c) => {
     connectedNodeIds.add(c.from);
     connectedNodeIds.add(c.to);
   });
-  
-  const orphanNodes = nodes.filter(n => 
-    !connectedNodeIds.has(n.id) && 
-    !['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type)
+
+  const orphanNodes = nodes.filter(
+    (n) =>
+      !connectedNodeIds.has(n.id) &&
+      !['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type),
   );
-  
+
   if (orphanNodes.length > 0) {
-    issues.push({ 
-      type: 'orphan_nodes', 
-      severity: 'medium', 
+    issues.push({
+      type: 'orphan_nodes',
+      severity: 'medium',
       message: `${orphanNodes.length} node(s) are not connected`,
-      nodeIds: orphanNodes.map(n => n.id),
+      nodeIds: orphanNodes.map((n) => n.id),
     });
     suggestions.push({
       action: 'connect_orphan_nodes',
@@ -132,12 +137,20 @@ function analyzeWorkflowStructure(workflow) {
   }
 
   // Check for dead ends (nodes with no outgoing connections that aren't terminal)
-  const terminalTypes = ['send_email', 'http_request', 'update_lead', 'update_contact', 'update_account', 'create_activity'];
-  const nodesWithOutgoing = new Set(connections.map(c => c.from));
-  const deadEndNodes = nodes.filter(n => 
-    !nodesWithOutgoing.has(n.id) && 
-    !terminalTypes.includes(n.type) &&
-    !['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type)
+  const terminalTypes = [
+    'send_email',
+    'http_request',
+    'update_lead',
+    'update_contact',
+    'update_account',
+    'create_activity',
+  ];
+  const nodesWithOutgoing = new Set(connections.map((c) => c.from));
+  const deadEndNodes = nodes.filter(
+    (n) =>
+      !nodesWithOutgoing.has(n.id) &&
+      !terminalTypes.includes(n.type) &&
+      !['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type),
   );
 
   if (deadEndNodes.length > 0 && nodes.length > 1) {
@@ -145,14 +158,14 @@ function analyzeWorkflowStructure(workflow) {
       type: 'dead_ends',
       severity: 'low',
       message: `${deadEndNodes.length} non-terminal node(s) have no outgoing connections`,
-      nodeIds: deadEndNodes.map(n => n.id),
+      nodeIds: deadEndNodes.map((n) => n.id),
     });
   }
 
   // Check for condition nodes without both branches
-  const conditionNodes = nodes.filter(n => n.type === 'condition');
-  conditionNodes.forEach(cn => {
-    const outgoingFromCondition = connections.filter(c => c.from === cn.id);
+  const conditionNodes = nodes.filter((n) => n.type === 'condition');
+  conditionNodes.forEach((cn) => {
+    const outgoingFromCondition = connections.filter((c) => c.from === cn.id);
     if (outgoingFromCondition.length < 2) {
       issues.push({
         type: 'incomplete_condition',
@@ -178,7 +191,7 @@ function analyzeWorkflowStructure(workflow) {
 function calculateWorkflowHealth(workflow, executions) {
   const nodes = workflow.nodes || [];
   const connections = workflow.connections || [];
-  
+
   let score = 100;
   let status = 'healthy';
   const factors = [];
@@ -189,14 +202,14 @@ function calculateWorkflowHealth(workflow, executions) {
     factors.push('No nodes defined');
   } else {
     // Check for trigger
-    const hasTrigger = nodes.some(n => 
-      ['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type)
+    const hasTrigger = nodes.some((n) =>
+      ['webhook_trigger', 'schedule_trigger', 'manual_trigger'].includes(n.type),
     );
     if (!hasTrigger) {
       score -= 15;
       factors.push('Missing trigger node');
     }
-    
+
     // Check connection ratio
     const expectedConnections = Math.max(0, nodes.length - 1);
     const connectionRatio = expectedConnections > 0 ? connections.length / expectedConnections : 1;
@@ -208,10 +221,10 @@ function calculateWorkflowHealth(workflow, executions) {
 
   // Execution success rate (40 points)
   if (executions.length > 0) {
-    const successCount = executions.filter(e => e.status === 'completed').length;
-    const failCount = executions.filter(e => e.status === 'failed').length;
+    const successCount = executions.filter((e) => e.status === 'completed').length;
+    const failCount = executions.filter((e) => e.status === 'failed').length;
     const successRate = successCount / executions.length;
-    
+
     if (successRate < 0.5) {
       score -= 40;
       factors.push(`Low success rate (${Math.round(successRate * 100)}%)`);
@@ -243,10 +256,10 @@ function calculateWorkflowHealth(workflow, executions) {
   // Recent execution score (10 points)
   if (executions.length > 0) {
     const lastExecution = executions[0];
-    const daysSinceLastExec = lastExecution?.started_at 
+    const daysSinceLastExec = lastExecution?.started_at
       ? Math.floor((Date.now() - new Date(lastExecution.started_at)) / (1000 * 60 * 60 * 24))
       : 999;
-    
+
     if (daysSinceLastExec > 30) {
       score -= 10;
       factors.push(`No executions in ${daysSinceLastExec} days`);
@@ -275,10 +288,10 @@ function generateWorkflowInsights(workflow, executions) {
 
   // Node type distribution
   const nodeTypes = {};
-  nodes.forEach(n => {
+  nodes.forEach((n) => {
     nodeTypes[n.type] = (nodeTypes[n.type] || 0) + 1;
   });
-  
+
   if (Object.keys(nodeTypes).length > 0) {
     const typesSummary = Object.entries(nodeTypes)
       .map(([type, count]) => `${count} ${type}`)
@@ -288,18 +301,22 @@ function generateWorkflowInsights(workflow, executions) {
 
   // Execution stats
   if (executions.length > 0) {
-    const avgDuration = executions
-      .filter(e => e.started_at && e.completed_at)
-      .reduce((sum, e) => {
-        return sum + (new Date(e.completed_at) - new Date(e.started_at));
-      }, 0) / executions.filter(e => e.completed_at).length || 0;
-    
+    const avgDuration =
+      executions
+        .filter((e) => e.started_at && e.completed_at)
+        .reduce((sum, e) => {
+          return sum + (new Date(e.completed_at) - new Date(e.started_at));
+        }, 0) / executions.filter((e) => e.completed_at).length || 0;
+
     if (avgDuration > 0) {
       insights.push(`Average execution time: ${Math.round(avgDuration / 1000)}s`);
     }
 
-    const successRate = executions.filter(e => e.status === 'completed').length / executions.length;
-    insights.push(`Success rate: ${Math.round(successRate * 100)}% (${executions.length} total executions)`);
+    const successRate =
+      executions.filter((e) => e.status === 'completed').length / executions.length;
+    insights.push(
+      `Success rate: ${Math.round(successRate * 100)}% (${executions.length} total executions)`,
+    );
   }
 
   // Trigger type
@@ -329,20 +346,24 @@ function generateWorkflowPredictions(workflow, executions) {
   if (executions.length >= 5) {
     // Calculate success probability based on recent history
     const recentExecs = executions.slice(0, 10);
-    const recentSuccessRate = recentExecs.filter(e => e.status === 'completed').length / recentExecs.length;
+    const recentSuccessRate =
+      recentExecs.filter((e) => e.status === 'completed').length / recentExecs.length;
     predictions.nextExecutionSuccess = Math.round(recentSuccessRate * 100) / 100;
 
     // Estimate duration from successful executions
-    const successfulExecs = recentExecs.filter(e => e.status === 'completed' && e.started_at && e.completed_at);
+    const successfulExecs = recentExecs.filter(
+      (e) => e.status === 'completed' && e.started_at && e.completed_at,
+    );
     if (successfulExecs.length > 0) {
-      const avgMs = successfulExecs.reduce((sum, e) => {
-        return sum + (new Date(e.completed_at) - new Date(e.started_at));
-      }, 0) / successfulExecs.length;
+      const avgMs =
+        successfulExecs.reduce((sum, e) => {
+          return sum + (new Date(e.completed_at) - new Date(e.started_at));
+        }, 0) / successfulExecs.length;
       predictions.estimatedDuration = Math.round(avgMs);
     }
 
     // Check if maintenance is needed
-    const recentFailures = recentExecs.filter(e => e.status === 'failed').length;
+    const recentFailures = recentExecs.filter((e) => e.status === 'failed').length;
     if (recentFailures >= 3) {
       predictions.maintenanceNeeded = true;
       predictions.recommendations.push('Review recent failures and fix common issues');
@@ -355,13 +376,15 @@ function generateWorkflowPredictions(workflow, executions) {
     predictions.recommendations.push('Consider breaking into smaller sub-workflows');
   }
 
-  const httpNodes = nodes.filter(n => n.type === 'http_request');
+  const httpNodes = nodes.filter((n) => n.type === 'http_request');
   if (httpNodes.length > 3) {
     predictions.recommendations.push('Multiple HTTP requests may cause timeout issues');
   }
 
   if (!workflow.is_active && executions.length > 0) {
-    predictions.recommendations.push('Workflow is inactive but has execution history - consider reactivating or archiving');
+    predictions.recommendations.push(
+      'Workflow is inactive but has execution history - consider reactivating or archiving',
+    );
   }
 
   return predictions;
@@ -404,7 +427,7 @@ async function buildWorkflowAiContext(workflow, _options = {}) {
 
     // Combine suggestions
     const suggestions = [...structureSuggestions];
-    
+
     // Add health-based suggestions
     if (health.status === 'at_risk' || health.status === 'critical') {
       suggestions.push({
@@ -440,9 +463,9 @@ async function buildWorkflowAiContext(workflow, _options = {}) {
       },
       executionStats: {
         total: executionList.length,
-        completed: executionList.filter(e => e.status === 'completed').length,
-        failed: executionList.filter(e => e.status === 'failed').length,
-        running: executionList.filter(e => e.status === 'running').length,
+        completed: executionList.filter((e) => e.status === 'completed').length,
+        failed: executionList.filter((e) => e.status === 'failed').length,
+        running: executionList.filter((e) => e.status === 'running').length,
       },
       processingTime,
     };
@@ -490,7 +513,7 @@ export default function createWorkflowV2Routes(_pgPool) {
    *       200:
    *         description: Workflows list with AI context
    */
-  router.get('/', cacheList('workflows', 180), async (req, res) => {
+  router.get('/', cacheList('workflows', 5), async (req, res) => {
     try {
       const { tenant_id, is_active, limit = 50, offset = 0 } = req.query;
       const supabase = getSupabaseClient();
@@ -511,11 +534,12 @@ export default function createWorkflowV2Routes(_pgPool) {
 
       // Get summary aiContext for the list
       const startTime = Date.now();
-      const activeCount = workflows.filter(w => w.is_active).length;
-      const inactiveCount = workflows.filter(w => !w.is_active).length;
-      const avgNodes = workflows.length > 0 
-        ? workflows.reduce((sum, w) => sum + (w.nodes?.length || 0), 0) / workflows.length 
-        : 0;
+      const activeCount = workflows.filter((w) => w.is_active).length;
+      const inactiveCount = workflows.filter((w) => !w.is_active).length;
+      const avgNodes =
+        workflows.length > 0
+          ? workflows.reduce((sum, w) => sum + (w.nodes?.length || 0), 0) / workflows.length
+          : 0;
 
       const listAiContext = {
         confidence: 0.8,
@@ -646,7 +670,7 @@ export default function createWorkflowV2Routes(_pgPool) {
    */
   router.get('/:id/analyze', async (req, res) => {
     const startTime = Date.now();
-    
+
     try {
       const { id } = req.params;
       const { tenant_id } = req.query;
@@ -688,14 +712,14 @@ export default function createWorkflowV2Routes(_pgPool) {
       const predictions = generateWorkflowPredictions(workflow, executions);
 
       // Node-level analysis
-      const nodeAnalysis = (workflow.nodes || []).map(node => {
-        const nodeExecutions = executions.flatMap(e => {
+      const nodeAnalysis = (workflow.nodes || []).map((node) => {
+        const nodeExecutions = executions.flatMap((e) => {
           const log = e.execution_log || [];
-          return log.filter(l => l.node_id === node.id);
+          return log.filter((l) => l.node_id === node.id);
         });
 
-        const successCount = nodeExecutions.filter(l => l.status === 'success').length;
-        const errorCount = nodeExecutions.filter(l => l.status === 'error').length;
+        const successCount = nodeExecutions.filter((l) => l.status === 'success').length;
+        const errorCount = nodeExecutions.filter((l) => l.status === 'error').length;
         const totalCount = successCount + errorCount;
 
         return {
@@ -706,16 +730,16 @@ export default function createWorkflowV2Routes(_pgPool) {
           successRate: totalCount > 0 ? Math.round((successCount / totalCount) * 100) : null,
           errorCount,
           commonErrors: nodeExecutions
-            .filter(l => l.error)
+            .filter((l) => l.error)
             .slice(0, 3)
-            .map(l => l.error),
+            .map((l) => l.error),
         };
       });
 
       // Find bottlenecks (nodes with high error rates)
       const bottlenecks = nodeAnalysis
-        .filter(n => n.executionCount > 5 && n.successRate !== null && n.successRate < 80)
-        .map(n => ({
+        .filter((n) => n.executionCount > 5 && n.successRate !== null && n.successRate < 80)
+        .map((n) => ({
           nodeId: n.nodeId,
           nodeType: n.nodeType,
           nodeName: n.nodeName,
@@ -743,9 +767,9 @@ export default function createWorkflowV2Routes(_pgPool) {
             },
             execution: {
               total: executions.length,
-              completed: executions.filter(e => e.status === 'completed').length,
-              failed: executions.filter(e => e.status === 'failed').length,
-              running: executions.filter(e => e.status === 'running').length,
+              completed: executions.filter((e) => e.status === 'completed').length,
+              failed: executions.filter((e) => e.status === 'failed').length,
+              running: executions.filter((e) => e.status === 'running').length,
             },
             nodeAnalysis,
             bottlenecks,
@@ -785,7 +809,7 @@ export default function createWorkflowV2Routes(_pgPool) {
    */
   router.get('/health-summary', async (req, res) => {
     const startTime = Date.now();
-    
+
     try {
       const { tenant_id } = req.query;
       const supabase = getSupabaseClient();
@@ -810,7 +834,7 @@ export default function createWorkflowV2Routes(_pgPool) {
 
       // Group executions by workflow
       const executionsByWorkflow = {};
-      executionList.forEach(e => {
+      executionList.forEach((e) => {
         if (!executionsByWorkflow[e.workflow_id]) {
           executionsByWorkflow[e.workflow_id] = [];
         }
@@ -818,7 +842,7 @@ export default function createWorkflowV2Routes(_pgPool) {
       });
 
       // Calculate health for each workflow
-      const workflowHealths = (workflows || []).map(wf => {
+      const workflowHealths = (workflows || []).map((wf) => {
         const normalized = normalizeWorkflow(wf);
         const wfExecs = executionsByWorkflow[wf.id] || [];
         const health = calculateWorkflowHealth(normalized, wfExecs);
@@ -832,18 +856,21 @@ export default function createWorkflowV2Routes(_pgPool) {
       });
 
       // Aggregate stats
-      const healthyCount = workflowHealths.filter(w => w.health.status === 'healthy').length;
-      const needsAttentionCount = workflowHealths.filter(w => w.health.status === 'needs_attention').length;
-      const atRiskCount = workflowHealths.filter(w => w.health.status === 'at_risk').length;
-      const criticalCount = workflowHealths.filter(w => w.health.status === 'critical').length;
+      const healthyCount = workflowHealths.filter((w) => w.health.status === 'healthy').length;
+      const needsAttentionCount = workflowHealths.filter(
+        (w) => w.health.status === 'needs_attention',
+      ).length;
+      const atRiskCount = workflowHealths.filter((w) => w.health.status === 'at_risk').length;
+      const criticalCount = workflowHealths.filter((w) => w.health.status === 'critical').length;
 
-      const avgScore = workflowHealths.length > 0
-        ? workflowHealths.reduce((sum, w) => sum + w.health.score, 0) / workflowHealths.length
-        : 0;
+      const avgScore =
+        workflowHealths.length > 0
+          ? workflowHealths.reduce((sum, w) => sum + w.health.score, 0) / workflowHealths.length
+          : 0;
 
       const totalExecutions = executionList.length;
-      const successfulExecutions = executionList.filter(e => e.status === 'completed').length;
-      const failedExecutions = executionList.filter(e => e.status === 'failed').length;
+      const successfulExecutions = executionList.filter((e) => e.status === 'completed').length;
+      const failedExecutions = executionList.filter((e) => e.status === 'failed').length;
 
       const processingTime = Date.now() - startTime;
       warnIfSlow('workflows-health-summary', processingTime);
@@ -861,7 +888,7 @@ export default function createWorkflowV2Routes(_pgPool) {
         data: {
           summary: {
             totalWorkflows: workflowHealths.length,
-            activeWorkflows: workflowHealths.filter(w => w.is_active).length,
+            activeWorkflows: workflowHealths.filter((w) => w.is_active).length,
             averageHealthScore: Math.round(avgScore),
             overallStatus,
             byStatus: {
@@ -875,19 +902,25 @@ export default function createWorkflowV2Routes(_pgPool) {
             total: totalExecutions,
             successful: successfulExecutions,
             failed: failedExecutions,
-            successRate: totalExecutions > 0 
-              ? Math.round((successfulExecutions / totalExecutions) * 100) 
-              : null,
+            successRate:
+              totalExecutions > 0
+                ? Math.round((successfulExecutions / totalExecutions) * 100)
+                : null,
           },
           workflows: workflowHealths.slice(0, 20), // Top 20 with health info
           aiContext: {
             confidence: 0.85,
-            suggestions: criticalCount > 0 ? [{
-              action: 'review_critical_workflows',
-              priority: 'high',
-              reason: `${criticalCount} workflow(s) in critical state`,
-              confidence: 0.95,
-            }] : [],
+            suggestions:
+              criticalCount > 0
+                ? [
+                    {
+                      action: 'review_critical_workflows',
+                      priority: 'high',
+                      reason: `${criticalCount} workflow(s) in critical state`,
+                      confidence: 0.95,
+                    },
+                  ]
+                : [],
             insights: [
               `Overall workflow health: ${overallStatus}`,
               `Average health score: ${Math.round(avgScore)}/100`,

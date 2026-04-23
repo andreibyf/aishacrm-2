@@ -112,7 +112,7 @@ export default function createAccountV2Routes(_pgPool) {
    *       200:
    *         description: List of accounts
    */
-  router.get('/', cacheList('accounts', 30), async (req, res) => {
+  router.get('/', cacheList('accounts', 5), async (req, res) => {
     try {
       const { tenant_id, type, industry, search, filter, assigned_to, assigned_to_team, sort } =
         req.query;

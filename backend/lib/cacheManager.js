@@ -12,11 +12,16 @@ class CacheManager {
     this.client = null;
     this.connected = false;
     this.defaultTTL = {
-      list: 180, // 3 minutes for list data (restored from 30s - backend mutations invalidate affected cache entries/tenant caches)
-      detail: 300, // 5 minutes for detail views (restored from 60s; backend invalidation still handles freshness after mutations)
-      count: 600, // 10 minutes for counts (restored from 120s; backend invalidation clears stale cache after writes)
-      settings: 1800, // 30 minutes for settings (unchanged - rarely mutated, and backend invalidation covers updates)
+      list: 5, // 5s — short to cap worst-case staleness when the cold-marker race-guard isn't in play
+      detail: 60, // 1 min (cold-marker blocks stale writes post-mutation; 1 min caps idle staleness)
+      count: 60, // 1 min
+      settings: 1800, // 30 min (settings are rarely mutated)
     };
+
+    // Cold-marker ttl: after invalidation, cacheList/cacheDetail SKIP writing to
+    // the cache for this many seconds. Prevents concurrent-GET-started-before-
+    // mutation-committed from populating stale data into cache AFTER invalidation.
+    this.coldMarkerTTL = 10; // seconds
   }
 
   /**
@@ -162,9 +167,54 @@ class CacheManager {
         );
       }
 
+      // Set cold marker so any concurrent GET that was in-flight during the
+      // mutation can't populate stale data AFTER this invalidation. The
+      // cacheList/cacheDetail middleware checks this marker before SETting.
+      await this.markInvalidationCold(tenantId, module);
+
       return true;
     } catch (error) {
       logger.error({ err: error, tenantId, module }, '[CacheManager] Invalidate error');
+      return false;
+    }
+  }
+
+  /**
+   * Mark a (tenant, module) pair as "just invalidated" so subsequent cache SETs
+   * for the same pair are skipped for `coldMarkerTTL` seconds. Idempotent — each
+   * invalidation resets the marker's TTL, which is the desired behavior (a
+   * burst of mutations extends the cold window).
+   */
+  async markInvalidationCold(tenantId, module, ttlSeconds = null) {
+    if (!this.connected) return false;
+    try {
+      const key = `cold:${tenantId}:${module}`;
+      const ttl = ttlSeconds ?? this.coldMarkerTTL;
+      // Use setEx so we don't need a separate EXPIRE call. Value is the timestamp
+      // at which the marker expires — only used for diagnostics; presence is
+      // what gates the SET skip.
+      const expiresAt = Date.now() + ttl * 1000;
+      await this.client.setEx(key, ttl, String(expiresAt));
+      return true;
+    } catch (error) {
+      logger.error({ err: error, tenantId, module }, '[CacheManager] markInvalidationCold error');
+      return false;
+    }
+  }
+
+  /**
+   * Check whether a (tenant, module) pair is currently in a "cold" window after
+   * invalidation. Returns true if the cold marker exists (regardless of its
+   * timestamp value — Redis's own EX handles expiry).
+   */
+  async isInvalidationCold(tenantId, module) {
+    if (!this.connected) return false;
+    try {
+      const key = `cold:${tenantId}:${module}`;
+      const exists = await this.client.exists(key);
+      return exists === 1;
+    } catch (error) {
+      logger.error({ err: error, tenantId, module }, '[CacheManager] isInvalidationCold error');
       return false;
     }
   }
@@ -192,6 +242,10 @@ class CacheManager {
           '[CacheManager] Invalidated dashboard bundle keys',
         );
       }
+
+      // Dashboard uses module name 'dashboard' for its cold marker; the bundle
+      // endpoint checks this before populating cache.
+      await this.markInvalidationCold(tenantId, 'dashboard');
 
       return true;
     } catch (error) {

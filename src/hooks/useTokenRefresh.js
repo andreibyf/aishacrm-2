@@ -3,47 +3,48 @@ import { useToast } from '@/components/ui/use-toast';
 
 /**
  * Proactive JWT Token Refresh Manager
- * 
+ *
  * Features:
- * - Decodes aisha_access cookie to check expiration
+ * - Reads `aisha_exp` cookie (non-httpOnly, set by backend alongside `aisha_access`)
+ *   to learn when the access token expires without ever needing to touch the httpOnly
+ *   access cookie itself.
  * - Auto-refreshes 2 minutes before expiry
  * - Shows session warning toasts
  * - Auto-logout on persistent failures
  * - Prevents multiple simultaneous refreshes
+ *
+ * HISTORICAL NOTE: This hook previously tried to read `aisha_access` via document.cookie
+ * and parse it as a JWT. That never worked in production because `aisha_access` is
+ * httpOnly — document.cookie returns an empty string. The consequence was that
+ * proactive refresh NEVER fired, so every session would expire hard at the 15-minute
+ * mark, causing a burst of 401 → refresh → retry requests from every open tab at
+ * once and triggering 429 rate-limit storms. Fix: backend now also sets a
+ * non-httpOnly `aisha_exp` cookie carrying ONLY the JWT exp claim (a public,
+ * non-sensitive field) which this hook reads.
  */
 
 const REFRESH_BEFORE_EXPIRY_MS = 2 * 60 * 1000; // 2 minutes
 const WARNING_BEFORE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const CHECK_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
-// Parse JWT payload without verification (client-side visibility only)
-function parseJWT(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
-
-// Extract cookie value by name
+// Extract cookie value by name. Only works for non-httpOnly cookies.
 function getCookie(name) {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? match[2] : null;
 }
 
-export function useTokenRefresh({ 
-  enabled = true,
-  onSessionExpired = null 
-} = {}) {
+// Read the access-token expiry from the non-httpOnly `aisha_exp` hint cookie.
+// Returns the expiry time in MILLISECONDS since epoch, or null if not present/parseable.
+function readAccessTokenExpiry() {
+  const raw = getCookie('aisha_exp');
+  if (!raw) return null;
+  const expSeconds = parseInt(raw, 10);
+  if (!Number.isFinite(expSeconds) || expSeconds <= 0) return null;
+  return expSeconds * 1000;
+}
+
+export function useTokenRefresh({ enabled = true, onSessionExpired = null } = {}) {
   const { toast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshingRef = useRef(false);
@@ -58,11 +59,11 @@ export function useTokenRefresh({
     // Listen for auth session expiry events from fetchWithBackoff
     const handleAuthExpired = (event) => {
       console.log('[TokenRefresh] Session expired event received:', event.detail);
-      
+
       toast({
-        title: "Session Expired",
-        description: "Your session has expired. Please log in again.",
-        variant: "destructive",
+        title: 'Session Expired',
+        description: 'Your session has expired. Please log in again.',
+        variant: 'destructive',
         duration: 5000,
       });
 
@@ -82,28 +83,21 @@ export function useTokenRefresh({
       // Prevent concurrent refreshes
       if (refreshingRef.current) return;
 
-      const token = getCookie('aisha_access');
-      if (!token) {
-        // No token - user not logged in or already logged out
+      const expiresAt = readAccessTokenExpiry();
+      if (!expiresAt) {
+        // No aisha_exp cookie - user is not logged in (or backend hasn't been
+        // redeployed with the aisha_exp cookie yet). Either way, nothing to refresh.
         warningShownRef.current = false;
         return;
       }
 
-      const payload = parseJWT(token);
-      if (!payload || !payload.exp) {
-        console.warn('[TokenRefresh] Invalid JWT payload');
-        return;
-      }
-
       const now = Date.now();
-      const expiresAt = payload.exp * 1000; // Convert to milliseconds
       const timeUntilExpiry = expiresAt - now;
 
       if (import.meta.env.DEV) {
         console.log('[TokenRefresh] Status:', {
           expiresIn: Math.round(timeUntilExpiry / 1000) + 's',
           expiresAt: new Date(expiresAt).toISOString(),
-          email: payload.email
         });
       }
 
@@ -118,9 +112,9 @@ export function useTokenRefresh({
       if (timeUntilExpiry <= WARNING_BEFORE_EXPIRY_MS && !warningShownRef.current) {
         const minutesLeft = Math.ceil(timeUntilExpiry / 60000);
         toast({
-          title: "Session Expiring Soon",
+          title: 'Session Expiring Soon',
           description: `Your session will expire in ${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}. Activity will auto-refresh your session.`,
-          variant: "default",
+          variant: 'default',
           duration: 10000,
         });
         warningShownRef.current = true;
@@ -155,17 +149,17 @@ export function useTokenRefresh({
         const response = await fetch('/api/auth/refresh', {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
         });
 
         if (response.ok) {
           console.log('[TokenRefresh] ✓ Token refreshed successfully');
           warningShownRef.current = false; // Reset warning for next cycle
-          
+
           toast({
-            title: "Session Renewed",
-            description: "Your session has been automatically renewed.",
-            variant: "default",
+            title: 'Session Renewed',
+            description: 'Your session has been automatically renewed.',
+            variant: 'default',
             duration: 3000,
           });
         } else {
@@ -174,9 +168,9 @@ export function useTokenRefresh({
 
           // Show error toast
           toast({
-            title: "Session Refresh Failed",
-            description: "Please log in again to continue.",
-            variant: "destructive",
+            title: 'Session Refresh Failed',
+            description: 'Please log in again to continue.',
+            variant: 'destructive',
             duration: 5000,
           });
 
@@ -192,11 +186,11 @@ export function useTokenRefresh({
         }
       } catch (error) {
         console.error('[TokenRefresh] Refresh error:', error);
-        
+
         toast({
-          title: "Network Error",
-          description: "Failed to refresh session. Please check your connection.",
-          variant: "destructive",
+          title: 'Network Error',
+          description: 'Failed to refresh session. Please check your connection.',
+          variant: 'destructive',
           duration: 5000,
         });
       } finally {

@@ -111,7 +111,7 @@ export default function createWebhookRoutes(_pgPool) {
    */
 
   // GET /api/webhooks - List webhooks
-  router.get('/', cacheList('webhooks', 180), async (req, res) => {
+  router.get('/', cacheList('webhooks', 5), async (req, res) => {
     try {
       const { limit = 50, offset = 0, is_active } = req.query;
 

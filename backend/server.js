@@ -269,7 +269,7 @@ import createBundleRoutes from './routes/bundles.js';
 import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
 import { validateTenantAccess } from './middleware/validateTenant.js';
-import { defaultLimiter, authLimiter } from './middleware/rateLimiter.js';
+import { defaultLimiter } from './middleware/rateLimiter.js';
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
@@ -571,8 +571,15 @@ logger.debug('Mounting /api/tasks routes');
 app.use('/api/tasks', defaultLimiter, createTasksRoutes());
 // Memory routes use Redis/Valkey; DB pool not required
 app.use('/api/memory', defaultLimiter, createMemoryRoutes());
-// Auth routes (cookie-based login/refresh/logout) - uses strict rate limiting for security
-app.use('/api/auth', authLimiter, createAuthRoutes(measuredPgPool));
+// Auth routes (cookie-based login/refresh/logout).
+// NOTE: This mount uses the LENIENT defaultLimiter as a floor. Per-route limiters
+// inside auth.js enforce tighter caps where needed:
+//   - POST /login, /password/reset/request, /password/reset/confirm → authLimiter (10/min)
+//   - POST /refresh, GET /me                                        → refreshLimiter (60/min, skipSuccessful)
+//   - Everything else (logout, impersonate, verify-token, etc.)     → defaultLimiter (2000/min)
+// Previously the blanket authLimiter (10/min) caused 429 storms on /refresh when
+// multiple tabs / parallel 401 retries triggered N simultaneous refresh calls.
+app.use('/api/auth', defaultLimiter, createAuthRoutes(measuredPgPool));
 // GitHub Issues routes for autonomous health monitoring
 app.use('/api/github-issues', defaultLimiter, createGitHubIssuesRoutes);
 // Proxy selected Supabase Edge Functions to avoid CORS issues in browsers

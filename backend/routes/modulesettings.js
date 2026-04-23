@@ -38,7 +38,7 @@ export default function createModuleSettingsRoutes(_pool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/', cacheList('modulesettings', 300), async (req, res) => {
+  router.get('/', cacheList('modulesettings', 5), async (req, res) => {
     try {
       const { module_name } = req.query;
 

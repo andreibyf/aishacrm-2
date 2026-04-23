@@ -10,7 +10,7 @@ import cacheManager from './cacheManager.js';
  * @param {string} module - Module name (accounts, leads, contacts, bizdevsources)
  * @param {number} ttl - Cache TTL in seconds (optional)
  */
-export function cacheList(module, ttl = 30) {
+export function cacheList(module, ttl = 5) {
   return async (req, res, next) => {
     // Only cache GET requests
     if (req.method !== 'GET') {
@@ -56,9 +56,24 @@ export function cacheList(module, ttl = 30) {
         if (res.statusCode === 200) {
           // Disable browser caching - use server-side Redis cache only
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-          cacheManager.set(key, data, ttl).catch((err) => {
-            console.error('[Cache] Failed to cache response:', err);
-          });
+          // RACE GUARD: If a mutation just invalidated this (tenant, module)
+          // pair, skip writing to cache. Otherwise a GET that started BEFORE
+          // the mutation committed can populate stale data AFTER the
+          // mutation's invalidation — making subsequent reads hit stale cache
+          // until the TTL expires. The response still goes out fresh to this
+          // caller; we just don't persist it.
+          (async () => {
+            try {
+              const cold = await cacheManager.isInvalidationCold(tenantId, module);
+              if (cold) {
+                console.log(`[Cache] Skip SET (cold): ${module} list for tenant ${tenantId}`);
+                return;
+              }
+              await cacheManager.set(key, data, ttl);
+            } catch (err) {
+              console.error('[Cache] Failed to cache response:', err);
+            }
+          })();
         }
         return originalJson(data);
       };
@@ -119,9 +134,22 @@ export function cacheDetail(module, ttl = 60) {
         if (res.statusCode === 200) {
           // Disable browser caching - use server-side Redis cache only
           res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-          cacheManager.set(key, data, ttl).catch((err) => {
-            console.error('[Cache] Failed to cache detail response:', err);
-          });
+          // RACE GUARD: same reasoning as cacheList — skip SET if this
+          // (tenant, module) pair is in a post-invalidation cold window.
+          (async () => {
+            try {
+              const cold = await cacheManager.isInvalidationCold(tenantId, module);
+              if (cold) {
+                console.log(
+                  `[Cache] Skip SET (cold): ${module} detail ${req.params.id} for tenant ${tenantId}`,
+                );
+                return;
+              }
+              await cacheManager.set(key, data, ttl);
+            } catch (err) {
+              console.error('[Cache] Failed to cache detail response:', err);
+            }
+          })();
         }
         return originalJson(data);
       };

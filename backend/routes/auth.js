@@ -7,6 +7,7 @@ import {
   sendPasswordResetEmail,
   updateAuthUserMetadata,
 } from '../lib/supabaseAuth.js';
+import { authLimiter, refreshLimiter } from '../middleware/rateLimiter.js';
 import logger from '../lib/logger.js';
 
 function getAnonSupabase() {
@@ -51,6 +52,32 @@ function cookieOpts(maxAgeMs) {
     path: '/',
     ...(domain && { domain }),
   };
+}
+
+// Options for the non-httpOnly expiry hint cookie. Contains ONLY the JWT exp
+// timestamp (a public, non-sensitive field already visible in any decoded JWT).
+// The frontend reads this to know when to proactively refresh — it can't read
+// the real `aisha_access` cookie because that's httpOnly by design.
+function expCookieOpts(maxAgeMs) {
+  return { ...cookieOpts(maxAgeMs), httpOnly: false };
+}
+
+// Emit both the httpOnly access cookie and the non-httpOnly exp hint cookie in
+// one shot. `exp` is the JWT exp claim (Unix seconds) — we decode the freshly
+// signed token rather than recomputing it to guarantee consistency with what
+// the JWT actually carries.
+function setAccessCookies(res, accessToken, maxAgeMs) {
+  res.cookie('aisha_access', accessToken, cookieOpts(maxAgeMs));
+  const decoded = jwt.decode(accessToken);
+  const exp = decoded && typeof decoded.exp === 'number' ? decoded.exp : null;
+  if (exp !== null) {
+    res.cookie('aisha_exp', String(exp), expCookieOpts(maxAgeMs));
+  }
+}
+
+function clearAccessCookies(res) {
+  res.clearCookie('aisha_access', { path: '/' });
+  res.clearCookie('aisha_exp', { path: '/' });
 }
 
 export default function createAuthRoutes(_pgPool) {
@@ -275,7 +302,7 @@ export default function createAuthRoutes(_pgPool) {
   });
 
   // POST /api/auth/login - verify with Supabase Auth (if anon key available), then set cookies
-  router.post('/login', async (req, res) => {
+  router.post('/login', authLimiter, async (req, res) => {
     try {
       const { email: rawEmail, password } = req.body || {};
       if (!rawEmail) {
@@ -577,7 +604,7 @@ export default function createAuthRoutes(_pgPool) {
       const access = signAccess(payload);
       const refresh = signRefresh({ sub: user.id, table });
 
-      res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
+      setAccessCookies(res, access, 15 * 60 * 1000);
       res.cookie('aisha_refresh', refresh, cookieOpts(7 * 24 * 60 * 60 * 1000));
 
       logger.debug('[Auth.login] Login successful:', {
@@ -606,7 +633,7 @@ export default function createAuthRoutes(_pgPool) {
   });
 
   // POST /api/auth/refresh - rotate short-lived access cookie using refresh cookie OR accept Supabase Bearer
-  router.post('/refresh', async (req, res) => {
+  router.post('/refresh', refreshLimiter, async (req, res) => {
     try {
       // DEBUG logging
       const hasRefreshCookie = !!req.cookies?.aisha_refresh;
@@ -690,7 +717,7 @@ export default function createAuthRoutes(_pgPool) {
             table,
           };
           const access = signAccess(payload);
-          res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
+          setAccessCookies(res, access, 15 * 60 * 1000);
           logger.debug('[Auth.refresh] Issued access cookie from Supabase Bearer token:', {
             email,
             mode: serviceKey ? 'service_role' : 'anon_fallback',
@@ -761,7 +788,7 @@ export default function createAuthRoutes(_pgPool) {
         table: tbl,
       };
       const access = signAccess(payload);
-      res.cookie('aisha_access', access, cookieOpts(15 * 60 * 1000));
+      setAccessCookies(res, access, 15 * 60 * 1000);
       return res.json({ status: 'success', message: 'Refreshed' });
     } catch (e) {
       logger.error('[Auth.refresh] error', e);
@@ -772,7 +799,7 @@ export default function createAuthRoutes(_pgPool) {
   // POST /api/auth/logout - clear cookies
   router.post('/logout', (req, res) => {
     try {
-      res.clearCookie('aisha_access', { path: '/' });
+      clearAccessCookies(res);
       res.clearCookie('aisha_refresh', { path: '/' });
       return res.json({ status: 'success', message: 'Logged out' });
     } catch {
@@ -781,7 +808,7 @@ export default function createAuthRoutes(_pgPool) {
   });
 
   // GET /api/auth/me - simple whoami via cookie (for UI probing)
-  router.get('/me', (req, res) => {
+  router.get('/me', refreshLimiter, (req, res) => {
     try {
       const token = req.cookies?.aisha_access;
       if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
@@ -794,7 +821,7 @@ export default function createAuthRoutes(_pgPool) {
   });
 
   // POST /api/auth/password/reset/request - initiate Supabase password reset email
-  router.post('/password/reset/request', async (req, res) => {
+  router.post('/password/reset/request', authLimiter, async (req, res) => {
     try {
       const { email, redirectTo } = req.body || {};
       if (!email) {
@@ -834,7 +861,7 @@ export default function createAuthRoutes(_pgPool) {
 
   // POST /api/auth/password/reset/confirm - (optional) set new password using recovery access token
   // NOTE: Frontend can also directly call supabase.auth.updateUser({ password }) after PASSWORD_RECOVERY event.
-  router.post('/password/reset/confirm', async (req, res) => {
+  router.post('/password/reset/confirm', authLimiter, async (req, res) => {
     try {
       const { access_token, new_password } = req.body || {};
       if (!access_token || !new_password) {
@@ -1115,7 +1142,7 @@ export default function createAuthRoutes(_pgPool) {
         res.cookie('aisha_original_refresh', req.cookies.aisha_refresh, cookieOpts(60 * 60 * 1000));
         res.clearCookie('aisha_refresh', { path: '/' });
       }
-      res.cookie('aisha_access', impersonationToken, cookieOpts(60 * 60 * 1000));
+      setAccessCookies(res, impersonationToken, 60 * 60 * 1000);
 
       // Audit log
       logger.info('[Auth.impersonate] Impersonation started:', {
@@ -1189,7 +1216,7 @@ export default function createAuthRoutes(_pgPool) {
         } else {
           // No trustworthy identity to restore — require re-login.
           res.clearCookie('aisha_original', { path: '/' });
-          res.clearCookie('aisha_access', { path: '/' });
+          clearAccessCookies(res);
           return res
             .status(401)
             .json({ status: 'error', message: 'Session expired. Please login again.' });
@@ -1197,7 +1224,7 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Restore original tokens
-      res.cookie('aisha_access', originalToken, cookieOpts(15 * 60 * 1000));
+      setAccessCookies(res, originalToken, 15 * 60 * 1000);
       res.clearCookie('aisha_original', { path: '/' });
       if (req.cookies?.aisha_original_refresh) {
         res.cookie(

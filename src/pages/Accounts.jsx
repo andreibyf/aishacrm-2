@@ -670,7 +670,7 @@ export default function AccountsPage() {
           )}
         </div>
       </TooltipProvider>
-      {ConfirmDialogPortal}
+      <ConfirmDialogPortal />
     </>
   );
 }
