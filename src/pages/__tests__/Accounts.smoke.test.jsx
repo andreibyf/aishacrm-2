@@ -108,7 +108,9 @@ vi.mock('@/components/shared/ProgressOverlay', () => ({
 
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   useConfirmDialog: () => ({
-    ConfirmDialog: <div data-testid="confirm-dialog-portal">ConfirmDialog</div>,
+    // Production hook returns a *component* (not a JSX element). Accounts.jsx
+    // renders it as `<ConfirmDialogPortal />`, so the mock must do the same.
+    ConfirmDialog: () => <div data-testid="confirm-dialog-portal">ConfirmDialog</div>,
     confirm: vi.fn().mockResolvedValue(true),
   }),
 }));

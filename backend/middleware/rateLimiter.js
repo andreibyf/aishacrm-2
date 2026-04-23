@@ -117,3 +117,30 @@ export const readLimiter = rateLimit({
     });
   },
 });
+
+// Dedicated rate limiter for token refresh + whoami endpoints - 60 requests/minute per IP
+// Deliberately more permissive than authLimiter (10/min) because:
+//   1. Legitimate users with multiple tabs may each refresh independently
+//   2. After a short window of clock drift, every tab may hit /refresh within seconds
+//   3. With frontend refresh-dedup in place, this only fires cross-tab or cross-device
+// `skipSuccessfulRequests` means only FAILED refreshes count toward the limit, so healthy
+// session renewal never throttles legitimate traffic — only brute-force attempts do.
+export const refreshLimiter = rateLimit({
+  skip: skipForTests,
+  windowMs: 60 * 1000,
+  max: 60,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    logger.warn('[RateLimit] Refresh limit exceeded', {
+      ip: req.ip,
+      path: req.path,
+      method: req.method,
+    });
+    res.status(429).json({
+      status: 'error',
+      message: 'Too many token refresh attempts, please try again after a minute.',
+    });
+  },
+});

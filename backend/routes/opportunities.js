@@ -304,7 +304,7 @@ export default function createOpportunityRoutes(_pgPool) {
   });
 
   // GET /api/opportunities - List opportunities with filtering
-  router.get('/', cacheList('opportunities', 120), async (req, res) => {
+  router.get('/', cacheList('opportunities', 5), async (req, res) => {
     try {
       let { tenant_id, filter, stage } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);

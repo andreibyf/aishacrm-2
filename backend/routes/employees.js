@@ -119,7 +119,7 @@ export default function createEmployeeRoutes(_pgPool) {
    *               $ref: '#/components/schemas/Error'
    */
   // GET /api/employees - List employees
-  router.get('/', cacheList('employees', 30), async (req, res) => {
+  router.get('/', cacheList('employees', 5), async (req, res) => {
     try {
       const { tenant_id, email, linked_user_id, limit = 50, offset = 0 } = req.query;
 

@@ -289,7 +289,7 @@ export default function createLeadsV2Routes() {
    *       200:
    *         description: Leads list with flattened metadata
    */
-  router.get('/', cacheList('leads', 30), async (req, res) => {
+  router.get('/', cacheList('leads', 5), async (req, res) => {
     try {
       const {
         tenant_id,

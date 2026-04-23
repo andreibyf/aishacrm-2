@@ -64,7 +64,7 @@ export default function createNotificationRoutes(_pgPool, options = {}) {
    *               $ref: '#/components/schemas/Success'
    */
   // GET /api/notifications - List notifications
-  router.get('/', cacheList('notifications', 60), async (req, res) => {
+  router.get('/', cacheList('notifications', 5), async (req, res) => {
     try {
       const { user_email } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);

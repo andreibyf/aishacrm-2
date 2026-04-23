@@ -23,6 +23,33 @@ Reset:
 const backoffState = {};
 let originalFetch = null;
 
+// Shared promise for token-refresh dedup. When the app gets N parallel 401s
+// (e.g. page load fires 8 API calls in parallel, all see an expired access cookie),
+// we want exactly ONE call to /api/auth/refresh, not N. All N callers await the
+// same promise and then retry their original request.
+//
+// The refreshLimiter on the backend is 60/min/IP; without this dedup, a normal
+// page load could trivially burn through that limit and trigger 429 storms.
+let refreshPromise = null;
+
+function sharedRefreshCall(refreshUrl) {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = originalFetch(refreshUrl, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then((resp) => ({ ok: resp.ok, status: resp.status }))
+    .catch((err) => ({ ok: false, status: 0, error: err }))
+    .finally(() => {
+      // Clear on the next microtask so concurrent-but-slightly-later callers
+      // still see the in-flight promise, but a NEW 401 a second later will
+      // correctly trigger a fresh refresh attempt.
+      refreshPromise = null;
+    });
+  return refreshPromise;
+}
+
 function computeDelay(count) {
   const base = Math.pow(2, Math.max(0, count - 1)) * 500; // 500, 1000, 2000, 4000...
   const jitter = Math.floor(Math.random() * 150); // Add small jitter
@@ -33,14 +60,14 @@ async function fetchWithBackoff(input, init) {
   const BACKEND_URL = getBackendUrl();
 
   const urlString = typeof input === 'string' ? input : (input && input.url) || '';
-  
+
   // Skip Supabase URLs entirely - they handle their own credentials and CORS
   // Supabase returns Access-Control-Allow-Origin: * which conflicts with credentials: 'include'
   const isSupabaseUrl = urlString.includes('.supabase.co');
   if (isSupabaseUrl) {
     return originalFetch(input, init);
   }
-  
+
   let key = 'unknown';
   try {
     const u = new URL(urlString, window.location.origin);
@@ -85,25 +112,30 @@ async function fetchWithBackoff(input, init) {
   // If refresh fails multiple times, notify user and redirect to login
   try {
     const u = new URL(urlString, window.location.origin);
-    const isBackendCall = u.pathname.startsWith('/api') || u.origin === new URL(BACKEND_URL, window.location.origin).origin;
+    const isBackendCall =
+      u.pathname.startsWith('/api') ||
+      u.origin === new URL(BACKEND_URL, window.location.origin).origin;
     const isRefreshCall = u.pathname === '/api/auth/refresh';
     const isLoginCall = u.pathname === '/api/auth/login';
     const alreadyRetried = hdrs.get('x-auth-retry') === '1';
-    
-    if (resp && resp.status === 401 && isBackendCall && !isRefreshCall && !isLoginCall && !alreadyRetried) {
+
+    if (
+      resp &&
+      resp.status === 401 &&
+      isBackendCall &&
+      !isRefreshCall &&
+      !isLoginCall &&
+      !alreadyRetried
+    ) {
       if (import.meta.env.DEV) {
-        console.log('[fetchWithBackoff] 401 detected, attempting token refresh');
+        console.log('[fetchWithBackoff] 401 detected, attempting shared token refresh');
       }
-      
-      // Call refresh endpoint - use absolute URL to ensure it hits the backend
+
+      // Shared refresh: N parallel 401s → 1 refresh call on the wire.
       const refreshUrl = `${BACKEND_URL}/api/auth/refresh`;
-      const refreshResp = await originalFetch(refreshUrl, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      if (refreshResp && refreshResp.ok) {
+      const refreshResult = await sharedRefreshCall(refreshUrl);
+
+      if (refreshResult.ok) {
         // Refresh succeeded - retry original request
         if (import.meta.env.DEV) {
           console.log('[fetchWithBackoff] Token refreshed successfully, retrying request');
@@ -115,13 +147,15 @@ async function fetchWithBackoff(input, init) {
       } else {
         // Refresh failed - session truly expired
         if (import.meta.env.DEV) {
-          console.warn('[fetchWithBackoff] Token refresh failed, session expired');
+          console.warn('[fetchWithBackoff] Token refresh failed, session expired', refreshResult);
         }
-        
+
         // Dispatch custom event to notify token refresh hook
-        window.dispatchEvent(new CustomEvent('auth-session-expired', {
-          detail: { reason: 'refresh_failed', status: refreshResp?.status }
-        }));
+        window.dispatchEvent(
+          new CustomEvent('auth-session-expired', {
+            detail: { reason: 'refresh_failed', status: refreshResult.status },
+          }),
+        );
       }
     }
   } catch {
@@ -153,7 +187,9 @@ export function initRateLimitBackoff({ enable = true } = {}) {
 
   // Reset handler
   window.addEventListener('rate-limit-reset', () => {
-    Object.keys(backoffState).forEach(k => { backoffState[k] = { count: 0, coolingUntil: 0 }; });
+    Object.keys(backoffState).forEach((k) => {
+      backoffState[k] = { count: 0, coolingUntil: 0 };
+    });
     window.__rateLimitStats = {};
   });
 

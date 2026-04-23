@@ -216,7 +216,7 @@ export default function createConstructionProjectsRoutes(_pgPool) {
   // ==============================================
   // GET /api/construction/projects - List all projects
   // ==============================================
-  router.get('/', cacheList('projects', 180), async (req, res) => {
+  router.get('/', cacheList('projects', 5), async (req, res) => {
     try {
       const { tenant_id, status, account_id, limit, offset } = req.query;
       const { getSupabaseClient } = await import('../lib/supabase-db.js');

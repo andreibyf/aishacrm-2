@@ -532,7 +532,7 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
     }
   });
 
-  router.get('/', cacheList('activities', 30), async (req, res) => {
+  router.get('/', cacheList('activities', 5), async (req, res) => {
     try {
       const { tenant_id, filter, sort } = req.query;
       if (!tenant_id) {

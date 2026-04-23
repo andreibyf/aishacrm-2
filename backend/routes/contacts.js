@@ -140,9 +140,7 @@ export default function createContactRoutes(_pgPool) {
 
   const toTagArray = (value) => {
     if (!Array.isArray(value)) return null;
-    return value
-      .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
-      .filter(Boolean);
+    return value.map((tag) => (typeof tag === 'string' ? tag.trim() : '')).filter(Boolean);
   };
 
   const MIRRORED_METADATA_KEYS = [
@@ -214,7 +212,7 @@ export default function createContactRoutes(_pgPool) {
   };
 
   // GET /api/contacts - List contacts
-  router.get('/', cacheList('contacts', 180), async (req, res) => {
+  router.get('/', cacheList('contacts', 5), async (req, res) => {
     try {
       let { tenant_id, status, account_id, assigned_to, filter } = req.query;
       const limit = parseInt(req.query.limit || '50', 10);
@@ -227,7 +225,7 @@ export default function createContactRoutes(_pgPool) {
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
       let q = supabase.from('contacts').select('*', { count: 'exact' }).eq('tenant_id', tenant_id);
-      
+
       // Handle $or filter for dynamic search (frontend passes filter as JSON string)
       if (filter) {
         let parsedFilter = filter;
@@ -238,31 +236,41 @@ export default function createContactRoutes(_pgPool) {
             // treat as literal
           }
         }
-        
-        if (typeof parsedFilter === 'object' && parsedFilter.$or && Array.isArray(parsedFilter.$or)) {
+
+        if (
+          typeof parsedFilter === 'object' &&
+          parsedFilter.$or &&
+          Array.isArray(parsedFilter.$or)
+        ) {
           // Build OR condition: match any of the $or criteria
-          const orConditions = parsedFilter.$or.map(condition => {
-            const [field, opObj] = Object.entries(condition)[0];
-            if (opObj && typeof opObj === 'object' && opObj.$icontains) {
-              return `${field}.ilike.%${opObj.$icontains}%`;
-            }
-            if (opObj === null) {
-              return `${field}.is.null`;
-            }
-            // Support direct equality for non-object values (strings, numbers, booleans)
-            // e.g. { assigned_to: "abc" } -> assigned_to.eq.abc
-            if (typeof opObj === 'string' || typeof opObj === 'number' || typeof opObj === 'boolean') {
-              return `${field}.eq.${opObj}`;
-            }
-            return null;
-          }).filter(Boolean);
-          
+          const orConditions = parsedFilter.$or
+            .map((condition) => {
+              const [field, opObj] = Object.entries(condition)[0];
+              if (opObj && typeof opObj === 'object' && opObj.$icontains) {
+                return `${field}.ilike.%${opObj.$icontains}%`;
+              }
+              if (opObj === null) {
+                return `${field}.is.null`;
+              }
+              // Support direct equality for non-object values (strings, numbers, booleans)
+              // e.g. { assigned_to: "abc" } -> assigned_to.eq.abc
+              if (
+                typeof opObj === 'string' ||
+                typeof opObj === 'number' ||
+                typeof opObj === 'boolean'
+              ) {
+                return `${field}.eq.${opObj}`;
+              }
+              return null;
+            })
+            .filter(Boolean);
+
           if (orConditions.length > 0) {
             q = q.or(orConditions.join(','));
           }
         }
       }
-      
+
       if (status) q = q.eq('status', status);
       if (account_id) q = q.eq('account_id', account_id);
       if (assigned_to) q = q.eq('assigned_to', assigned_to);
@@ -279,7 +287,7 @@ export default function createContactRoutes(_pgPool) {
           contacts,
           total: count || 0,
           limit,
-          offset
+          offset,
         },
       });
     } catch (error) {
@@ -318,7 +326,7 @@ export default function createContactRoutes(_pgPool) {
    *             schema:
    *               $ref: '#/components/schemas/Success'
    */
-  router.get('/search', cacheList('contacts', 180), async (req, res) => {
+  router.get('/search', cacheList('contacts', 5), async (req, res) => {
     try {
       let { tenant_id, q = '' } = req.query;
       const limit = parseInt(req.query.limit || '25', 10);
@@ -339,7 +347,9 @@ export default function createContactRoutes(_pgPool) {
         .from('contacts')
         .select('*', { count: 'exact' })
         .eq('tenant_id', tenant_id)
-        .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`)
+        .or(
+          `first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`,
+        )
         .order('updated_at', { ascending: false })
         .range(offset, offset + limit - 1);
       if (error) throw new Error(error.message);
@@ -396,26 +406,28 @@ export default function createContactRoutes(_pgPool) {
 
       // Validate required name fields
       if (!first_name || !first_name.trim()) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'first_name is required and cannot be empty',
-          field: 'first_name'
+          field: 'first_name',
         });
       }
 
       if (!last_name || !last_name.trim()) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'last_name is required and cannot be empty',
-          field: 'last_name'
+          field: 'last_name',
         });
       }
 
-      const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'active';
+      const normalizedStatus =
+        typeof status === 'string' && status.trim() ? status.trim() : 'active';
       const metadataExtras = {};
       if (title !== undefined && title !== null) metadataExtras.title = title;
       if (department !== undefined && department !== null) metadataExtras.department = department;
-      if (description !== undefined && description !== null) metadataExtras.description = description;
+      if (description !== undefined && description !== null)
+        metadataExtras.description = description;
       const mergedMetadata = sanitizeMetadataPayload(metadata, otherFields, metadataExtras);
 
       const nowIso = new Date().toISOString();
@@ -444,7 +456,8 @@ export default function createContactRoutes(_pgPool) {
         contactPayload.account_id = account_id || null;
       }
       if (assigned_to !== undefined) contactPayload.assigned_to = assigned_to || null;
-      if (assigned_to_name !== undefined) contactPayload.assigned_to_name = assigned_to_name || null;
+      if (assigned_to_name !== undefined)
+        contactPayload.assigned_to_name = assigned_to_name || null;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
@@ -593,18 +606,18 @@ export default function createContactRoutes(_pgPool) {
 
       // Validate required name fields if provided
       if (first_name !== undefined && (!first_name || !first_name.trim())) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'first_name cannot be empty',
-          field: 'first_name'
+          field: 'first_name',
         });
       }
 
       if (last_name !== undefined && (!last_name || !last_name.trim())) {
-        return res.status(400).json({ 
-          status: 'error', 
+        return res.status(400).json({
+          status: 'error',
           message: 'last_name cannot be empty',
-          field: 'last_name'
+          field: 'last_name',
         });
       }
 
@@ -624,7 +637,12 @@ export default function createContactRoutes(_pgPool) {
       if (title !== undefined) metadataExtras.title = title;
       if (department !== undefined) metadataExtras.department = department;
       if (description !== undefined) metadataExtras.description = description;
-      const updatedMetadata = sanitizeMetadataPayload(current?.metadata, metadata, otherFields, metadataExtras);
+      const updatedMetadata = sanitizeMetadataPayload(
+        current?.metadata,
+        metadata,
+        otherFields,
+        metadataExtras,
+      );
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (first_name !== undefined) payload.first_name = first_name?.trim?.() || null;

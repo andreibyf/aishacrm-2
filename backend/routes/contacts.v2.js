@@ -100,7 +100,7 @@ export default function createContactV2Routes(_pgPool) {
    *       200:
    *         description: Contacts list with flattened metadata
    */
-  router.get('/', cacheList('contacts', 30), async (req, res) => {
+  router.get('/', cacheList('contacts', 5), async (req, res) => {
     try {
       const { tenant_id, status, account_id, filter, assigned_to, assigned_to_team, sort, search } =
         req.query;
