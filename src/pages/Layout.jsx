@@ -2399,8 +2399,12 @@ export default function LayoutWrapper({ children, currentPageName }) {
         <QueryClientProvider client={queryClient}>
           <ApiOptimizerProvider>
             <TenantProvider>
-              <EntityLabelsWrapper>
-                <ApiProvider>
+              {/* ApiProvider must be ABOVE EntityLabelsWrapper because
+                   EntityLabelsProvider now consumes cachedRequest via
+                   useApiManager(). Order: TenantProvider (for tenantId) →
+                   ApiProvider (for cachedRequest) → EntityLabelsWrapper. */}
+              <ApiProvider>
+                <EntityLabelsWrapper>
                   <TimezoneProvider>
                     <EmployeeScopeProvider>
                       <LoggerProvider>
@@ -2410,8 +2414,8 @@ export default function LayoutWrapper({ children, currentPageName }) {
                       </LoggerProvider>
                     </EmployeeScopeProvider>
                   </TimezoneProvider>
-                </ApiProvider>
-              </EntityLabelsWrapper>
+                </EntityLabelsWrapper>
+              </ApiProvider>
             </TenantProvider>
           </ApiOptimizerProvider>
         </QueryClientProvider>

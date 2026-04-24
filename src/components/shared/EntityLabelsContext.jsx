@@ -2,106 +2,111 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BACKEND_URL } from '@/api/entities';
 import { DEFAULT_LABELS, HREF_TO_ENTITY_KEY } from './entityLabelsUtils';
 import { EntityLabelsContext } from './entityLabelsContextDefinition';
+import { useApiManager } from './ApiManager';
+
+// Entity labels change rarely (admin toggles them from Settings). Cache for 5
+// minutes so a superadmin flipping between tenants in the session reuses the
+// cached labels instead of re-fetching on every tenantId change.
+const ENTITY_LABELS_TTL_MS = 5 * 60 * 1000;
 
 export function EntityLabelsProvider({ children, tenantId }) {
-  console.log('[EntityLabelsContext] Provider rendered with tenantId:', tenantId);
   const [labels, setLabels] = useState(DEFAULT_LABELS);
   const [loading, setLoading] = useState(false);
-  const lastFetchedTenantIdRef = useRef(null); // Use ref to persist across strict mode remounts
+  const lastFetchedTenantIdRef = useRef(null);
+  const { cachedRequest, peek, clearCache } = useApiManager();
 
-  const fetchLabels = useCallback(async (tid) => {
-    if (!tid) {
-      console.log('[EntityLabelsContext] No tenant ID, using defaults');
-      setLabels(DEFAULT_LABELS);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log('[EntityLabelsContext] Fetching labels for tenant:', tid);
-      // Add cache-busting timestamp to prevent 304 responses
-      const cacheBuster = Date.now();
-      const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}?_t=${cacheBuster}`, {
-        credentials: 'include',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[EntityLabelsContext] RAW API response for tenant', tid, ':', JSON.stringify(data, null, 2));
-        if (data.status === 'success' && data.data?.labels) {
-          console.log('[EntityLabelsContext] Setting labels for', tid, ':', JSON.stringify(data.data.labels));
-          console.log('[EntityLabelsContext] Customized entities:', data.data.customized);
-          // Force a new object reference to ensure React detects the change
-          setLabels({ ...data.data.labels });
-        }
-      } else {
-        // Fallback to defaults on error
-        console.warn('[EntityLabelsContext] Failed to fetch labels, using defaults');
+  const fetchLabels = useCallback(
+    async (tid) => {
+      if (!tid) {
         setLabels(DEFAULT_LABELS);
+        return;
       }
-    } catch (error) {
-      console.error('[EntityLabelsContext] Error fetching entity labels:', error);
-      setLabels(DEFAULT_LABELS);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
+      // Skip the loading-state flicker when cachedRequest will resolve from
+      // cache synchronously — the common case for superadmins flipping back
+      // to a previously-viewed tenant within the TTL window.
+      const willHitCache = peek
+        ? peek('EntityLabels', 'get', { tenantId: tid }, { ttlMs: ENTITY_LABELS_TTL_MS })
+        : false;
+
+      try {
+        if (!willHitCache) setLoading(true);
+        const data = await cachedRequest(
+          'EntityLabels',
+          'get',
+          { tenantId: tid },
+          async () => {
+            const response = await fetch(`${BACKEND_URL}/api/entity-labels/${tid}`, {
+              credentials: 'include',
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          },
+          { ttlMs: ENTITY_LABELS_TTL_MS },
+        );
+
+        if (data?.status === 'success' && data.data?.labels) {
+          setLabels({ ...data.data.labels });
+        } else {
+          setLabels(DEFAULT_LABELS);
+        }
+      } catch (error) {
+        console.error('[EntityLabelsContext] Error fetching entity labels:', error);
+        setLabels(DEFAULT_LABELS);
+      } finally {
+        if (!willHitCache) setLoading(false);
+      }
+    },
+    [cachedRequest, peek],
+  );
 
   useEffect(() => {
     if (tenantId && tenantId !== lastFetchedTenantIdRef.current) {
-      console.log('[EntityLabelsContext] Tenant changed, fetching labels for:', tenantId);
       lastFetchedTenantIdRef.current = tenantId;
       fetchLabels(tenantId);
     } else if (!tenantId && lastFetchedTenantIdRef.current) {
-      // Tenant cleared, reset to defaults
-      console.log('[EntityLabelsContext] Tenant cleared, resetting to defaults');
       setLabels(DEFAULT_LABELS);
       lastFetchedTenantIdRef.current = null;
     }
   }, [tenantId, fetchLabels]);
 
-  /**
-   * Get the plural label for an entity
-   * @param {string} entityKey - e.g., 'leads', 'accounts'
-   * @returns {string} - e.g., 'Prospects' or 'Leads'
-   */
-  const getLabel = useCallback((entityKey) => {
-    const key = entityKey?.toLowerCase();
-    return labels[key]?.plural || DEFAULT_LABELS[key]?.plural || entityKey;
-  }, [labels]);
+  const getLabel = useCallback(
+    (entityKey) => {
+      const key = entityKey?.toLowerCase();
+      return labels[key]?.plural || DEFAULT_LABELS[key]?.plural || entityKey;
+    },
+    [labels],
+  );
 
-  /**
-   * Get the singular label for an entity
-   * @param {string} entityKey - e.g., 'leads', 'accounts'
-   * @returns {string} - e.g., 'Prospect' or 'Lead'
-   */
-  const getLabelSingular = useCallback((entityKey) => {
-    const key = entityKey?.toLowerCase();
-    return labels[key]?.singular || DEFAULT_LABELS[key]?.singular || entityKey;
-  }, [labels]);
+  const getLabelSingular = useCallback(
+    (entityKey) => {
+      const key = entityKey?.toLowerCase();
+      return labels[key]?.singular || DEFAULT_LABELS[key]?.singular || entityKey;
+    },
+    [labels],
+  );
 
-  /**
-   * Get the label for a navigation href
-   * @param {string} href - e.g., 'Leads', 'BizDevSources'
-   * @returns {string} - custom label or original
-   */
-  const getNavLabel = useCallback((href) => {
-    const entityKey = HREF_TO_ENTITY_KEY[href];
-    if (entityKey) {
-      return getLabel(entityKey);
-    }
-    return null; // Return null if not a customizable entity
-  }, [getLabel]);
+  const getNavLabel = useCallback(
+    (href) => {
+      const entityKey = HREF_TO_ENTITY_KEY[href];
+      if (entityKey) {
+        return getLabel(entityKey);
+      }
+      return null;
+    },
+    [getLabel],
+  );
 
+  // Force a refresh by invalidating the cached entry, then refetching.
+  // Used after EntityLabelsManager save/reset so nav labels update immediately.
   const refresh = useCallback(() => {
-    console.log('[EntityLabelsContext] refresh() called, tenantId:', tenantId);
+    clearCache('EntityLabels');
+    lastFetchedTenantIdRef.current = null;
     if (tenantId) {
+      lastFetchedTenantIdRef.current = tenantId;
       fetchLabels(tenantId);
     }
-  }, [tenantId, fetchLabels]);
+  }, [tenantId, fetchLabels, clearCache]);
 
   const value = {
     labels,
@@ -112,11 +117,5 @@ export function EntityLabelsProvider({ children, tenantId }) {
     refresh,
   };
 
-  return (
-    <EntityLabelsContext.Provider value={value}>
-      {children}
-    </EntityLabelsContext.Provider>
-  );
+  return <EntityLabelsContext.Provider value={value}>{children}</EntityLabelsContext.Provider>;
 }
-
-

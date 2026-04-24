@@ -97,17 +97,9 @@ export default function EntityLabelsManager({ isTenantAdmin = false }) {
 
       try {
         setLoading(true);
-        // Add cache-busting timestamp to prevent 304 responses
-        const cacheBuster = Date.now();
-        const response = await fetch(
-          `${BACKEND_URL}/api/entity-labels/${selectedTenantId}?_t=${cacheBuster}`,
-          {
-            credentials: 'include',
-            headers: {
-              'Cache-Control': 'no-cache',
-            },
-          },
-        );
+        const response = await fetch(`${BACKEND_URL}/api/entity-labels/${selectedTenantId}`, {
+          credentials: 'include',
+        });
 
         if (response.ok) {
           const data = await response.json();
