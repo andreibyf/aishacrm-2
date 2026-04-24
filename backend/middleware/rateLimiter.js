@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import logger from '../lib/logger.js';
+import { logRateLimitViolation } from '../lib/rateLimitTracker.js';
 
 /**
  * Rate limiting middleware for API routes
@@ -19,6 +20,43 @@ import logger from '../lib/logger.js';
 const skipForTests = () =>
   process.env.NODE_ENV === 'test' || process.env.DISABLE_RATE_LIMIT === 'true';
 
+/**
+ * Create rate limit handler with violation tracking
+ * @param {String} limitType - Type of limit ('default', 'auth', 'write', 'read', 'refresh')
+ * @returns {Function} Rate limit handler
+ */
+function createRateLimitHandler(limitType) {
+  return (req, res) => {
+    const violation = {
+      ip: req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
+      tenantId: req.tenant?.id || null,
+      userId: req.user?.id || null,
+      endpoint: req.path,
+      method: req.method,
+      limitType,
+      userAgent: req.headers['user-agent'] || null,
+      cloudflareRay: req.headers['cf-ray'] || null,
+      cloudflareCountry: req.headers['cf-ipcountry'] || null,
+    };
+
+    // Log to database (async, don't wait)
+    logRateLimitViolation(violation).catch(err => {
+      logger.error('[RateLimitTracker] Failed to log violation:', err);
+    });
+
+    logger.warn(`[RateLimit] ${limitType} limit exceeded`, {
+      ip: violation.ip,
+      path: req.path,
+      method: req.method,
+    });
+
+    res.status(429).json({
+      status: 'error',
+      message: `Too many requests from this IP, please try again after a minute.`,
+    });
+  };
+}
+
 // Default rate limiter - 100 requests/minute per IP
 // High limit accommodates test suites (1200+ requests). Production traffic
 // from a single IP rarely exceeds 100/min; tests can hit 1000+/min.
@@ -32,17 +70,7 @@ export const defaultLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  handler: (req, res) => {
-    logger.warn('[RateLimit] Default limit exceeded', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-    });
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many requests from this IP, please try again after a minute.',
-    });
-  },
+  handler: createRateLimitHandler('default'),
 });
 
 // Strict rate limiter for authentication endpoints - 10 requests/minute per IP
@@ -57,17 +85,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false, // Count all requests
-  handler: (req, res) => {
-    logger.warn('[RateLimit] Auth limit exceeded', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-    });
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many authentication attempts from this IP, please try again after a minute.',
-    });
-  },
+  handler: createRateLimitHandler('auth'),
 });
 
 // Moderate rate limiter for write-heavy endpoints - 20 requests/minute per IP
@@ -81,66 +99,34 @@ export const writeLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn('[RateLimit] Write limit exceeded', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-    });
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many write requests from this IP, please try again after a minute.',
-    });
-  },
+  handler: createRateLimitHandler('write'),
 });
 
-// Lenient rate limiter for read-heavy endpoints - 200 requests/minute per IP
+// Read-heavy endpoints - 200 requests/minute per IP
 export const readLimiter = rateLimit({
   skip: skipForTests,
   windowMs: 60 * 1000, // 1 minute
   max: 200, // limit each IP to 200 requests per windowMs
   message: {
     status: 'error',
-    message: 'Too many requests from this IP, please try again after a minute.',
+    message: 'Too many read requests from this IP, please try again after a minute.',
   },
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn('[RateLimit] Read limit exceeded', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-    });
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many requests from this IP, please try again after a minute.',
-    });
-  },
+  handler: createRateLimitHandler('read'),
 });
 
-// Dedicated rate limiter for token refresh + whoami endpoints - 60 requests/minute per IP
-// Deliberately more permissive than authLimiter (10/min) because:
-//   1. Legitimate users with multiple tabs may each refresh independently
-//   2. After a short window of clock drift, every tab may hit /refresh within seconds
-//   3. With frontend refresh-dedup in place, this only fires cross-tab or cross-device
-// `skipSuccessfulRequests` means only FAILED refreshes count toward the limit, so healthy
-// session renewal never throttles legitimate traffic — only brute-force attempts do.
+// Token refresh limiter - 60 requests/minute per IP
 export const refreshLimiter = rateLimit({
   skip: skipForTests,
   windowMs: 60 * 1000,
   max: 60,
   skipSuccessfulRequests: true,
+  message: {
+    status: 'error',
+    message: 'Too many token refresh attempts, please try again after a minute.',
+  },
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn('[RateLimit] Refresh limit exceeded', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-    });
-    res.status(429).json({
-      status: 'error',
-      message: 'Too many token refresh attempts, please try again after a minute.',
-    });
-  },
+  handler: createRateLimitHandler('refresh'),
 });

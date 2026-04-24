@@ -199,6 +199,7 @@ import createDocumentationRoutes from './routes/documentation.js';
 import createCashflowRoutes from './routes/cashflow.js';
 import createCronRoutes from './routes/cron.js';
 import createMetricsRoutes from './routes/metrics.js';
+import createMonitoringRoutes from './routes/monitoring.js';
 import createEdgeFunctionRoutes from './routes/edgeFunctions.js';
 import createAISummaryRoutes from './routes/aiSummary.js';
 import createUtilsRoutes from './routes/utils.js';
@@ -270,10 +271,16 @@ import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
 import { validateTenantAccess } from './middleware/validateTenant.js';
 import { defaultLimiter } from './middleware/rateLimiter.js';
+import { trafficMonitor } from './middleware/trafficMonitor.js';
+import { startMetricsCollection } from './lib/systemMetrics.js';
 
 // Apply v1 deprecation headers middleware (before routes)
 app.use(createDeprecationMiddleware());
 logger.info('v1 API deprecation headers middleware enabled');
+
+// Apply traffic monitoring middleware (tracks all requests)
+app.use(trafficMonitor);
+logger.info('Traffic monitoring middleware enabled');
 
 // Use the pgPool directly; per-request DB time is measured inside the DB adapter
 const measuredPgPool = pgPool;
@@ -361,6 +368,8 @@ app.use('/api/cashflow', defaultLimiter, createCashflowRoutes(measuredPgPool));
 app.use('/api/cron', defaultLimiter, createCronRoutes(measuredPgPool));
 // Metrics routes read from performance_logs; use resilient wrapper to avoid ended pool errors
 app.use('/api/metrics', defaultLimiter, createMetricsRoutes(resilientPerfDb));
+// Monitoring routes for comprehensive API/traffic/system monitoring
+app.use('/api/monitoring', defaultLimiter, requireAuth, createMonitoringRoutes());
 app.use('/api/utils', defaultLimiter, createUtilsRoutes(measuredPgPool));
 app.use(
   '/api/cache',
@@ -998,6 +1007,14 @@ server.listen(PORT, async () => {
     startHealthMonitoring();
   } else {
     logger.debug('[HealthMonitor] Disabled (set HEALTH_MONITORING_ENABLED=true to enable)');
+  }
+
+  // Start system metrics collection
+  if (process.env.SYSTEM_METRICS_ENABLED !== 'false') {
+    logger.info('[SystemMetrics] Starting system metrics collection (30s interval)');
+    startMetricsCollection(30000); // Collect every 30 seconds
+  } else {
+    logger.debug('[SystemMetrics] Disabled (set SYSTEM_METRICS_ENABLED=true to enable)');
   }
 
   // Note: Agent office task queue processor is registered in startTaskWorkers() above
