@@ -46,14 +46,6 @@ docs/
 !docs/*.pdf
 !docs/user-guide.md
 
-# Backend code (separate Docker build)
-backend/
-braid-mcp-node-server/
-litellm/
-n8n-nodes-mcp/
-addons/
-supabase/functions/
-
 # Scripts
 scripts/
 *.ps1
