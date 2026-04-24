@@ -7,38 +7,44 @@ export const ApiProvider = ({ children }) => {
   const cacheRef = useRef(new Map());
   const pendingRequestsRef = useRef(new Map());
 
-  const cachedRequest = useCallback(async (entityName, methodName, params, fetcher) => {
-    const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
+  const cachedRequest = useCallback(
+    async (entityName, methodName, params, fetcher, options = {}) => {
+      const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
 
-    // Cache timeout: 1 second in dev, 2 seconds in production (reduced from 2s/5s - app perf improved)
-    const CACHE_TIMEOUT = import.meta.env.DEV ? 1000 : 2000;
+      // Default cache timeout: 1s dev / 2s prod. Callers can override via
+      // options.ttlMs for data that changes rarely (tenant list, module
+      // settings) to avoid navigation-triggered refetches.
+      const defaultTimeout = import.meta.env.DEV ? 1000 : 2000;
+      const ttl = typeof options.ttlMs === 'number' ? options.ttlMs : defaultTimeout;
 
-    if (cacheRef.current.has(cacheKey)) {
-      const cached = cacheRef.current.get(cacheKey);
-      const age = Date.now() - cached.timestamp;
-      if (age < CACHE_TIMEOUT) {
-        return cached.data;
+      if (cacheRef.current.has(cacheKey)) {
+        const cached = cacheRef.current.get(cacheKey);
+        const age = Date.now() - cached.timestamp;
+        if (age < ttl) {
+          return cached.data;
+        }
       }
-    }
 
-    if (pendingRequestsRef.current.has(cacheKey)) {
-      return pendingRequestsRef.current.get(cacheKey);
-    }
+      if (pendingRequestsRef.current.has(cacheKey)) {
+        return pendingRequestsRef.current.get(cacheKey);
+      }
 
-    const promise = fetcher()
-      .then((data) => {
-        cacheRef.current.set(cacheKey, { data, timestamp: Date.now() });
-        pendingRequestsRef.current.delete(cacheKey);
-        return data;
-      })
-      .catch((error) => {
-        pendingRequestsRef.current.delete(cacheKey);
-        throw error;
-      });
+      const promise = fetcher()
+        .then((data) => {
+          cacheRef.current.set(cacheKey, { data, timestamp: Date.now() });
+          pendingRequestsRef.current.delete(cacheKey);
+          return data;
+        })
+        .catch((error) => {
+          pendingRequestsRef.current.delete(cacheKey);
+          throw error;
+        });
 
-    pendingRequestsRef.current.set(cacheKey, promise);
-    return promise;
-  }, []);
+      pendingRequestsRef.current.set(cacheKey, promise);
+      return promise;
+    },
+    [],
+  );
 
   const clearCache = useCallback((pattern) => {
     if (!pattern) {

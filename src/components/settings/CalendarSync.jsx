@@ -134,17 +134,16 @@ export default function CalendarSync({ tenantId }) {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const cacheBust = `_t=${Date.now()}`;
       // Check if tenant has scheduling integration configured
       const res = await apiFetch(
-        `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom&${cacheBust}`,
+        `/api/tenantintegrations?tenant_id=${tenantId}&integration_type=calcom`,
       );
       const json = res.status === 304 ? {} : await res.json().catch(() => ({}));
       let integration = getTenantIntegrationRecord(json);
 
       // Fallback: if filtered query returned no row, load full tenant list and find calcom.
       if (!integration) {
-        const allRes = await apiFetch(`/api/tenantintegrations?tenant_id=${tenantId}&${cacheBust}`);
+        const allRes = await apiFetch(`/api/tenantintegrations?tenant_id=${tenantId}`);
         const allJson = await allRes.json().catch(() => ({}));
         const rows = allJson?.data?.tenantintegrations || allJson?.data || [];
         if (Array.isArray(rows)) {
