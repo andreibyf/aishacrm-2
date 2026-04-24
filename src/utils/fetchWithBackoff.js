@@ -23,6 +23,15 @@ Reset:
 const backoffState = {};
 let originalFetch = null;
 
+// Cloudflare WAF blocks are IP-wide, not per-route — when blocked, every URL
+// returns 403 regardless of path. Track consecutive 403s GLOBALLY, unlike 429
+// which is tracked per-path. After 3 consecutive 403s, enter a 60s cooldown
+// that short-circuits subsequent fetches so we stop feeding the firewall.
+const FIREWALL_TRIP_AT = 3;
+const FIREWALL_COOLDOWN_MS = 60000;
+let consecutive403s = 0;
+let firewallCoolingUntil = 0;
+
 // Shared promise for token-refresh dedup. When the app gets N parallel 401s
 // (e.g. page load fires 8 API calls in parallel, all see an expired access cookie),
 // we want exactly ONE call to /api/auth/refresh, not N. All N callers await the
@@ -77,6 +86,17 @@ async function fetchWithBackoff(input, init) {
   }
 
   const now = Date.now();
+
+  // Firewall circuit breaker is checked BEFORE the per-path 429 state because
+  // a Cloudflare block 403s everything; don't let per-path 429 state shadow it.
+  if (firewallCoolingUntil && now < firewallCoolingUntil) {
+    const err = new Error('FirewallCooling');
+    err.isFirewall = true;
+    err.isCooling = true;
+    err.retryAt = firewallCoolingUntil;
+    throw err;
+  }
+
   const state = backoffState[key] || { count: 0, coolingUntil: 0 };
   if (state.coolingUntil && now < state.coolingUntil) {
     const err = new Error('RateLimitCooling');
@@ -97,6 +117,21 @@ async function fetchWithBackoff(input, init) {
 
   const resp = await originalFetch(input, initWithCreds);
 
+  // Firewall (403) tracking: count consecutive 403s globally. Any 2xx/3xx
+  // resets the counter — a single authorization failure on one route is fine,
+  // but sustained 403s mean the WAF has blocked the IP.
+  if (resp && resp.status === 403) {
+    consecutive403s += 1;
+    if (consecutive403s >= FIREWALL_TRIP_AT) {
+      firewallCoolingUntil = Date.now() + FIREWALL_COOLDOWN_MS;
+    }
+    if (window.__firewallStats) {
+      window.__firewallStats.consecutive = consecutive403s;
+      window.__firewallStats.coolingUntil = firewallCoolingUntil;
+    }
+    return resp;
+  }
+
   if (resp && resp.status === 429) {
     state.count += 1;
     const delay = computeDelay(state.count);
@@ -106,6 +141,16 @@ async function fetchWithBackoff(input, init) {
     backoffState[key] = state;
     window.__rateLimitStats[key] = { ...state };
     return resp; // Let caller inspect 429 body (CORS headers now present)
+  }
+
+  // Any successful response (2xx/3xx) clears the firewall counter. The 401
+  // refresh flow below can also land here — we let a successful refresh retry
+  // reset the counter too, since it means the IP isn't blocked.
+  if (resp && resp.status < 400 && consecutive403s > 0) {
+    consecutive403s = 0;
+    if (window.__firewallStats) {
+      window.__firewallStats.consecutive = 0;
+    }
   }
 
   // Seamless short-lived auth: if 401 from backend, attempt refresh once then retry
@@ -182,6 +227,12 @@ export function initRateLimitBackoff({ enable = true } = {}) {
   originalFetch = window.fetch;
   window.__originalFetch = originalFetch;
   window.__rateLimitStats = window.__rateLimitStats || {};
+  window.__firewallStats = window.__firewallStats || { consecutive: 0, coolingUntil: 0 };
+
+  // Reset module-level firewall state on install so tests (and dev reloads)
+  // start from a clean slate.
+  consecutive403s = 0;
+  firewallCoolingUntil = 0;
 
   window.fetch = (...args) => fetchWithBackoff(...args);
 
@@ -191,6 +242,9 @@ export function initRateLimitBackoff({ enable = true } = {}) {
       backoffState[k] = { count: 0, coolingUntil: 0 };
     });
     window.__rateLimitStats = {};
+    consecutive403s = 0;
+    firewallCoolingUntil = 0;
+    window.__firewallStats = { consecutive: 0, coolingUntil: 0 };
   });
 
   window.__fetchBackoffInstalled = true;
