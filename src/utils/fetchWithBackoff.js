@@ -23,6 +23,15 @@ Reset:
 const backoffState = {};
 let originalFetch = null;
 
+// Cloudflare WAF blocks are IP-wide, not per-route — when blocked, every URL
+// returns 403 regardless of path. Track consecutive 403s GLOBALLY, unlike 429
+// which is tracked per-path. After 3 consecutive 403s, enter a 60s cooldown
+// that short-circuits subsequent fetches so we stop feeding the firewall.
+const FIREWALL_TRIP_AT = 3;
+const FIREWALL_COOLDOWN_MS = 60000;
+let consecutive403s = 0;
+let firewallCoolingUntil = 0;
+
 // Shared promise for token-refresh dedup. When the app gets N parallel 401s
 // (e.g. page load fires 8 API calls in parallel, all see an expired access cookie),
 // we want exactly ONE call to /api/auth/refresh, not N. All N callers await the
@@ -56,6 +65,24 @@ function computeDelay(count) {
   return Math.min(base + jitter, 15000); // Cap individual delay at 15s
 }
 
+// Only track the firewall circuit breaker for backend-bound requests. A
+// Cloudflare block on our backend should NOT short-circuit unrelated fetches
+// to third-party services (MCP endpoints, CDN URLs, etc.).
+function isBackendRequest(urlString) {
+  try {
+    const backendUrl = getBackendUrl();
+    const u = new URL(urlString, window.location.origin);
+    const backendOrigin = new URL(backendUrl, window.location.origin).origin;
+    if (u.origin === backendOrigin) return true;
+    // Relative paths like `/api/...` and `/socket.io/...` are backend too.
+    if (u.pathname.startsWith('/api')) return true;
+    if (u.pathname.startsWith('/socket.io')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithBackoff(input, init) {
   const BACKEND_URL = getBackendUrl();
 
@@ -77,6 +104,20 @@ async function fetchWithBackoff(input, init) {
   }
 
   const now = Date.now();
+  const isBackend = isBackendRequest(urlString);
+
+  // Firewall circuit breaker is checked BEFORE the per-path 429 state because
+  // a Cloudflare block 403s everything; don't let per-path 429 state shadow it.
+  // Only applies to backend requests — a block on our own backend should not
+  // short-circuit fetches to third-party services.
+  if (isBackend && firewallCoolingUntil && now < firewallCoolingUntil) {
+    const err = new Error('FirewallCooling');
+    err.isFirewall = true;
+    err.isCooling = true;
+    err.retryAt = firewallCoolingUntil;
+    throw err;
+  }
+
   const state = backoffState[key] || { count: 0, coolingUntil: 0 };
   if (state.coolingUntil && now < state.coolingUntil) {
     const err = new Error('RateLimitCooling');
@@ -96,6 +137,38 @@ async function fetchWithBackoff(input, init) {
   initWithCreds.headers = hdrs;
 
   const resp = await originalFetch(input, initWithCreds);
+
+  // Firewall (403) tracking: count consecutive 403s globally for BACKEND
+  // requests only. Any other response status (2xx, 3xx, 429, 500, etc.)
+  // resets the counter — 429 or 500 mixed in means the 403s are not
+  // "consecutive" in the firewall-block sense.
+  if (isBackend && resp && resp.status === 403) {
+    consecutive403s += 1;
+    if (consecutive403s >= FIREWALL_TRIP_AT) {
+      firewallCoolingUntil = Date.now() + FIREWALL_COOLDOWN_MS;
+      // Reset the counter when the breaker trips so that after cooldown a
+      // single 403 doesn't immediately re-trip the 60s block. The streak
+      // restarts from zero post-cooldown.
+      consecutive403s = 0;
+    }
+    if (window.__firewallStats) {
+      window.__firewallStats.consecutive = consecutive403s;
+      window.__firewallStats.coolingUntil = firewallCoolingUntil;
+    }
+    return resp;
+  }
+
+  // ANY non-403 response from a backend request resets the consecutive-403
+  // counter BEFORE any early-return branches below. The contract is
+  // "consecutive 403s", so a 429 or 500 mixed in breaks the streak — the
+  // firewall isn't what's blocking us at that moment. Placed before the 429
+  // handler because that branch returns early.
+  if (isBackend && resp && resp.status !== 403 && consecutive403s > 0) {
+    consecutive403s = 0;
+    if (window.__firewallStats) {
+      window.__firewallStats.consecutive = 0;
+    }
+  }
 
   if (resp && resp.status === 429) {
     state.count += 1;
@@ -182,6 +255,12 @@ export function initRateLimitBackoff({ enable = true } = {}) {
   originalFetch = window.fetch;
   window.__originalFetch = originalFetch;
   window.__rateLimitStats = window.__rateLimitStats || {};
+  window.__firewallStats = window.__firewallStats || { consecutive: 0, coolingUntil: 0 };
+
+  // Reset module-level firewall state on install so tests (and dev reloads)
+  // start from a clean slate.
+  consecutive403s = 0;
+  firewallCoolingUntil = 0;
 
   window.fetch = (...args) => fetchWithBackoff(...args);
 
@@ -191,6 +270,9 @@ export function initRateLimitBackoff({ enable = true } = {}) {
       backoffState[k] = { count: 0, coolingUntil: 0 };
     });
     window.__rateLimitStats = {};
+    consecutive403s = 0;
+    firewallCoolingUntil = 0;
+    window.__firewallStats = { consecutive: 0, coolingUntil: 0 };
   });
 
   window.__fetchBackoffInstalled = true;
