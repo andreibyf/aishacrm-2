@@ -123,6 +123,10 @@ async function processPendingCampaigns() {
     }
   } catch (err) {
     logger.error({ err }, '[CampaignWorker] processPendingCampaigns error');
+    // Re-throw so startJitteredInterval can apply exponential skip-backoff on
+    // systemic failures (e.g. DNS EAI_AGAIN bursts). Without this, the scheduler
+    // treats the tick as successful and keeps firing on every cadence.
+    throw err;
   }
 }
 

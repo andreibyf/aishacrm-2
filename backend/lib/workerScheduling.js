@@ -17,7 +17,7 @@ import logger from './logger.js';
  * @param {() => (void|Promise<void>)} fn           Work to run each tick.
  * @param {object} opts
  * @param {number} opts.intervalMs                  Base interval between ticks.
- * @param {number} [opts.jitterMs=0]                Random 0..jitterMs added to first fire.
+ * @param {number} [opts.jitterMs=0]                Random integer ms in [0, jitterMs) added to first fire.
  * @param {number} [opts.maxSkips=8]                Cap on exponential backoff skip count.
  * @param {string} [opts.name='worker']             Name used in backoff log lines.
  * @returns {() => void}                            Stop function.

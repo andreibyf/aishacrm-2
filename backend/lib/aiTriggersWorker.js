@@ -144,8 +144,8 @@ async function processAllTriggers() {
       .eq('status', 'active');
 
     if (tenantsError) {
-      logger.error({ err: tenantsError }, '[AiTriggersWorker] Error fetching tenants');
-      return;
+      // Throw so outer catch logs it AND scheduler applies backoff on DNS/Supabase outage.
+      throw tenantsError;
     }
 
     let totalTriggers = 0;
@@ -169,6 +169,10 @@ async function processAllTriggers() {
     logger.debug({ totalTriggers, durationMs: duration }, '[AiTriggersWorker] Processed triggers');
   } catch (err) {
     logger.error({ err }, '[AiTriggersWorker] processAllTriggers error');
+    // Re-throw so startJitteredInterval can apply exponential skip-backoff on
+    // systemic failures. Per-tenant errors are caught inside the loop and do
+    // not propagate here — only top-level failures (e.g. tenants-fetch).
+    throw err;
   }
 }
 
