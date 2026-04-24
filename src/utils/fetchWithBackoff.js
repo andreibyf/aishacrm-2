@@ -65,6 +65,24 @@ function computeDelay(count) {
   return Math.min(base + jitter, 15000); // Cap individual delay at 15s
 }
 
+// Only track the firewall circuit breaker for backend-bound requests. A
+// Cloudflare block on our backend should NOT short-circuit unrelated fetches
+// to third-party services (MCP endpoints, CDN URLs, etc.).
+function isBackendRequest(urlString) {
+  try {
+    const backendUrl = getBackendUrl();
+    const u = new URL(urlString, window.location.origin);
+    const backendOrigin = new URL(backendUrl, window.location.origin).origin;
+    if (u.origin === backendOrigin) return true;
+    // Relative paths like `/api/...` and `/socket.io/...` are backend too.
+    if (u.pathname.startsWith('/api')) return true;
+    if (u.pathname.startsWith('/socket.io')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithBackoff(input, init) {
   const BACKEND_URL = getBackendUrl();
 
@@ -86,10 +104,13 @@ async function fetchWithBackoff(input, init) {
   }
 
   const now = Date.now();
+  const isBackend = isBackendRequest(urlString);
 
   // Firewall circuit breaker is checked BEFORE the per-path 429 state because
   // a Cloudflare block 403s everything; don't let per-path 429 state shadow it.
-  if (firewallCoolingUntil && now < firewallCoolingUntil) {
+  // Only applies to backend requests — a block on our own backend should not
+  // short-circuit fetches to third-party services.
+  if (isBackend && firewallCoolingUntil && now < firewallCoolingUntil) {
     const err = new Error('FirewallCooling');
     err.isFirewall = true;
     err.isCooling = true;
@@ -117,19 +138,36 @@ async function fetchWithBackoff(input, init) {
 
   const resp = await originalFetch(input, initWithCreds);
 
-  // Firewall (403) tracking: count consecutive 403s globally. Any 2xx/3xx
-  // resets the counter — a single authorization failure on one route is fine,
-  // but sustained 403s mean the WAF has blocked the IP.
-  if (resp && resp.status === 403) {
+  // Firewall (403) tracking: count consecutive 403s globally for BACKEND
+  // requests only. Any other response status (2xx, 3xx, 429, 500, etc.)
+  // resets the counter — 429 or 500 mixed in means the 403s are not
+  // "consecutive" in the firewall-block sense.
+  if (isBackend && resp && resp.status === 403) {
     consecutive403s += 1;
     if (consecutive403s >= FIREWALL_TRIP_AT) {
       firewallCoolingUntil = Date.now() + FIREWALL_COOLDOWN_MS;
+      // Reset the counter when the breaker trips so that after cooldown a
+      // single 403 doesn't immediately re-trip the 60s block. The streak
+      // restarts from zero post-cooldown.
+      consecutive403s = 0;
     }
     if (window.__firewallStats) {
       window.__firewallStats.consecutive = consecutive403s;
       window.__firewallStats.coolingUntil = firewallCoolingUntil;
     }
     return resp;
+  }
+
+  // ANY non-403 response from a backend request resets the consecutive-403
+  // counter BEFORE any early-return branches below. The contract is
+  // "consecutive 403s", so a 429 or 500 mixed in breaks the streak — the
+  // firewall isn't what's blocking us at that moment. Placed before the 429
+  // handler because that branch returns early.
+  if (isBackend && resp && resp.status !== 403 && consecutive403s > 0) {
+    consecutive403s = 0;
+    if (window.__firewallStats) {
+      window.__firewallStats.consecutive = 0;
+    }
   }
 
   if (resp && resp.status === 429) {
@@ -141,16 +179,6 @@ async function fetchWithBackoff(input, init) {
     backoffState[key] = state;
     window.__rateLimitStats[key] = { ...state };
     return resp; // Let caller inspect 429 body (CORS headers now present)
-  }
-
-  // Any successful response (2xx/3xx) clears the firewall counter. The 401
-  // refresh flow below can also land here — we let a successful refresh retry
-  // reset the counter too, since it means the IP isn't blocked.
-  if (resp && resp.status < 400 && consecutive403s > 0) {
-    consecutive403s = 0;
-    if (window.__firewallStats) {
-      window.__firewallStats.consecutive = 0;
-    }
   }
 
   // Seamless short-lived auth: if 401 from backend, attempt refresh once then retry

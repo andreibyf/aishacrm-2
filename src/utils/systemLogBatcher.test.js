@@ -149,6 +149,24 @@ describe('systemLogBatcher hardening', () => {
     expect(callBackendAPI).toHaveBeenCalledTimes(5);
   });
 
+  it('ERROR entry accelerates a pending long-delay flush to the 500ms window', async () => {
+    callBackendAPI.mockResolvedValue({ status: 'success' });
+
+    // An INFO first schedules a 2s flush
+    enqueueSystemLog({ level: 'INFO', message: 'info' });
+
+    // An ERROR arrives 100ms later — must shorten the flush to 500ms total
+    // from the ERROR enqueue (i.e., not wait the full original 2s)
+    await vi.advanceTimersByTimeAsync(100);
+    enqueueSystemLog({ level: 'ERROR', message: 'boom' });
+
+    // Advance to ERROR's intended window (100 + 500 = 600ms total). Flush
+    // should have fired and included BOTH entries.
+    await vi.advanceTimersByTimeAsync(550);
+    expect(callBackendAPI).toHaveBeenCalledTimes(1);
+    expect(callBackendAPI.mock.calls[0][2].entries).toHaveLength(2);
+  });
+
   it('happy path: batched INFO logs flush on interval, exactly once per batch', async () => {
     callBackendAPI.mockResolvedValue({ status: 'success' });
 

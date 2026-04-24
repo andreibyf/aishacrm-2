@@ -27,15 +27,26 @@ const MAX_BATCH = parseInt(import.meta.env?.VITE_SYSTEM_LOG_MAX_BATCH || '25', 1
 
 let queue = [];
 let timer = null;
+let flushAt = 0; // wall-clock ms when the current `timer` is scheduled to fire
 let lastFlush = 0;
 let cooldownUntil = 0;
 let consecutiveFailures = 0;
 let circuitOpenUntil = 0;
 
 function scheduleFlush(delayMs) {
-  if (timer) return; // a flush is already scheduled
+  const target = Date.now() + delayMs;
+  // If a flush is already scheduled AND the existing one fires at or before
+  // the requested time, keep it. Otherwise clear and reschedule so that an
+  // ERROR's 500ms window can override an earlier INFO's 2s schedule.
+  if (timer && flushAt <= target) return;
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  flushAt = target;
   timer = setTimeout(() => {
     timer = null;
+    flushAt = 0;
     tryFlush();
   }, delayMs);
 }
@@ -151,6 +162,7 @@ export async function flushSystemLogs() {
   if (timer) {
     clearTimeout(timer);
     timer = null;
+    flushAt = 0;
   }
   await tryFlush();
 }
@@ -175,6 +187,7 @@ export function __resetBatcherForTest() {
     clearTimeout(timer);
     timer = null;
   }
+  flushAt = 0;
   lastFlush = 0;
   cooldownUntil = 0;
   consecutiveFailures = 0;

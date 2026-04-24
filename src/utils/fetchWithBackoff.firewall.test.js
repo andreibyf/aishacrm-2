@@ -144,4 +144,70 @@ describe('fetchWithBackoff: 403 firewall circuit breaker', () => {
     expect(resp.status).toBe(200);
     expect(originalFetchMock).toHaveBeenCalledTimes(6);
   });
+
+  it('any non-403 response (including 429/500) resets the counter — true "consecutive" semantic', async () => {
+    // 403 → 429 → 403 → 403. Per the "consecutive 403" contract, this is only
+    // 2 consecutive 403s at the end (the 429 broke the streak). Should NOT trip.
+    responseQueue = [403, 429, 403, 403];
+
+    for (let i = 0; i < 4; i++) {
+      await window.fetch(`http://api.test.local/api/x${i}`);
+    }
+    expect(originalFetchMock).toHaveBeenCalledTimes(4);
+
+    // Next request should reach the wire — breaker not tripped
+    responseQueue = [200];
+    const resp = await window.fetch('http://api.test.local/api/y');
+    expect(resp.status).toBe(200);
+    expect(originalFetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('after cooldown expires, counter is reset — a single 403 does not re-trip', async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+
+    responseQueue = [403, 403, 403];
+    await window.fetch('http://api.test.local/api/a');
+    await window.fetch('http://api.test.local/api/b');
+    await window.fetch('http://api.test.local/api/c'); // trips breaker
+
+    // Short-circuit confirmed
+    await expect(window.fetch('http://api.test.local/api/d')).rejects.toThrow();
+
+    // Cooldown expires
+    vi.setSystemTime(now + 61_000);
+
+    // First request after cooldown gets another 403. Counter should have
+    // been reset when the breaker tripped, so this single 403 does NOT
+    // immediately re-trigger the 60s block.
+    responseQueue = [403, 200];
+    const afterCooldown = await window.fetch('http://api.test.local/api/e');
+    expect(afterCooldown.status).toBe(403);
+
+    // Next request should STILL hit the wire — breaker not re-tripped by
+    // a single post-cooldown 403.
+    const followup = await window.fetch('http://api.test.local/api/f');
+    expect(followup.status).toBe(200);
+    expect(originalFetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('firewall breaker only applies to backend requests — third-party URLs are exempt', async () => {
+    // 3 consecutive 403s from a third-party origin (NOT the backend) must not
+    // trip the breaker — otherwise one misbehaving external service could
+    // lock out the whole app.
+    responseQueue = [403, 403, 403];
+    const thirdParty = 'http://third-party-mcp.example.com/query';
+
+    for (let i = 0; i < 3; i++) {
+      await window.fetch(thirdParty);
+    }
+    expect(originalFetchMock).toHaveBeenCalledTimes(3);
+
+    // Next backend request should hit the wire — breaker state not polluted
+    responseQueue = [200];
+    const backend = await window.fetch('http://api.test.local/api/ok');
+    expect(backend.status).toBe(200);
+    expect(originalFetchMock).toHaveBeenCalledTimes(4);
+  });
 });
