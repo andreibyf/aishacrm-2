@@ -689,7 +689,7 @@ jobs:
 
             # Verify frontend runtime env injection (must include valid Supabase credentials)
             phase "Validating frontend runtime env-config.js"
-            docker exec aishacrm-frontend node -e '
+            run_timed 30s docker exec aishacrm-frontend node -e '
               const fs = require("fs");
               const raw = fs.readFileSync("/app/dist/env-config.js", "utf8");
               const start = raw.indexOf("{");
@@ -713,6 +713,19 @@ jobs:
               }
               console.log("Frontend runtime env verified");
               console.log("VITE_APP_BUILD_VERSION:", env.VITE_APP_BUILD_VERSION || "missing");
+            '
+
+            # Validate no localhost references in production build (Vite project)
+            # NOTE: This project uses VITE, not Next.js. Path is /app/dist, NOT apps/web/.next
+            phase "Checking for localhost references in production bundle"
+            run_timed 60s sh -c '
+              if docker exec aishacrm-frontend find /app/dist -name "*.js" -type f -print0 | \
+                 xargs -0 grep -l "localhost:3000" 2>/dev/null | head -1 ; then
+                echo "WARNING: Found localhost:3000 references in production bundle"
+                echo "This may indicate env vars were not properly injected at build time"
+                exit 1
+              fi
+              echo "✓ No localhost references found in bundle"
             '
 
       - name: Deployment summary
