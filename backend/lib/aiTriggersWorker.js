@@ -20,6 +20,7 @@ import { emitTenantWebhooks } from './webhookEmitter.js';
 import { runTask as runAiBrainTask } from './aiBrain.js';
 import { getSupabaseClient } from './supabase-db.js';
 import { sanitizeUuidInput } from './uuidValidator.js';
+import { startJitteredInterval } from './workerScheduling.js';
 import logger from './logger.js';
 
 // PR6: C.A.R.E. shadow wiring (read-only analysis, no behavior change)
@@ -39,7 +40,7 @@ import { getCareConfigForTenant } from './care/careTenantConfig.js';
 // PR-Playbook: Playbook router for autonomous action sequences
 import { routeTriggerToPlaybook } from './care/carePlaybookRouter.js';
 
-let workerInterval = null;
+let stopWorker = null;
 let supabase = null;
 
 // Trigger configuration defaults
@@ -106,15 +107,11 @@ export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
   console.info('[AiTriggersWorker] Starting');
   logger.info({ intervalMs }, '[AiTriggersWorker] Starting');
 
-  // Run immediately on start
-  processAllTriggers().catch((err) =>
-    logger.error({ err }, '[AiTriggersWorker] Initial run error'),
-  );
-
-  // Then run on interval
-  workerInterval = setInterval(() => {
-    processAllTriggers().catch((err) => logger.error({ err }, '[AiTriggersWorker] Error'));
-  }, intervalMs);
+  stopWorker = startJitteredInterval(processAllTriggers, {
+    intervalMs,
+    jitterMs: Math.max(1000, Math.floor(intervalMs * 0.2)),
+    name: 'AiTriggersWorker',
+  });
 
   logger.info('[AiTriggersWorker] Started');
 }
@@ -123,9 +120,9 @@ export function startAiTriggersWorker(_pool, intervalMs = DEFAULT_INTERVAL_MS) {
  * Stop the AI triggers worker
  */
 export function stopAiTriggersWorker() {
-  if (workerInterval) {
-    clearInterval(workerInterval);
-    workerInterval = null;
+  if (stopWorker) {
+    stopWorker();
+    stopWorker = null;
     logger.info('[AiTriggersWorker] Stopped');
   }
 }

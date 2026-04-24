@@ -4,6 +4,7 @@
  */
 import { getSupabaseClient } from './supabase-db.js';
 import { sanitizeUuidInput } from './uuidValidator.js';
+import { startJitteredInterval } from './workerScheduling.js';
 import logger from './logger.js';
 
 let queue = [];
@@ -11,6 +12,7 @@ let flushing = false;
 let initialized = false;
 let pgFallback = null;
 let lastFlushAt = null;
+let stopInterval = null;
 
 const FLUSH_INTERVAL_MS = parseInt(process.env.PERF_LOG_FLUSH_MS || '2000', 10); // 2s default
 const BATCH_MAX = parseInt(process.env.PERF_LOG_BATCH_MAX || '25', 10);
@@ -44,14 +46,16 @@ function sanitizeRecord(rec) {
 export function initializePerformanceLogBatcher(pgPool) {
   if (initialized) return; // idempotent
   pgFallback = pgPool || null;
-  setInterval(
-    () => flush().catch((e) => logger.error({ err: e }, '[PerfLogBatcher] Interval flush error')),
-    FLUSH_INTERVAL_MS,
-  ).unref();
+  stopInterval = startJitteredInterval(flush, {
+    intervalMs: FLUSH_INTERVAL_MS,
+    jitterMs: Math.max(200, Math.floor(FLUSH_INTERVAL_MS * 0.5)),
+    name: 'PerfLogBatcher',
+  });
   // Flush on shutdown
   for (const sig of ['SIGINT', 'SIGTERM', 'beforeExit']) {
     process.on(sig, async () => {
       try {
+        if (stopInterval) stopInterval();
         await flush();
       } catch {
         /* noop */
