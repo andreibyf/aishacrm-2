@@ -13,7 +13,7 @@ export function EntityLabelsProvider({ children, tenantId }) {
   const [labels, setLabels] = useState(DEFAULT_LABELS);
   const [loading, setLoading] = useState(false);
   const lastFetchedTenantIdRef = useRef(null);
-  const { cachedRequest, clearCache } = useApiManager();
+  const { cachedRequest, peek, clearCache } = useApiManager();
 
   const fetchLabels = useCallback(
     async (tid) => {
@@ -22,8 +22,15 @@ export function EntityLabelsProvider({ children, tenantId }) {
         return;
       }
 
+      // Skip the loading-state flicker when cachedRequest will resolve from
+      // cache synchronously — the common case for superadmins flipping back
+      // to a previously-viewed tenant within the TTL window.
+      const willHitCache = peek
+        ? peek('EntityLabels', 'get', { tenantId: tid }, { ttlMs: ENTITY_LABELS_TTL_MS })
+        : false;
+
       try {
-        setLoading(true);
+        if (!willHitCache) setLoading(true);
         const data = await cachedRequest(
           'EntityLabels',
           'get',
@@ -47,10 +54,10 @@ export function EntityLabelsProvider({ children, tenantId }) {
         console.error('[EntityLabelsContext] Error fetching entity labels:', error);
         setLabels(DEFAULT_LABELS);
       } finally {
-        setLoading(false);
+        if (!willHitCache) setLoading(false);
       }
     },
-    [cachedRequest],
+    [cachedRequest, peek],
   );
 
   useEffect(() => {

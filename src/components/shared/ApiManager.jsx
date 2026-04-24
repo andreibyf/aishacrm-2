@@ -15,7 +15,10 @@ export const ApiProvider = ({ children }) => {
       // options.ttlMs for data that changes rarely (tenant list, module
       // settings) to avoid navigation-triggered refetches.
       const defaultTimeout = import.meta.env.DEV ? 1000 : 2000;
-      const ttl = typeof options.ttlMs === 'number' ? options.ttlMs : defaultTimeout;
+      // Use Number.isFinite so NaN / Infinity fall back to the default.
+      // Otherwise NaN would silently disable caching and Infinity would never
+      // expire — both easy foot-guns for callers passing a computed ttlMs.
+      const ttl = Number.isFinite(options.ttlMs) ? options.ttlMs : defaultTimeout;
 
       if (cacheRef.current.has(cacheKey)) {
         const cached = cacheRef.current.get(cacheKey);
@@ -46,6 +49,18 @@ export const ApiProvider = ({ children }) => {
     [],
   );
 
+  // Synchronous cache peek. Lets callers (e.g., EntityLabelsContext) know
+  // whether a subsequent cachedRequest will resolve from cache so they can
+  // skip UI loading-state flicker on tenant-switch-back within the TTL window.
+  const peek = useCallback((entityName, methodName, params, options = {}) => {
+    const cacheKey = `${entityName}.${methodName}:${JSON.stringify(params)}`;
+    if (!cacheRef.current.has(cacheKey)) return false;
+    const cached = cacheRef.current.get(cacheKey);
+    const defaultTimeout = import.meta.env.DEV ? 1000 : 2000;
+    const ttl = Number.isFinite(options.ttlMs) ? options.ttlMs : defaultTimeout;
+    return Date.now() - cached.timestamp < ttl;
+  }, []);
+
   const clearCache = useCallback((pattern) => {
     if (!pattern) {
       cacheRef.current.clear();
@@ -74,7 +89,7 @@ export const ApiProvider = ({ children }) => {
   );
 
   return (
-    <ApiContext.Provider value={{ cachedRequest, clearCache, clearCacheByKey }}>
+    <ApiContext.Provider value={{ cachedRequest, peek, clearCache, clearCacheByKey }}>
       {children}
     </ApiContext.Provider>
   );

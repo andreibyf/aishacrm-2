@@ -77,7 +77,7 @@ describe('ApiManager.cachedRequest per-key TTL override', () => {
       expect(hit).toBe('tenants-list');
       expect(fetcher).toHaveBeenCalledTimes(1);
 
-      // 5 min + 1s later — beyond the override TTL
+      // 5 min later from here (5 min 10s total since caching) — beyond the override TTL
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300000);
       });
@@ -109,6 +109,65 @@ describe('ApiManager.cachedRequest per-key TTL override', () => {
 
       expect(longFetcher).toHaveBeenCalledTimes(1);
       expect(shortFetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('NaN and Infinity ttlMs fall back to the default TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const { cachedRequest } = makeHarness();
+      const fetcher = vi.fn().mockResolvedValue('v1');
+
+      // NaN should be treated as invalid and fall back to default (1-2s)
+      await cachedRequest('Ent', 'x', {}, fetcher, { ttlMs: Number.NaN });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      // 5s later — default TTL has definitely expired, so fetcher should re-run
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      fetcher.mockResolvedValue('v2');
+      const after = await cachedRequest('Ent', 'x', {}, fetcher, { ttlMs: Number.NaN });
+      expect(after).toBe('v2');
+      expect(fetcher).toHaveBeenCalledTimes(2);
+
+      // Infinity should also fall back — otherwise cache would never expire
+      const key2Fetcher = vi.fn().mockResolvedValue('inf-1');
+      await cachedRequest('Ent', 'y', {}, key2Fetcher, { ttlMs: Number.POSITIVE_INFINITY });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      key2Fetcher.mockResolvedValue('inf-2');
+      const inf = await cachedRequest('Ent', 'y', {}, key2Fetcher, {
+        ttlMs: Number.POSITIVE_INFINITY,
+      });
+      expect(inf).toBe('inf-2');
+      expect(key2Fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('peek(name, method, params, {ttlMs}) returns true iff cache is fresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const { cachedRequest, peek } = makeHarness();
+
+      // Cache miss before any request
+      expect(peek('Tenant', 'list', {}, { ttlMs: 300000 })).toBe(false);
+
+      await cachedRequest('Tenant', 'list', {}, async () => 'hit', { ttlMs: 300000 });
+
+      // Fresh entry within TTL — hit
+      expect(peek('Tenant', 'list', {}, { ttlMs: 300000 })).toBe(true);
+
+      // Advance past TTL — miss
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(301000);
+      });
+      expect(peek('Tenant', 'list', {}, { ttlMs: 300000 })).toBe(false);
     } finally {
       vi.useRealTimers();
     }
