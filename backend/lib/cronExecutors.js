@@ -13,8 +13,57 @@ import { createCommunicationsProviderAdapter } from './communications/providerAd
 export async function markUsersOffline(pgPool, jobMetadata = {}) {
   const timeoutMinutes = jobMetadata.timeout_minutes || 5;
   const threshold = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+  const thresholdIso = threshold.toISOString();
 
   try {
+    // Supabase fallback path: cron.js passes pgPool=null and supabase via metadata
+    if (!pgPool && jobMetadata.supabase) {
+      const supabase = jobMetadata.supabase;
+      const stalePredicate = `metadata->>last_seen.lt.${thresholdIso},metadata->>last_login.lt.${thresholdIso}`;
+      let usersCount = 0;
+      let employeesCount = 0;
+
+      for (const table of ['users', 'employees']) {
+        const { data: stale, error: fetchErr } = await supabase
+          .from(table)
+          .select('id, metadata')
+          .or(stalePredicate);
+        if (fetchErr) throw fetchErr;
+
+        for (const row of stale || []) {
+          const merged = { ...(row.metadata || {}), live_status: 'offline' };
+          // Repeat the staleness predicate on the update so that if the user
+          // became active between the select and this write, the update
+          // matches 0 rows rather than clobbering fresh activity with an
+          // offline status. Postgres evaluates the filter at row-lock time,
+          // so this is race-free for live_status. Note: other metadata fields
+          // written concurrently can still be lost because `merged` is built
+          // from the pre-select snapshot; the raw-SQL path (above) uses a
+          // server-side jsonb merge that avoids this. See follow-up: move
+          // to an RPC function for full atomicity.
+          const { error: updErr } = await supabase
+            .from(table)
+            .update({ metadata: merged, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+            .or(stalePredicate);
+          if (updErr) throw updErr;
+        }
+
+        if (table === 'users') usersCount = stale?.length || 0;
+        else employeesCount = stale?.length || 0;
+      }
+
+      return {
+        success: true,
+        message: `Marked ${usersCount + employeesCount} users as offline`,
+        details: {
+          users: usersCount,
+          employees: employeesCount,
+          threshold: thresholdIso,
+        },
+      };
+    }
+
     // Update users table
     const usersResult = await pgPool.query(
       `UPDATE users
@@ -45,7 +94,7 @@ export async function markUsersOffline(pgPool, jobMetadata = {}) {
       details: {
         users: usersResult.rowCount,
         employees: employeesResult.rowCount,
-        threshold: threshold.toISOString(),
+        threshold: thresholdIso,
       },
     };
   } catch (error) {
@@ -65,9 +114,26 @@ export async function cleanOldActivities(pgPool, jobMetadata = {}) {
   const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
   try {
+    // Supabase fallback path
+    if (!pgPool && jobMetadata.supabase) {
+      const { count, error } = await jobMetadata.supabase
+        .from('activity')
+        .select('*', { count: 'exact', head: true })
+        .lt('created_at', cutoffDate.toISOString());
+      if (error) throw error;
+      return {
+        success: true,
+        message: `Would archive ${count ?? 0} activities`,
+        details: {
+          cutoff_date: cutoffDate.toISOString(),
+          count: count ?? 0,
+        },
+      };
+    }
+
     // For now, just count how many would be affected
     const result = await pgPool.query(
-      `SELECT COUNT(*) as count FROM activity 
+      `SELECT COUNT(*) as count FROM activity
        WHERE created_at < $1`,
       [cutoffDate],
     );
@@ -503,8 +569,27 @@ export async function syncDenormalizedFields(_pgPool, _jobMetadata = {}) {
  * Mark expired session credits (credits_remaining → 0 where expiry_date < now)
  * Runs daily. Only touches records that still have remaining credits.
  */
-export async function checkCreditExpiry(pgPool, _jobMetadata = {}) {
+export async function checkCreditExpiry(pgPool, jobMetadata = {}) {
   try {
+    // Supabase fallback path
+    if (!pgPool && jobMetadata.supabase) {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await jobMetadata.supabase
+        .from('session_credits')
+        .update({ credits_remaining: 0 })
+        .lt('expiry_date', nowIso)
+        .gt('credits_remaining', 0)
+        .select('id, tenant_id, contact_id, lead_id, credits_remaining');
+      if (error) throw error;
+      const count = data?.length || 0;
+      logger.info('[CronExecutor] checkCreditExpiry: expired credits marked', { count });
+      return {
+        success: true,
+        message: `Expired ${count} credit record(s)`,
+        details: { expired_count: count },
+      };
+    }
+
     const result = await pgPool.query(
       `UPDATE session_credits
        SET credits_remaining = 0

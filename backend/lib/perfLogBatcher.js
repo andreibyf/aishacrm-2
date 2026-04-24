@@ -4,6 +4,7 @@
  */
 import { getSupabaseClient } from './supabase-db.js';
 import { sanitizeUuidInput } from './uuidValidator.js';
+import { startJitteredInterval } from './workerScheduling.js';
 import logger from './logger.js';
 
 let queue = [];
@@ -11,6 +12,7 @@ let flushing = false;
 let initialized = false;
 let pgFallback = null;
 let lastFlushAt = null;
+let stopInterval = null;
 
 const FLUSH_INTERVAL_MS = parseInt(process.env.PERF_LOG_FLUSH_MS || '2000', 10); // 2s default
 const BATCH_MAX = parseInt(process.env.PERF_LOG_BATCH_MAX || '25', 10);
@@ -44,14 +46,16 @@ function sanitizeRecord(rec) {
 export function initializePerformanceLogBatcher(pgPool) {
   if (initialized) return; // idempotent
   pgFallback = pgPool || null;
-  setInterval(
-    () => flush().catch((e) => logger.error({ err: e }, '[PerfLogBatcher] Interval flush error')),
-    FLUSH_INTERVAL_MS,
-  ).unref();
+  stopInterval = startJitteredInterval(flush, {
+    intervalMs: FLUSH_INTERVAL_MS,
+    jitterMs: Math.max(200, Math.floor(FLUSH_INTERVAL_MS * 0.5)),
+    name: 'PerfLogBatcher',
+  });
   // Flush on shutdown
   for (const sig of ['SIGINT', 'SIGTERM', 'beforeExit']) {
     process.on(sig, async () => {
       try {
+        if (stopInterval) stopInterval();
         await flush();
       } catch {
         /* noop */
@@ -132,32 +136,42 @@ export async function flush() {
   } catch (e) {
     logger.error({ err: e }, '[PerfLogBatcher] Batch insert failed');
     // Fallback: attempt sequential pg inserts if available
-    if (pgFallback) {
-      for (const rec of batch) {
-        const s = sanitizeRecord(rec);
-        try {
-          await pgFallback.query(
-            `INSERT INTO performance_logs (tenant_id, method, endpoint, status_code, duration_ms, response_time_ms, db_query_time_ms, user_email, ip_address, user_agent, error_message, error_stack)
+    if (!pgFallback) {
+      // No fallback — bubble up so startJitteredInterval can apply skip-backoff
+      // (e.g. DNS EAI_AGAIN storm). Otherwise the batcher retries every 2s.
+      throw e;
+    }
+    let fallbackSuccess = 0;
+    for (const rec of batch) {
+      const s = sanitizeRecord(rec);
+      try {
+        await pgFallback.query(
+          `INSERT INTO performance_logs (tenant_id, method, endpoint, status_code, duration_ms, response_time_ms, db_query_time_ms, user_email, ip_address, user_agent, error_message, error_stack)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-            [
-              s.tenant_id,
-              s.method,
-              s.endpoint,
-              s.status_code,
-              s.duration_ms,
-              s.response_time_ms,
-              s.db_query_time_ms,
-              s.user_email,
-              s.ip_address,
-              s.user_agent,
-              s.error_message,
-              s.error_stack,
-            ],
-          );
-        } catch (fallbackErr) {
-          logger.error({ err: fallbackErr }, '[PerfLogBatcher] Fallback pgPool insert failed');
-        }
+          [
+            s.tenant_id,
+            s.method,
+            s.endpoint,
+            s.status_code,
+            s.duration_ms,
+            s.response_time_ms,
+            s.db_query_time_ms,
+            s.user_email,
+            s.ip_address,
+            s.user_agent,
+            s.error_message,
+            s.error_stack,
+          ],
+        );
+        fallbackSuccess++;
+      } catch (fallbackErr) {
+        logger.error({ err: fallbackErr }, '[PerfLogBatcher] Fallback pgPool insert failed');
       }
+    }
+    if (fallbackSuccess === 0) {
+      // Both supabase AND every fallback attempt failed — systemic outage.
+      // Re-throw so the scheduler backs off.
+      throw e;
     }
   } finally {
     flushing = false;

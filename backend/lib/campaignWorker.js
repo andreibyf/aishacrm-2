@@ -12,8 +12,9 @@
 import { emitTenantWebhooks } from './webhookEmitter.js';
 import logger from './logger.js';
 import { getSupabaseClient, query as supabaseSqlQuery } from './supabase-db.js';
+import { startJitteredInterval } from './workerScheduling.js';
 
-let workerInterval = null;
+let stopWorker = null;
 let supabase = null;
 let getSupabaseClientImpl = getSupabaseClient;
 const webhookDb = { query: supabaseSqlQuery };
@@ -42,24 +43,18 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
   }
 
   if (!hasCampaignWorkerSupabaseConfig(process.env)) {
-    logger.warn(
-      '[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)',
-    );
+    logger.warn('[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)');
     return;
   }
 
   supabase = getSupabaseClientImpl();
   logger.info({ intervalMs }, '[CampaignWorker] Starting');
 
-  // Run immediately on start
-  processPendingCampaigns().catch((err) =>
-    logger.error({ err }, '[CampaignWorker] Initial run error'),
-  );
-
-  // Then run on interval
-  workerInterval = setInterval(() => {
-    processPendingCampaigns().catch((err) => logger.error({ err }, '[CampaignWorker] Error'));
-  }, intervalMs);
+  stopWorker = startJitteredInterval(processPendingCampaigns, {
+    intervalMs,
+    jitterMs: Math.max(1000, Math.floor(intervalMs * 0.2)),
+    name: 'CampaignWorker',
+  });
 
   logger.info('[CampaignWorker] Started');
 }
@@ -68,9 +63,9 @@ export function startCampaignWorker(pool, intervalMs = 30000) {
  * Stop the campaign worker
  */
 export function stopCampaignWorker() {
-  if (workerInterval) {
-    clearInterval(workerInterval);
-    workerInterval = null;
+  if (stopWorker) {
+    stopWorker();
+    stopWorker = null;
     logger.info('[CampaignWorker] Stopped');
   }
   supabase = null;
@@ -128,6 +123,10 @@ async function processPendingCampaigns() {
     }
   } catch (err) {
     logger.error({ err }, '[CampaignWorker] processPendingCampaigns error');
+    // Re-throw so startJitteredInterval can apply exponential skip-backoff on
+    // systemic failures (e.g. DNS EAI_AGAIN bursts). Without this, the scheduler
+    // treats the tick as successful and keeps firing on every cadence.
+    throw err;
   }
 }
 
@@ -355,10 +354,7 @@ async function dispatchViaWorkflow(campaign, target) {
   // then campaign-level assignment. Never use scheduled_by — that is the user who
   // started the campaign, not the record owner.
   const assignedTo =
-    targetPayload.assigned_to ||
-    campaign.assigned_to ||
-    campaignMeta.assigned_to ||
-    null;
+    targetPayload.assigned_to || campaign.assigned_to || campaignMeta.assigned_to || null;
 
   const payload = {
     event: 'campaign.dispatch',
@@ -389,7 +385,10 @@ async function dispatchViaWorkflow(campaign, target) {
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
-    logger.warn({ target_id: target.id, status: response.status }, '[CampaignWorker] Webhook failed');
+    logger.warn(
+      { target_id: target.id, status: response.status },
+      '[CampaignWorker] Webhook failed',
+    );
     throw new Error(`Webhook returned ${response.status}: ${text}`);
   }
 
