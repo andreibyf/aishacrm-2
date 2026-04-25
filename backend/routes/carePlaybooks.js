@@ -209,7 +209,7 @@ export default function createCarePlaybookRoutes(_pool) {
         trigger_type,
         name,
         description,
-        is_enabled = true,
+        is_enabled = false,
         shadow_mode = true,
         priority = 100,
         execution_mode = 'native',
