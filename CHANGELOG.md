@@ -9,8 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CARE trigger worker: prevent CPU storm from unbounded LLM calls** (`backend/lib/aiTriggersWorker.js`):
+  - Added per-tenant CARE consumer gate at top of `processTriggersForTenant`. Skips all detection/LLM work when the tenant has neither `care_workflow_config.is_enabled=true` nor any `care_playbook.is_enabled=true`. 30s in-memory cache (`CARE_CONSUMER_CACHE_TTL_MS`), fail-open on errors so a transient DB hiccup doesn't silence CARE.
+  - Added in-memory generation cooldown (`CARE_GENERATION_COOLDOWN_MS`, default 1h) keyed on `(tenant, trigger, record)`. Applied on `generation_failed` (LLM returned no actions) and `low_confidence` (<0.7) outcomes. Prevents the worker from re-running the same expensive Anthropic call every 60s when no row was written to `ai_suggestions`.
+  - New regression tests in `backend/__tests__/lib/aiTriggersWorker-cooldown.test.js` (3 cases: generation_failed cooldown, low_confidence cooldown, per-record key isolation).
+
 ### Security
 
+- Resolves prod incident (933% CPU lockup requiring VPS restart) caused by CARE trigger worker re-issuing Anthropic `brain_plan_actions` calls every tick because all per-playbook `is_enabled` toggles were off and the suggestion engine had no cooldown for empty/low-confidence results.
 - **JWT secret fail-fast in production** (new `backend/lib/jwtSecret.js`):
   - Centralized JWT secret resolution via `getAccessSecret()` / `getRefreshSecret()` with resolution order `JWT_ACCESS_SECRET` → `JWT_SECRET` → dev fallback (non-prod only).
   - In production, throws on startup if the resolved secret is missing, empty, or matches a known insecure literal (`change-me-access`, `change-me-refresh`, `your-secret-key-change-in-production`). Eliminates the silent-compromise risk where a missing env var caused tokens to be signed/verified with a public source-code constant.

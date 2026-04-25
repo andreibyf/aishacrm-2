@@ -50,6 +50,107 @@ const DEAL_DECAY_DAYS = parseInt(process.env.CARE_DEAL_DECAY_DAYS) || 14;
 const SUGGESTION_EXPIRY_DAYS = 7;
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
+// Cooldown for terminal "no-suggestion-produced" outcomes that DON'T write a row
+// to ai_suggestions (generation_failed, low_confidence). Without this, every
+// worker tick re-runs the same expensive LLM call against the same record,
+// leading to runaway CPU (see incident 2026-04-25). Keyed by tenantUuid:triggerId:recordId.
+const GENERATION_COOLDOWN_MS = parseInt(process.env.CARE_GENERATION_COOLDOWN_MS, 10) || 60 * 60 * 1000; // 1h
+const generationCooldown = new Map();
+
+function generationCooldownKey(tenantUuid, triggerId, recordId) {
+  return `${tenantUuid}:${triggerId}:${recordId}`;
+}
+
+function isInGenerationCooldown(tenantUuid, triggerId, recordId) {
+  const key = generationCooldownKey(tenantUuid, triggerId, recordId);
+  const expiresAt = generationCooldown.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt <= Date.now()) {
+    generationCooldown.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function setGenerationCooldown(tenantUuid, triggerId, recordId, ttlMs = GENERATION_COOLDOWN_MS) {
+  const key = generationCooldownKey(tenantUuid, triggerId, recordId);
+  generationCooldown.set(key, Date.now() + ttlMs);
+  // Opportunistic cleanup to prevent unbounded growth.
+  if (generationCooldown.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of generationCooldown) {
+      if (v <= now) generationCooldown.delete(k);
+    }
+  }
+}
+
+// Test/debug helper — exported so tests can reset state between runs.
+export function _resetGenerationCooldown() {
+  generationCooldown.clear();
+}
+
+// Per-tenant cache for the "does CARE have any enabled consumer?" gate.
+// Short TTL keeps the worker responsive to UI toggle changes without
+// hammering Supabase every tick. Bypass via setter for tests.
+const CARE_CONSUMER_CACHE_TTL_MS =
+  parseInt(process.env.CARE_CONSUMER_CACHE_TTL_MS, 10) || 30 * 1000; // 30s
+const careConsumerCache = new Map();
+
+export function _resetCareConsumerCache() {
+  careConsumerCache.clear();
+}
+
+/**
+ * Returns true if the tenant has at least one CARE consumer wired up:
+ *   - care_workflow_config.is_enabled = true   (downstream webhook), OR
+ *   - any care_playbook with is_enabled = true (autonomous action)
+ * Returns true (fail-open) on transient errors so a Supabase blip can't
+ * silently disable CARE platform-wide.
+ */
+async function isCareConsumerEnabledForTenant(tenantUuid) {
+  const cached = careConsumerCache.get(tenantUuid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  if (!supabase) return true; // fail-open
+
+  // Run both checks in parallel; either positive means "has consumer".
+  const [configRes, playbookRes] = await Promise.all([
+    supabase
+      .from('care_workflow_config')
+      .select('is_enabled')
+      .eq('tenant_id', tenantUuid)
+      .maybeSingle(),
+    supabase
+      .from('care_playbook')
+      .select('id')
+      .eq('tenant_id', tenantUuid)
+      .eq('is_enabled', true)
+      .limit(1),
+  ]);
+
+  const configEnabled = configRes?.data?.is_enabled === true;
+  const hasEnabledPlaybook = Array.isArray(playbookRes?.data) && playbookRes.data.length > 0;
+
+  // If both calls errored, fail open (assume enabled) to avoid a single
+  // bad query disabling CARE for everyone.
+  if (configRes?.error && playbookRes?.error) {
+    logger.warn(
+      { err: configRes.error, err2: playbookRes.error, tenantUuid },
+      '[AiTriggersWorker] CARE consumer-gate query failed — failing open',
+    );
+    return true;
+  }
+
+  const enabled = configEnabled || hasEnabledPlaybook;
+  careConsumerCache.set(tenantUuid, {
+    value: enabled,
+    expiresAt: Date.now() + CARE_CONSUMER_CACHE_TTL_MS,
+  });
+  return enabled;
+}
+
 function safeSystemUserId() {
   const sanitized = sanitizeUuidInput(process.env.SYSTEM_USER_ID, {
     systemAliases: ['system', 'unknown', 'anonymous'],
@@ -234,6 +335,27 @@ async function triggerCareWorkflowForTenant(tenantId, payload) {
 async function processTriggersForTenant(tenant) {
   const { id: tenantUuid, tenant_id: tenantSlug } = tenant;
   let triggerCount = 0;
+
+  // CARE master gate: short-circuit ALL trigger detection (and therefore all
+  // LLM calls) when the tenant has no consumer for the events. A "consumer"
+  // means EITHER:
+  //   - care_workflow_config.is_enabled = true  (downstream webhook subscriber)
+  //   - at least one care_playbook with is_enabled = true (autonomous action)
+  // Without this gate, the worker would still detect every matching record,
+  // route to the playbook router (returns null because all disabled), then
+  // fall through to createSuggestionIfNew which fires expensive LLM calls
+  // that nobody can ever consume — the cause of the 2026-04-25 CPU storm.
+  try {
+    const careEnabled = await isCareConsumerEnabledForTenant(tenantUuid);
+    if (!careEnabled) {
+      logger.debug({ tenantSlug }, '[AiTriggersWorker] CARE has no enabled consumer for tenant — skipping');
+      return 0;
+    }
+  } catch (gateErr) {
+    // Fail-OPEN on the gate check: a transient Supabase error must not
+    // silently disable CARE for everyone. Log and continue.
+    logger.warn({ err: gateErr, tenantSlug }, '[AiTriggersWorker] CARE enable-gate check failed — proceeding');
+  }
 
   try {
     // 1. Detect stagnant leads (with error isolation)
@@ -2318,6 +2440,18 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
   let suggestionId = null;
 
   try {
+    // In-memory cooldown for previously-failed generations. Prevents the worker
+    // from re-running the same expensive LLM call against the same record on
+    // every tick when the AI Brain returns no proposed actions or low confidence.
+    if (isInGenerationCooldown(tenantUuid, triggerId, recordId)) {
+      outcomeType = OUTCOME_TYPES.duplicate_suppressed;
+      _log.debug(
+        { triggerId, recordId, outcomeType, reason: 'generation_cooldown' },
+        '[AiTriggersWorker] Skipping - in generation cooldown',
+      );
+      return null;
+    }
+
     // Check if there's already a pending OR recently rejected suggestion for this trigger+record
     // Cooldown: Don't recreate suggestions rejected within the last 7 days
     const cooldownDays = 7;
@@ -2352,9 +2486,10 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
 
     if (!suggestion) {
       outcomeType = OUTCOME_TYPES.generation_failed;
+      setGenerationCooldown(tenantUuid, triggerId, recordId);
       _log.debug(
-        { triggerId, recordId, outcomeType },
-        '[AiTriggersWorker] No suggestion generated',
+        { triggerId, recordId, outcomeType, cooldownMs: GENERATION_COOLDOWN_MS },
+        '[AiTriggersWorker] No suggestion generated - applying cooldown',
       );
       return null;
     }
@@ -2364,9 +2499,10 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     const confidence = suggestion.confidence ?? 0;
     if (confidence < MIN_CONFIDENCE) {
       outcomeType = OUTCOME_TYPES.low_confidence;
+      setGenerationCooldown(tenantUuid, triggerId, recordId);
       _log.debug(
-        { triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType },
-        '[AiTriggersWorker] Suggestion below confidence threshold',
+        { triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType, cooldownMs: GENERATION_COOLDOWN_MS },
+        '[AiTriggersWorker] Suggestion below confidence threshold - applying cooldown',
       );
       return null;
     }
