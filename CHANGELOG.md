@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deployment workflow: VPS `.env` no longer drifts from Doppler config** (`.github/workflows/docker-release.yml`):
+  - Pass `DOPPLER_PROJECT` and `DOPPLER_CONFIG` from GitHub `vars` into the SSH deploy step (previously only `DOPPLER_TOKEN` was passed).
+  - Force-overwrite `DOPPLER_TOKEN`, `DOPPLER_PROJECT`, and `DOPPLER_CONFIG` in the VPS `.env` on every deploy. Previous logic used `grep -q ... || echo` which preserved any pre-existing wrong value (e.g. a stale `DOPPLER_CONFIG=dev_personal`), causing prod containers to silently load dev secrets and resulting in `JWT_SECRET` / `COOKIE_DOMAIN` not being injected.
+
 ### Added
 
 - **Comprehensive Monitoring System (`/api/monitoring/*`, traffic/system metrics, rate limit tracking):** Complete observability solution for API routes, traffic patterns, system resources, and rate limit violations. New features:

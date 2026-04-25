@@ -435,12 +435,14 @@ jobs:
           VERSION_TAG: ${{ github.ref_name }}
           MCP_GITHUB_TOKEN: ${{ steps.doppler-deploy.outputs.PROD_MCP_GITHUB_TOKEN }}
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ vars.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ vars.DOPPLER_CONFIG }}
         with:
           host: ${{ steps.doppler-deploy.outputs.PROD_VPS_HOST }}
           username: ${{ steps.doppler-deploy.outputs.PROD_VPS_USER }}
           key: ${{ steps.doppler-deploy.outputs.PROD_VPS_SSH_KEY }}
           port: ${{ steps.doppler-deploy.outputs.PROD_VPS_PORT || 22 }}
-          envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN
+          envs: VERSION_TAG,MCP_GITHUB_TOKEN,DOPPLER_TOKEN,DOPPLER_PROJECT,DOPPLER_CONFIG
           command_timeout: 20m
           timeout: 25m
           script: |
@@ -468,14 +470,22 @@ jobs:
             # No secrets are written to disk. DOPPLER_TOKEN is the only credential on the VPS.
             phase "Configuring Doppler token for runtime secret injection"
             if [ -n "$DOPPLER_TOKEN" ]; then
-              # Write DOPPLER_TOKEN to a minimal .env used by docker compose
-              # This is the ONLY secret stored on disk — containers fetch everything else at runtime
-              grep -q "^DOPPLER_TOKEN=" .env 2>/dev/null && \
-                sed -i "s|^DOPPLER_TOKEN=.*|DOPPLER_TOKEN=$DOPPLER_TOKEN|" .env || \
-                echo "DOPPLER_TOKEN=$DOPPLER_TOKEN" >> .env
-              grep -q "^DOPPLER_PROJECT=" .env 2>/dev/null || echo "DOPPLER_PROJECT=aishacrm" >> .env
-              grep -q "^DOPPLER_CONFIG=" .env 2>/dev/null || echo "DOPPLER_CONFIG=prd_prd" >> .env
-              phase "✓ Doppler token configured for runtime injection"
+              # Default project/config if not provided by workflow vars
+              DOPPLER_PROJECT="${DOPPLER_PROJECT:-aishacrm}"
+              DOPPLER_CONFIG="${DOPPLER_CONFIG:-prd_prd}"
+
+              # Force-overwrite Doppler vars in .env (do NOT preserve stale values from past deploys).
+              # Previous logic used `grep -q ... || echo ...` which preserved any pre-existing
+              # wrong value (e.g. dev_personal) and silently caused prod to load dev secrets.
+              for KEY in DOPPLER_TOKEN DOPPLER_PROJECT DOPPLER_CONFIG; do
+                eval "VAL=\${$KEY}"
+                if grep -q "^${KEY}=" .env 2>/dev/null; then
+                  sed -i "s|^${KEY}=.*|${KEY}=${VAL}|" .env
+                else
+                  echo "${KEY}=${VAL}" >> .env
+                fi
+              done
+              phase "✓ Doppler configured: project=$DOPPLER_PROJECT config=$DOPPLER_CONFIG"
 
               # Clean up legacy .env.from-doppler if it exists (secrets no longer stored on disk)
               if [ -f .env.from-doppler ]; then
