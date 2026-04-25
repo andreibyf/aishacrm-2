@@ -56,6 +56,8 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { useTenant } from '@/components/shared/tenantContext';
+import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
+import { getAuthFetchOptions } from '@/api/core/httpClient';
 import PlaybookStepBuilder from './PlaybookStepBuilder';
 import { BACKEND_URL } from '@/api/entities';
 
@@ -103,6 +105,7 @@ const EMPTY_PLAYBOOK = {
 
 export default function CarePlaybooks() {
   const { selectedTenantId } = useTenant();
+  const { authCookiesReady } = useAuthCookiesReady();
   const [playbooks, setPlaybooks] = useState([]);
   const [executions, setExecutions] = useState([]);
   const [executionTotal, setExecutionTotal] = useState(0);
@@ -146,16 +149,30 @@ export default function CarePlaybooks() {
     [selectedTenantId],
   );
 
+  const careFetch = useCallback(
+    async (path, { params = {}, headers = {}, ...options } = {}) => {
+      const authOptions = await getAuthFetchOptions(tenantHeaders(headers));
+
+      return fetch(buildCareUrl(path, params), {
+        ...authOptions,
+        ...options,
+        headers: {
+          ...authOptions.headers,
+          ...tenantHeaders(headers),
+          ...(options.headers || {}),
+        },
+      });
+    },
+    [buildCareUrl, tenantHeaders],
+  );
+
   // ============================================================
   // Data fetching
   // ============================================================
 
   const fetchPlaybooks = useCallback(async () => {
     try {
-      const res = await fetch(buildCareUrl('/api/care-playbooks'), {
-        credentials: 'include',
-        headers: tenantHeaders(),
-      });
+      const res = await careFetch('/api/care-playbooks');
       const data = await res.json();
       if (data.status === 'success') {
         setPlaybooks(data.data?.playbooks || []);
@@ -163,13 +180,12 @@ export default function CarePlaybooks() {
     } catch (err) {
       console.error('Error fetching playbooks:', err);
     }
-  }, [buildCareUrl, tenantHeaders]);
+  }, [careFetch]);
 
   const fetchExecutions = useCallback(async () => {
     try {
-      const res = await fetch(buildCareUrl('/api/care-playbooks/executions', { limit: 25 }), {
-        credentials: 'include',
-        headers: tenantHeaders(),
+      const res = await careFetch('/api/care-playbooks/executions', {
+        params: { limit: 25 },
       });
       const data = await res.json();
       if (data.status === 'success') {
@@ -179,16 +195,20 @@ export default function CarePlaybooks() {
     } catch (err) {
       console.error('Error fetching executions:', err);
     }
-  }, [buildCareUrl, tenantHeaders]);
+  }, [careFetch]);
 
   useEffect(() => {
+    if (!authCookiesReady) {
+      return;
+    }
+
     const load = async () => {
       setLoading(true);
       await Promise.all([fetchPlaybooks(), fetchExecutions()]);
       setLoading(false);
     };
     load();
-  }, [fetchPlaybooks, fetchExecutions]);
+  }, [authCookiesReady, fetchPlaybooks, fetchExecutions]);
 
   // ============================================================
   // Playbook CRUD
@@ -224,15 +244,14 @@ export default function CarePlaybooks() {
     setSaving(true);
     try {
       const url = editingPlaybook
-        ? buildCareUrl(`/api/care-playbooks/${editingPlaybook.id}`)
-        : buildCareUrl('/api/care-playbooks');
+        ? `/api/care-playbooks/${editingPlaybook.id}`
+        : '/api/care-playbooks';
 
       const method = editingPlaybook ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await careFetch(url, {
         method,
-        credentials: 'include',
-        headers: tenantHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           ...(selectedTenantId ? { tenant_id: selectedTenantId } : {}),
@@ -252,23 +271,31 @@ export default function CarePlaybooks() {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+      await fetchPlaybooks();
     }
   };
 
   const handleToggle = async (playbook) => {
     try {
-      const res = await fetch(buildCareUrl(`/api/care-playbooks/${playbook.id}/toggle`), {
+      const res = await careFetch(`/api/care-playbooks/${playbook.id}/toggle`, {
         method: 'PUT',
-        credentials: 'include',
-        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
         toast({ title: `Playbook ${data.data.is_enabled ? 'enabled' : 'disabled'}` });
-        await fetchPlaybooks();
+      } else {
+        toast({
+          title: 'Toggle failed',
+          description: data.message || 'Unexpected error',
+          variant: 'destructive',
+        });
       }
     } catch {
       toast({ title: 'Error toggling playbook', variant: 'destructive' });
+    } finally {
+      // Always re-fetch to ensure UI matches DB state — prevents silent desync
+      // that caused the 2026-04-25 CPU storm (UI showed "off", DB had "on").
+      await fetchPlaybooks();
     }
   };
 
@@ -277,27 +304,29 @@ export default function CarePlaybooks() {
       return;
 
     try {
-      const res = await fetch(buildCareUrl(`/api/care-playbooks/${playbook.id}`), {
+      const res = await careFetch(`/api/care-playbooks/${playbook.id}`, {
         method: 'DELETE',
-        credentials: 'include',
-        headers: tenantHeaders(),
       });
       const data = await res.json();
       if (data.status === 'success') {
         toast({ title: 'Playbook deleted' });
-        await fetchPlaybooks();
+      } else {
+        toast({
+          title: 'Delete failed',
+          description: data.message || 'Unexpected error',
+          variant: 'destructive',
+        });
       }
     } catch {
       toast({ title: 'Error deleting playbook', variant: 'destructive' });
+    } finally {
+      await fetchPlaybooks();
     }
   };
 
   const handleViewExecution = async (execution) => {
     try {
-      const res = await fetch(buildCareUrl(`/api/care-playbooks/executions/${execution.id}`), {
-        credentials: 'include',
-        headers: tenantHeaders(),
-      });
+      const res = await careFetch(`/api/care-playbooks/executions/${execution.id}`);
       const data = await res.json();
       if (data.status === 'success') {
         setSelectedExecution(data.data);

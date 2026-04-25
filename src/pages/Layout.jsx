@@ -1192,6 +1192,10 @@ function Layout({ children, currentPageName }) {
   // Load module settings once per user; defer to idle time to reduce initial load
   React.useEffect(() => {
     const loadModuleSettings = () => {
+      if (!authCookiesReady) {
+        return;
+      }
+
       if (!user) {
         setModuleSettings([]);
         return;
@@ -1235,7 +1239,7 @@ function Layout({ children, currentPageName }) {
       }
     };
     loadModuleSettings();
-  }, [user, cachedRequest]);
+  }, [authCookiesReady, user, cachedRequest]);
 
   // Listen for module settings changes and reload navigation
   React.useEffect(() => {
