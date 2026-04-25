@@ -74,6 +74,8 @@ const TRIGGER_CONFIG = {
   contact_inactive: { icon: User, label: 'Inactive Contact', color: 'text-blue-400' },
   followup_needed: { icon: Phone, label: 'Follow-up Needed', color: 'text-purple-400' },
   account_risk: { icon: AlertTriangle, label: 'Account at Risk', color: 'text-red-400' },
+  closing_thirty_days: { icon: TrendingUp, label: 'Closing Soon', color: 'text-green-400' },
+  playbook_email: { icon: Mail, label: 'Playbook Email', color: 'text-blue-400' },
 };
 
 // Priority colors
