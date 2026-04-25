@@ -227,13 +227,15 @@ describe('SuggestionQueue', () => {
     expect(screen.getByText(/Thread History \(2 messages\)/)).toBeInTheDocument();
   });
 
-  it('renders raw JSON for non-email tool suggestions', async () => {
+  it('renders action summary for non-email tool suggestions', async () => {
     render(<SuggestionQueue tenantId="tenant-1" focusSuggestionId="suggestion-002" />);
 
     await waitFor(() => expect(screen.getByText('Other Record')).toBeInTheDocument());
 
-    // Non-email suggestions should still show raw JSON
-    expect(screen.getByText(/"tool_name": "create_task"/)).toBeInTheDocument();
+    // create_* suggestions render ActionSummaryCard instead of raw JSON
+    expect(screen.getAllByText(/create task/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('No details available')).toBeInTheDocument();
+    expect(screen.queryByText(/"tool_name": "create_task"/)).not.toBeInTheDocument();
   });
 
   it('calls /approve then /apply when user approves a suggestion', async () => {
