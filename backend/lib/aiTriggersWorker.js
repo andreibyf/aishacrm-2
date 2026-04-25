@@ -54,7 +54,8 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 // to ai_suggestions (generation_failed, low_confidence). Without this, every
 // worker tick re-runs the same expensive LLM call against the same record,
 // leading to runaway CPU (see incident 2026-04-25). Keyed by tenantUuid:triggerId:recordId.
-const GENERATION_COOLDOWN_MS = parseInt(process.env.CARE_GENERATION_COOLDOWN_MS, 10) || 60 * 60 * 1000; // 1h
+const GENERATION_COOLDOWN_MS =
+  parseInt(process.env.CARE_GENERATION_COOLDOWN_MS, 10) || 60 * 60 * 1000; // 1h
 const generationCooldown = new Map();
 
 function generationCooldownKey(tenantUuid, triggerId, recordId) {
@@ -348,13 +349,19 @@ async function processTriggersForTenant(tenant) {
   try {
     const careEnabled = await isCareConsumerEnabledForTenant(tenantUuid);
     if (!careEnabled) {
-      logger.debug({ tenantSlug }, '[AiTriggersWorker] CARE has no enabled consumer for tenant — skipping');
+      logger.debug(
+        { tenantSlug },
+        '[AiTriggersWorker] CARE has no enabled consumer for tenant — skipping',
+      );
       return 0;
     }
   } catch (gateErr) {
     // Fail-OPEN on the gate check: a transient Supabase error must not
     // silently disable CARE for everyone. Log and continue.
-    logger.warn({ err: gateErr, tenantSlug }, '[AiTriggersWorker] CARE enable-gate check failed — proceeding');
+    logger.warn(
+      { err: gateErr, tenantSlug },
+      '[AiTriggersWorker] CARE enable-gate check failed — proceeding',
+    );
   }
 
   try {
@@ -2464,7 +2471,9 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
       .eq('tenant_id', tenantUuid)
       .eq('trigger_id', triggerId)
       .eq('record_id', recordId)
-      .or(`status.eq.pending,and(status.eq.rejected,updated_at.gte.${cooldownDate.toISOString()})`)
+      .or(
+        `status.eq.pending,and(status.eq.rejected,updated_at.gte.${cooldownDate.toISOString()}),and(status.eq.generation_skipped,expires_at.gte.${new Date().toISOString()})`,
+      )
       .limit(1);
 
     if (checkError) {
@@ -2487,9 +2496,19 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     if (!suggestion) {
       outcomeType = OUTCOME_TYPES.generation_failed;
       setGenerationCooldown(tenantUuid, triggerId, recordId);
+      // Persist cooldown to DB so it survives container restarts (incident 2026-04-25)
+      await _persistGenerationSkipped(
+        _supabase,
+        tenantUuid,
+        triggerId,
+        recordType,
+        recordId,
+        context,
+        _log,
+      );
       _log.debug(
         { triggerId, recordId, outcomeType, cooldownMs: GENERATION_COOLDOWN_MS },
-        '[AiTriggersWorker] No suggestion generated - applying cooldown',
+        '[AiTriggersWorker] No suggestion generated - applying persistent cooldown',
       );
       return null;
     }
@@ -2500,9 +2519,26 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
     if (confidence < MIN_CONFIDENCE) {
       outcomeType = OUTCOME_TYPES.low_confidence;
       setGenerationCooldown(tenantUuid, triggerId, recordId);
+      // Persist cooldown to DB so it survives container restarts (incident 2026-04-25)
+      await _persistGenerationSkipped(
+        _supabase,
+        tenantUuid,
+        triggerId,
+        recordType,
+        recordId,
+        context,
+        _log,
+      );
       _log.debug(
-        { triggerId, recordId, confidence, MIN_CONFIDENCE, outcomeType, cooldownMs: GENERATION_COOLDOWN_MS },
-        '[AiTriggersWorker] Suggestion below confidence threshold - applying cooldown',
+        {
+          triggerId,
+          recordId,
+          confidence,
+          MIN_CONFIDENCE,
+          outcomeType,
+          cooldownMs: GENERATION_COOLDOWN_MS,
+        },
+        '[AiTriggersWorker] Suggestion below confidence threshold - applying persistent cooldown',
       );
       return null;
     }
@@ -2608,6 +2644,57 @@ export async function createSuggestionIfNew(tenantUuid, triggerData, _deps = {})
 }
 
 /**
+ * Persist a generation_skipped marker row to ai_suggestions so that the
+ * dedup check in createSuggestionIfNew survives container restarts.
+ * Without this, the in-memory cooldown resets on restart and the same
+ * expensive LLM call fires every tick (incident 2026-04-25, 933% CPU).
+ *
+ * @private
+ */
+async function _persistGenerationSkipped(
+  supabaseClient,
+  tenantUuid,
+  triggerId,
+  recordType,
+  recordId,
+  context,
+  log,
+) {
+  try {
+    const cooldownExpiresAt = new Date(Date.now() + GENERATION_COOLDOWN_MS);
+    const { error } = await supabaseClient.from('ai_suggestions').insert({
+      tenant_id: tenantUuid,
+      trigger_id: triggerId,
+      record_type: recordType,
+      record_id: recordId,
+      trigger_context: context || {},
+      action: { tool_name: 'generation_skipped', tool_args: {} },
+      confidence: 0,
+      reasoning: 'Generation failed or low confidence — persistent cooldown marker',
+      priority: 'low',
+      status: 'generation_skipped',
+      outcome_type: 'generation_skipped',
+      expires_at: cooldownExpiresAt.toISOString(),
+    });
+    if (error) {
+      // 23505 = duplicate — already have a marker, which is fine
+      if (error.code !== '23505') {
+        log.warn(
+          { err: error, triggerId, recordId },
+          '[AiTriggersWorker] Failed to persist generation_skipped row',
+        );
+      }
+    }
+  } catch (err) {
+    // Non-fatal: in-memory cooldown is still active as backup
+    log.warn({ err, triggerId, recordId }, '[AiTriggersWorker] _persistGenerationSkipped error');
+  }
+}
+
+// Exported for testing
+export { _persistGenerationSkipped };
+
+/**
  * Generate AI suggestion using AI Brain in propose_actions mode
  * Stage 2 Implementation: Full AI Brain integration with fallback to templates
  */
@@ -2706,6 +2793,17 @@ function mapTriggerToTaskType(triggerId) {
     [TRIGGER_TYPES.CONTACT_INACTIVE]: 'contact_reengagement_suggestion',
     [TRIGGER_TYPES.OPPORTUNITY_HOT]: 'opportunity_closing_suggestion',
     [TRIGGER_TYPES.FOLLOWUP_NEEDED]: 'followup_action_suggestion',
+    // FL Real Estate triggers
+    [TRIGGER_TYPES.BUYER_LEAD_CREATED]: 'buyer_lead_triage',
+    [TRIGGER_TYPES.LISTING_LEAD_CREATED]: 'listing_lead_prep',
+    [TRIGGER_TYPES.SHOWING_SCHEDULED]: 'pre_showing_compliance',
+    [TRIGGER_TYPES.INSPECTION_PERIOD_OPEN]: 'inspection_risk_review',
+    [TRIGGER_TYPES.CLOSING_THIRTY_DAYS]: 'closing_binder_checklist',
+    [TRIGGER_TYPES.EFFECTIVE_DATE_SET]: 'transaction_sprint_kickoff',
+    [TRIGGER_TYPES.ESCROW_DAY3]: 'escrow_deposit_verification',
+    [TRIGGER_TYPES.HOA_DOCS_RECEIVED]: 'hoa_rescission_tracker',
+    [TRIGGER_TYPES.LOAN_COMMITMENT_DAY30]: 'loan_commitment_verification',
+    [TRIGGER_TYPES.CLOSING_THREE_DAYS]: 'final_compliance_checklist',
   };
 
   return taskTypeMap[triggerId] || 'general_crm_suggestion';
@@ -2778,6 +2876,157 @@ function generateTemplateSuggestion(triggerId, _recordType, recordId, context) {
       confidence: 0.9,
       reasoning: `Opportunity "${context.deal_name}" is hot (${context.probability}% probability) and closing in ${context.days_to_close} days. Schedule a meeting to close.`,
     },
+
+    // ── Florida Real Estate Transaction Templates ──────────────────
+    [TRIGGER_TYPES.BUYER_LEAD_CREATED]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Buyer lead triage: ${context.lead_name || 'new buyer'}`,
+          body: `New buyer lead created. Property type: ${context.property_type || 'TBD'}. Initiate insurance pre-qualification and property type assessment.`,
+          related_to: 'lead',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.85,
+      reasoning: `New buyer lead "${context.lead_name}" created. Property type triage recommended.`,
+    },
+
+    [TRIGGER_TYPES.LISTING_LEAD_CREATED]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Seller insurance prep: ${context.lead_name || 'new listing'}`,
+          body: `New listing/seller lead created. Begin seller insurance preparation checklist.`,
+          related_to: 'lead',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.85,
+      reasoning: `New listing lead "${context.lead_name}" created. Seller insurance prep recommended.`,
+    },
+
+    [TRIGGER_TYPES.SHOWING_SCHEDULED]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Pre-showing compliance check`,
+          body: `First showing scheduled (activity: ${context.activity_id}). Run pre-showing compliance checklist.`,
+          related_to: 'lead',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.8,
+      reasoning: `First showing scheduled for lead. Pre-showing compliance check recommended.`,
+    },
+
+    [TRIGGER_TYPES.INSPECTION_PERIOD_OPEN]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Inspection period: ${context.deal_name || 'deal'}`,
+          body: `Opportunity entered ${context.stage} stage. Property type: ${context.property_type || 'TBD'}, year built: ${context.year_built || 'unknown'}, roof age: ${context.roof_age || 'unknown'}. Review insurance risk flags.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.85,
+      reasoning: `Opportunity "${context.deal_name}" entered inspection period (${context.stage}). Insurance risk flag review recommended.`,
+    },
+
+    [TRIGGER_TYPES.CLOSING_THIRTY_DAYS]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `30-day closing checklist: ${context.deal_name || 'deal'}`,
+          body: `Closing in ${context.days_to_close} days (${context.close_date}). Amount: $${context.amount || 0}. Flood zone: ${context.flood_zone || 'TBD'}. Verify insurance binder status.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.85,
+      reasoning: `Opportunity "${context.deal_name}" closing in ${context.days_to_close} days. Insurance binder checklist recommended.`,
+    },
+
+    [TRIGGER_TYPES.EFFECTIVE_DATE_SET]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Transaction sprint kickoff: ${context.deal_name || 'deal'}`,
+          body: `Effective date set: ${context.effective_date}. Close date: ${context.close_date}. Amount: $${context.amount || 0}. Begin transaction compliance sprint.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.9,
+      reasoning: `Effective date set for "${context.deal_name}". Transaction sprint kickoff recommended.`,
+    },
+
+    [TRIGGER_TYPES.ESCROW_DAY3]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Escrow deposit verification: ${context.deal_name || 'deal'}`,
+          body: `Day 3 after effective date (${context.effective_date}). Verify escrow deposit has been received and documented.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.9,
+      reasoning: `Day 3 escrow verification for "${context.deal_name}". Deposit confirmation recommended.`,
+    },
+
+    [TRIGGER_TYPES.HOA_DOCS_RECEIVED]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `HOA docs rescission tracker: ${context.deal_name || 'deal'}`,
+          body: `HOA/condo docs received on ${context.hoa_docs_received_date}. 3-day rescission window is active. Property type: ${context.property_type || 'TBD'}.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.9,
+      reasoning: `HOA docs received for "${context.deal_name}". 3-day rescission tracking initiated.`,
+    },
+
+    [TRIGGER_TYPES.LOAN_COMMITMENT_DAY30]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Loan commitment deadline: ${context.deal_name || 'deal'}`,
+          body: `Day 30 from effective date (${context.effective_date}). Loan commitment deadline approaching. Amount: $${context.amount || 0}.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.9,
+      reasoning: `Loan commitment Day 30 deadline for "${context.deal_name}". Verification recommended.`,
+    },
+
+    [TRIGGER_TYPES.CLOSING_THREE_DAYS]: {
+      action: {
+        tool_name: 'create_activity',
+        tool_args: {
+          type: 'task',
+          subject: `Final compliance checklist: ${context.deal_name || 'deal'}`,
+          body: `Closing in ${context.days_to_close} days (${context.close_date}). Amount: $${context.amount || 0}. Run final compliance checklist.`,
+          related_to: 'opportunity',
+          related_id: recordId,
+        },
+      },
+      confidence: 0.9,
+      reasoning: `Opportunity "${context.deal_name}" closing in ${context.days_to_close} days. Final compliance checklist recommended.`,
+    },
   };
 
   return suggestionTemplates[triggerId] || null;
@@ -2794,7 +3043,7 @@ async function expireOldSuggestions() {
     const { data, error } = await supabase
       .from('ai_suggestions')
       .update({ status: 'expired', updated_at: now })
-      .eq('status', 'pending')
+      .in('status', ['pending', 'generation_skipped'])
       .lt('expires_at', now)
       .select('id');
 
