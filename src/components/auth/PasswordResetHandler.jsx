@@ -142,19 +142,25 @@ export default function PasswordResetHandler({ children }) {
         className="relative min-h-screen flex items-center justify-center overflow-hidden px-4"
         style={{ background: '#080c15' }}
       >
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 overflow-hidden pointer-events-none or-ignore"
+          aria-hidden="true"
+        >
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
             style={{
-              width: '800px', height: '800px',
-              background: 'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
+              width: '800px',
+              height: '800px',
+              background:
+                'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
               borderRadius: '50%',
             }}
           />
           <div
             className="absolute inset-0 opacity-[0.04]"
             style={{
-              backgroundImage: 'linear-gradient(rgba(20,184,166,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(20,184,166,0.5) 1px, transparent 1px)',
+              backgroundImage:
+                'linear-gradient(rgba(20,184,166,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(20,184,166,0.5) 1px, transparent 1px)',
               backgroundSize: '60px 60px',
             }}
           />
@@ -170,7 +176,10 @@ export default function PasswordResetHandler({ children }) {
             boxShadow: '0 0 60px rgba(6, 182, 212, 0.08), 0 25px 50px rgba(0, 0, 0, 0.4)',
           }}
         >
-          <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }} />
+          <div
+            className="h-1 w-full"
+            style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }}
+          />
           <div className="p-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-white mb-1">Reset Your Password</h2>
@@ -189,15 +198,23 @@ export default function PasswordResetHandler({ children }) {
                 {error && (
                   <div
                     className="flex items-center gap-2 p-3 rounded-lg"
-                    style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}
+                    style={{
+                      background: 'rgba(239,68,68,0.1)',
+                      border: '1px solid rgba(239,68,68,0.3)',
+                    }}
                   >
                     <AlertCircle className="h-5 w-5 flex-shrink-0" style={{ color: '#f87171' }} />
-                    <p className="text-sm" style={{ color: '#fca5a5' }}>{error}</p>
+                    <p className="text-sm" style={{ color: '#fca5a5' }}>
+                      {error}
+                    </p>
                   </div>
                 )}
 
                 <div>
-                  <label htmlFor="newPassword" className="block text-sm font-medium mb-2 text-slate-300">
+                  <label
+                    htmlFor="newPassword"
+                    className="block text-sm font-medium mb-2 text-slate-300"
+                  >
                     New Password
                   </label>
                   <Input
@@ -210,12 +227,19 @@ export default function PasswordResetHandler({ children }) {
                     minLength={8}
                     disabled={loading}
                     className="w-full text-white placeholder-slate-500"
-                    style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(100,116,139,0.3)', '--tw-ring-color': '#14b8a6' }}
+                    style={{
+                      background: 'rgba(30,41,59,0.6)',
+                      border: '1px solid rgba(100,116,139,0.3)',
+                      '--tw-ring-color': '#14b8a6',
+                    }}
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2 text-slate-300">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-sm font-medium mb-2 text-slate-300"
+                  >
                     Confirm Password
                   </label>
                   <Input
@@ -228,7 +252,11 @@ export default function PasswordResetHandler({ children }) {
                     minLength={8}
                     disabled={loading}
                     className="w-full text-white placeholder-slate-500"
-                    style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(100,116,139,0.3)', '--tw-ring-color': '#14b8a6' }}
+                    style={{
+                      background: 'rgba(30,41,59,0.6)',
+                      border: '1px solid rgba(100,116,139,0.3)',
+                      '--tw-ring-color': '#14b8a6',
+                    }}
                   />
                 </div>
 
@@ -236,7 +264,10 @@ export default function PasswordResetHandler({ children }) {
                   type="submit"
                   disabled={loading}
                   className="w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110 disabled:opacity-50"
-                  style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4)', boxShadow: '0 4px 20px rgba(20,184,166,0.3)' }}
+                  style={{
+                    background: 'linear-gradient(90deg, #14b8a6, #06b6d4)',
+                    boxShadow: '0 4px 20px rgba(20,184,166,0.3)',
+                  }}
                 >
                   {loading ? 'Updating...' : 'Update Password'}
                 </button>
@@ -263,12 +294,17 @@ export default function PasswordResetHandler({ children }) {
         className="relative min-h-screen flex items-center justify-center overflow-hidden px-4"
         style={{ background: '#080c15' }}
       >
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 overflow-hidden pointer-events-none or-ignore"
+          aria-hidden="true"
+        >
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
             style={{
-              width: '800px', height: '800px',
-              background: 'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
+              width: '800px',
+              height: '800px',
+              background:
+                'radial-gradient(circle, rgba(20,184,166,0.07) 0%, rgba(6,182,212,0.04) 35%, transparent 65%)',
               borderRadius: '50%',
             }}
           />
@@ -284,7 +320,10 @@ export default function PasswordResetHandler({ children }) {
             boxShadow: '0 0 60px rgba(6, 182, 212, 0.08), 0 25px 50px rgba(0, 0, 0, 0.4)',
           }}
         >
-          <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }} />
+          <div
+            className="h-1 w-full"
+            style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4, #22c55e)' }}
+          />
           <div className="p-8">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-white mb-1">Password Reset</h2>
@@ -292,11 +331,18 @@ export default function PasswordResetHandler({ children }) {
             </div>
             <div className="flex flex-col items-center gap-4 py-4">
               <AlertCircle className="h-12 w-12" style={{ color: '#f87171' }} />
-              <p className="text-center text-sm" style={{ color: '#fca5a5' }}>{error}</p>
+              <p className="text-center text-sm" style={{ color: '#fca5a5' }}>
+                {error}
+              </p>
               <button
                 className="mt-2 w-full text-white px-4 py-3 rounded-lg transition-all font-semibold text-base hover:brightness-110"
-                style={{ background: 'linear-gradient(90deg, #14b8a6, #06b6d4)', boxShadow: '0 4px 20px rgba(20,184,166,0.3)' }}
-                onClick={() => { window.location.href = '/forgot-password'; }}
+                style={{
+                  background: 'linear-gradient(90deg, #14b8a6, #06b6d4)',
+                  boxShadow: '0 4px 20px rgba(20,184,166,0.3)',
+                }}
+                onClick={() => {
+                  window.location.href = '/forgot-password';
+                }}
               >
                 Request New Reset Email
               </button>

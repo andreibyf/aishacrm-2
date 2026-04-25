@@ -58,7 +58,10 @@ export default function ForgotPasswordPage() {
       style={{ background: '#080c15' }}
     >
       {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      <div
+        className="absolute inset-0 overflow-hidden pointer-events-none or-ignore"
+        aria-hidden="true"
+      >
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
           style={{
@@ -140,10 +143,7 @@ export default function ForgotPasswordPage() {
               )}
 
               <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-2 text-slate-300"
-                >
+                <label htmlFor="email" className="block text-sm font-medium mb-2 text-slate-300">
                   Email
                 </label>
                 <Input

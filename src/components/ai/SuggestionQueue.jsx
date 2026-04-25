@@ -582,7 +582,9 @@ function SuggestionCard({
   defaultExpanded = false,
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const config = TRIGGER_CONFIG[suggestion.trigger_type] || TRIGGER_CONFIG.followup_needed;
+  const config =
+    TRIGGER_CONFIG[suggestion.trigger_id || suggestion.trigger_type] ||
+    TRIGGER_CONFIG.followup_needed;
   const Icon = config.icon;
 
   useEffect(() => {
@@ -797,9 +799,20 @@ export default function SuggestionQueue({
   const focusId = focusSuggestionId ? String(focusSuggestionId) : null;
 
   const displayedSuggestions = useMemo(() => {
-    if (!focusId) return suggestions;
-    return suggestions.filter((suggestion) => suggestion.id === focusId);
-  }, [focusId, suggestions]);
+    let list = suggestions;
+
+    // Client-side trigger type filter (API returns all pending)
+    if (filter !== 'all') {
+      list = list.filter((s) => (s.trigger_id || s.trigger_type) === filter);
+    }
+
+    // Focus on a single suggestion if linked from notification
+    if (focusId) {
+      list = list.filter((s) => s.id === focusId);
+    }
+
+    return list;
+  }, [focusId, suggestions, filter]);
 
   const focusedSuggestionMissing = Boolean(
     focusId && !isLoading && displayedSuggestions.length === 0,
@@ -925,7 +938,7 @@ export default function SuggestionQueue({
   // Get unique trigger types for filter
   const availableTriggerTypes = [
     'all',
-    ...new Set(suggestions.map((s) => s.trigger_type).filter(Boolean)),
+    ...new Set(suggestions.map((s) => s.trigger_id || s.trigger_type).filter(Boolean)),
   ];
 
   if (isLoading && suggestions.length === 0) {

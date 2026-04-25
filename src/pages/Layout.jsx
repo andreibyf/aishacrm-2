@@ -1696,10 +1696,13 @@ function Layout({ children, currentPageName }) {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: '#080c15' }}
+      >
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading user data...</p>
+          <Loader2 className="w-12 h-12 text-cyan-400 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Loading user data...</p>
         </div>
       </div>
     );
@@ -1731,7 +1734,10 @@ function Layout({ children, currentPageName }) {
         style={{ background: '#080c15' }}
       >
         {/* Neural network background effect */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute inset-0 overflow-hidden pointer-events-none or-ignore"
+          aria-hidden="true"
+        >
           {/* Grid lines (subtle) */}
           <div
             className="absolute inset-0 opacity-[0.04]"
