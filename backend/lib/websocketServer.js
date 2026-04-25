@@ -6,9 +6,9 @@ import cookie from 'cookie';
 import { getSupabaseAdmin } from './supabaseFactory.js';
 import logger from './logger.js';
 import { initMemoryClient, appendEvent, disconnectMemoryClient } from './memoryClient.js';
+import { getAccessSecret } from './jwtSecret.js';
 
 const supabase = getSupabaseAdmin();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 /**
  * WebSocket Server for Real-Time Activity Feed
@@ -98,7 +98,7 @@ export function init(httpServer) {
       }
 
       // Verify JWT
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, getAccessSecret());
       const socketUserId = resolveSocketUserId(decoded);
 
       if (!socketUserId) {

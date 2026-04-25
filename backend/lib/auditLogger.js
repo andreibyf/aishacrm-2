@@ -3,6 +3,9 @@
  * Simplifies audit log creation across routes
  */
 
+import jwt from 'jsonwebtoken';
+import { getAccessSecret } from './jwtSecret.js';
+
 /**
  * Create an audit log entry
  * @param {object} supabase - Supabase client instance
@@ -73,11 +76,7 @@ export function getUserEmailFromRequest(req) {
   if (authHeader.startsWith('Bearer ')) {
     try {
       const token = authHeader.substring(7);
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-      );
+      const decoded = jwt.verify(token, getAccessSecret());
       if (decoded?.email) return decoded.email;
     } catch {
       // Token verification failed, continue to fallback

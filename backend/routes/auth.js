@@ -9,6 +9,7 @@ import {
 } from '../lib/supabaseAuth.js';
 import { authLimiter, refreshLimiter } from '../middleware/rateLimiter.js';
 import logger from '../lib/logger.js';
+import { getAccessSecret, getRefreshSecret } from '../lib/jwtSecret.js';
 
 function getAnonSupabase() {
   const url = process.env.SUPABASE_URL;
@@ -21,20 +22,12 @@ function getAnonSupabase() {
 
 function signAccess(payload, expiresIn = '15m') {
   // Use HS256 explicitly - must match verification in authenticate.js
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    logger.warn('[Auth] JWT_SECRET not set, using insecure fallback');
-  }
-  return jwt.sign(payload, secret || 'change-me-access', { algorithm: 'HS256', expiresIn });
+  return jwt.sign(payload, getAccessSecret(), { algorithm: 'HS256', expiresIn });
 }
 
 function signRefresh(payload) {
   // Use HS256 explicitly for refresh tokens
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    logger.warn('[Auth] JWT_SECRET not set for refresh, using insecure fallback');
-  }
-  return jwt.sign(payload, secret || 'change-me-refresh', { algorithm: 'HS256', expiresIn: '7d' });
+  return jwt.sign(payload, getRefreshSecret(), { algorithm: 'HS256', expiresIn: '7d' });
 }
 
 function cookieOpts(maxAgeMs) {
@@ -283,7 +276,7 @@ export default function createAuthRoutes(_pgPool) {
         return res.status(400).json({ status: 'error', message: 'token required' });
       }
 
-      const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
+      const secret = getAccessSecret();
       try {
         const decoded = jwt.verify(token, secret);
         res.json({
@@ -733,8 +726,7 @@ export default function createAuthRoutes(_pgPool) {
         logger.debug('[Auth.refresh] No refresh token found in cookies');
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
-      const secret =
-        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change-me-refresh';
+      const secret = getRefreshSecret();
       let decoded;
       try {
         decoded = jwt.verify(token, secret);
@@ -812,7 +804,7 @@ export default function createAuthRoutes(_pgPool) {
     try {
       const token = req.cookies?.aisha_access;
       if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
-      const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'change-me-access';
+      const secret = getAccessSecret();
       const payload = jwt.verify(token, secret);
       return res.json({ status: 'success', data: { user: payload } });
     } catch {
@@ -1061,7 +1053,7 @@ export default function createAuthRoutes(_pgPool) {
         return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       }
 
-      const secret = process.env.JWT_SECRET || 'change-me-access';
+      const secret = getAccessSecret();
       let currentUser;
       try {
         currentUser = jwt.verify(token, secret, { algorithms: ['HS256'] });
@@ -1189,7 +1181,7 @@ export default function createAuthRoutes(_pgPool) {
       }
 
       // Verify current token has impersonating flag
-      const secret = process.env.JWT_SECRET || 'change-me-access';
+      const secret = getAccessSecret();
       let currentPayload;
       try {
         currentPayload = jwt.verify(currentToken, secret, { algorithms: ['HS256'] });
@@ -1271,7 +1263,7 @@ export default function createAuthRoutes(_pgPool) {
         return res.json({ status: 'success', data: { impersonating: false } });
       }
 
-      const secret = process.env.JWT_SECRET || 'change-me-access';
+      const secret = getAccessSecret();
       let payload;
       try {
         payload = jwt.verify(token, secret, { algorithms: ['HS256'] });

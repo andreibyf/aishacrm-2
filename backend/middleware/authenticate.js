@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import logger from '../lib/logger.js';
+import { getAccessSecret } from '../lib/jwtSecret.js';
 
 /**
  * Authenticate request and populate req.user from:
@@ -85,8 +86,8 @@ export async function authenticateRequest(req, _res, next) {
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
       try {
-        // Match signing logic in auth.js: use JWT_SECRET or fallback
-        const secret = process.env.JWT_SECRET || 'change-me-access';
+        // Match signing logic in routes/auth.js — fail-fast in prod via jwtSecret
+        const secret = getAccessSecret();
 
         // Explicitly verify with HS256 algorithm only
         const payload = jwt.verify(cookieToken, secret, { algorithms: ['HS256'] });

@@ -7,6 +7,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import expandUserMetadata from '../lib/expandUserMetadata.js';
+import { getAccessSecret } from '../lib/jwtSecret.js';
 import {
   confirmUserEmail,
   deleteAuthUser,
@@ -925,7 +926,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const user = expandUserMetadata((refreshedRows && refreshedRows[0]) || found);
 
       // Generate JWT token
-      const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+      const JWT_SECRET = getAccessSecret();
       const token = jwt.sign(
         {
           user_id: user.id,
@@ -997,10 +998,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       // Prefer JWT if provided
       if (bearer) {
         try {
-          const decoded = jwt.verify(
-            bearer,
-            process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-          );
+          const decoded = jwt.verify(bearer, getAccessSecret());
           userId = decoded?.user_id || null;
         } catch {
           // Ignore token errors; fall back to email

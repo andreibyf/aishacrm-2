@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **JWT secret fail-fast in production** (new `backend/lib/jwtSecret.js`):
+  - Centralized JWT secret resolution via `getAccessSecret()` / `getRefreshSecret()` with resolution order `JWT_ACCESS_SECRET` → `JWT_SECRET` → dev fallback (non-prod only).
+  - In production, throws on startup if the resolved secret is missing, empty, or matches a known insecure literal (`change-me-access`, `change-me-refresh`, `your-secret-key-change-in-production`). Eliminates the silent-compromise risk where a missing env var caused tokens to be signed/verified with a public source-code constant.
+  - Wired into all call sites: `backend/routes/auth.js` (signAccess, signRefresh, verify, refresh, /me, impersonation), `backend/middleware/authenticate.js`, `backend/middleware/authCookie.js`, `backend/lib/websocketServer.js`, `backend/lib/auditLogger.js`, `backend/routes/users.js`. Removed 12+ inline `|| 'change-me-…'` fallbacks.
+
 ### Fixed
 
 - **Deployment workflow: VPS `.env` no longer drifts from Doppler config** (`.github/workflows/docker-release.yml`):
