@@ -15,11 +15,11 @@ import {
   Legend,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { Calendar, DollarSign, Loader2, Target, TrendingUp, Users } from 'lucide-react';
 import { Contact, Lead, Opportunity } from '@/api/entities';
 
@@ -276,7 +276,7 @@ export default function HistoricalTrends({ tenantFilter }) {
             <CardTitle className="text-slate-100">Daily Activity Trends</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <LineChart data={trendsData}>
                 <defs>
                   <linearGradient id="gradContacts" x1="0" y1="0" x2="0" y2="1">
@@ -346,7 +346,7 @@ export default function HistoricalTrends({ tenantFilter }) {
                   name="Opportunities"
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -355,7 +355,7 @@ export default function HistoricalTrends({ tenantFilter }) {
             <CardTitle className="text-slate-100">Daily Pipeline Value</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={trendsData}>
                 <defs>
                   <linearGradient id="gradPipelineBar" x1="0" y1="0" x2="0" y2="1">
@@ -396,7 +396,7 @@ export default function HistoricalTrends({ tenantFilter }) {
                   ))}
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>

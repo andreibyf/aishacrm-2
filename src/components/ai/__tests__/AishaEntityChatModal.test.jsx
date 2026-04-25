@@ -7,6 +7,8 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogContent: ({ children }) => <div>{children}</div>,
   DialogHeader: ({ children }) => <div>{children}</div>,
   DialogTitle: ({ children }) => <div>{children}</div>,
+  // AishaEntityChatModal.jsx:279 renders <DialogDescription className="sr-only" />
+  DialogDescription: ({ children, ...props }) => <div {...props}>{children}</div>,
   DialogFooter: ({ children }) => <div>{children}</div>,
 }));
 

@@ -102,6 +102,26 @@
   min-height: 200px;
 }
 
+/* SafeChartContainer baseline.
+   Defeats `min-width: auto` / `min-height: auto` defaults of flex children,
+   which is the most common reason ResponsiveContainer briefly measures 0×0
+   (and then emits an SVG with width="-1"/height="-1" that breaks OpenReplay
+   session replays + trips Cloudflare's payload scanner). */
+.safe-chart-container {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Defensive last-resort: any Recharts ResponsiveContainer that does manage to
+   render with negative dimensions is hidden so it never reaches the rrweb
+   snapshot. The SafeChartContainer wrapper above should already prevent this,
+   but this rule keeps a single bad render from corrupting an entire session. */
+.recharts-responsive-container[style*='-1px'],
+.recharts-responsive-container svg[width='-1'],
+.recharts-responsive-container svg[height='-1'] {
+  display: none !important;
+}
+
 /* AiSHA UI Action Animations */
 @keyframes aisha-pulse {
   0% {

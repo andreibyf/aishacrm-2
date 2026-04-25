@@ -27,8 +27,8 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -331,7 +331,7 @@ export default function BookingAnalytics({ tenantId }) {
               <CardTitle className="text-sm font-medium">Daily Bookings</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
+              <SafeChartContainer height={220}>
                 <LineChart data={bookingData.daily_trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
@@ -354,7 +354,7 @@ export default function BookingAnalytics({ tenantId }) {
                     dot={false}
                   />
                 </LineChart>
-              </ResponsiveContainer>
+              </SafeChartContainer>
             </CardContent>
           </Card>
         )}
@@ -366,7 +366,7 @@ export default function BookingAnalytics({ tenantId }) {
               <CardTitle className="text-sm font-medium">Bookings by Status</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
+              <SafeChartContainer height={220}>
                 <PieChart>
                   <Pie
                     data={statusChartData}
@@ -383,7 +383,7 @@ export default function BookingAnalytics({ tenantId }) {
                   </Pie>
                   <Tooltip />
                 </PieChart>
-              </ResponsiveContainer>
+              </SafeChartContainer>
             </CardContent>
           </Card>
         )}
@@ -395,7 +395,7 @@ export default function BookingAnalytics({ tenantId }) {
               <CardTitle className="text-sm font-medium">Package Sales</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
+              <SafeChartContainer height={220}>
                 <BarChart data={packageData.packages.slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis
@@ -408,7 +408,7 @@ export default function BookingAnalytics({ tenantId }) {
                   <Legend />
                   <Bar dataKey="sold_count" name="Packages Sold" fill="#3b82f6" />
                 </BarChart>
-              </ResponsiveContainer>
+              </SafeChartContainer>
             </CardContent>
           </Card>
         )}
@@ -421,7 +421,7 @@ export default function BookingAnalytics({ tenantId }) {
               <CardDescription>Active credit holders by remaining balance</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={220}>
+              <SafeChartContainer height={220}>
                 <BarChart data={utilizationData.balance_distribution}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="range" tick={{ fontSize: 11 }} />
@@ -429,7 +429,7 @@ export default function BookingAnalytics({ tenantId }) {
                   <Tooltip />
                   <Bar dataKey="count" name="Holders" fill="#8b5cf6" />
                 </BarChart>
-              </ResponsiveContainer>
+              </SafeChartContainer>
             </CardContent>
           </Card>
         )}

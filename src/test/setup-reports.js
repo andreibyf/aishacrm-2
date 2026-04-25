@@ -41,3 +41,14 @@ vi.mock('recharts', () => ({
   Scatter: makePassThrough('Scatter'),
   Radar: makePassThrough('Radar'),
 }));
+
+// SafeChartContainer is the prod-time wrapper around ResponsiveContainer that
+// gates rendering on a ResizeObserver measurement. JSDOM's ResizeObserver is a
+// noop, so the gate would stay closed and chart children would never render in
+// reports tests — masking real assertions and causing race-conditions in tests
+// that check sibling DOM (e.g. LeadAnalytics asserting "Total Leads: 4" after a
+// waitFor resolves on a stale header). Pass-through here mirrors how recharts
+// itself is mocked above and restores pre-migration test behavior.
+vi.mock('@/components/shared/charts/SafeChartContainer', () => ({
+  default: ({ children }) => children ?? null,
+}));

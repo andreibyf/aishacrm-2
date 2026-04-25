@@ -1,6 +1,7 @@
 import React, { useEffect, useState, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Cell, Legend, Pie, PieChart, Tooltip } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { Lead } from '@/api/entities'; // ensure correct SDK import
 import { useUser } from '@/components/shared/useUser';
 import { useAuthCookiesReady } from '@/components/shared/useAuthCookiesReady';
@@ -200,7 +201,7 @@ function LeadSourceChart(props) {
         ) : (
           // Reserve extra height so the legend is always visible
           <div className="h-[28rem] flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
+            <SafeChartContainer height="100%">
               <PieChart margin={{ top: 20, right: 20, bottom: 60, left: 20 }}>
                 <Pie
                   data={data.filter((item) => item.value > 0)} // Only show slices with data in the pie
@@ -285,7 +286,7 @@ function LeadSourceChart(props) {
                   }}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </div>
         )}
       </CardContent>

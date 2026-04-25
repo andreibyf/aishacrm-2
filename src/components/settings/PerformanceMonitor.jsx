@@ -1,7 +1,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { Clock, Zap, Database, AlertCircle, Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -367,7 +368,7 @@ export default function PerformanceMonitor() {
             <div>
               <h3 className="text-lg font-semibold text-slate-100 mb-4">API Response Times</h3>
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <SafeChartContainer height={300}>
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis 
@@ -400,7 +401,7 @@ export default function PerformanceMonitor() {
                       name="Avg Response Time (ms)"
                     />
                   </LineChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               ) : (
                 <div className="h-[300px] flex items-center justify-center text-slate-400">
                   <div className="text-center">

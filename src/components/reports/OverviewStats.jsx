@@ -9,11 +9,11 @@ import {
   Legend,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { Account, Lead, Opportunity } from '@/api/entities';
 import TrendIndicator from './TrendIndicator';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -324,7 +324,7 @@ export default function OverviewStats({ tenantFilter }) {
             <CardTitle className="text-slate-100">Lead Sources Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <PieChart>
                 <defs>
                   {COLORS_MAP.map((colorPair, index) => (
@@ -431,7 +431,7 @@ export default function OverviewStats({ tenantFilter }) {
                   }}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -440,7 +440,7 @@ export default function OverviewStats({ tenantFilter }) {
             <CardTitle className="text-slate-100">Sales Pipeline by Stage</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={(chartData.opportunityStages || []).filter((item) => item.value > 0)}>
                 <defs>
                   <linearGradient id="colorPipeline" x1="0" y1="0" x2="0" y2="1">
@@ -484,7 +484,7 @@ export default function OverviewStats({ tenantFilter }) {
                   animationDuration={1500}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>

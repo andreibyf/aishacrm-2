@@ -15,10 +15,10 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
   BarChart,
   Bar,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { TrendingUp, Calendar, DollarSign, Target, Loader2, AlertCircle } from 'lucide-react';
 import { Opportunity, Lead } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
@@ -265,7 +265,7 @@ export default function ForecastingDashboard() {
             <CardTitle className="text-slate-100">Revenue Forecast</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <LineChart data={forecastData}>
                 <defs>
                   <linearGradient id="gradExpected" x1="0" y1="0" x2="0" y2="1">
@@ -325,7 +325,7 @@ export default function ForecastingDashboard() {
                   name="Potential Revenue"
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -334,7 +334,7 @@ export default function ForecastingDashboard() {
             <CardTitle className="text-slate-100">Opportunities Closing</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={forecastData}>
                 <defs>
                   <linearGradient id="gradOppBar" x1="0" y1="0" x2="0" y2="1">
@@ -374,7 +374,7 @@ export default function ForecastingDashboard() {
                   name="Opportunities"
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>

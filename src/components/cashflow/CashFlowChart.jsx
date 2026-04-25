@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
 
 function ensurePlain(obj) {
@@ -59,7 +60,7 @@ export default function CashFlowChart({ transactions }) {
         <CardTitle className="text-slate-100">Cash Flow Trend</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
+        <SafeChartContainer height={300}>
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
             <XAxis dataKey="month" stroke="#94a3b8" />
@@ -77,7 +78,7 @@ export default function CashFlowChart({ transactions }) {
             <Bar dataKey="income" fill="#22c55e" name="Income" />
             <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
           </BarChart>
-        </ResponsiveContainer>
+        </SafeChartContainer>
       </CardContent>
     </Card>
   );

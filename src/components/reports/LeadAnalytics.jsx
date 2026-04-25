@@ -11,11 +11,11 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { format, subDays } from 'date-fns'; // Changed from subMonths/startOfMonth
 import { Lead } from '@/api/entities';
 import {
@@ -277,7 +277,7 @@ export default function LeadAnalytics({ tenantFilter }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <LineChart data={leadsOverTime}>
                 <defs>
                   <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
@@ -326,7 +326,7 @@ export default function LeadAnalytics({ tenantFilter }) {
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -335,7 +335,7 @@ export default function LeadAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Lead Status Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <PieChart>
                 <defs>
                   {COLORS_MAP.map((colorPair, index) => (
@@ -378,7 +378,7 @@ export default function LeadAnalytics({ tenantFilter }) {
                 <Tooltip content={renderCustomizedTooltip} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>
@@ -389,7 +389,7 @@ export default function LeadAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Lead Quality Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={leadQualityData}>
                 <defs>
                   <linearGradient id="colorQuality" x1="0" y1="0" x2="0" y2="1">
@@ -423,7 +423,7 @@ export default function LeadAnalytics({ tenantFilter }) {
                   barSize={40}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -432,7 +432,7 @@ export default function LeadAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Lead Source Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={leadsBySource}>
                 <defs>
                   <linearGradient id="colorLeadsSource" x1="0" y1="0" x2="1" y2="0">
@@ -488,7 +488,7 @@ export default function LeadAnalytics({ tenantFilter }) {
                   barSize={20}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>

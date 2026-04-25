@@ -8,9 +8,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   LabelList,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { useApiManager } from '@/components/shared/ApiManager';
 import { Opportunity } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser';
@@ -374,7 +374,7 @@ function SalesPipeline(props) {
           <>
             <div className="flex-1 flex items-center justify-center">
               <div className="h-80 w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <SafeChartContainer height="100%">
                   <BarChart data={pipelineData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis
@@ -418,7 +418,7 @@ function SalesPipeline(props) {
                       />
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </div>
             </div>
 

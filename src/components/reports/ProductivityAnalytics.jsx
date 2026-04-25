@@ -11,11 +11,11 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { format, isThisWeek, isToday, startOfWeek, subWeeks } from 'date-fns';
 import { Activity, Employee } from '@/api/entities';
 import {
@@ -376,7 +376,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Weekly Activity Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <LineChart data={weeklyData}>
                 <defs>
                   <linearGradient id="colorActivities" x1="0" y1="0" x2="0" y2="1">
@@ -425,7 +425,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -434,7 +434,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Task Completion Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <PieChart>
                 <defs>
                   {COLORS_MAP.map((colorPair, index) => (
@@ -477,7 +477,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 <Tooltip contentStyle={DARK_TOOLTIP_STYLE} labelStyle={DARK_LABEL_STYLE} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>
@@ -488,7 +488,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Activity Priority Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <PieChart>
                 <defs>
                   {COLORS_MAP.map((colorPair, index) => (
@@ -531,7 +531,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                 <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
               </PieChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
 
@@ -540,7 +540,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
             <CardTitle className="text-lg text-slate-100">Activity Type Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <SafeChartContainer height={300}>
               <BarChart data={typeData} layout="vertical">
                 <defs>
                   {COLORS_MAP.map((colorPair, index) => (
@@ -589,7 +589,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                   radius={[0, 4, 4, 0]}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </CardContent>
         </Card>
       </div>
@@ -631,7 +631,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
         </CardHeader>
         <CardContent>
           {activitiesPerUser.length > 0 ? (
-            <ResponsiveContainer width="100%" height={400}>
+            <SafeChartContainer height={400}>
               <BarChart
                 data={activitiesPerUser}
                 layout="vertical"
@@ -677,7 +677,7 @@ export default function ProductivityAnalytics({ tenantFilter }) {
                   radius={[0, 4, 4, 0]}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           ) : (
             <div className="text-center py-8">
               <ActivityIcon className="w-10 h-10 text-slate-600 mx-auto mb-3" />

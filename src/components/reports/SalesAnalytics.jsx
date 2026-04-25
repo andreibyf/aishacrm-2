@@ -12,11 +12,11 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 import { differenceInDays, format, startOfMonth, subMonths } from 'date-fns';
 import { Opportunity } from '@/api/entities';
 import {
@@ -248,7 +248,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <SafeChartContainer height={300}>
                   <LineChart data={dealsOverTime}>
                     <defs>
                       <linearGradient id="colorRevenueLine" x1="0" y1="0" x2="0" y2="1">
@@ -289,7 +289,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                       activeDot={{ r: 8, stroke: '#10b981', strokeWidth: 2 }}
                     />
                   </LineChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </CardContent>
             </Card>
 
@@ -301,7 +301,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <SafeChartContainer height={300}>
                   <BarChart data={dealsOverTime}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis
@@ -315,7 +315,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                     <Tooltip contentStyle={DARK_TOOLTIP_STYLE} />
                     <Bar dataKey="deals" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </CardContent>
             </Card>
           </div>
@@ -330,7 +330,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={350}>
+                <SafeChartContainer height={350}>
                   <PieChart>
                     <defs>
                       {COLORS_MAP.map((colorPair, index) => (
@@ -405,7 +405,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                       contentStyle={DARK_TOOLTIP_STYLE}
                     />
                   </PieChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </CardContent>
             </Card>
 
@@ -417,7 +417,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+                <SafeChartContainer height={300}>
                   <BarChart
                     data={leadSourcePerformance}
                     layout="vertical"
@@ -463,7 +463,7 @@ export default function SalesAnalytics({ tenantFilter }) {
                       barSize={15}
                     />
                   </BarChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </CardContent>
             </Card>
           </div>

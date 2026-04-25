@@ -20,10 +20,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RTooltip,
-  ResponsiveContainer,
   LabelList,
   Cell,
 } from 'recharts';
+import SafeChartContainer from '@/components/shared/charts/SafeChartContainer';
 
 import { Activity } from '@/api/entities';
 import { BACKEND_URL } from '@/api/entities';
@@ -467,7 +467,7 @@ function RecentActivities(props) {
           ) : (
             <>
               <div className="h-[26rem] max-w-3xl mx-auto mt-6 flex items-center">
-                <ResponsiveContainer width="100%" height="100%">
+                <SafeChartContainer height="100%">
                   <RBarChart
                     data={summaryData}
                     margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
@@ -505,7 +505,7 @@ function RecentActivities(props) {
                       />
                     </Bar>
                   </RBarChart>
-                </ResponsiveContainer>
+                </SafeChartContainer>
               </div>
               <div className="text-center pt-3 border-t border-slate-700 mt-3">
                 <Button
