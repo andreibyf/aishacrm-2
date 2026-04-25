@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CARE settings cross-origin auth startup gap (`src/components/settings/CarePlaybooks.jsx`, `src/pages/Layout.jsx`):** `CarePlaybooks` was issuing raw `fetch()` calls to `https://api.aishacrm.com` with cookie-only auth, which works poorly cross-origin because the app's auth cookies are not reliable on the API origin. Switched the screen to the shared `getAuthFetchOptions()` helper so CARE playbook/execution requests now include the Supabase bearer token used elsewhere in the frontend, while preserving `x-tenant-id`. Also gated the startup module-settings fetch in `Layout` on `authCookiesReady` so the initial settings/module probes do not race ahead of auth initialization and surface as misleading browser CORS/network failures.
+
 - **CARE trigger worker: prevent CPU storm from unbounded LLM calls** (`backend/lib/aiTriggersWorker.js`):
   - Added per-tenant CARE consumer gate at top of `processTriggersForTenant`. Skips all detection/LLM work when the tenant has neither `care_workflow_config.is_enabled=true` nor any `care_playbook.is_enabled=true`. 30s in-memory cache (`CARE_CONSUMER_CACHE_TTL_MS`), fail-open on errors so a transient DB hiccup doesn't silence CARE.
   - Added in-memory generation cooldown (`CARE_GENERATION_COOLDOWN_MS`, default 1h) keyed on `(tenant, trigger, record)`. Applied on `generation_failed` (LLM returned no actions) and `low_confidence` (<0.7) outcomes. Prevents the worker from re-running the same expensive Anthropic call every 60s when no row was written to `ai_suggestions`.
