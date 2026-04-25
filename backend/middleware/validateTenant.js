@@ -1,6 +1,24 @@
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import logger from '../lib/logger.js';
 
+function normalizeRole(role) {
+  const normalized = String(role || '')
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === 'super_admin' ||
+    normalized === 'super admin' ||
+    normalized === 'super-admin'
+  ) {
+    return 'superadmin';
+  }
+  return normalized;
+}
+
+function isSuperadminUser(user) {
+  return normalizeRole(user?.role) === 'superadmin' || user?.is_superadmin === true;
+}
+
 function normalizeTenantIdentifier(value) {
   const candidate = Array.isArray(value) ? value.find((v) => typeof v === 'string') : value;
   return typeof candidate === 'string' ? candidate.trim() : candidate;
@@ -84,7 +102,7 @@ export async function validateTenantAccess(req, res, next) {
   //
   // Exception: certain superadmin routes that handle tenant scoping internally
   // (Developer AI, AI profile summary) are exempt from the tenant_id requirement.
-  if (user.role === 'superadmin') {
+  if (isSuperadminUser(user)) {
     const isReadOperation =
       req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
 
@@ -192,7 +210,8 @@ export function requireAdminRole(req, res, next) {
   }
 
   // Only superadmin and admin can access settings
-  if (user.role !== 'superadmin' && user.role !== 'admin') {
+  const role = normalizeRole(user.role);
+  if (!isSuperadminUser(user) && role !== 'admin') {
     return res.status(403).json({
       status: 'error',
       message: 'Settings access denied. Only administrators can modify settings.',
@@ -231,7 +250,8 @@ export function requireAdminOrManagerRole(req, res, next) {
   }
 
   // Allow superadmin, admin, or manager
-  if (user.role !== 'superadmin' && user.role !== 'admin' && user.role !== 'manager') {
+  const role = normalizeRole(user.role);
+  if (!isSuperadminUser(user) && role !== 'admin' && role !== 'manager') {
     return res.status(403).json({
       status: 'error',
       message: 'Access denied. Only administrators and managers can perform this action.',
@@ -259,7 +279,8 @@ export function enforceEmployeeDataScope(req, res, next) {
   }
 
   // Superadmin, Admin, Manager: no restrictions
-  if (user.role === 'superadmin' || user.role === 'admin' || user.role === 'manager') {
+  const role = normalizeRole(user.role);
+  if (isSuperadminUser(user) || role === 'admin' || role === 'manager') {
     return next();
   }
 
@@ -314,7 +335,7 @@ export function requireSuperAdminRole(req, res, next) {
   }
 
   // Only superadmin can access these endpoints
-  if (user.role !== 'superadmin') {
+  if (!isSuperadminUser(user)) {
     return res.status(403).json({
       status: 'error',
       message: 'Access denied. Only superadmins can perform this action.',

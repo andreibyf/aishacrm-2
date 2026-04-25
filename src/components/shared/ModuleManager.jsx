@@ -356,8 +356,16 @@ export default function ModuleManager() {
 
   // Determine effective tenant: prefer selectedTenantId (for superadmin switching), fall back to user.tenant_id
   const effectiveTenantId = selectedTenantId || user?.tenant_id;
+  const canManageModuleSettings =
+    user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
 
   const loadData = useCallback(async () => {
+    if (!canManageModuleSettings) {
+      setModuleSettings([]);
+      setLoading(false);
+      return;
+    }
+
     if (!effectiveTenantId) {
       setLoading(false);
       return;
@@ -415,16 +423,21 @@ export default function ModuleManager() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveTenantId]);
+  }, [canManageModuleSettings, effectiveTenantId]);
 
   useEffect(() => {
-    if (user && authCookiesReady && effectiveTenantId) {
+    if (user && authCookiesReady) {
       loadData();
     }
-  }, [user, authCookiesReady, effectiveTenantId, loadData]);
+  }, [user, authCookiesReady, loadData]);
 
   const toggleModule = async (moduleId, currentStatus) => {
     if (!user || !effectiveTenantId) return;
+
+    if (!canManageModuleSettings) {
+      toast.error('Only admin and superadmin can modify module settings');
+      return;
+    }
 
     try {
       const module = defaultModules.find((m) => m.id === moduleId);
@@ -491,8 +504,7 @@ export default function ModuleManager() {
 
   // Admin-only: List currently disabled modules for the selected tenant
   const DisabledModulesPanel = () => {
-    const isAdminLike =
-      user?.role === 'admin' || user?.role === 'superadmin' || user?.is_superadmin === true;
+    const isAdminLike = canManageModuleSettings;
     // Use effectiveTenantId which is already calculated at component level
     if (!isAdminLike || !effectiveTenantId) return null;
 
@@ -536,6 +548,16 @@ export default function ModuleManager() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
+          {!canManageModuleSettings && (
+            <Alert className="bg-amber-900/30 border-amber-700/50">
+              <AlertCircle className="h-4 w-4 text-amber-400" />
+              <AlertDescription className="text-amber-200">
+                Module settings are admin-only. Your role can view this page, but changes are
+                disabled.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Alert className="bg-blue-900/30 border-blue-700/50">
             <AlertCircle className="h-4 w-4 text-blue-400" />
             <AlertDescription className="text-blue-300">
@@ -592,6 +614,7 @@ export default function ModuleManager() {
                       <Switch
                         checked={isActive}
                         onCheckedChange={() => toggleModule(module.id, isActive)}
+                        disabled={!canManageModuleSettings}
                         className="data-[state=checked]:bg-green-600"
                       />
                     </div>

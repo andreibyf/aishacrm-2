@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Modules tab now blocks non-admin writes client-side (`src/components/shared/ModuleManager.jsx`):** The UI was still attempting `GET/POST/PUT` calls to admin-only `/api/modulesettings` routes for non-admin users, resulting in repeated 401/403 responses that surfaced in the browser as noisy CORS/network errors during module toggles and startup initialization. Added a role gate (`admin`/`superadmin`) in `ModuleManager` so non-admin users no longer trigger module settings API calls, toggle switches are disabled for unauthorized roles, and the page shows an explicit admin-only notice instead of failing requests.
+
 - **CARE settings cross-origin auth startup gap (`src/components/settings/CarePlaybooks.jsx`, `src/pages/Layout.jsx`):** `CarePlaybooks` was issuing raw `fetch()` calls to `https://api.aishacrm.com` with cookie-only auth, which works poorly cross-origin because the app's auth cookies are not reliable on the API origin. Switched the screen to the shared `getAuthFetchOptions()` helper so CARE playbook/execution requests now include the Supabase bearer token used elsewhere in the frontend, while preserving `x-tenant-id`. Also gated the startup module-settings fetch in `Layout` on `authCookiesReady` so the initial settings/module probes do not race ahead of auth initialization and surface as misleading browser CORS/network failures.
 
 - **CARE trigger worker: prevent CPU storm from unbounded LLM calls** (`backend/lib/aiTriggersWorker.js`):

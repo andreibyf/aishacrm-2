@@ -34,6 +34,20 @@ function getJWKSClient() {
   return jwksClient;
 }
 
+function normalizeRole(role) {
+  const normalized = String(role || '')
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === 'super_admin' ||
+    normalized === 'super admin' ||
+    normalized === 'super-admin'
+  ) {
+    return 'superadmin';
+  }
+  return normalized || 'employee';
+}
+
 export async function authenticateRequest(req, _res, next) {
   try {
     // DEBUG: Log EVERY request to see if middleware runs
@@ -73,6 +87,7 @@ export async function authenticateRequest(req, _res, next) {
         name: 'Service Role',
         role: 'superadmin',
         tenant_id: null, // Service role has access to all tenants
+        is_superadmin: true,
         service_role: true,
       };
       if (process.env.AUTH_DEBUG === 'true') {
@@ -108,7 +123,7 @@ export async function authenticateRequest(req, _res, next) {
               supa
                 .from('users')
                 .select(
-                  'first_name, last_name, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
+                  'first_name, last_name, role, tenant_id, metadata, employee_role, perm_notes_anywhere, perm_all_records, perm_reports, perm_employees, perm_settings, nav_permissions',
                 )
                 .eq('email', email)
                 .maybeSingle(),
@@ -159,8 +174,12 @@ export async function authenticateRequest(req, _res, next) {
           name: displayName,
           first_name: firstName,
           last_name: lastName,
-          role: payload.role,
-          tenant_id: payload.tenant_id || null,
+          role: normalizeRole(userPerms.role || payload.role),
+          tenant_id: userPerms.tenant_id ?? payload.tenant_id ?? null,
+          is_superadmin:
+            normalizeRole(userPerms.role || payload.role) === 'superadmin' ||
+            userPerms.metadata?.is_superadmin === true ||
+            payload.is_superadmin === true,
           // Employee role (CRM visibility level - now on users table)
           employee_role: userPerms.employee_role ?? 'employee',
           // Granular permissions (from users table, fallback to role-based defaults)
@@ -228,8 +247,9 @@ export async function authenticateRequest(req, _res, next) {
             req.user = {
               id: internalPayload.sub || null,
               email: internalPayload.email || 'internal-service',
-              role: effectiveRole,
+              role: normalizeRole(effectiveRole),
               tenant_id: internalPayload.tenant_id || null,
+              is_superadmin: normalizeRole(effectiveRole) === 'superadmin',
               internal: true,
             };
             if (process.env.AUTH_DEBUG === 'true') {
@@ -355,8 +375,10 @@ export async function authenticateRequest(req, _res, next) {
               name: displayName,
               first_name: row.first_name || null,
               last_name: row.last_name || null,
-              role: row.role || 'employee',
+              role: normalizeRole(row.role),
               tenant_id: row.tenant_id ?? null,
+              is_superadmin:
+                normalizeRole(row.role) === 'superadmin' || row.metadata?.is_superadmin === true,
               // Employee role (CRM visibility level - now on users table)
               employee_role: row.employee_role ?? 'employee',
               // Granular permissions (from users table, fallback to role-based defaults)
