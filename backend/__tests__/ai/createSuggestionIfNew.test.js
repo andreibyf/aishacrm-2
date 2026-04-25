@@ -11,7 +11,7 @@
 import { describe, test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSuggestionIfNew } from '../../lib/aiTriggersWorker.js';
+import { createSuggestionIfNew, _resetGenerationCooldown } from '../../lib/aiTriggersWorker.js';
 import { OUTCOME_TYPES } from '../../lib/care/careTypes.js';
 import { CareAuditEventType } from '../../lib/care/careAuditTypes.js';
 
@@ -150,6 +150,7 @@ describe('createSuggestionIfNew', () => {
   let webhooks;
 
   beforeEach(() => {
+    _resetGenerationCooldown();
     log = noopLogger();
     audit = mockAudit();
     webhooks = mockWebhooks();
@@ -235,7 +236,11 @@ describe('createSuggestionIfNew', () => {
 
       assert.equal(result, null, 'should return null');
       assert.equal(generate.callCount(), 1, 'generateAiSuggestion called once');
-      assert.equal(supabase._calls.insert.length, 0, 'should NOT insert');
+      // Only a generation_skipped cooldown marker should be inserted, not a suggestion
+      const suggestionInserts = supabase._calls.insert.filter(
+        (i) => i.status !== 'generation_skipped',
+      );
+      assert.equal(suggestionInserts.length, 0, 'should NOT insert a suggestion');
     });
 
     test('emits ACTION_OUTCOME audit with outcome_type generation_failed', async () => {
@@ -291,7 +296,11 @@ describe('createSuggestionIfNew', () => {
         emitCareAudit: audit,
       });
 
-      assert.equal(supabase._calls.insert.length, 0, 'should NOT insert on low confidence');
+      // Only a generation_skipped cooldown marker should be inserted, not a suggestion
+      const suggestionInserts = supabase._calls.insert.filter(
+        (i) => i.status !== 'generation_skipped',
+      );
+      assert.equal(suggestionInserts.length, 0, 'should NOT insert a suggestion on low confidence');
     });
 
     test('does NOT emit tenant webhook', async () => {
@@ -355,7 +364,10 @@ describe('createSuggestionIfNew', () => {
       });
 
       assert.equal(result, null);
-      assert.equal(supabase._calls.insert.length, 0, 'no insert when confidence undefined');
+      const suggestionInserts = supabase._calls.insert.filter(
+        (i) => i.status !== 'generation_skipped',
+      );
+      assert.equal(suggestionInserts.length, 0, 'no suggestion insert when confidence undefined');
       assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
     });
   });
@@ -445,7 +457,10 @@ describe('createSuggestionIfNew', () => {
       });
 
       assert.equal(result, null, 'should return null — low confidence');
-      assert.equal(supabase._calls.insert.length, 0, 'should NOT insert');
+      const suggestionInserts = supabase._calls.insert.filter(
+        (i) => i.status !== 'generation_skipped',
+      );
+      assert.equal(suggestionInserts.length, 0, 'should NOT insert a suggestion');
       assert.equal(audit.calls[0].meta.outcome_type, OUTCOME_TYPES.low_confidence);
     });
 
