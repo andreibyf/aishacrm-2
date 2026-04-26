@@ -41,9 +41,14 @@ services:
       - staging-aishanet
 
   calcom:
-    # Pinned to same digest as production (validated 2026-04-07).
-    # Bumping requires re-validating Host table, _user_eventtype, ALLOWED_HOSTNAMES.
-    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
+    # Cal.com v6.2.0 (released 2026-03-02), digest-pinned for reproducibility.
+    # Different from production's `0aca8203...` pin (a v5.x-era image), which
+    # Docker 28.2.2 on this VPS rejects with "manifest schema unsupported" — the
+    # legacy manifest schema has been dropped from modern Docker. Production may
+    # be using a Docker version that still supports the older format, or has
+    # the image cached. Bumping production to this same digest is recommended.
+    # Re-validate Host table, _user_eventtype, ALLOWED_HOSTNAMES if upgrading.
+    image: calcom/cal.com@sha256:ace3bb1219fb7306585ab9f4d94d41af7ee064c343db0498173436bbe857bd49
     container_name: staging-aishacrm-calcom
     restart: unless-stopped
     depends_on:
