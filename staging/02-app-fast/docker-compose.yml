@@ -1,0 +1,86 @@
+# Staging — Group 2: app-fast
+# Services: aishacrm-frontend, aishacrm-comms
+#
+# Both services are independent of each other but join staging-aishanet so the
+# comms worker can reach staging-aishacrm-backend (group 1) and the redis pair.
+#
+# Coolify resource: docker-compose pointing to staging/02-app-fast/docker-compose.yml
+# Prerequisite: group 1 (backend-heavy) must be deployed with COMPOSE_PROFILES=app
+# so comms has a backend + redis to target.
+
+services:
+  frontend:
+    image: ghcr.io/andreibyf/aishacrm-2-frontend:${FRONTEND_IMAGE_TAG:-latest}
+    container_name: staging-aishacrm-frontend
+    restart: unless-stopped
+    environment:
+      # Doppler runtime injection (frontend entrypoint substitutes window-level env)
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - PORT=3000
+      # Browser-facing URLs — must be public hostnames, never internal DNS
+      - VITE_AISHACRM_BACKEND_URL=https://staging-api.aishacrm.com
+      - VITE_CALCOM_URL=https://staging-scheduler.aishacrm.com
+      - VITE_OPENREPLAY_PROJECT_KEY=${VITE_OPENREPLAY_PROJECT_KEY:-}
+      - VITE_OPENREPLAY_INGEST_POINT=${VITE_OPENREPLAY_INGEST_POINT:-}
+      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-https://replay.aishacrm.com}
+      - SERVICE_FQDN_FRONTEND=https://staging-app.aishacrm.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.staging-frontend.rule=Host(`staging-app.aishacrm.com`)
+      - traefik.http.routers.staging-frontend.entrypoints=https
+      - traefik.http.routers.staging-frontend.tls.certresolver=letsencrypt
+      - traefik.http.services.staging-frontend.loadbalancer.server.port=3000
+
+  comms:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:${BACKEND_IMAGE_TAG:-latest}
+    container_name: staging-aishacrm-comms
+    restart: unless-stopped
+    command: ["npm", "run", "worker:communications"]
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      - REDIS_CACHE_URL=redis://staging-aishacrm-redis-cache:6379
+      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
+      - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const configured=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(configured)&&configured>0?configured:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+
+networks:
+  staging-aishanet:
+    name: staging-aishanet
+    external: true

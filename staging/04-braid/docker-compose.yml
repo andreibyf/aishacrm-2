@@ -1,0 +1,101 @@
+# Staging — Group 4: braid
+# Services: braid-mcp-server (coordinator) + braid-mcp-1, braid-mcp-2 (workers)
+#
+# All three share the same image. Server stays internal — only the staging backend
+# calls it via http://staging-braid-mcp-server:8000. No Traefik label needed.
+
+services:
+  braid-mcp-server:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    container_name: staging-braid-mcp-server
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=server
+      - PORT=8000
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+
+  braid-mcp-1:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    container_name: staging-braid-mcp-1
+    restart: unless-stopped
+    depends_on:
+      braid-mcp-server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=node
+      - MCP_NODE_ID=staging-1
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - MCP_SERVER_URL=http://staging-braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+
+  braid-mcp-2:
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    container_name: staging-braid-mcp-2
+    restart: unless-stopped
+    depends_on:
+      braid-mcp-server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=node
+      - MCP_NODE_ID=staging-2
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - MCP_SERVER_URL=http://staging-braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+
+networks:
+  staging-aishanet:
+    name: staging-aishanet
+    external: true

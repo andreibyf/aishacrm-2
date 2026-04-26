@@ -1,0 +1,71 @@
+# Staging — Group 3: ai-infra
+# Services: aishacrm-litellm, aishacrm-ollama
+#
+# Both stay internal — no host port, no Traefik route. Only the staging backend
+# (group 1) needs to reach them, and it does so via the staging-aishanet network.
+#
+# Ollama is heavy (model pull at first boot). Pin to small models to keep staging fast.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: staging-aishacrm-ollama
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "ollama serve & sleep 5 && ollama pull llama3.2:3b && wait"
+    environment:
+      - OLLAMA_NUM_CTX=1024
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_PARALLEL=2
+    volumes:
+      - staging_ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - staging-aishanet
+
+  litellm:
+    image: ghcr.io/andreibyf/aishacrm-2-litellm:${LITELLM_IMAGE_TAG:-latest}
+    container_name: staging-aishacrm-litellm
+    restart: unless-stopped
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+    volumes:
+      # litellm_config.yaml lives at repo root in production. For staging, the same
+      # file is checked into the build context. Coolify clones the repo so the
+      # bind mount works relative to the compose file's parent (../..).
+      - ../../litellm_config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - staging-aishanet
+
+volumes:
+  staging_ollama_data:
+    driver: local
+
+networks:
+  staging-aishanet:
+    name: staging-aishanet
+    external: true

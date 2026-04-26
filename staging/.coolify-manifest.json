@@ -1,0 +1,51 @@
+{
+  "project": {
+    "name": "aishacrm-staging",
+    "uuid": "b78ljy1xtefe1vnaktddgk17",
+    "environment": "production"
+  },
+  "branch": "main",
+  "server_uuid": "f7uzrwlbqjtx6qamppma5xsz",
+  "applications": [
+    {
+      "key": "01-backend-heavy",
+      "name": "staging-backend-heavy",
+      "uuid": "kvwa38mel9mt1i1c49wn9t96",
+      "fqdn": "https://staging-api.aishacrm.com",
+      "compose_path": "/staging/01-backend-heavy/docker-compose.yml",
+      "env_var_count": 14
+    },
+    {
+      "key": "02-app-fast",
+      "name": "staging-app-fast",
+      "uuid": "q14ihdhjh5szhlaesj82til2",
+      "fqdn": "https://staging-app.aishacrm.com",
+      "compose_path": "/staging/02-app-fast/docker-compose.yml",
+      "env_var_count": 12
+    },
+    {
+      "key": "03-ai-infra",
+      "name": "staging-ai-infra",
+      "uuid": "ue9r079mdtpkmgbbb619f04z",
+      "fqdn": null,
+      "compose_path": "/staging/03-ai-infra/docker-compose.yml",
+      "env_var_count": 7
+    },
+    {
+      "key": "04-braid",
+      "name": "staging-braid",
+      "uuid": "b11ezlw1volbg4ka6vyuy8ac",
+      "fqdn": null,
+      "compose_path": "/staging/04-braid/docker-compose.yml",
+      "env_var_count": 8
+    },
+    {
+      "key": "05-scheduling-rare",
+      "name": "staging-scheduling-rare",
+      "uuid": "kjduwoyrdw5jjmxhdx7056wz",
+      "fqdn": "https://staging-scheduler.aishacrm.com",
+      "compose_path": "/staging/05-scheduling-rare/docker-compose.yml",
+      "env_var_count": 20
+    }
+  ]
+}

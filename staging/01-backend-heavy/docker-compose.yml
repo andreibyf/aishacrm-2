@@ -1,0 +1,126 @@
+# Staging — Group 1: backend-heavy
+# Services: aishacrm-backend, redis-memory, redis-cache
+#
+# Phase 1 (Redis-only validation): leave COMPOSE_PROFILES unset → only redis-* start
+# Phase 2 (full group):           set COMPOSE_PROFILES=app in Coolify → backend joins
+#
+# Coolify resource: docker-compose pointing to staging/01-backend-heavy/docker-compose.yml
+# Required network on App VPS (create once):  docker network create staging-aishanet
+
+services:
+  redis-memory:
+    image: redis:7-alpine
+    container_name: staging-aishacrm-redis-memory
+    restart: unless-stopped
+    ports:
+      # Bind to loopback only — used for SSH-tunnel redis-cli debugging.
+      # Inter-container traffic goes through staging-aishanet, not host port.
+      - "127.0.0.1:6479:6379"
+    volumes:
+      - staging_redis_memory_data:/data
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - staging-aishanet
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: staging-aishacrm-redis-cache
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6480:6379"
+    volumes:
+      - staging_redis_cache_data:/data
+    command: redis-server --save "" --loglevel warning --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - staging-aishanet
+
+  backend:
+    image: ghcr.io/andreibyf/aishacrm-2-backend:${BACKEND_IMAGE_TAG:-latest}
+    container_name: staging-aishacrm-backend
+    restart: unless-stopped
+    profiles: [app]
+    depends_on:
+      redis-memory:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    environment:
+      # Doppler runtime injection (stg_stg cloned from prd_prd)
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      # Internal staging DNS — all hostnames resolve via staging-aishanet
+      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      - REDIS_CACHE_URL=redis://staging-aishacrm-redis-cache:6379
+      - BRAID_MCP_URL=http://staging-braid-mcp-server:8000
+      - MCP_NODE_HEALTH_URL=http://staging-braid-mcp-server:8000/health
+      - MCP_NODE_ID=staging-aishacrm-backend
+      - LITELLM_BASE_URL=http://staging-aishacrm-litellm:4000
+      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - CALCOM_WEBHOOK_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://staging-scheduler.aishacrm.com}
+      # Browser-origin CORS allowlist for staging
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://staging-app.aishacrm.com}
+      # PEP / LLM
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      - TELEMETRY_ENABLED=false
+      # Coolify Traefik service-FQDN binding (frontend domain not needed here)
+      - SERVICE_FQDN_BACKEND=https://staging-api.aishacrm.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+    labels:
+      # Coolify auto-routes staging-api.aishacrm.com → container:3001 when SERVICE_FQDN_BACKEND is set.
+      # These labels make Traefik discovery explicit and survive Coolify upgrades.
+      - traefik.enable=true
+      - traefik.http.routers.staging-backend.rule=Host(`staging-api.aishacrm.com`)
+      - traefik.http.routers.staging-backend.entrypoints=https
+      - traefik.http.routers.staging-backend.tls.certresolver=letsencrypt
+      - traefik.http.services.staging-backend.loadbalancer.server.port=3001
+
+volumes:
+  staging_redis_memory_data:
+    driver: local
+  staging_redis_cache_data:
+    driver: local
+
+networks:
+  staging-aishanet:
+    name: staging-aishanet
+    external: true

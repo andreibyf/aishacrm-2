@@ -1,0 +1,91 @@
+# Staging — Group 5: scheduling-rare
+# Services: aishacrm-calcom, aishacrm-calcom-db
+#
+# Cal.com uses a dedicated Postgres (NOT Supabase — Cal.com runs raw Prisma which
+# RLS rejects). Same separation as production. Image pinned to the prod-validated
+# digest so staging surfaces the same fixes (Host table, _user_eventtype, ALLOWED_HOSTNAMES).
+#
+# Required Doppler stg_stg secrets: CALCOM_DB_PASSWORD, CALCOM_NEXTAUTH_SECRET,
+# CALCOM_ENCRYPTION_KEY, CALCOM_SMTP_*. Coolify substitutes these at deploy time.
+
+services:
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: staging-aishacrm-calcom-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - staging_calcom_db_data:/var/lib/postgresql/data
+      # Init script bind-mounted from repo (Coolify clones repo before deploy)
+      - ../../scripts/calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+
+  calcom:
+    # Pinned to same digest as production (validated 2026-04-07).
+    # Bumping requires re-validating Host table, _user_eventtype, ALLOWED_HOSTNAMES.
+    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
+    container_name: staging-aishacrm-calcom
+    restart: unless-stopped
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      - NEXTAUTH_URL_INTERNAL=http://staging-aishacrm-calcom:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      # Cal.com parses ALLOWED_HOSTNAMES as JSON.parse(`[${value}]`) — keep the quotes.
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"staging-scheduler.aishacrm.com"}
+      - CALCOM_LICENSE_KEY=${CALCOM_LICENSE_KEY:-59c0bed7-8b21-4280-8514-e022fbfc24c7}
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+      - SERVICE_FQDN_CALCOM=https://staging-scheduler.aishacrm.com
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - staging-aishanet
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.staging-calcom.rule=Host(`staging-scheduler.aishacrm.com`)
+      - traefik.http.routers.staging-calcom.entrypoints=https
+      - traefik.http.routers.staging-calcom.tls.certresolver=letsencrypt
+      - traefik.http.services.staging-calcom.loadbalancer.server.port=3000
+
+volumes:
+  staging_calcom_db_data:
+    driver: local
+
+networks:
+  staging-aishanet:
+    name: staging-aishanet
+    external: true
