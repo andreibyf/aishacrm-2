@@ -10,7 +10,13 @@
 
 services:
   calcom-db:
-    image: postgres:15-alpine
+    # Custom image baked from postgres:15-alpine + scripts/calcom-db-init.sql.
+    # Built by docker-release.yml. Stock postgres:15-alpine + bind mount won't
+    # work in Coolify v4: it strips the relative path components from the
+    # compose source and Docker auto-creates an empty directory at the missing
+    # source — same defect that crashed litellm with IsADirectoryError.
+    # See calcom-db/Dockerfile for the full reasoning.
+    image: ghcr.io/andreibyf/aishacrm-2-calcom-db:${CALCOM_DB_IMAGE_TAG:-latest}
     container_name: staging-aishacrm-calcom-db
     restart: unless-stopped
     environment:
@@ -19,11 +25,8 @@ services:
       POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
     volumes:
       - staging_calcom_db_data:/var/lib/postgresql/data
-      # Path is relative to THIS compose file's directory. Coolify v4 mishandles
-      # `../..` segments — when the source can't be resolved, Docker bind-creates
-      # an empty directory and the postgres entrypoint chokes. Local copy kept
-      # in sync with /scripts/calcom-db-init.sql by validate-compose.sh.
-      - ./calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
+      # No bind mount — init SQL is COPY'd into /docker-entrypoint-initdb.d/
+      # by calcom-db/Dockerfile.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
       interval: 10s

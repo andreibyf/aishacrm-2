@@ -32,6 +32,10 @@ jobs:
             context: .
             dockerfile: ./litellm/Dockerfile
             image: ghcr.io/${{ github.repository }}-litellm
+          - service: calcom-db
+            context: .
+            dockerfile: ./calcom-db/Dockerfile
+            image: ghcr.io/${{ github.repository }}-calcom-db
 
     steps:
       - name: Checkout code

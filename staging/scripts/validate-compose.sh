@@ -110,12 +110,11 @@ echo "=== Bind-mount drift checks ==="
 # Coolify v4 mishandles `..` in compose volume sources, so we keep local copies
 # of the repo-root config files inside each group folder. These checks fail loud
 # if the local copy diverges from the source of truth.
-declare -A MIRRORS=(
-  # litellm_config.yaml is no longer mirrored — baked into the GHCR image via
-  # litellm/Dockerfile. Only calcom-db-init.sql still uses the mirror pattern
-  # because postgres:15-alpine is a stock image we don't rebuild.
-  ["scripts/calcom-db-init.sql"]="staging/05-scheduling-rare/calcom-db-init.sql"
-)
+# No mirror pairs left. Both staging file dependencies are now baked into
+# GHCR images — litellm/Dockerfile copies litellm_config.yaml, and
+# calcom-db/Dockerfile copies scripts/calcom-db-init.sql. Coolify v4
+# bind-mount fragility is no longer in the staging deploy path.
+declare -A MIRRORS=()
 for src in "${!MIRRORS[@]}"; do
   dst="${MIRRORS[$src]}"
   if [[ ! -f "$src" ]]; then
