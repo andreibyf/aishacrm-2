@@ -1,0 +1,43 @@
+# Group 6 — Cloudflare Tunnel
+#
+# Provides public ingress to staging-{api,app,scheduler}.aishacrm.com without
+# binding host ports 80/443 (occupied by OpenReplay's Caddy on the App VPS).
+# Cloudflare terminates TLS at the edge; cloudflared maintains a persistent
+# outbound connection and forwards request bodies into staging-aishanet,
+# resolving target containers by Docker service name (backend, frontend, calcom).
+#
+# Public hostname → service routing is configured in the Cloudflare Zero Trust
+# dashboard under Networks → Tunnels → staging-aishacrm → Public Hostnames.
+# Current routes (set 2026-04-26):
+#   staging-api.aishacrm.com       → http://backend:3001
+#   staging-app.aishacrm.com       → http://frontend:3000
+#   staging-scheduler.aishacrm.com → http://calcom:3000
+#
+# TUNNEL_TOKEN is set as a Coolify env var (NOT pulled from Doppler — cloudflared
+# image has no doppler CLI). Token grants connector-only privileges scoped to
+# this single tunnel; rotate via dashboard if compromised.
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: staging-aishacrm-tunnel
+    # --metrics enables /ready health endpoint (returns connectorId once linked
+    # to Cloudflare edge, used by healthcheck below).
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    networks:
+      - staging-aishanet
+    restart: unless-stopped
+    healthcheck:
+      # /ready → 200 with {"connectorId": "..."} when tunnel is registered.
+      # 30s start_period gives cloudflared time to authenticate on cold start.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2000/ready 2>&1 | grep -q connectorId || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  staging-aishanet:
+    external: true

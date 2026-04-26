@@ -46,6 +46,14 @@
       "fqdn": "https://staging-scheduler.aishacrm.com",
       "compose_path": "/staging/05-scheduling-rare/docker-compose.yml",
       "env_var_count": 20
+    },
+    {
+      "key": "06-tunnel",
+      "name": "staging-tunnel",
+      "uuid": "vw66hjdz88ax3b4ema9uuxs6",
+      "fqdn": null,
+      "compose_path": "/staging/06-tunnel/docker-compose.yml",
+      "env_var_count": 1
     }
   ]
 }
