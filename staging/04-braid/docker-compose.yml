@@ -16,8 +16,13 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
-      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      # Service names (not container_names) — Coolify v4 ignores `container_name`
+      # and auto-suffixes containers with the app UUID. Docker DNS on
+      # staging-aishanet only resolves the compose service name, so cross-stack
+      # references must use that name (group 1 compose: services.backend,
+      # services.redis-memory).
+      - CRM_BACKEND_URL=http://backend:3001
+      - REDIS_URL=redis://redis-memory:6379
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
@@ -47,9 +52,9 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://staging-braid-mcp-server:8000
-      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
-      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://backend:3001
+      - REDIS_URL=redis://redis-memory:6379
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
@@ -78,9 +83,9 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://staging-braid-mcp-server:8000
-      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
-      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://backend:3001
+      - REDIS_URL=redis://redis-memory:6379
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
