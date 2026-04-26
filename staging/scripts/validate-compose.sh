@@ -106,6 +106,35 @@ for group in "${GROUPS[@]}"; do
 done
 
 echo
+echo "=== Bind-mount drift checks ==="
+# Coolify v4 mishandles `..` in compose volume sources, so we keep local copies
+# of the repo-root config files inside each group folder. These checks fail loud
+# if the local copy diverges from the source of truth.
+declare -A MIRRORS=(
+  ["litellm_config.yaml"]="staging/03-ai-infra/litellm_config.yaml"
+  ["scripts/calcom-db-init.sql"]="staging/05-scheduling-rare/calcom-db-init.sql"
+)
+for src in "${!MIRRORS[@]}"; do
+  dst="${MIRRORS[$src]}"
+  if [[ ! -f "$src" ]]; then
+    echo "   FAIL: source-of-truth $src missing"
+    FAIL=1
+    continue
+  fi
+  if [[ ! -f "$dst" ]]; then
+    echo "   FAIL: staging copy $dst missing — run: cp $src $dst"
+    FAIL=1
+    continue
+  fi
+  if ! cmp -s "$src" "$dst"; then
+    echo "   FAIL: $dst drifted from $src — run: cp $src $dst"
+    FAIL=1
+  else
+    echo "   ok: $dst in sync with $src"
+  fi
+done
+
+echo
 if [[ "$FAIL" -eq 0 ]]; then
   echo "=== ALL CHECKS PASSED ==="
   exit 0

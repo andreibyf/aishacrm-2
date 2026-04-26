@@ -19,8 +19,11 @@ services:
       POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
     volumes:
       - staging_calcom_db_data:/var/lib/postgresql/data
-      # Init script bind-mounted from repo (Coolify clones repo before deploy)
-      - ../../scripts/calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
+      # Path is relative to THIS compose file's directory. Coolify v4 mishandles
+      # `../..` segments — when the source can't be resolved, Docker bind-creates
+      # an empty directory and the postgres entrypoint chokes. Local copy kept
+      # in sync with /scripts/calcom-db-init.sql by validate-compose.sh.
+      - ./calcom-db-init.sql:/docker-entrypoint-initdb.d/calcom-db-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
       interval: 10s

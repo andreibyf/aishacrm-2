@@ -43,10 +43,13 @@ services:
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
     volumes:
-      # litellm_config.yaml lives at repo root in production. For staging, the same
-      # file is checked into the build context. Coolify clones the repo so the
-      # bind mount works relative to the compose file's parent (../..).
-      - ../../litellm_config.yaml:/app/config.yaml:ro
+      # Path is relative to THIS compose file's directory. Coolify v4 mishandles
+      # `../..` segments — when the source can't be resolved, Docker bind-creates
+      # an empty directory at the source path and the container then sees a
+      # directory at /app/config.yaml (IsADirectoryError on litellm startup).
+      # Workaround: keep a copy of litellm_config.yaml here in this folder.
+      # validate-compose.sh enforces it stays in sync with /litellm_config.yaml.
+      - ./litellm_config.yaml:/app/config.yaml:ro
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
       interval: 30s
