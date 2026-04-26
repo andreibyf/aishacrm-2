@@ -68,3 +68,11 @@ temp/
 
 # Source maps (in production)
 *.map
+
+# Re-include specific files needed by Dockerfiles. These overrides MUST come
+# after the broad excludes above (`scripts/` line 50 and `*.sql` line 59) so
+# Docker's ignore matcher applies the negation last.
+# - calcom-db/Dockerfile bakes the Cal.com bootstrap SQL into a custom postgres
+#   image (avoids Coolify v4 bind-mount path-stripping). Both `scripts/` and
+#   `*.sql` would otherwise filter this file out of the build context.
+!scripts/calcom-db-init.sql
