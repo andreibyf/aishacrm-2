@@ -65,8 +65,16 @@ services:
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
-      # Cal.com parses ALLOWED_HOSTNAMES as JSON.parse(`[${value}]`) — keep the quotes.
-      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"staging-scheduler.aishacrm.com"}
+      # Cal.com middleware does `JSON.parse('[' + ALLOWED_HOSTNAMES + ']')`, so
+      # the value must be a JSON-string literal including the double-quote chars.
+      # Coolify's compose-render → .env-file → dotenv-parse pipeline STRIPS outer
+      # quotes, so the previous default `"staging-scheduler.aishacrm.com"` lost
+      # its quotes by the time it reached the container — Cal.com then crashed
+      # with "Unexpected token 's', \"[staging-sc...\" is not valid JSON".
+      # YAML single-quote wrap preserves the literal inner double-quotes verbatim
+      # all the way to the container env. Override via Coolify env if the host
+      # changes — Coolify UI value should also include the literal `"..."`.
+      - 'ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"staging-scheduler.aishacrm.com"}'
       - CALCOM_LICENSE_KEY=${CALCOM_LICENSE_KEY:-59c0bed7-8b21-4280-8514-e022fbfc24c7}
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
