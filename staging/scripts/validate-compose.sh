@@ -111,7 +111,9 @@ echo "=== Bind-mount drift checks ==="
 # of the repo-root config files inside each group folder. These checks fail loud
 # if the local copy diverges from the source of truth.
 declare -A MIRRORS=(
-  ["litellm_config.yaml"]="staging/03-ai-infra/litellm_config.yaml"
+  # litellm_config.yaml is no longer mirrored — baked into the GHCR image via
+  # litellm/Dockerfile. Only calcom-db-init.sql still uses the mirror pattern
+  # because postgres:15-alpine is a stock image we don't rebuild.
   ["scripts/calcom-db-init.sql"]="staging/05-scheduling-rare/calcom-db-init.sql"
 )
 for src in "${!MIRRORS[@]}"; do

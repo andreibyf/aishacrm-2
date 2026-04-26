@@ -42,14 +42,14 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-    volumes:
-      # Path is relative to THIS compose file's directory. Coolify v4 mishandles
-      # `../..` segments — when the source can't be resolved, Docker bind-creates
-      # an empty directory at the source path and the container then sees a
-      # directory at /app/config.yaml (IsADirectoryError on litellm startup).
-      # Workaround: keep a copy of litellm_config.yaml here in this folder.
-      # validate-compose.sh enforces it stays in sync with /litellm_config.yaml.
-      - ./litellm_config.yaml:/app/config.yaml:ro
+    # No bind mount — /app/config.yaml is baked into the image via
+    # litellm/Dockerfile (`COPY litellm_config.yaml /app/config.yaml`).
+    # Reason: Coolify v4 in this deployment mode renders only the compose file
+    # to <app_dir>/docker-compose.yaml without cloning the repo tree, so any
+    # bind source pointing at a repo file resolves to a non-existent path and
+    # Docker auto-creates an empty directory there, crashing litellm with
+    # IsADirectoryError. To change config: edit litellm_config.yaml at repo
+    # root and push a new vX.Y.Z tag — docker-release.yml rebuilds the image.
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
       interval: 30s

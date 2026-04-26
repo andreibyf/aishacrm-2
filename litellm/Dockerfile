@@ -9,4 +9,13 @@ RUN apk add --no-cache wget ca-certificates && \
 COPY litellm/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Bake the litellm proxy config into the image. Previously this was bind-mounted
+# from the repo root via docker-compose, but Coolify v4 (used in staging) only
+# clones the rendered compose file — not the working tree — so any compose
+# `volumes:` source pointing at a repo file resolves to a non-existent path,
+# Docker auto-creates an empty directory there, and litellm crashes on startup
+# with `IsADirectoryError [Errno 21] '/app/config.yaml'`. Production prod-compose
+# can keep its bind mount; that overlay supplies identical content.
+COPY litellm_config.yaml /app/config.yaml
+
 ENTRYPOINT ["/entrypoint.sh"]
