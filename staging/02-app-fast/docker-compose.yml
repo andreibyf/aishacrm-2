@@ -57,9 +57,11 @@ services:
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
-      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
-      - REDIS_CACHE_URL=redis://staging-aishacrm-redis-cache:6379
-      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
+      # Compose service names — Coolify v4 ignores container_name; only service
+      # names resolve via Docker DNS on staging-aishanet.
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - CRM_BACKEND_URL=http://backend:3001
       - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
       - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
     healthcheck:

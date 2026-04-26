@@ -44,12 +44,14 @@ services:
       calcom-db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
-      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      # Compose service names (calcom-db, calcom) resolve via Docker DNS on
+      # staging-aishanet. Coolify v4 ignores container_name directives.
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
       - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
       - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
       - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
-      - NEXTAUTH_URL_INTERNAL=http://staging-aishacrm-calcom:3000
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
       # Cal.com parses ALLOWED_HOSTNAMES as JSON.parse(`[${value}]`) — keep the quotes.

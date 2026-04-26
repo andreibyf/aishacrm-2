@@ -73,16 +73,18 @@ services:
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
-      # Internal staging DNS — all hostnames resolve via staging-aishanet
-      - REDIS_URL=redis://staging-aishacrm-redis-memory:6379
-      - REDIS_CACHE_URL=redis://staging-aishacrm-redis-cache:6379
-      - BRAID_MCP_URL=http://staging-braid-mcp-server:8000
-      - MCP_NODE_HEALTH_URL=http://staging-braid-mcp-server:8000/health
+      # Internal staging DNS — Coolify v4 ignores `container_name`, so cross-service
+      # references must use compose service names (resolved by Docker DNS on
+      # staging-aishanet) rather than the original staging-aishacrm-* names.
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - BRAID_MCP_URL=http://braid-mcp-server:8000
+      - MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health
       - MCP_NODE_ID=staging-aishacrm-backend
-      - LITELLM_BASE_URL=http://staging-aishacrm-litellm:4000
-      - CRM_BACKEND_URL=http://staging-aishacrm-backend:3001
-      - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@staging-aishacrm-calcom-db:5432/${CALCOM_DB_NAME:-calcom}
-      - CALCOM_WEBHOOK_BACKEND_URL=http://staging-aishacrm-backend:3001
+      - LITELLM_BASE_URL=http://litellm:4000
+      - CRM_BACKEND_URL=http://backend:3001
+      - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - CALCOM_WEBHOOK_BACKEND_URL=http://backend:3001
       - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://staging-scheduler.aishacrm.com}
       # Browser-origin CORS allowlist for staging
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://staging-app.aishacrm.com}
