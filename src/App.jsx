@@ -1,11 +1,13 @@
-import './App.css'
-import Pages from "@/pages/index.jsx"
-import { Toaster } from "sonner"
-import { useOpenReplayTracking } from '@/hooks/useOpenReplayTracking';
+import './App.css';
+import Pages from '@/pages/index.jsx';
+import { Toaster } from 'sonner';
+import { useSessionReplayTracking } from '@/hooks/useSessionReplayTracking';
 
 function App() {
-  // Initialize OpenReplay for co-browsing/session replay
-  useOpenReplayTracking();
+  // Provider-agnostic session replay tracking. Provider chosen via
+  // VITE_SESSION_REPLAY_PROVIDER env (clarity | openreplay | none).
+  // Back-compat: respects existing VITE_OPENREPLAY_ENABLED / VITE_CLARITY_ENABLED.
+  useSessionReplayTracking();
 
   // Add debug logging
   if (import.meta.env.DEV) {
@@ -35,5 +37,4 @@ function App() {
   );
 }
 
-export default App
- 
+export default App;

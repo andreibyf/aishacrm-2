@@ -22,9 +22,10 @@ services:
       # Browser-facing URLs — must be public hostnames, never internal DNS
       - VITE_AISHACRM_BACKEND_URL=https://staging-api.aishacrm.com
       - VITE_CALCOM_URL=https://staging-scheduler.aishacrm.com
+      - VITE_OPENREPLAY_ENABLED=${VITE_OPENREPLAY_ENABLED:-false}
       - VITE_OPENREPLAY_PROJECT_KEY=${VITE_OPENREPLAY_PROJECT_KEY:-}
       - VITE_OPENREPLAY_INGEST_POINT=${VITE_OPENREPLAY_INGEST_POINT:-}
-      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-https://replay.aishacrm.com}
+      - VITE_OPENREPLAY_DASHBOARD_URL=${VITE_OPENREPLAY_DASHBOARD_URL:-}
       - SERVICE_FQDN_FRONTEND=https://staging-app.aishacrm.com
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]

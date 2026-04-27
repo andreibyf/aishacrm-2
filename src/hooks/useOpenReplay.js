@@ -23,6 +23,13 @@ export function useOpenReplay() {
   const trackerRef = useRef(null);
 
   useEffect(() => {
+    // Explicit kill-switch: set VITE_OPENREPLAY_ENABLED=false to disable even if a key is present
+    const enabled = getRuntimeEnv('VITE_OPENREPLAY_ENABLED');
+    if (enabled === 'false' || enabled === '0') {
+      console.info('[OpenReplay] Disabled via VITE_OPENREPLAY_ENABLED - session replay skipped');
+      return;
+    }
+
     const projectKey = getRuntimeEnv('VITE_OPENREPLAY_PROJECT_KEY');
     const ingestPoint = getRuntimeEnv('VITE_OPENREPLAY_INGEST_POINT');
     // Skip initialization if no project key configured
