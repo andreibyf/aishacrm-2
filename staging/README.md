@@ -1,6 +1,34 @@
-# Staging — Coolify Deployment
+# Staging — Coolify Deployment (On-Demand)
 
-This folder defines the AiSHA CRM staging environment, deployed via **GitHub → Coolify VPS → App VPS**. It does **not** replace the existing GHCR-based production deploy in `/opt/aishacrm` — both run side-by-side until staging is fully validated.
+> **Status: all 6 Coolify staging resources are stopped by default.**
+>
+> Maintaining an always-on staging environment proved low-value for this project — disciplined CI tests, Doppler-centralized secrets, and Coolify's fast tag-pin rollback already cover most of staging's purpose, and an always-on staging duplicate of every prod service contributed to the OOM incident on the App VPS in late April 2026. The Coolify resources, compose files, and `aishacrm-2-calcom-db` GHCR image remain in the repo so the staging stack can be spun up on demand for specific exercises (deploy-pipeline migration, integration changes that touch multiple services, demo-to-stakeholder runs).
+>
+> **To bring staging up:** Coolify UI → start the resources you need → tear back down when done.
+>
+> See [Wind-down rationale](#wind-down-rationale) below.
+
+This folder defines the AiSHA CRM staging environment, deployed via **GitHub → Coolify VPS → App VPS**. It does **not** replace the existing GHCR-based production deploy in `/opt/aishacrm` — they coexist when staging is up.
+
+## Wind-down rationale
+
+Captured here so the next time someone considers running staging full-time, the reasoning is explicit:
+
+- **Solo / small team** — every commit gets reviewed before push; PR-level integration risk is low.
+- **CI tests already cover the code paths that matter** — pre-push runs the full backend suite (~2,500 tests) and the build.
+- **Doppler centralizes secrets** so env-config drift between staging and prod is small.
+- **Coolify provides fast rollback** — pin a service to a previous image tag in seconds, no separate environment needed for "is this version safe."
+- **Most pipeline issues resolved during the staging buildout were one-time plumbing** (Coolify v4 bind-mount path stripping, Cal.com manifest-schema deprecation, ALLOWED_HOSTNAMES quote stripping, dockerignore filtering) — they won't recur once Coolify-build is the production deploy path.
+- **Resource cost on shared VPS** — running staging duplicates of backend, frontend, redis pair, MCP cluster, plus build churn from repeated tag pushes, contributed to an OOM-class incident that took down both prod and staging containers simultaneously.
+
+Substitutes that capture most of staging's value at a fraction of the cost:
+
+1. **Canary deploys in prod** — pin one service to a new tag via Coolify, watch logs/health, roll forward or back.
+2. **Local docker-compose dry-run** — full stack on dev machine via the root `docker-compose.yml`.
+3. **Feature flags** for risky paths (already in use: `CARE_SHADOW_MODE`, `LITELLM_ENABLED`, etc.).
+4. **Ephemeral staging on demand** — Coolify resources defined, started only when a deploy-pipeline change needs validation.
+
+## Quick start (on-demand)
 
 ## Layout
 
