@@ -1,5 +1,7 @@
 # Staging — Coolify Deployment (On-Demand)
 
+> **Strategic context:** see [`docs/deployment/COOLIFY_MIGRATION.md`](../docs/deployment/COOLIFY_MIGRATION.md) for the full goals → achievements → next-steps view of the GHCR-replacement workstream this folder is part of.
+>
 > **Status: all 6 Coolify staging resources are stopped by default.**
 >
 > Maintaining an always-on staging environment proved low-value for this project — disciplined CI tests, Doppler-centralized secrets, and Coolify's fast tag-pin rollback already cover most of staging's purpose, and an always-on staging duplicate of every prod service contributed to the OOM incident on the App VPS in late April 2026. The Coolify resources, compose files, and `aishacrm-2-calcom-db` GHCR image remain in the repo so the staging stack can be spun up on demand for specific exercises (deploy-pipeline migration, integration changes that touch multiple services, demo-to-stakeholder runs).

@@ -1,3 +1,17 @@
+# AiSHA CRM – Active Workstreams
+
+## Current active: Coolify Migration (Phase 2 — production)
+
+**Goal:** Replace GHCR-based deploy pipeline with Coolify-native local builds. Eliminates GHA build minutes, GHCR storage, and the build → push → pull round-trip.
+
+**Phase 1 (staging POC):** ✅ Complete (2026-04-26). Wound down to on-demand. See [`docs/deployment/COOLIFY_MIGRATION.md`](../docs/deployment/COOLIFY_MIGRATION.md).
+
+**Phase 2 (production migration):** 🔲 Queued. Order: litellm → mcp → frontend → calcom-db → backend. Hardening prerequisites: memory caps on prod compose, Coolify build concurrency = 1, Cal.com prod pin bumped to v6.2.0.
+
+Detailed goals, achievements, and remaining steps: **[`docs/deployment/COOLIFY_MIGRATION.md`](../docs/deployment/COOLIFY_MIGRATION.md)**.
+
+---
+
 # AiSHA CRM – Permission Hardening & Optimistic UX Plan
 
 **🎉 PLAN COMPLETE ✅ (April 9, 2026)**
