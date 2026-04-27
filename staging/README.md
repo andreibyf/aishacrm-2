@@ -10,12 +10,24 @@ staging/
 ├── 02-app-fast/            # frontend + comms worker
 ├── 03-ai-infra/            # litellm + ollama
 ├── 04-braid/               # braid-mcp-server + 2 worker nodes
-├── 05-scheduling-rare/     # cal.com + dedicated postgres
+├── 05-scheduling-rare/     # cal.com + dedicated postgres  (OPT-IN, paused by default)
 ├── scripts/
 │   ├── validate-compose.sh # local lint — run before pushing
 │   └── post-deploy-check.sh# post-deploy smoke tests on App VPS
 └── .env.example            # required Coolify env-var reference
 ```
+
+### Group 5 (scheduling-rare) is opt-in
+
+Cal.com is third-party infrastructure with its own release cadence, image schema quirks, env-var parsing rules, and bootstrap behavior. Maintaining a healthy staging instance has high friction (per-release manifest schema changes, ALLOWED_HOSTNAMES quote handling, postgres init-script bind-mount workarounds) and adds nothing to validating the AiSHA deploy pipeline itself — backends just talk to it via HTTP, and a missing scheduler is a valid staging state.
+
+The Coolify resource for `staging-scheduling-rare` is therefore **paused by default**. The compose file, the custom `aishacrm-2-calcom-db` GHCR image, and the env wiring all remain in the repo so you can resume any time:
+
+1. Coolify UI → `staging-scheduling-rare` → Start
+2. Set the required Doppler secrets (CALCOM*DB_PASSWORD, CALCOM_NEXTAUTH_SECRET, CALCOM_ENCRYPTION_KEY, CALCOM_SMTP*\*) in `stg_stg`
+3. First boot will run postgres `initdb` + Cal.com Prisma migrations (~60–90s) — give the calcom service `start_period` time to pass
+
+Production keeps Cal.com behind the same `profiles: [scheduling]` opt-in pattern in `docker-compose.prod.yml`.
 
 Each group is **one Coolify "Docker Compose" resource** pointing at its respective `docker-compose.yml`. Coolify clones this repo, substitutes env vars, and runs `docker compose up` on the App VPS.
 
