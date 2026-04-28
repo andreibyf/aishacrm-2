@@ -601,10 +601,10 @@ router.post('/clear-cache', async (_req, res) => {
  *
  * SECURITY: Superadmin only - exposes container configuration
  *
- * NOTE: Ollama settings are container-global (not tenant-specific), but this route
- * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
- * select a tenant to access these endpoints, even though the settings apply globally.
- * Consider mounting /ollama endpoints separately for cleaner architecture.
+ * NOTE: Ollama settings are container-global (not tenant-specific). This route
+ * is mounted behind validateTenantAccess middleware but is tenant-exempt (see
+ * tenantExemptPaths in middleware/validateTenant.js) because it operates at the
+ * Docker Compose level, not the tenant database.
  */
 router.get('/ollama', requireSuperAdminRole, async (_req, res) => {
   const current = readOllamaEnvFromCompose();
@@ -695,10 +695,10 @@ router.get('/ollama', requireSuperAdminRole, async (_req, res) => {
  *
  * SECURITY: Superadmin only - modifies host docker-compose and container config
  *
- * NOTE: Ollama settings are container-global (not tenant-specific), but this route
- * is mounted behind validateTenantAccess middleware via server.js. Superadmins must
- * select a tenant to access these endpoints, even though the settings apply globally.
- * Frontend should include tenant_id in request body/query to satisfy middleware.
+ * NOTE: Ollama settings are container-global (not tenant-specific). This route
+ * is mounted behind validateTenantAccess middleware but is tenant-exempt (see
+ * tenantExemptPaths in middleware/validateTenant.js) because it operates at the
+ * Docker Compose level, not the tenant database.
  */
 router.post('/ollama', requireSuperAdminRole, async (req, res) => {
   const { settings: updates, restart = false } = req.body;

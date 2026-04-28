@@ -115,6 +115,7 @@ export async function validateTenantAccess(req, res, next) {
     const tenantExemptPaths = [
       '/developer', // Developer AI chat, stream, approve, reject
       '/summarize-person-profile', // AI summary — handles own tenant scoping internally
+      '/ollama', // Ollama runtime settings (Docker Compose level, not tenant DB)
     ];
     const isTenantExempt = tenantExemptPaths.some((p) => req.path.startsWith(p));
     if (isTenantExempt) {
