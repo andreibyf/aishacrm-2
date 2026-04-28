@@ -78,6 +78,9 @@ services:
       # PEP Custom Query — use Groq (no Ollama in prod)
       - PEP_LLM_PROVIDER=groq
       - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      # Client/Contact Summaries — use Groq for fast on-demand generation (was local/Ollama)
+      - SUMMARY_LLM_PROVIDER=groq
+      - SUMMARY_LLM_MODEL=llama-3.1-8b-instant
       # LiteLLM proxy (Docker-internal URL; LITELLM_ENABLED and LITELLM_MASTER_KEY injected by Doppler at runtime — do NOT set them here)
       - LITELLM_BASE_URL=http://litellm:4000
       # Office visualization disabled in production
