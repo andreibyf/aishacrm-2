@@ -4,6 +4,10 @@ services:
     image: redis:7-alpine
     container_name: aishacrm-redis-memory
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -24,6 +28,10 @@ services:
     image: redis:7-alpine
     container_name: aishacrm-redis-cache
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
     ports:
       - "127.0.0.1:6380:6379"
     volumes:
@@ -41,6 +49,10 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-backend:latest
     container_name: aishacrm-backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.5'  # Priority service - AI, API, CARE
     depends_on:
       redis-memory:
         condition: service_healthy
@@ -89,6 +101,10 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-backend:latest
     container_name: aishacrm-comms
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
     depends_on:
       backend:
         condition: service_healthy
@@ -126,6 +142,10 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-litellm:latest
     container_name: aishacrm-litellm
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.4'
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
@@ -152,6 +172,10 @@ services:
     image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
     container_name: aishacrm-frontend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'  # Priority service - user-facing
     depends_on:
       backend:
         condition: service_started
@@ -267,6 +291,10 @@ services:
   calcom:
     image: calcom/cal.com:latest
     container_name: aishacrm-calcom
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'  # Low usage, mostly idle
     # Override default start.sh to skip seed-app-store.ts on every boot (causes CPU spike).
     # Seed only needs to run once on first install. Apps already seeded and persisted in DB.
     command: ["sh", "-c", "scripts/replace-placeholder.sh $BUILT_NEXT_PUBLIC_WEBAPP_URL $NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
