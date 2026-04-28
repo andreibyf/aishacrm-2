@@ -1,0 +1,245 @@
+# GitLab CI/CD Pipeline for AiSHA CRM
+# Mirrors .github/workflows/docker-release.yml functionality
+# Triggers on version tags (v*) and deploys to production VPS
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/  # Only run on version tags
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  # These should be set in GitLab: Settings → CI/CD → Variables
+  # Required variables:
+  # - DOPPLER_TOKEN (masked)
+  # - DOPPLER_PROJECT
+  # - DOPPLER_CONFIG
+
+stages:
+  - build
+  - deploy
+
+# Build job with matrix for 5 services
+.build_template:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  timeout: 30m
+  before_script:
+    # Install Doppler CLI
+    - apk add --no-cache curl bash
+    - curl -Ls https://cli.doppler.com/install.sh | sh
+    - doppler --version
+    
+    # Verify Doppler connection
+    - |
+      echo "Testing Doppler connection..."
+      if ! doppler secrets get ADMIN_EMAILS --plain > /dev/null 2>&1; then
+        echo "ERROR: Failed to connect to Doppler"
+        echo "Check DOPPLER_TOKEN, DOPPLER_PROJECT, DOPPLER_CONFIG variables"
+        exit 1
+      fi
+      echo "✓ Doppler connected"
+    
+    # Login to GHCR
+    - echo "$CI_REGISTRY_PASSWORD" | docker login ghcr.io -u "$CI_REGISTRY_USER" --password-stdin
+  
+  script:
+    - |
+      echo "Building $SERVICE_NAME..."
+      
+      # Fetch Doppler secrets for build args
+      ADMIN_EMAILS=$(doppler secrets get ADMIN_EMAILS --plain 2>/dev/null || echo "")
+      
+      # Build and push Docker image
+      docker buildx create --use || true
+      docker buildx build \
+        --platform linux/amd64 \
+        --file $DOCKERFILE \
+        --push \
+        --tag ghcr.io/andreibyf/aishacrm-2-$SERVICE_NAME:$CI_COMMIT_TAG \
+        --tag ghcr.io/andreibyf/aishacrm-2-$SERVICE_NAME:latest \
+        --build-arg VITE_APP_BUILD_VERSION=$CI_COMMIT_TAG \
+        --build-arg VITE_CURRENT_BRANCH=$CI_COMMIT_TAG \
+        --build-arg VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+        --build-arg VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+        --build-arg VITE_AISHACRM_BACKEND_URL=$VITE_AISHACRM_BACKEND_URL \
+        --build-arg VITE_CALCOM_URL=${VITE_CALCOM_URL:-https://scheduler.aishacrm.com} \
+        --build-arg ADMIN_EMAILS=$ADMIN_EMAILS \
+        --build-arg PUPPETEER_SKIP_DOWNLOAD=1 \
+        --build-arg USE_SYSTEM_CHROMIUM=false \
+        --build-arg CACHE_BUST=$CI_COMMIT_SHA \
+        $CONTEXT
+      
+      echo "✓ Built and pushed $SERVICE_NAME"
+  
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# Matrix jobs for each service
+build:frontend:
+  extends: .build_template
+  variables:
+    SERVICE_NAME: "frontend"
+    CONTEXT: "."
+    DOCKERFILE: "./Dockerfile"
+
+build:backend:
+  extends: .build_template
+  variables:
+    SERVICE_NAME: "backend"
+    CONTEXT: "."
+    DOCKERFILE: "./backend/Dockerfile"
+  before_script:
+    - !reference [.build_template, before_script]
+    # Guard backend imports
+    - |
+      echo "Scanning backend imports for repo-root paths..."
+      apk add --no-cache grep
+      MATCHES=$(grep -RInE --exclude-dir node_modules --exclude-dir __tests__ --exclude-dir tests "from ['\"](\.\./){2,}|require\(['\"](\.\./){2,}" backend || true)
+      if [ -n "$MATCHES" ]; then
+        echo "$MATCHES" | grep -v "braid-llm-kit" | grep -v "shared/" | grep -v "pep/" > /tmp/bad-imports.txt || true
+        if [ -s /tmp/bad-imports.txt ]; then
+          echo "ERROR: Found backend imports to repo-root paths:"
+          cat /tmp/bad-imports.txt
+          exit 1
+        fi
+      fi
+      echo "Import scan passed."
+
+build:mcp:
+  extends: .build_template
+  variables:
+    SERVICE_NAME: "mcp"
+    CONTEXT: "./braid-mcp-node-server"
+    DOCKERFILE: "./braid-mcp-node-server/Dockerfile"
+
+build:litellm:
+  extends: .build_template
+  variables:
+    SERVICE_NAME: "litellm"
+    CONTEXT: "."
+    DOCKERFILE: "./litellm/Dockerfile"
+
+build:calcom-db:
+  extends: .build_template
+  variables:
+    SERVICE_NAME: "calcom-db"
+    CONTEXT: "."
+    DOCKERFILE: "./calcom-db/Dockerfile"
+
+# Deploy to production VPS
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  timeout: 30m
+  needs:
+    - build:frontend
+    - build:backend
+    - build:mcp
+    - build:litellm
+    - build:calcom-db
+  before_script:
+    # Install dependencies
+    - apk add --no-cache openssh-client curl bash
+    
+    # Install Doppler CLI
+    - curl -Ls https://cli.doppler.com/install.sh | sh
+    
+    # Fetch VPS credentials from Doppler
+    - |
+      echo "Fetching VPS deployment secrets from Doppler..."
+      PROD_VPS_HOST=$(doppler secrets get PROD_VPS_HOST --plain 2>/dev/null || exit 1)
+      PROD_VPS_USER=$(doppler secrets get PROD_VPS_USER --plain 2>/dev/null || exit 1)
+      PROD_VPS_PORT=$(doppler secrets get PROD_VPS_PORT --plain 2>/dev/null || exit 1)
+      PROD_MCP_GITHUB_TOKEN=$(doppler secrets get PROD_MCP_GITHUB_TOKEN --plain 2>/dev/null || exit 1)
+      
+      # SSH key
+      mkdir -p ~/.ssh
+      doppler secrets get PROD_VPS_SSH_KEY --plain > ~/.ssh/deploy_key
+      chmod 600 ~/.ssh/deploy_key
+      
+      # Add VPS to known_hosts
+      ssh-keyscan -p $PROD_VPS_PORT $PROD_VPS_HOST >> ~/.ssh/known_hosts 2>/dev/null
+      
+      echo "✓ VPS credentials fetched"
+    
+    # Export variables for script
+    - export PROD_VPS_HOST PROD_VPS_USER PROD_VPS_PORT PROD_MCP_GITHUB_TOKEN
+  
+  script:
+    - |
+      echo "Deploying $CI_COMMIT_TAG to production VPS..."
+      
+      # Copy deployment files to VPS
+      scp -i ~/.ssh/deploy_key -P $PROD_VPS_PORT \
+        docker-compose.prod.yml nginx-n8n.conf litellm_config.yaml \
+        $PROD_VPS_USER@$PROD_VPS_HOST:/opt/aishacrm/
+      
+      scp -i ~/.ssh/deploy_key -P $PROD_VPS_PORT \
+        braid-mcp-node-server/docker-compose.prod.yml \
+        braid-mcp-node-server/.env.example \
+        $PROD_VPS_USER@$PROD_VPS_HOST:/opt/aishacrm/braid-mcp-node-server/
+      
+      # Execute deployment script on VPS
+      ssh -i ~/.ssh/deploy_key -p $PROD_VPS_PORT $PROD_VPS_USER@$PROD_VPS_HOST bash <<'ENDSSH'
+        set -euo pipefail
+        
+        phase() { echo "[$(date -u +'%Y-%m-%d %H:%M:%S UTC')] $1"; }
+        run_timed() { local dur=$1; shift; timeout $dur "$@" 2>/dev/null || "$@"; }
+        
+        cd /opt/aishacrm
+        phase "Deploying version: $CI_COMMIT_TAG"
+        
+        # Configure Doppler
+        phase "Configuring Doppler token"
+        for KEY in DOPPLER_TOKEN DOPPLER_PROJECT DOPPLER_CONFIG; do
+          VAL=$(eval echo \$$KEY)
+          if grep -q "^${KEY}=" .env 2>/dev/null; then
+            sed -i "s|^${KEY}=.*|${KEY}=${VAL}|" .env
+          else
+            echo "${KEY}=${VAL}" >> .env
+          fi
+        done
+        phase "✓ Doppler configured"
+        
+        # Cleanup
+        phase "Cleaning up Docker state"
+        docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+        docker container prune -f 2>/dev/null || true
+        docker network inspect aishanet >/dev/null 2>&1 || docker network create aishanet
+        
+        # Pull images
+        phase "Pulling GHCR images for $CI_COMMIT_TAG"
+        run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-frontend:$CI_COMMIT_TAG
+        run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-backend:$CI_COMMIT_TAG
+        run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-mcp:$CI_COMMIT_TAG
+        run_timed 15m docker pull ghcr.io/andreibyf/aishacrm-2-litellm:$CI_COMMIT_TAG
+        
+        # Tag as latest
+        phase "Tagging images as latest"
+        docker tag ghcr.io/andreibyf/aishacrm-2-frontend:$CI_COMMIT_TAG ghcr.io/andreibyf/aishacrm-2-frontend:latest
+        docker tag ghcr.io/andreibyf/aishacrm-2-backend:$CI_COMMIT_TAG ghcr.io/andreibyf/aishacrm-2-backend:latest
+        docker tag ghcr.io/andreibyf/aishacrm-2-mcp:$CI_COMMIT_TAG ghcr.io/andreibyf/aishacrm-2-mcp:latest
+        docker tag ghcr.io/andreibyf/aishacrm-2-litellm:$CI_COMMIT_TAG ghcr.io/andreibyf/aishacrm-2-litellm:latest
+        
+        # Restart services
+        phase "Recreating main services"
+        run_timed 10m docker compose -f docker-compose.prod.yml up -d --force-recreate frontend backend litellm
+        
+        phase "Deployment complete"
+      ENDSSH
+      
+      echo "✓ Deployment to production VPS complete"
+  
+  only:
+    - tags
+  
+  retry:
+    max: 1
+    when:
+      - script_failure
