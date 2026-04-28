@@ -71,6 +71,9 @@ services:
       - TELEMETRY_ENABLED=false
       # C.A.R.E. worker interval - 5 minutes to prevent CPU overload (ZAP 550% cap)
       - AI_TRIGGERS_WORKER_INTERVAL_MS=300000
+      # C.A.R.E. queue rate limiting - prevents stampedes when many workflows trigger
+      - CARE_RATE_LIMIT_MAX=${CARE_RATE_LIMIT_MAX:-10}
+      - CARE_RATE_LIMIT_DURATION=${CARE_RATE_LIMIT_DURATION:-60000}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
       interval: 30s

@@ -17,7 +17,13 @@ import logger from '../logger.js';
 const REDIS_URL =
   process.env.REDIS_MEMORY_URL || process.env.REDIS_URL || 'redis://redis-memory:6379';
 
+// Rate limiter configuration - prevents CPU overload when many workflows trigger at once
+// Default: max 10 concurrent executions per 60 seconds (adjustable via env vars)
+const RATE_LIMIT_MAX = parseInt(process.env.CARE_RATE_LIMIT_MAX || '10', 10);
+const RATE_LIMIT_DURATION = parseInt(process.env.CARE_RATE_LIMIT_DURATION || '60000', 10);
+
 logger.debug('[PlaybookQueue] Initializing playbook execution queue with Redis:', REDIS_URL);
+logger.debug(`[PlaybookQueue] Rate limit: max ${RATE_LIMIT_MAX} jobs per ${RATE_LIMIT_DURATION}ms`);
 
 export const playbookQueue = new Bull('care-playbook-execution', REDIS_URL, {
   defaultJobOptions: {
@@ -28,6 +34,11 @@ export const playbookQueue = new Bull('care-playbook-execution', REDIS_URL, {
     },
     removeOnComplete: 200,
     removeOnFail: 500,
+  },
+  limiter: {
+    max: RATE_LIMIT_MAX, // Max concurrent jobs
+    duration: RATE_LIMIT_DURATION, // Time window in ms
+    bounceBack: false, // Don't retry immediately if rate limited
   },
   settings: {
     lockDuration: 60000, // 60s lock (steps may involve external API calls)
