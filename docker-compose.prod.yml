@@ -260,8 +260,11 @@ services:
   # Image pinned to known-good digest (2026-04-07). To upgrade: pull new image, verify fixes
   # still apply (Host table, _user_eventtype, ALLOWED_HOSTNAMES), then update digest here.
   calcom:
-    image: calcom/cal.com@sha256:0aca8203c51dd7e7e74b71713d028c70f2ae8d58ae987901ac19567dc8d59d98
+    image: calcom/cal.com:latest
     container_name: aishacrm-calcom
+    # Override default start.sh to skip seed-app-store.ts on every boot (causes CPU spike).
+    # Seed only needs to run once on first install. Apps already seeded and persisted in DB.
+    command: ["sh", "-c", "scripts/replace-placeholder.sh $BUILT_NEXT_PUBLIC_WEBAPP_URL $NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
     restart: unless-stopped
     profiles: [scheduling]
     depends_on:
