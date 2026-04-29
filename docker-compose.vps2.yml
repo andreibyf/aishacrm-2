@@ -51,7 +51,7 @@ services:
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
-      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"scheduler.aishacrm.com"}
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-["scheduler.aishacrm.com"]}
       - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
@@ -95,9 +95,12 @@ services:
       start_period: 10s
 
   # Hawser - Docker monitoring for Dockhand visibility
+  # NOTE: VPS-2 needs separate token from https://dockhand.dev
+  # Add to .env: HAWSER_TOKEN_VPS2=<token-from-dockhand>
+  # Using mjohnsongp/hawser (community mirror with Docker API version fix)
   hawser:
-    image: ghcr.io/beyondcode/hawser:latest
-    container_name: hawser
+    image: mjohnsongp/hawser:latest
+    container_name: aishacrm-hawser-vps2
     restart: unless-stopped
     networks:
       - aishanet
@@ -106,7 +109,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - HAWSER_TOKEN=${HAWSER_TOKEN}  # Get from Dockhand dashboard
+      - HAWSER_TOKEN=${HAWSER_TOKEN_VPS2}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
