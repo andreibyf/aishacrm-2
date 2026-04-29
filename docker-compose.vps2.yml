@@ -1,0 +1,125 @@
+# Docker Compose for VPS-2 (147.189.168.164)
+# Non-core AiSHA services migrated from VPS-1 to reduce CPU load
+# Deploy with: docker compose -f docker-compose.vps2.yml up -d
+
+services:
+  # Cal.com PostgreSQL database
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-calcom-db
+    restart: unless-stopped
+    networks:
+      - aishanet
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - calcom_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cal.com scheduling service
+  calcom:
+    image: calcom/cal.com:latest
+    container_name: aishacrm-calcom
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'  # More headroom on VPS-2
+    command: ["sh", "-c", "scripts/replace-placeholder.sh $BUILT_NEXT_PUBLIC_WEBAPP_URL $NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
+    restart: unless-stopped
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet
+    environment:
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
+      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-"scheduler.aishacrm.com"}
+      - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+    ports:
+      - "3002:3000"  # Expose for Coolify proxy routing
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Ollama local LLM server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aishacrm-ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+    networks:
+      - aishanet
+    ports:
+      - "11434:11434"  # Expose for LiteLLM on VPS-1
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Hawser - Docker monitoring for Dockhand visibility
+  hawser:
+    image: ghcr.io/beyondcode/hawser:latest
+    container_name: hawser
+    restart: unless-stopped
+    networks:
+      - aishanet
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - HAWSER_TOKEN=${HAWSER_TOKEN}  # Get from Dockhand dashboard
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  aishanet:
+    driver: bridge
+
+volumes:
+  calcom_db_data:
+    driver: local
+  ollama_data:
+    driver: local
