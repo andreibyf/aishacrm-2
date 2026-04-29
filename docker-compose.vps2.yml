@@ -105,7 +105,7 @@ services:
     networks:
       - aishanet
     ports:
-      - "8080:8080"
+      - "2376:8080"  # Expose Hawser on port 2376 (maps to internal 8080)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
