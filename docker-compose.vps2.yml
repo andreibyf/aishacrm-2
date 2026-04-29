@@ -94,24 +94,30 @@ services:
       retries: 3
       start_period: 10s
 
-  # Hawser - Docker monitoring for Dockhand visibility
-  # NOTE: VPS-2 needs separate token from https://dockhand.dev
-  # Add to .env: HAWSER_TOKEN_VPS2=<token-from-dockhand>
-  # Using mjohnsongp/hawser (community mirror with Docker API version fix)
+  # Hawser - Docker monitoring agent for Dockhand
+  # Standard Mode: Agent listens for connections from Dockhand
+  # Official docs: https://github.com/Finsys/hawser
+  # Token from Dockhand: Settings > Environments > Hawser Standard
   hawser:
-    image: mjohnsongp/hawser:latest
+    image: ghcr.io/finsys/hawser:latest
     container_name: aishacrm-hawser-vps2
     restart: unless-stopped
     networks:
       - aishanet
     ports:
-      - "2376:8080"  # Expose Hawser on port 2376 (maps to internal 8080)
+      - "2376:2376"  # Standard Hawser port
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /opt/hawser-stacks:/opt/hawser-stacks  # Host path for compose stacks with relative paths
     environment:
-      - HAWSER_TOKEN=${HAWSER_TOKEN_VPS2}
+      - PORT=2376
+      - TOKEN=${HAWSER_TOKEN_VPS2}
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - STACKS_DIR=/opt/hawser-stacks
+      - AGENT_NAME=vps2-aishacrm
+      - LOG_LEVEL=info
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:2376/_hawser/health"]
       interval: 30s
       timeout: 5s
       retries: 3
