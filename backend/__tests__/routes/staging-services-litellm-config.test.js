@@ -64,7 +64,8 @@ test('staging-litellm: mem_limit set in 256m..768m range', () => {
   const m = value.match(/^(\d+)([gmk])$/i);
   assert.ok(m, `mem_limit value '${value}' must match digit+unit format`);
   const mb = parseInt(m[1], 10) * (m[2].toLowerCase() === 'g' ? 1024 : 1);
-  assert.ok(mb >= 256 && mb <= 768, `mem_limit ${value} (${mb}MB) must be in [256, 768] MB`);
+  // Bumped from 256-768 MB after first deploy showed 384m was 97% utilized.
+  assert.ok(mb >= 384 && mb <= 1024, `mem_limit ${value} (${mb}MB) must be in [384, 1024] MB`);
 });
 
 test('staging-litellm: joins external staging-aishanet (not prod aishanet)', () => {

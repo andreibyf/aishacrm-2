@@ -35,9 +35,12 @@ services:
       dockerfile: litellm/Dockerfile
     container_name: aishacrm-litellm-staging-coolify
     restart: unless-stopped
-    # Match the manually-deployed sibling's mem cap so both fit during soak.
-    mem_limit: 384m
-    mem_reservation: 192m
+    # Original 384m was too tight (97% utilization at idle in first deploy).
+    # Bumped to 768m for headroom; one real chat completion request needs
+    # ~50-100 MiB transient on top of the steady ~370 MiB resident set.
+    # Staging server has dynamic RAM, so the bigger cap is safe.
+    mem_limit: 768m
+    mem_reservation: 256m
     environment:
       # Doppler injects LITELLM_MASTER_KEY + provider keys at runtime
       # via `stg_stg` (NOT prd_prd — staging isolation).
