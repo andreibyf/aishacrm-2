@@ -1,21 +1,21 @@
-# Staging — Group 2: app-fast
-# Services: aishacrm-frontend, aishacrm-comms
+# Staging - Group 2: app-fast (frontend + comms worker)
+# Both Coolify-native, share the build context with backend (uses backend image
+# for comms via different command), join staging-aishanet for inter-service DNS.
 #
-# Both services are independent of each other but join staging-aishanet so the
-# comms worker can reach staging-aishacrm-backend (group 1) and the redis pair.
+# Service-name choices (must match what existing code/Doppler expect):
+#   - frontend   -> alias [frontend], traefik routes staging-app.aishacrm.com
+#   - aisha-comms -> alias [aisha-comms]; matches manual stack convention
+#                    (NOT `comms` - the prior compose had this wrong)
 #
-# Coolify resource: docker-compose pointing to staging/02-app-fast/docker-compose.yml
-# Prerequisite: group 1 (backend-heavy) must be deployed with COMPOSE_PROFILES=app
-# so comms has a backend + redis to target.
+# Dependency: backend (in staging-backend-heavy) must be deployed first so
+# comms has a target for its REST/CRM heartbeats. Browser traffic to frontend
+# also needs backend at staging-api.aishacrm.com.
 
 services:
   frontend:
-    # Path B: build locally from OneDev source.
-    # VITE_* args are baked into the bundle at build time — entrypoint does runtime
-    # injection of overrides, so build-time defaults must point at staging URLs.
-    image: aishacrm-frontend:${FRONTEND_IMAGE_TAG:-staging}
+    image: aishacrm-frontend:coolify
     build:
-      context: ../..
+      context: .
       dockerfile: Dockerfile
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
@@ -27,13 +27,13 @@ services:
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-staging-${COOLIFY_RESOURCE_UUID:-unknown}}
     container_name: staging-aishacrm-frontend
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
     environment:
-      # Doppler runtime injection (frontend entrypoint substitutes window-level env)
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
       - PORT=3000
-      # Browser-facing URLs — must be public hostnames, never internal DNS
       - VITE_AISHACRM_BACKEND_URL=https://staging-api.aishacrm.com
       - VITE_CALCOM_URL=https://staging-scheduler.aishacrm.com
       - VITE_OPENREPLAY_ENABLED=${VITE_OPENREPLAY_ENABLED:-false}
@@ -53,7 +53,9 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - staging-aishanet
+      staging-aishanet:
+        aliases:
+          - frontend
     labels:
       - traefik.enable=true
       - traefik.http.routers.staging-frontend.rule=Host(`staging-app.aishacrm.com`)
@@ -61,34 +63,31 @@ services:
       - traefik.http.routers.staging-frontend.tls.certresolver=letsencrypt
       - traefik.http.services.staging-frontend.loadbalancer.server.port=3000
 
-  comms:
-    # Path B: same backend image as group 1, built locally.
-    image: aishacrm-backend:${BACKEND_IMAGE_TAG:-staging}
+  aisha-comms:
+    image: aishacrm-backend:coolify
     build:
-      context: ../..
+      context: .
       dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-comms
     restart: unless-stopped
+    mem_limit: 768m
+    mem_reservation: 256m
     command: ["npm", "run", "worker:communications"]
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
       - NODE_ENV=production
-      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
-      # Compose service names — Coolify v4 ignores container_name; only service
-      # names resolve via Docker DNS on staging-aishanet.
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=512 --dns-result-order=ipv4first}
       - REDIS_URL=redis://redis-memory:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379
-      - CRM_BACKEND_URL=http://backend:3001
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
       - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
       - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const configured=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(configured)&&configured>0?configured:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\"",
-        ]
+        - "CMD-SHELL"
+        - "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const c=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(c)&&c>0?c:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\""
       interval: 30s
       timeout: 5s
       retries: 3
@@ -99,9 +98,11 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - staging-aishanet
+      staging-aishanet:
+        aliases:
+          - aisha-comms
 
 networks:
   staging-aishanet:
-    name: staging-aishanet
     external: true
+    name: aishacrm_aishanet-staging
