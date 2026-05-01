@@ -168,34 +168,91 @@ fi
 rm -f "$VITEST_JSON" "$VITEST_LOG"
 echo ""
 
-# ── 4. Backend Tests (Docker) ────────────────────────
-echo "▶ [4/4] Running backend tests..."
-if docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | grep -q .; then
+# ── 4. Backend Tests ─────────────────────────────────
+# Tiers, controlled by BACKEND_TESTS env var (default: "precheck"):
+#   precheck — curated deterministic suite (~90s, never needs services)
+#   safe     — 16 grouped runs (needs Supabase/Postgres/Redis up locally)
+#   full     — `npm test` (~2,300 tests; needs all services, CI-grade)
+#   skip     — bypass entirely (emergency only)
+#
+# Override with: BACKEND_TESTS=full git push
+# Skip with:     BACKEND_TESTS=skip git push   (or `git push --no-verify`)
+#
+# Why default `precheck`: the heavier tiers (`safe`, full) require live
+# Supabase + Redis + Postgres. When those services point at staging
+# (e.g. after a Doppler config swap) or when running locally without
+# `docker compose up`, those tests fail for environmental reasons unrelated
+# to the change being pushed. Precheck pins the deterministic-only subset
+# so pushes remain trustworthy without needing a full local stack up.
+BACKEND_TESTS="${BACKEND_TESTS:-precheck}"
+echo "▶ [4/4] Running backend tests (tier: ${BACKEND_TESTS})..."
+
+if [ "$BACKEND_TESTS" = "skip" ]; then
+  echo "   ⚠️  BACKEND_TESTS=skip — bypassing backend test suite"
+  echo "   Re-enable with: BACKEND_TESTS=precheck git push"
+  echo ""
+elif docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | grep -q .; then
   echo "   (running in Docker container aishacrm-backend)"
-  if docker exec aishacrm-backend npm test 2>&1; then
-    echo "✅ Backend tests passed"
-  else
+  case "$BACKEND_TESTS" in
+    precheck) TEST_CMD="npm run test:precheck" ;;
+    safe)     TEST_CMD="npm run test:safe" ;;
+    full)     TEST_CMD="npm test" ;;
+    *)        echo "❌ Unknown BACKEND_TESTS tier: '$BACKEND_TESTS' (valid: precheck|safe|full|skip)"; exit 1 ;;
+  esac
+
+  # Container may have a stale package.json (e.g. test:precheck added on host
+  # but image not rebuilt yet). If the script doesn't exist in the container,
+  # fall back to running on the host where the working tree is current.
+  if [ "$BACKEND_TESTS" != "skip" ] \
+     && ! docker exec aishacrm-backend grep -q "\"${BACKEND_TESTS}\":" /app/package.json /app/backend/package.json 2>/dev/null \
+     && [ "$BACKEND_TESTS" != "full" ] && [ "$BACKEND_TESTS" != "safe" ]; then
+    echo "   (container's package.json has no '$BACKEND_TESTS' script — running on host instead)"
+    if (cd backend && npm run "test:${BACKEND_TESTS}") 2>&1; then
+      echo "✅ Backend tests passed (${BACKEND_TESTS}, host fallback)"
+      echo ""
+      # Skip the rest of the docker block by ending here; host run was authoritative.
+      true
+    else
+      echo ""
+      echo "❌ BACKEND TESTS FAILED (${BACKEND_TESTS}, host fallback)"
+      exit 1
+    fi
+  elif docker exec aishacrm-backend $TEST_CMD 2>&1; then
+    echo "✅ Backend tests passed (${BACKEND_TESTS})"
+  elif [ "$BACKEND_TESTS" = "full" ]; then
     echo ""
-    echo "⚠️  Backend tests failed — retrying once (Node.js IPC fluke workaround)..."
+    echo "⚠️  Full suite failed — retrying once (Node.js IPC fluke workaround)..."
     echo ""
     if docker exec aishacrm-backend npm test 2>&1; then
       echo "✅ Backend tests passed on retry"
     else
       echo ""
-      echo "⚠️  Backend tests failed again — running stable grouped suite (test:safe)..."
+      echo "⚠️  Full suite failed again — falling back to test:safe..."
       echo ""
       if docker exec aishacrm-backend npm run test:safe 2>&1; then
         echo "✅ Backend tests passed via test:safe"
       else
         echo ""
-        echo "❌ BACKEND TESTS FAILED — fix errors above before pushing"
+        echo "❌ BACKEND TESTS FAILED — fix errors above, or push with BACKEND_TESTS=precheck"
         exit 1
       fi
     fi
+  else
+    echo ""
+    echo "❌ BACKEND TESTS FAILED (${BACKEND_TESTS}) — fix errors above, or escalate/de-escalate via BACKEND_TESTS env var"
+    exit 1
   fi
 else
-  echo "   ⚠️  Docker container aishacrm-backend not running — skipping backend tests"
-  echo "   To run: docker compose up -d backend"
+  echo "   ⚠️  Docker container aishacrm-backend not running — running test:precheck on host..."
+  echo "   (precheck has no service dependencies; safe/full need: docker compose up -d backend)"
+  echo ""
+  if (cd backend && npm run test:precheck) 2>&1; then
+    echo "✅ Backend tests passed (precheck, host)"
+  else
+    echo ""
+    echo "❌ PRECHECK FAILED ON HOST — fix errors above before pushing"
+    exit 1
+  fi
 fi
 echo ""
 
