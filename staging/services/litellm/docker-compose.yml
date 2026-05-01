@@ -1,0 +1,74 @@
+# Staging LiteLLM — Coolify-native build target on the Staging server (VPS-1).
+#
+# Mirror of `prod/01-litellm/docker-compose.yml`. Same build/deploy pattern,
+# just on the Staging server with `stg_stg` Doppler config and the
+# `staging-aishanet` external network. Deploys side-by-side with the
+# manually-deployed `aishacrm-litellm-staging` container during the
+# Coolify-pattern validation soak; backend cutover is a Doppler env-var
+# flip on `stg_stg.LITELLM_BASE_URL`.
+#
+# Why this exists: the Phase 2 prod-litellm migration to Hetzner was deployed
+# WITHOUT first validating the Coolify-native build pattern in staging. This
+# compose file rectifies that gap. The pattern (build: context: ., DNS alias
+# decoupled from container_name, side-by-side service-name namespacing) is
+# identical to the prod version so any quirks surface here first going
+# forward.
+
+services:
+  # Service name `litellm-coolify` (NOT `litellm`) so it doesn't collide
+  # with the manually-deployed `aishacrm-litellm-staging` on the shared
+  # `staging-aishanet` network. Coolify v4 ignores `container_name`, so
+  # the auto-generated container will be something like
+  # `litellm-coolify-<app-uuid>-<suffix>`. Backend reaches this stack at
+  # http://litellm-coolify:4000 (alias on the network — see networks: block).
+  litellm-coolify:
+    # Local build from OneDev clone — no GHCR image dependency.
+    #
+    # `context: .` (NOT `../..`) because Coolify v4 invokes compose with
+    # `--project-directory <artifacts-root>` and resolves relative paths
+    # against that, NOT the compose file's directory. `..` segments resolve
+    # outside the artifacts tree (`/litellm/...`) and the build fails with
+    # "lstat /litellm: no such file or directory". Documented and tested
+    # in detail on prod/01-litellm/docker-compose.yml.
+    image: aishacrm-litellm-staging:coolify
+    build:
+      context: .
+      dockerfile: litellm/Dockerfile
+    container_name: aishacrm-litellm-staging-coolify
+    restart: unless-stopped
+    # Match the manually-deployed sibling's mem cap so both fit during soak.
+    mem_limit: 384m
+    mem_reservation: 192m
+    environment:
+      # Doppler injects LITELLM_MASTER_KEY + provider keys at runtime
+      # via `stg_stg` (NOT prd_prd — staging isolation).
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      staging-aishanet:
+        # Explicit alias decouples DNS hostname from Coolify's
+        # auto-generated container_name. Backend resolves `litellm-coolify`
+        # to this container regardless of how Coolify names it.
+        aliases:
+          - litellm-coolify
+
+networks:
+  # External network shared with the manually-deployed staging stack
+  # (docker-compose.staging.yml). Cloudflared + backend-staging + frontend-staging
+  # all live here. Coolify must NOT recreate this network.
+  staging-aishanet:
+    external: true
