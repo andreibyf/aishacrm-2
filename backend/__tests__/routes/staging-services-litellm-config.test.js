@@ -29,17 +29,17 @@ function getServiceBlock(text, serviceName) {
   return after.slice(0, end);
 }
 
-const block = getServiceBlock(compose, 'litellm-coolify');
+const block = getServiceBlock(compose, 'litellm');
 
-test('staging-litellm: file is loadable + has litellm-coolify service block', () => {
-  assert.ok(block.length > 200, 'litellm-coolify service block missing or truncated');
+test('staging-litellm: file is loadable + has litellm service block', () => {
+  assert.ok(block.length > 200, 'litellm service block missing or truncated');
 });
 
-test('staging-litellm: service name is `litellm-coolify` (not `litellm`)', () => {
-  assert.match(compose, /^\s{2}litellm-coolify:\s*$/m,
-    'service must be `litellm-coolify` to avoid DNS collision with the manually-deployed staging litellm');
-  assert.doesNotMatch(compose, /^\s{2}litellm:\s*$/m,
-    'service must NOT be named `litellm` — collides with the staging stack');
+test('staging-litellm: service name is `litellm` (replaces retired GHCR sibling)', () => {
+  // After the GHCR-pulled aishacrm-litellm-staging is retired, the Coolify-
+  // built container claims the service name `litellm` on staging-aishanet.
+  // Backend's LITELLM_BASE_URL=http://litellm:4000 resolves to this one.
+  assert.match(compose, /^\s{2}litellm:\s*$/m, 'service must be named `litellm`');
 });
 
 test('staging-litellm: build context is `.` (not ../..) — Coolify v4 quirk', () => {
@@ -74,10 +74,10 @@ test('staging-litellm: joins external staging-aishanet (not prod aishanet)', () 
     'service must NOT join the bare `aishanet` network');
 });
 
-test('staging-litellm: explicit DNS alias `litellm-coolify`', () => {
+test('staging-litellm: explicit DNS alias `litellm`', () => {
   assert.match(block,
-    /networks:\s*\n\s+staging-aishanet:\s*\n[\s\S]+?aliases:\s*\n\s+-\s*litellm-coolify/m,
-    'aliases: [- litellm-coolify] gives backend a stable DNS hostname independent of Coolify-generated container_name');
+    /networks:\s*\n\s+staging-aishanet:\s*\n[\s\S]+?aliases:\s*\n\s+-\s*litellm\s*$/m,
+    'aliases: [- litellm] gives backend the DNS hostname it expects, independent of Coolify-generated container_name');
 });
 
 test('staging-litellm: top-level network declares staging-aishanet as external + correct host name', () => {

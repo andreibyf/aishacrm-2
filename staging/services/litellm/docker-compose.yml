@@ -15,13 +15,12 @@
 # forward.
 
 services:
-  # Service name `litellm-coolify` (NOT `litellm`) so it doesn't collide
-  # with the manually-deployed `aishacrm-litellm-staging` on the shared
-  # `staging-aishanet` network. Coolify v4 ignores `container_name`, so
-  # the auto-generated container will be something like
-  # `litellm-coolify-<app-uuid>-<suffix>`. Backend reaches this stack at
-  # http://litellm-coolify:4000 (alias on the network — see networks: block).
-  litellm-coolify:
+  # Service name `litellm` AND alias `litellm` on staging-aishanet — backend
+  # keeps its existing `LITELLM_BASE_URL=http://litellm:4000` config and
+  # Docker DNS resolves `litellm` to this Coolify-built container. The
+  # manually-deployed aishacrm-litellm-staging that previously claimed this
+  # name is retired before this stack is deployed (see deploy runbook).
+  litellm:
     # Local build from OneDev clone — no GHCR image dependency.
     #
     # `context: .` (NOT `../..`) because Coolify v4 invokes compose with
@@ -60,11 +59,12 @@ services:
         max-file: "3"
     networks:
       staging-aishanet:
-        # Explicit alias decouples DNS hostname from Coolify's
-        # auto-generated container_name. Backend resolves `litellm-coolify`
-        # to this container regardless of how Coolify names it.
+        # Explicit alias `litellm` lets backend reach this container at the
+        # same DNS name the retired GHCR sibling used to serve from. The
+        # alias is independent of Coolify's auto-generated container_name
+        # (which has the app UUID baked in).
         aliases:
-          - litellm-coolify
+          - litellm
 
 networks:
   # External network shared with the manually-deployed staging stack.
