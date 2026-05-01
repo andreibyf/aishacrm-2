@@ -88,7 +88,9 @@ run_group "braid"       __tests__/braid/*.test.js
 # Compose / deploy-contract static analysis (no services needed):
 run_group "deploy-config" \
     __tests__/routes/calcom-vps2-deploy-config.test.js \
-    __tests__/routes/staging-services-calcom-config.test.js
+    __tests__/routes/staging-services-calcom-config.test.js \
+    __tests__/routes/prod-compose-mem-limits.test.js \
+    __tests__/routes/prod-litellm-coolify-config.test.js
 
 echo ""
 echo "==========================================================="
