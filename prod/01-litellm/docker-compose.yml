@@ -1,0 +1,75 @@
+# Prod LiteLLM — Coolify-native build target on Hetzner.
+#
+# Phase 2 of the GHCR-to-Coolify migration (docs/deployment/COOLIFY_MIGRATION.md):
+# this is the FIRST service to migrate from `image: ghcr.io/...` to a
+# locally-built image on the Hetzner host. Mirrors the pattern proved out in
+# `staging/services/calcom/`.
+#
+# Deploy model:
+#   - Coolify Application "prod-litellm" on the `hetzner-prod` server points at
+#     OneDev (https://repo.aishacrm.com/aishacrm.git) with this compose file as
+#     the docker_compose_location.
+#   - Coolify clones the repo into the application's working dir on Hetzner,
+#     then `docker compose up -d` builds + runs.
+#   - Container `aishacrm-litellm-coolify` runs ALONGSIDE the existing
+#     GHCR-based `aishacrm-litellm` container during the soak window. Both
+#     join the external `aishanet` network. The backend reaches them via
+#     LITELLM_BASE_URL (Doppler-injected) — flipping that env var is the
+#     cutover trigger.
+#   - After ≥48h soak with the new container healthy, you flip
+#     `LITELLM_BASE_URL` from `http://litellm:4000` (GHCR-built) to
+#     `http://aishacrm-litellm-coolify:4000` (Coolify-built), restart backend.
+#   - After 48h post-cutover stability, the old `litellm` service entry can
+#     be removed from `docker-compose.prod.yml` and the GHCR image deleted.
+#
+# Project namespace isolation:
+#   When deploying via Coolify, the project name is auto-derived from the
+#   Coolify Application UUID — it will NOT collide with the prod compose's
+#   `aishacrm` project namespace (which is what took down prod calcom on
+#   2026-05-01 when staging-calcom was deployed without --project-name).
+#   That isolation is automatic with Coolify; no manual flag needed here.
+
+services:
+  litellm:
+    # Local build from OneDev clone — no GHCR image dependency.
+    image: aishacrm-litellm:coolify
+    build:
+      context: ../..
+      dockerfile: litellm/Dockerfile
+    container_name: aishacrm-litellm-coolify
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    # Match the GHCR-deployed sibling's mem cap so the two containers running
+    # side-by-side during soak fit under the host's 8 GB budget.
+    mem_limit: 384m
+    mem_reservation: 192m
+    environment:
+      # Doppler injects LITELLM_MASTER_KEY + provider keys at runtime.
+      # Note: this is the prd_prd Doppler config — same as the GHCR-deployed
+      # sibling. Both containers see identical env, so cutover is just a
+      # change of LITELLM_BASE_URL on the backend side.
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - aishanet
+
+networks:
+  # External network shared with the GHCR-deployed prod stack
+  # (docker-compose.prod.yml). Cloudflared + backend + frontend all live here.
+  # Coolify must NOT recreate this network — it's managed by the prod compose.
+  aishanet:
+    external: true

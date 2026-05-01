@@ -2,12 +2,13 @@ services:
   # Redis/Valkey - Ephemeral memory layer for agent sessions
   redis-memory:
     image: redis:7-alpine
+    cgroup_parent: aishacrm.slice
+    # Container cap > Redis maxmemory (256m) to leave headroom for Redis
+    # internals, RDB snapshot fork on `--save 60 1`, and IO threads.
+    mem_limit: 384m
+    mem_reservation: 256m
     container_name: aishacrm-redis-memory
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -26,12 +27,13 @@ services:
   # Redis Cache - API response caching
   redis-cache:
     image: redis:7-alpine
+    cgroup_parent: aishacrm.slice
+    # Container cap > Redis maxmemory (512m) for IO threads + transient overhead.
+    # No RDB persistence (--save "") so no fork-time spike to budget for.
+    mem_limit: 640m
+    mem_reservation: 256m
     container_name: aishacrm-redis-cache
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
     ports:
       - "127.0.0.1:6380:6379"
     volumes:
@@ -47,12 +49,15 @@ services:
   # Backend API
   backend:
     image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    cgroup_parent: aishacrm.slice
+    # 3.5g cap (was 4g) to share Hetzner 8GB headroom for Coolify-native
+    # builds in Phase 2. NODE_OPTIONS=--max-old-space-size=3072 sets V8 heap
+    # ceiling at 3GB; 500MB headroom covers libuv, native deps (puppeteer
+    # Chromium pages), and Doppler subprocess.
+    mem_limit: 3584m
+    mem_reservation: 1g
     container_name: aishacrm-backend
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '2.5'  # Priority service - AI, API, CARE
     depends_on:
       redis-memory:
         condition: service_healthy
@@ -66,7 +71,7 @@ services:
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
-      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - NODE_OPTIONS=--max-old-space-size=3072 --dns-result-order=ipv4first
       - UV_THREADPOOL_SIZE=2
       - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://scheduler.aishacrm.com}
       # Override Docker network URLs
@@ -103,12 +108,14 @@ services:
   # Communications worker
   aisha-comms:
     image: ghcr.io/andreibyf/aishacrm-2-backend:latest
+    cgroup_parent: aishacrm.slice
+    # Worker process; loads same image as backend but only runs the
+    # communications poll loop. Cap well below backend's 3.5g — observed
+    # steady-state ~150-300 MiB.
+    mem_limit: 768m
+    mem_reservation: 384m
     container_name: aishacrm-comms
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
     depends_on:
       backend:
         condition: service_healthy
@@ -122,7 +129,7 @@ services:
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
       - NODE_ENV=production
-      - NODE_OPTIONS=${NODE_OPTIONS:---dns-result-order=ipv4first}
+      - NODE_OPTIONS=--max-old-space-size=3072 --dns-result-order=ipv4first
       - UV_THREADPOOL_SIZE=2
       - REDIS_URL=redis://redis-memory:6379
       - REDIS_CACHE_URL=redis://redis-cache:6379
@@ -145,12 +152,12 @@ services:
   # LiteLLM - AI model proxy and router (OpenAI-compatible API)
   litellm:
     image: ghcr.io/andreibyf/aishacrm-2-litellm:latest
+    cgroup_parent: aishacrm.slice
+    # Python proxy with provider SDKs loaded; observed ~250-300 MiB steady.
+    mem_limit: 384m
+    mem_reservation: 192m
     container_name: aishacrm-litellm
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.4'
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
@@ -175,12 +182,12 @@ services:
   # Frontend
   frontend:
     image: ghcr.io/andreibyf/aishacrm-2-frontend:latest
+    cgroup_parent: aishacrm.slice
+    # Static asset serve (Vite-built bundle behind nginx); idles ~30-50 MiB.
+    mem_limit: 256m
+    mem_reservation: 128m
     container_name: aishacrm-frontend
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.5'  # Priority service - user-facing
     depends_on:
       backend:
         condition: service_started
@@ -203,6 +210,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    # Without an explicit `networks:` block, Compose creates `<project>_default`
+    # and ATTACHES THE CONTAINER ONLY TO THAT NETWORK. Every other service in
+    # this file is on `aishanet` (used by cloudflared to reach origins via
+    # docker DNS), so omitting the declaration here silently breaks tunnel
+    # ingress: cloudflared resolves `aishacrm-frontend` against aishanet's
+    # embedded DNS and gets NXDOMAIN ("server misbehaving" in cloudflared
+    # log output). Live-recovery on Hetzner ran `docker network connect
+    # aishanet aishacrm-frontend`; this declaration makes the fix survive
+    # any future `up -d --force-recreate`.
+    networks:
+      - default
+      - aishanet
 
   # n8n - Workflow automation platform (OPTIONAL - not part of core CRM)
   # To start n8n: docker compose -f docker-compose.prod.yml --profile workflows up -d
@@ -210,6 +229,7 @@ services:
   # Used for building custom workflows that can call CRM APIs via webhooks
   n8n:
     image: n8nio/n8n:latest
+    cgroup_parent: aishacrm.slice
     container_name: aishacrm-n8n
     restart: unless-stopped
     profiles: [workflows]
@@ -246,6 +266,7 @@ services:
   # To start: docker compose -f docker-compose.prod.yml --profile workflows up -d
   n8n-proxy:
     image: nginx:alpine
+    cgroup_parent: aishacrm.slice
     container_name: aishacrm-n8n-proxy
     restart: unless-stopped
     profiles: [workflows]
@@ -296,10 +317,6 @@ services:
   calcom:
     image: calcom/cal.com:latest
     container_name: aishacrm-calcom
-    deploy:
-      resources:
-        limits:
-          cpus: '0.2'  # Low usage, mostly idle
     # Override default start.sh to skip seed-app-store.ts on every boot (causes CPU spike).
     # Seed only needs to run once on first install. Apps already seeded and persisted in DB.
     command: ["sh", "-c", "scripts/replace-placeholder.sh $BUILT_NEXT_PUBLIC_WEBAPP_URL $NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]

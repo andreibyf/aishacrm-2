@@ -10,6 +10,16 @@ services:
     restart: unless-stopped
     networks:
       - aishanet
+    # 5432 must be reachable from VPS-1's backend so the tenant-integrations and
+    # calcom-sync routes can run their auto-provisioning queries (createCalcomUser,
+    # ensureCalcomEventType, ensureCalcomWebhook, etc — see backend/lib/calcomDb.js
+    # and backend/routes/tenant-integrations.js). The public port mapping is the
+    # short-term fix; the long-term plan is to put VPS-1 ↔ VPS-2 traffic on a
+    # private mesh (Tailscale/Wireguard) and revert this back to internal-only.
+    # Lock down with UFW on VPS-2 to allow port 5432 only from VPS-1's IP
+    # (147.189.173.237) — see scripts/ufw-vps2.sh in repo root once added.
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
       POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
@@ -28,14 +38,29 @@ services:
         max-file: "3"
 
   # Cal.com scheduling service
+  # Pinned to v6.2.0 (released 2026-03-02) — same digest staging proved out.
+  # Why pinned (not :latest): modern Docker (28.2+) rejects the legacy v1
+  # manifest schema that v5-era cal.com images shipped with. The v5 pin
+  # `0aca8203...` only kept working on VPS-2 because the image was cached;
+  # any `docker image prune` would have broken prod calcom. v6.2.0 ships
+  # an OCI v2 manifest. To upgrade further: pull new digest, validate
+  # Host table + _user_eventtype + ALLOWED_HOSTNAMES against this config,
+  # then update the @sha256 below.
   calcom:
-    image: calcom/cal.com:latest
+    image: calcom/cal.com@sha256:ace3bb1219fb7306585ab9f4d94d41af7ee064c343db0498173436bbe857bd49
     container_name: aishacrm-calcom
     deploy:
       resources:
         limits:
           cpus: '2.0'  # More headroom on VPS-2
-    command: ["sh", "-c", "scripts/replace-placeholder.sh $BUILT_NEXT_PUBLIC_WEBAPP_URL $NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
+    # `$$VAR` (double-dollar) escapes Compose's variable interpolation so the
+    # literal `$VAR` reaches `sh -c`, which expands it against the CONTAINER's
+    # env at runtime. Compose interpolation happens at render time against the
+    # HOST env / .env file, where these vars are not defined — using `$VAR`
+    # there silently expanded to empty strings and the substitution was a no-op
+    # (left 767 instances of http://localhost:3000 in the bundle, surfacing as
+    # the "login redirects to localhost:3000" symptom in 2026-04 outage).
+    command: ["sh", "-c", "scripts/replace-placeholder.sh $$BUILT_NEXT_PUBLIC_WEBAPP_URL $$NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
     restart: unless-stopped
     depends_on:
       calcom-db:
@@ -51,15 +76,29 @@ services:
       - NEXTAUTH_URL_INTERNAL=http://calcom:3000
       - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
       - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://scheduler.aishacrm.com}
-      - ALLOWED_HOSTNAMES=${CALCOM_ALLOWED_HOSTNAMES:-["scheduler.aishacrm.com"]}
+      # The `calcom/cal.com:latest` image bakes BUILT_NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+      # into the static Next.js bundle at build time. The replace-placeholder.sh
+      # script in `command:` swaps that for NEXT_PUBLIC_WEBAPP_URL on every start,
+      # but it needs both vars present in the container env. Hardcoding the FROM
+      # value here matches the upstream image and survives image bumps that keep
+      # the same default placeholder.
+      - BUILT_NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+      # Cal.com parses this as `JSON.parse('[' + ALLOWED_HOSTNAMES + ']')`, so the
+      # value MUST contain the literal double-quote characters. YAML single-quote
+      # wrap preserves them verbatim. Compose `${VAR:-default}` interpolation
+      # strips inner double-quotes from the default expression, so we hardcode the
+      # value rather than templating it. To override, edit this line directly.
+      - 'ALLOWED_HOSTNAMES="scheduler.aishacrm.com"'
       - CALCOM_LICENSE_KEY=59c0bed7-8b21-4280-8514-e022fbfc24c7
       - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
       - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
       - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
       - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
       - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
-    ports:
-      - "3002:3000"  # Expose for Coolify proxy routing
+    # No host port mapping. cloudflared on VPS-2 (added below) reaches calcom
+    # through the docker-internal aishanet network at http://calcom:3000.
+    # Re-add `ports: - "3002:3000"` only if you need to access calcom directly
+    # from VPS-1 again (e.g., during a tunnel outage).
     healthcheck:
       test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
       interval: 30s
@@ -94,30 +133,64 @@ services:
       retries: 3
       start_period: 10s
 
-  # Hawser - Docker monitoring agent for Dockhand
-  # Standard Mode: Agent listens for connections from Dockhand
-  # Official docs: https://github.com/Finsys/hawser
-  # Token from Dockhand: Settings > Environments > Hawser Standard
+  # cloudflared connector for tunnel ecff23d3-890e-4bea-b59e-aacbafae4b9c
+  # ("aishacrm-vps2"). Routes scheduler.aishacrm.com -> http://calcom:3000 over
+  # the docker-internal aishanet network, eliminating the public-IP HTTP hop
+  # that VPS-1's old tunnel used to do (scheduler.aishacrm.com -> 147.189.168.164:3002).
+  # No healthcheck — cloudflared image is distroless (no shell), so the standard
+  # CMD-SHELL pattern errors. cloudflared exits cleanly on persistent connection
+  # failure and Docker's restart-policy retries; that's the upstream-recommended
+  # pattern. TUNNEL_TOKEN_VPS2 lives in /opt/aishacrm/.env, sourced from Doppler
+  # prd_prd. To rotate: rotate in Cloudflare dashboard -> update Doppler ->
+  # `docker compose up -d --force-recreate cloudflared`.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: aishacrm-cloudflared-vps2
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+    # `--protocol http2` forces TCP-based HTTP/2 transport instead of the default
+    # QUIC over UDP. On budget VPS networks (Zap included), upstream NAT/firewall
+    # devices time out idle UDP flows after ~30-60s, causing all 4 tunnel
+    # connections to fail simultaneously with "no recent network activity" and
+    # users seeing scheduler.aishacrm.com flap (down for ~8s while reconnecting).
+    # HTTP/2 has built-in TCP keepalives and survives NAT idle timeouts cleanly.
+    # Cost: minor latency overhead vs QUIC (TCP handshake + slow-start), but for
+    # tunnel control-plane traffic it's negligible.
+    command: tunnel --no-autoupdate --protocol http2 --metrics 0.0.0.0:2000 run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN_VPS2}
+    networks:
+      - aishanet
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Hawser - Docker monitoring for Dockhand visibility.
+  # Switched from ghcr.io/finsys/hawser:latest to mjohnsongp/hawser:latest in
+  # 2026-04 because finsys image fails on Docker 29.x (rejects the newer Engine
+  # API version returned by the host). The mjohnsongp community fork carries
+  # the API-version compat fix. Container name kept at aishacrm-hawser-vps2 on
+  # VPS-2 (live container is named `hawser` because the live compose uses that
+  # short name — repo aligns to live).
   hawser:
-    image: ghcr.io/finsys/hawser:latest
-    container_name: aishacrm-hawser-vps2
+    image: mjohnsongp/hawser:latest
+    container_name: hawser
     restart: unless-stopped
     networks:
       - aishanet
     ports:
-      - "2376:2376"  # Standard Hawser port
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /opt/hawser-stacks:/opt/hawser-stacks  # Host path for compose stacks with relative paths
     environment:
-      - PORT=2376
-      - TOKEN=${HAWSER_TOKEN_VPS2}
-      - DOCKER_SOCKET=/var/run/docker.sock
-      - STACKS_DIR=/opt/hawser-stacks
-      - AGENT_NAME=vps2-aishacrm
-      - LOG_LEVEL=info
+      - HAWSER_TOKEN=${HAWSER_TOKEN_VPS2}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:2376/_hawser/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
