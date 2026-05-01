@@ -123,15 +123,13 @@ services:
       - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
       - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
       - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
-    # Host port 3004 exposes calcom for the cross-VPS HTTP hop:
-    # Staging server's cloudflared (aishacrm-tunnel, /etc/cloudflared/config.yml)
-    # routes `staging-scheduler.aishacrm.com → http://147.189.168.164:3004`
-    # over the public WAN. UFW on VPS-2 restricts port 3004 to Staging's IP only.
-    # If we later move staging-scheduler ingress to the aishacrm-vps2 tunnel
-    # (which has direct Docker DNS access to this container), this port mapping
-    # becomes redundant and can be removed; until then, it's required.
-    ports:
-      - "3004:3000"
+    # No host port mapping. The aishacrm-vps2 cloudflared tunnel reaches calcom
+    # through the docker-internal `aishanet-staging-calcom` network (cloudflared
+    # is connected to that network alongside `aishacrm_aishanet`). This was
+    # previously `ports: - "3004:3000"` to support a cross-VPS HTTP hop from
+    # Staging server's cloudflared, before the staging-scheduler ingress was
+    # moved to the aishacrm-vps2 tunnel on 2026-05-01. Removing the host port
+    # eliminates the public-WAN exposure of calcom on VPS-2.
     healthcheck:
       test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
       interval: 30s

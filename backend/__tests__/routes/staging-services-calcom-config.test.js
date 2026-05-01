@@ -77,17 +77,16 @@ test('staging compose: calcom-db container_name ends in -staging', () => {
   );
 });
 
-test('staging compose: calcom host port is 3004 (cross-VPS hop from Staging cloudflared)', () => {
-  // Staging's cloudflared (aishacrm-tunnel) on VPS-1 reaches VPS-2's calcom
-  // over the public WAN at http://147.189.168.164:3004. Port 3004 chosen to
-  // avoid prod calcom's host port 3002 and the VPS-1 staging stack's host
-  // ports (5xxx range). UFW on VPS-2 restricts to Staging's IP.
+test('staging compose: calcom does NOT publish a host port (cloudflared reaches it via Docker DNS)', () => {
+  // After the 2026-05-01 cutover, staging-scheduler.aishacrm.com routes via
+  // the aishacrm-vps2 tunnel which has Docker DNS access to the
+  // `aishanet-staging-calcom` network. No host port mapping is needed and
+  // exposing one would unnecessarily put calcom on the public WAN.
   const portsBlock = calcomBlock.match(/^\s+ports:\n((?:\s+- .+\n)+)/m);
-  assert.ok(portsBlock, 'calcom must declare a host ports block for the cross-VPS HTTP hop');
-  assert.match(
-    portsBlock[1],
-    /"?3004:3000"?/,
-    'calcom must publish 3004:3000 — Staging cloudflared routes staging-scheduler.aishacrm.com → http://147.189.168.164:3004',
+  assert.equal(
+    portsBlock,
+    null,
+    'calcom must NOT declare a host ports block — cloudflared on VPS-2 reaches it via Docker DNS',
   );
 });
 
