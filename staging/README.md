@@ -36,28 +36,32 @@ Substitutes that capture most of staging's value at a fraction of the cost:
 
 ```
 staging/
-├── 01-backend-heavy/       # backend + redis-memory + redis-cache
-├── 02-app-fast/            # frontend + comms worker
-├── 03-ai-infra/            # litellm + ollama
-├── 04-braid/               # braid-mcp-server + 2 worker nodes
-├── 05-scheduling-rare/     # cal.com + dedicated postgres  (OPT-IN, paused by default)
+├── 01-backend-heavy/       # backend + redis-memory + redis-cache  (Coolify Application)
+├── 02-app-fast/            # frontend + comms worker               (Coolify Application)
+├── 03-ai-infra/            # litellm + ollama                      (Coolify Application)
+├── 04-braid/               # braid-mcp-server + 2 worker nodes     (Coolify Application)
+├── 06-tunnel/              # cloudflared                           (Coolify Application)
+├── services/
+│   └── calcom/             # staging Cal.com — runs on VPS-2 (Services), NOT Coolify
+│       ├── docker-compose.yml
+│       └── README.md       # deploy/teardown instructions
 ├── scripts/
-│   ├── validate-compose.sh # local lint — run before pushing
-│   └── post-deploy-check.sh# post-deploy smoke tests on App VPS
+│   ├── provision-coolify-onedev.py # provisioner for groups 1–4 + 6
+│   ├── bootstrap-stg_stg.sh        # Doppler config bootstrap
+│   ├── validate-compose.sh         # local lint — run before pushing
+│   └── post-deploy-check.sh        # post-deploy smoke tests on App VPS
 └── .env.example            # required Coolify env-var reference
 ```
 
-### Group 5 (scheduling-rare) is opt-in
+### Cal.com runs on VPS-2 (Services server), not on Staging
 
-Cal.com is third-party infrastructure with its own release cadence, image schema quirks, env-var parsing rules, and bootstrap behavior. Maintaining a healthy staging instance has high friction (per-release manifest schema changes, ALLOWED_HOSTNAMES quote handling, postgres init-script bind-mount workarounds) and adds nothing to validating the AiSHA deploy pipeline itself — backends just talk to it via HTTP, and a missing scheduler is a valid staging state.
+Until 2026-05-01, staging Cal.com ran on Staging server (VPS-1) — first as a Coolify Application (`staging/05-scheduling-rare/`), then as a manually-deployed `docker-compose.staging-calcom.yml` at repo root. Both versions are now **deleted**. Calcom moved to **VPS-2 (the Services server)** to mirror the prod topology (where `scheduler.aishacrm.com` lives on VPS-2 alongside Coolify, OneDev, Metabase, Uptime Kuma).
 
-The Coolify resource for `staging-scheduling-rare` is therefore **paused by default**. The compose file, the custom `aishacrm-2-calcom-db` GHCR image, and the env wiring all remain in the repo so you can resume any time:
+**Why the move:** Staging server idled at load avg 8.2 with calcom contributing ~1.2 GiB RSS + a Next.js process tree that pushed the box past its 5-core slice cap. Co-locating both calcom instances on VPS-2 (which has 8 cores, dynamic RAM, low load) frees Staging server for the app/api/ai-infra/braid groups and aligns the architecture across environments.
 
-1. Coolify UI → `staging-scheduling-rare` → Start
-2. Set the required Doppler secrets (CALCOM*DB_PASSWORD, CALCOM_NEXTAUTH_SECRET, CALCOM_ENCRYPTION_KEY, CALCOM_SMTP*\*) in `stg_stg`
-3. First boot will run postgres `initdb` + Cal.com Prisma migrations (~60–90s) — give the calcom service `start_period` time to pass
+**Where to find it:** [`staging/services/calcom/`](services/calcom/) — compose file + deploy/teardown runbook. Production calcom is at [`docker-compose.vps2.yml`](../docker-compose.vps2.yml).
 
-Production keeps Cal.com behind the same `profiles: [scheduling]` opt-in pattern in `docker-compose.prod.yml`.
+**Critical operational rule** (the 2026-05-01 outage that recreated prod calcom under the staging definition is documented in CHANGELOG): the staging calcom compose declares the same SERVICE names (`calcom`, `calcom-db`) as prod's compose. Always deploy the staging compose under an explicit project namespace (`docker compose --project-name staging-calcom …`) and from a separate directory (`/opt/staging-calcom/` on VPS-2) so the project labels don't collide with prod's `aishacrm` namespace.
 
 Each group is **one Coolify "Docker Compose" resource** pointing at its respective `docker-compose.yml`. Coolify clones this repo, substitutes env vars, and runs `docker compose up` on the App VPS.
 
@@ -65,20 +69,20 @@ Each group is **one Coolify "Docker Compose" resource** pointing at its respecti
 
 All container names are prefixed `staging-`. All inter-service traffic flows over the `staging-aishanet` external network — **no host ports** are used for cross-service calls.
 
-| Group | Container                       | Internal port | Host port         | Public URL                               |
-| ----- | ------------------------------- | ------------- | ----------------- | ---------------------------------------- |
-| 1     | `staging-aishacrm-redis-memory` | 6379          | `127.0.0.1:6479`  | (loopback, debug only)                   |
-| 1     | `staging-aishacrm-redis-cache`  | 6379          | `127.0.0.1:6480`  | (loopback, debug only)                   |
-| 1     | `staging-aishacrm-backend`      | 3001          | (none — Traefik)  | `https://staging-api.aishacrm.com`       |
-| 2     | `staging-aishacrm-frontend`     | 3000          | (none — Traefik)  | `https://staging-app.aishacrm.com`       |
-| 2     | `staging-aishacrm-comms`        | n/a           | (none — worker)   | n/a                                      |
-| 3     | `staging-aishacrm-litellm`      | 4000          | (none — internal) | n/a                                      |
-| 3     | `staging-aishacrm-ollama`       | 11434         | (none — internal) | n/a                                      |
-| 4     | `staging-braid-mcp-server`      | 8000          | (none — internal) | n/a                                      |
-| 4     | `staging-braid-mcp-1`           | 8000          | (none — internal) | n/a                                      |
-| 4     | `staging-braid-mcp-2`           | 8000          | (none — internal) | n/a                                      |
-| 5     | `staging-aishacrm-calcom-db`    | 5432          | (none — internal) | n/a                                      |
-| 5     | `staging-aishacrm-calcom`       | 3000          | (none — Traefik)  | `https://staging-scheduler.aishacrm.com` |
+| Group | Container                       | Internal port | Host port         | Public URL                         |
+| ----- | ------------------------------- | ------------- | ----------------- | ---------------------------------- |
+| 1     | `staging-aishacrm-redis-memory` | 6379          | `127.0.0.1:6479`  | (loopback, debug only)             |
+| 1     | `staging-aishacrm-redis-cache`  | 6379          | `127.0.0.1:6480`  | (loopback, debug only)             |
+| 1     | `staging-aishacrm-backend`      | 3001          | (none — Traefik)  | `https://staging-api.aishacrm.com` |
+| 2     | `staging-aishacrm-frontend`     | 3000          | (none — Traefik)  | `https://staging-app.aishacrm.com` |
+| 2     | `staging-aishacrm-comms`        | n/a           | (none — worker)   | n/a                                |
+| 3     | `staging-aishacrm-litellm`      | 4000          | (none — internal) | n/a                                |
+| 3     | `staging-aishacrm-ollama`       | 11434         | (none — internal) | n/a                                |
+| 4     | `staging-braid-mcp-server`      | 8000          | (none — internal) | n/a                                |
+| 4     | `staging-braid-mcp-1`           | 8000          | (none — internal) | n/a                                |
+| 4     | `staging-braid-mcp-2`           | 8000          | (none — internal) | n/a                                |
+
+**Calcom for staging lives on VPS-2** (Services server) — see [`staging/services/calcom/README.md`](services/calcom/README.md). Containers there: `aishacrm-calcom-staging` (host port `3004`, served by Staging cloudflared via cross-VPS HTTP hop) and `aishacrm-calcom-db-staging` (host port `5433`, reachable from Staging backend over the public WAN with UFW restricted to Staging's IP). `staging-scheduler.aishacrm.com` resolves through the `aishacrm-tunnel` ingress on Staging server which then forwards to `http://147.189.168.164:3004`.
 
 **No port collides with production** (4000, 4001, 6379, 6380, 8000, 3002, 4002, 11436).
 
@@ -137,8 +141,8 @@ For **each group**, in Coolify (on the Coolify VPS):
 2. **Source**: GitHub → `andreibyf/aishacrm-2` → branch `main` (or a dedicated `staging` branch — see Branch strategy below)
 3. **Compose file path**: `staging/0X-<group>/docker-compose.yml`
 4. **Server**: select the App VPS (already configured per the user's setup)
-5. **Domains** (group 1, 2, 5 only): paste the FQDN from the table above
-6. **Environment variables**: copy from `staging/.env.example`, fill in real values. **`DOPPLER_TOKEN` is required on all 5.**
+5. **Domains** (groups 1 and 2 only — group 5/calcom is no longer Coolify-managed): paste the FQDN from the table above
+6. **Environment variables**: copy from `staging/.env.example`, fill in real values. **`DOPPLER_TOKEN` is required on all groups except 06-tunnel (which uses `TUNNEL_TOKEN` only).**
 7. **Deploy**
 
 ## Branch strategy

@@ -1,0 +1,160 @@
+# Staging Cal.com on VPS-2 ("Services" server, 147.189.168.164).
+#
+# Design intent: mirror the prod calcom layout from docker-compose.vps2.yml so that
+# Staging server (VPS-1) can offload calcom and the infrastructure topology matches
+# prod (calcom lives on the Services server in both environments). Calcom DB
+# password / NEXTAUTH_SECRET / encryption key are isolated from prod via Doppler
+# `stg_stg`; network is isolated from prod calcom via its own bridge.
+#
+# !!! CRITICAL — DEPLOY UNDER A DEDICATED COMPOSE PROJECT NAMESPACE !!!
+# This compose declares the same SERVICE names as prod (`calcom`, `calcom-db`).
+# If you bring it up alongside prod's compose under the same project name
+# (e.g. via `docker compose -f staging-calcom.yml up` from /opt/aishacrm/, where
+# the directory-derived project is `aishacrm`), docker-compose v2 will MATCH
+# the prod containers by `(project, service)` pair and RECREATE them under
+# the new staging definition — taking prod calcom DOWN. To prevent this:
+#
+#   1. Deploy from a SEPARATE directory (`/opt/staging-calcom/` recommended), and
+#   2. Pass `--project-name staging-calcom` explicitly on every compose command.
+#
+# Deploy:
+#   ssh root@147.189.168.164 'mkdir -p /opt/staging-calcom'
+#   scp staging/services/calcom/docker-compose.yml \
+#       root@147.189.168.164:/opt/staging-calcom/docker-compose.yml
+#   scp <env_file> root@147.189.168.164:/opt/staging-calcom/.env
+#   ssh root@147.189.168.164 'cd /opt/staging-calcom && \
+#       docker compose --project-name staging-calcom -f docker-compose.yml up -d'
+#
+# After first up, bridge cloudflared to this network so staging-scheduler.aishacrm.com
+# can reach `aishacrm-calcom-staging:3000` via Docker DNS:
+#   ssh root@147.189.168.164 \
+#       'docker network connect aishanet-staging-calcom aishacrm-cloudflared-vps2'
+#
+# Cloudflare ingress (Zero Trust → Tunnels → aishacrm-vps2 → Public Hostnames):
+#   staging-scheduler.aishacrm.com → http://aishacrm-calcom-staging:3000
+#
+# UFW (allow Staging server to reach calcom-db over the public WAN):
+#   ufw allow from 147.189.173.237 to any port 5433 proto tcp \
+#       comment 'staging-calcom-db: Staging VPS-1 only'
+
+# When this compose is brought up via `docker compose --project-name staging-calcom`,
+# Docker prefixes the resulting volume with that project name → final volume is
+# `staging-calcom_staging_calcom_db_data`. The prod compose at `/opt/aishacrm/`
+# uses `aishacrm` project → its volume is `aishacrm_calcom_db_data`. No overlap.
+
+services:
+  # Cal.com PostgreSQL database — isolated from prod calcom-db.
+  calcom-db:
+    image: postgres:15-alpine
+    container_name: aishacrm-calcom-db-staging
+    restart: unless-stopped
+    networks:
+      - aishanet-staging-calcom
+    # 5433 host port (prod calcom-db uses 5432 on this same host). Reachable from
+    # Staging server's backend at 147.189.168.164:5433 — this is what
+    # backend/lib/calcomDb.js's getCalcomDb() pool connects to via Doppler
+    # `stg_stg.CALCOM_DB_URL`. UFW restricts the port to Staging's IP only.
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${CALCOM_DB_USER:-calcom}
+      POSTGRES_PASSWORD: ${CALCOM_DB_PASSWORD}
+      POSTGRES_DB: ${CALCOM_DB_NAME:-calcom}
+    volumes:
+      - staging_calcom_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CALCOM_DB_USER:-calcom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cal.com scheduling service — staging instance.
+  # Image kept on `:latest` to match prod's pinning convention. If a future
+  # image regression breaks staging, pin to a digest here first (validate),
+  # then bump prod's docker-compose.vps2.yml to the same digest.
+  calcom:
+    image: calcom/cal.com:latest
+    container_name: aishacrm-calcom-staging
+    deploy:
+      resources:
+        limits:
+          # 1.5 GiB cap: lower than prod's effective ceiling because VPS-2 hosts
+          # more services after this migration. Calcom idles around 680 MiB RSS,
+          # peaks around 1.2 GiB under traffic per the Staging-side observations.
+          memory: 1536M
+          cpus: '1.5'
+    # `$$VAR` (double-dollar) escape — see docker-compose.vps2.yml:48-54 for
+    # full rationale. Without escape, replace-placeholder.sh runs as no-op
+    # against host env (where these are unset) and the Next.js bundle keeps
+    # `localhost:3000` references that surface as login-redirect failures.
+    command: ["sh", "-c", "scripts/replace-placeholder.sh $$BUILT_NEXT_PUBLIC_WEBAPP_URL $$NEXT_PUBLIC_WEBAPP_URL && npx prisma migrate deploy --schema /calcom/packages/prisma/schema.prisma && yarn start"]
+    restart: unless-stopped
+    depends_on:
+      calcom-db:
+        condition: service_healthy
+    networks:
+      - aishanet-staging-calcom
+    environment:
+      # Service-name resolution: `calcom-db` here (NOT `aishacrm-calcom-db-staging`)
+      # because docker-compose v2 networks use service names, not container names,
+      # for inter-service DNS. Same pattern as prod's compose.
+      - DATABASE_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - DATABASE_DIRECT_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - NEXTAUTH_SECRET=${CALCOM_NEXTAUTH_SECRET}
+      - CALCOM_PUBLIC_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      - NEXTAUTH_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      # NEXTAUTH_URL_INTERNAL uses the docker compose service name (`calcom`),
+      # not the container name. Cal.com's session middleware uses this for
+      # internal callbacks; service name resolves regardless of container name.
+      - NEXTAUTH_URL_INTERNAL=http://calcom:3000
+      - CALENDSO_ENCRYPTION_KEY=${CALCOM_ENCRYPTION_KEY}
+      - NEXT_PUBLIC_WEBAPP_URL=${CALCOM_PUBLIC_URL:-https://staging-scheduler.aishacrm.com}
+      - BUILT_NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000
+      # ALLOWED_HOSTNAMES requires literal double-quotes — see docker-compose.vps2.yml:78-83.
+      - 'ALLOWED_HOSTNAMES="staging-scheduler.aishacrm.com"'
+      - CALCOM_LICENSE_KEY=${CALCOM_LICENSE_KEY:-59c0bed7-8b21-4280-8514-e022fbfc24c7}
+      - EMAIL_FROM=${CALCOM_EMAIL_FROM:-noreply@aishacrm.com}
+      - EMAIL_SERVER_HOST=${CALCOM_SMTP_HOST}
+      - EMAIL_SERVER_PORT=${CALCOM_SMTP_PORT:-587}
+      - EMAIL_SERVER_USER=${CALCOM_SMTP_USER}
+      - EMAIL_SERVER_PASSWORD=${CALCOM_SMTP_PASSWORD}
+    # Host port 3004 exposes calcom for the cross-VPS HTTP hop:
+    # Staging server's cloudflared (aishacrm-tunnel, /etc/cloudflared/config.yml)
+    # routes `staging-scheduler.aishacrm.com → http://147.189.168.164:3004`
+    # over the public WAN. UFW on VPS-2 restricts port 3004 to Staging's IP only.
+    # If we later move staging-scheduler ingress to the aishacrm-vps2 tunnel
+    # (which has direct Docker DNS access to this container), this port mapping
+    # becomes redundant and can be removed; until then, it's required.
+    ports:
+      - "3004:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fL", "http://localhost:3000/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # New isolated bridge network — staging-calcom and prod calcom do NOT share
+  # a network, so their service-name DNS doesn't collide and there's no path
+  # for staging to reach prod's `calcom-db`. The cloudflared container on
+  # VPS-2 is connected to BOTH networks (this one and `aishacrm_aishanet`)
+  # post-deploy, which is what lets it route both `scheduler.aishacrm.com` and
+  # `staging-scheduler.aishacrm.com` to the right calcom by hostname.
+  aishanet-staging-calcom:
+    driver: bridge
+    name: aishanet-staging-calcom
+
+volumes:
+  staging_calcom_db_data:
+    driver: local

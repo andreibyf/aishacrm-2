@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
 """
-Provision the 6 Coolify Docker Compose resources for staging — Path B (OneDev source).
+Provision the 5 Coolify Docker Compose resources for staging — Path B (OneDev source).
 
 DIFFERENCE FROM provision-coolify.py:
   - Source repo points at OneDev (https://repo.aishacrm.com/aishacrm.git) with
     embedded x-access-token credentials, not GitHub.
-  - Adds --delete-existing flag that DELETEs apps matching the 6 staging names
-    plus the 2 known orphans (fvwje8dn22hqf6g9i34xj5vt, pfm7cuevpylnm9z1q0im6a6u)
-    before recreating. Use this for clean migration.
+  - Adds --delete-existing flag that DELETEs apps matching the 5 staging names
+    (+ the 2 known orphans fvwje8dn22hqf6g9i34xj5vt, pfm7cuevpylnm9z1q0im6a6u,
+    + the obsolete `staging-scheduling-rare` group-05 app) before recreating.
   - Adds Group 6 (tunnel/cloudflared) which the original script omitted.
+
+GROUP 05 (calcom/scheduling) IS NOT PROVISIONED HERE.
+  Calcom moved off Staging server to the Services server (VPS-2) in 2026-05.
+  That deploy is at staging/services/calcom/docker-compose.yml and runs via
+  direct `docker compose up -d` on VPS-2 (mirroring prod calcom's deployment
+  pattern), NOT via Coolify. See staging/services/calcom/README.md.
 
 WHAT THIS DOES:
   1. Reuses existing Coolify project "aishacrm-staging" (uuid b78ljy1xtefe1vnaktddgk17).
-  2. (Optional) DELETEs all existing apps whose names match our 6 groups + 2 orphans.
-  3. For each of the 6 groups, creates a docker-compose application pointing at
-     OneDev with the right docker_compose_location.
+  2. (Optional) DELETEs all existing apps matching our 5 active groups + 2 orphans
+     + the obsolete `staging-scheduling-rare` (group 05) app.
+  3. For each of the 5 active groups, creates a docker-compose application
+     pointing at OneDev with the right docker_compose_location.
   4. Populates env vars per group (DOPPLER_TOKEN/PROJECT/CONFIG + per-group
      overrides matching provision-coolify.py).
-  5. Attaches FQDNs (groups 1, 2, 5) so Coolify Traefik provisions TLS.
+  5. Attaches FQDNs (groups 1, 2) so Coolify Traefik provisions TLS.
   6. Writes staging/.coolify-manifest-onedev.json with all created UUIDs.
 
 USAGE:
@@ -62,11 +69,17 @@ DEFAULT_TENANT_ID = "a11dfb63-4b18-4eb8-872e-747af2e37c46"
 PROJECT_NAME = "aishacrm-staging"
 SERVER_UUID = "f7uzrwlbqjtx6qamppma5xsz"  # beige-koala / 147.189.173.237 (VPS-1)
 
-# Names of the 6 group apps + 2 known orphans created by earlier attempts.
+# Names of the 5 active group apps + 2 known orphans created by earlier attempts.
 ORPHAN_APP_UUIDS = [
     "fvwje8dn22hqf6g9i34xj5vt",  # auto-named "aishacrm-2:main-..."
     "pfm7cuevpylnm9z1q0im6a6u",  # docker-image-... (coollabsio/coolify)
 ]
+
+# Apps from prior provisioning runs that are no longer part of the active set.
+# `--delete-existing` removes these by name in addition to the orphan UUIDs and
+# any current group apps. After calcom moved to VPS-2, the group-05 Coolify
+# app (`staging-scheduling-rare`) is obsolete.
+DEPRECATED_APP_NAMES = ["staging-scheduling-rare"]
 
 
 # ---- Group definitions -----------------------------------------------------
@@ -107,9 +120,12 @@ def build_groups(
                 "COMPOSE_PROFILES": "app",  # Path B: build inline, run backend
                 "ALLOWED_ORIGINS": "https://staging-app.aishacrm.com",
                 "PUBLIC_SCHEDULER_URL": "https://staging-scheduler.aishacrm.com",
-                "CALCOM_DB_USER": "calcom",
-                "CALCOM_DB_NAME": "calcom",
-                "CALCOM_DB_PASSWORD": calcom_secrets["CALCOM_DB_PASSWORD"],
+                # NOTE: CALCOM_DB_* removed — calcom moved to VPS-2 in 2026-05.
+                # The staging backend's calcom-db connection now uses Doppler
+                # `stg_stg.CALCOM_DB_URL` directly (postgres on 147.189.168.164:5433).
+                # The compose template `${CALCOM_DB_PASSWORD}` in
+                # staging/01-backend-heavy/docker-compose.yml resolves to empty,
+                # then Doppler overrides at backend startup via `doppler run`.
                 "NODE_OPTIONS": "--max-old-space-size=2048",
             },
         ),
@@ -148,30 +164,8 @@ def build_groups(
             fqdn=None,
             extra_env={**common, "DEFAULT_TENANT_ID": DEFAULT_TENANT_ID},
         ),
-        Group(
-            key="05-scheduling-rare",
-            app_name="staging-scheduling-rare",
-            fqdn="https://staging-scheduler.aishacrm.com",
-            public_service="calcom",
-            extra_env={
-                **common,
-                "CALCOM_DB_USER": "calcom",
-                "CALCOM_DB_NAME": "calcom",
-                "CALCOM_DB_PASSWORD": calcom_secrets["CALCOM_DB_PASSWORD"],
-                "CALCOM_NEXTAUTH_SECRET": calcom_secrets["CALCOM_NEXTAUTH_SECRET"],
-                "CALCOM_ENCRYPTION_KEY": calcom_secrets["CALCOM_ENCRYPTION_KEY"],
-                "CALCOM_PUBLIC_URL": "https://staging-scheduler.aishacrm.com",
-                # Cal.com requires the literal double-quotes in this value (JSON.parse
-                # in middleware). YAML/.env round-trip strips them — see compose comment.
-                "CALCOM_ALLOWED_HOSTNAMES": '"staging-scheduler.aishacrm.com"',
-                "CALCOM_LICENSE_KEY": "59c0bed7-8b21-4280-8514-e022fbfc24c7",
-                "CALCOM_EMAIL_FROM": "noreply@aishacrm.com",
-                "CALCOM_SMTP_HOST": calcom_secrets.get("CALCOM_SMTP_HOST", ""),
-                "CALCOM_SMTP_PORT": calcom_secrets.get("CALCOM_SMTP_PORT", "465"),
-                "CALCOM_SMTP_USER": calcom_secrets.get("CALCOM_SMTP_USER", ""),
-                "CALCOM_SMTP_PASSWORD": calcom_secrets.get("CALCOM_SMTP_PASSWORD", ""),
-            },
-        ),
+        # Group 05 (calcom) intentionally absent — see module docstring.
+        # Calcom now runs on VPS-2 via staging/services/calcom/docker-compose.yml.
         Group(
             key="06-tunnel",
             app_name="staging-tunnel",
@@ -199,6 +193,13 @@ class Coolify:
         headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json",
+            # Cloudflare bot filter (Error 1010) blocks default Python-urllib UA.
+            # Use a Chromium-based UA so deploy.aishacrm.com lets the request through.
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            ),
         }
         if data is not None:
             headers["Content-Type"] = "application/json"
@@ -275,6 +276,9 @@ class Coolify:
             "docker_compose_location": compose_path,
             "name": name,
             "instant_deploy": False,
+            # Coolify keeps domain reservations after DELETE for a short window;
+            # force override so we can recreate the same FQDN immediately.
+            "force_domain_override": True,
         }
         if fqdn and public_service:
             body["docker_compose_domains"] = [
@@ -325,15 +329,17 @@ def provision(
     groups = build_groups(stg_doppler, calcom_secrets, tunnel_token, onedev_token)
     group_names = {g.app_name for g in groups}
 
-    # ---- Delete existing apps (the 6 by name + 2 known orphans by uuid) ----
+    # ---- Delete existing apps (active groups + deprecated names + 2 known orphans) ----
     if delete_existing:
         print("\n--- DELETE phase ---")
+        deletion_target_names = group_names | set(DEPRECATED_APP_NAMES)
         existing_apps = cf.list_apps() if not dry_run else []
         for app in existing_apps:
-            if app.get("name") in group_names or app.get("uuid") in ORPHAN_APP_UUIDS:
+            if app.get("name") in deletion_target_names or app.get("uuid") in ORPHAN_APP_UUIDS:
                 uuid = app["uuid"]
                 name = app.get("name", "?")
-                print(f"  DELETE app '{name}' uuid={uuid}")
+                tag = " (deprecated)" if name in DEPRECATED_APP_NAMES else ""
+                print(f"  DELETE app '{name}'{tag} uuid={uuid}")
                 if not dry_run:
                     cf.delete_app(uuid)
         if dry_run:
@@ -341,6 +347,8 @@ def provision(
                 print(f"  [DRY] would DELETE orphan uuid={u}")
             for g in groups:
                 print(f"  [DRY] would DELETE app name='{g.app_name}' if exists")
+            for n in DEPRECATED_APP_NAMES:
+                print(f"  [DRY] would DELETE deprecated app name='{n}' if exists")
 
     # ---- Create phase ----
     repo_url = _build_repo_url(onedev_token)
@@ -401,24 +409,34 @@ class TestBuildGroups(unittest.TestCase):
         "VITE_SUPABASE_ANON_KEY": "stg-anon",
     }
 
-    def test_six_groups(self):
+    def test_five_groups_calcom_excluded(self):
+        # Group 05 (calcom) is intentionally absent — calcom runs on VPS-2 via
+        # staging/services/calcom/docker-compose.yml, not as a Coolify app.
         gs = build_groups("dp.st.stg_stg.tok", self.CALCOM, "tunnel-tok", "onedev-tok")
-        self.assertEqual(len(gs), 6)
+        self.assertEqual(len(gs), 5)
         keys = [g.key for g in gs]
         self.assertEqual(keys, [
             "01-backend-heavy", "02-app-fast", "03-ai-infra",
-            "04-braid", "05-scheduling-rare", "06-tunnel",
+            "04-braid", "06-tunnel",
         ])
+        # Explicitly assert no group has the obsolete calcom name/key.
+        self.assertNotIn("05-scheduling-rare", keys)
+        for g in gs:
+            self.assertNotEqual(g.app_name, "staging-scheduling-rare")
 
-    def test_only_groups_1_2_5_have_fqdn(self):
+    def test_only_groups_1_2_have_fqdn(self):
+        # After dropping group 05, only the public app groups (api, frontend)
+        # carry FQDNs. Scheduler FQDN is owned by VPS-2 cloudflared, not Coolify.
         gs = build_groups("tok", self.CALCOM, "tunnel", "od")
         f = {g.key: g.fqdn for g in gs}
         self.assertEqual(f["01-backend-heavy"], "https://staging-api.aishacrm.com")
         self.assertEqual(f["02-app-fast"], "https://staging-app.aishacrm.com")
-        self.assertEqual(f["05-scheduling-rare"], "https://staging-scheduler.aishacrm.com")
         self.assertIsNone(f["03-ai-infra"])
         self.assertIsNone(f["04-braid"])
         self.assertIsNone(f["06-tunnel"])
+        # No group should claim the scheduler FQDN — that lives on VPS-2.
+        for g in gs:
+            self.assertNotEqual(g.fqdn, "https://staging-scheduler.aishacrm.com")
 
     def test_phase2_runs_backend(self):
         # Path B: backend MUST run (build inline, no GHCR images)
@@ -438,7 +456,9 @@ class TestBuildGroups(unittest.TestCase):
         url = _build_repo_url("MYTOKEN")
         self.assertEqual(url, "https://x-access-token:MYTOKEN@repo.aishacrm.com/aishacrm.git")
 
-    def test_doppler_token_in_groups_1_5(self):
+    def test_doppler_token_in_app_groups(self):
+        # All groups except 06-tunnel must have Doppler injection wired up.
+        # The tunnel container runs cloudflared only, no AiSHA code.
         gs = build_groups("dp.st.stg_stg.tok", self.CALCOM, "tunnel", "od")
         for g in gs:
             if g.key == "06-tunnel":
@@ -447,23 +467,34 @@ class TestBuildGroups(unittest.TestCase):
             self.assertEqual(g.extra_env["DOPPLER_PROJECT"], "aishacrm")
             self.assertEqual(g.extra_env["DOPPLER_CONFIG"], "stg_stg")
 
-    def test_calcom_only_in_groups_1_and_5(self):
+    def test_no_calcom_secrets_in_any_group(self):
+        # After moving calcom to VPS-2, no Coolify-managed group should carry
+        # calcom secrets. The staging backend reaches calcom-db via Doppler-injected
+        # CALCOM_DB_URL at runtime, not via Coolify env vars.
         gs = build_groups("tok", self.CALCOM, "tunnel", "od")
-        env = {g.key: g.extra_env for g in gs}
-        self.assertIn("CALCOM_DB_PASSWORD", env["01-backend-heavy"])
-        self.assertIn("CALCOM_DB_PASSWORD", env["05-scheduling-rare"])
-        self.assertIn("CALCOM_NEXTAUTH_SECRET", env["05-scheduling-rare"])
-        self.assertNotIn("CALCOM_NEXTAUTH_SECRET", env["01-backend-heavy"])
-        self.assertNotIn("CALCOM_DB_PASSWORD", env["02-app-fast"])
-        self.assertNotIn("CALCOM_DB_PASSWORD", env["03-ai-infra"])
-        self.assertNotIn("CALCOM_DB_PASSWORD", env["04-braid"])
+        for g in gs:
+            for key in (
+                "CALCOM_DB_PASSWORD",
+                "CALCOM_DB_USER",
+                "CALCOM_DB_NAME",
+                "CALCOM_NEXTAUTH_SECRET",
+                "CALCOM_ENCRYPTION_KEY",
+                "CALCOM_ALLOWED_HOSTNAMES",
+                "CALCOM_LICENSE_KEY",
+                "CALCOM_SMTP_HOST",
+                "CALCOM_SMTP_USER",
+                "CALCOM_SMTP_PASSWORD",
+            ):
+                self.assertNotIn(
+                    key, g.extra_env,
+                    f"group {g.key} ({g.app_name}) carries {key} but calcom is now on VPS-2 — "
+                    f"all calcom secrets come from Doppler stg_stg, not Coolify env",
+                )
 
-    def test_calcom_allowed_hostnames_has_quotes(self):
-        gs = build_groups("tok", self.CALCOM, "tunnel", "od")
-        g5 = next(g for g in gs if g.key == "05-scheduling-rare")
-        # Must include literal double-quotes for Cal.com middleware JSON.parse
-        self.assertEqual(g5.extra_env["CALCOM_ALLOWED_HOSTNAMES"],
-                         '"staging-scheduler.aishacrm.com"')
+    def test_deprecated_apps_listed_for_deletion(self):
+        # The provisioner must clean up the obsolete `staging-scheduling-rare`
+        # app via --delete-existing so re-runs don't leave orphans.
+        self.assertIn("staging-scheduling-rare", DEPRECATED_APP_NAMES)
 
     def test_frontend_build_args_present(self):
         gs = build_groups("tok", self.CALCOM, "tunnel", "od")

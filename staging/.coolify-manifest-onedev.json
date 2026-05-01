@@ -1,0 +1,51 @@
+{
+  "project": {
+    "name": "aishacrm-staging",
+    "uuid": "b78ljy1xtefe1vnaktddgk17",
+    "environment": "production"
+  },
+  "branch": "main",
+  "server_uuid": "f7uzrwlbqjtx6qamppma5xsz",
+  "applications": [
+    {
+      "key": "01-backend-heavy",
+      "name": "staging-backend-heavy",
+      "uuid": "d24ro1fqm0zyl7pd72g6snd2",
+      "fqdn": "https://staging-api.aishacrm.com",
+      "compose_path": "/staging/01-backend-heavy/docker-compose.yml",
+      "env_var_count": 15
+    },
+    {
+      "key": "02-app-fast",
+      "name": "staging-app-fast",
+      "uuid": "di7ko49ikfd2mz8yh0q7id8q",
+      "fqdn": "https://staging-app.aishacrm.com",
+      "compose_path": "/staging/02-app-fast/docker-compose.yml",
+      "env_var_count": 20
+    },
+    {
+      "key": "03-ai-infra",
+      "name": "staging-ai-infra",
+      "uuid": "c3yxd5efwpw4kxhw8gbuqz8r",
+      "fqdn": null,
+      "compose_path": "/staging/03-ai-infra/docker-compose.yml",
+      "env_var_count": 8
+    },
+    {
+      "key": "04-braid",
+      "name": "staging-braid",
+      "uuid": "tw8zmua5jyzwnhh1oxw15kkm",
+      "fqdn": null,
+      "compose_path": "/staging/04-braid/docker-compose.yml",
+      "env_var_count": 9
+    },
+    {
+      "key": "06-tunnel",
+      "name": "staging-tunnel",
+      "uuid": "f11tb5stkopblvw4uy66vx1m",
+      "fqdn": null,
+      "compose_path": "/staging/06-tunnel/docker-compose.yml",
+      "env_var_count": 1
+    }
+  ]
+}

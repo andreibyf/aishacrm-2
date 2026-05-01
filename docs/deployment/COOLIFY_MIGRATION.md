@@ -1,8 +1,8 @@
 # Coolify Migration — Goals, Achievements, Next Steps
 
-**Last updated:** 2026-04-26  
+**Last updated:** 2026-05-01  
 **Workstream owner:** Dre  
-**Status:** Phase 1 complete (staging POC). Phase 2 (production migration) queued.
+**Status:** Phase 1 complete (staging POC, OneDev cutover, calcom relocated to VPS-2). Phase 2 (production migration) queued.
 
 ---
 
@@ -37,19 +37,21 @@ Built `staging/` as a complete Coolify-managed deploy of the AiSHA stack to vali
 
 **Working artifacts in the repo (all kept for on-demand use):**
 
-| Artifact                                        | Purpose                                                                                    |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `staging/01-backend-heavy/docker-compose.yml`   | Backend + Redis pair (Coolify resource UUID `kvwa38mel9mt1i1c49wn9t96`)                    |
-| `staging/02-app-fast/docker-compose.yml`        | Frontend + comms worker (`q14ihdhjh5szhlaesj82til2`)                                       |
-| `staging/03-ai-infra/docker-compose.yml`        | LiteLLM + Ollama (`ue9r079mdtpkmgbbb619f04z`)                                              |
-| `staging/04-braid/docker-compose.yml`           | Braid MCP server + 2 worker nodes (`b11ezlw1volbg4ka6vyuy8ac`)                             |
-| `staging/05-scheduling-rare/docker-compose.yml` | Cal.com + dedicated postgres — opt-in only                                                 |
-| `staging/scripts/bootstrap-stg_stg.sh`          | Doppler stg_stg config bootstrap (clone-from-prd_prd)                                      |
-| `staging/scripts/validate-compose.sh`           | Local lint (syntax, port collisions, network membership)                                   |
-| `staging/scripts/post-deploy-check.sh`          | Phase-aware smoke tests on the App VPS                                                     |
-| `litellm/Dockerfile`                            | LiteLLM image with `litellm_config.yaml` baked in (avoids Coolify v4 bind-mount stripping) |
-| `calcom-db/Dockerfile`                          | Postgres + `scripts/calcom-db-init.sql` baked in (same reason)                             |
-| `staging-aishanet` external Docker network      | Cross-resource DNS on App VPS (created once, persistent)                                   |
+| Artifact                                      | Purpose                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `staging/01-backend-heavy/docker-compose.yml` | Backend + Redis pair (Coolify Application)                                                 |
+| `staging/02-app-fast/docker-compose.yml`      | Frontend + comms worker                                                                    |
+| `staging/03-ai-infra/docker-compose.yml`      | LiteLLM + Ollama                                                                           |
+| `staging/04-braid/docker-compose.yml`         | Braid MCP server + 2 worker nodes                                                          |
+| `staging/06-tunnel/docker-compose.yml`        | cloudflared (added 2026-04-30)                                                             |
+| `staging/services/calcom/docker-compose.yml`  | Cal.com + dedicated postgres on **VPS-2** (added 2026-05-01, replaces group 05)            |
+| `staging/scripts/bootstrap-stg_stg.sh`        | Doppler stg_stg config bootstrap (clone-from-prd_prd)                                      |
+| `staging/scripts/provision-coolify-onedev.py` | Provisioner for the 5 Coolify Applications (groups 01–04, 06)                              |
+| `staging/scripts/validate-compose.sh`         | Local lint (syntax, port collisions, network membership)                                   |
+| `staging/scripts/post-deploy-check.sh`        | Phase-aware smoke tests on the App VPS                                                     |
+| `litellm/Dockerfile`                          | LiteLLM image with `litellm_config.yaml` baked in (avoids Coolify v4 bind-mount stripping) |
+| `calcom-db/Dockerfile`                        | Postgres + `scripts/calcom-db-init.sql` baked in (same reason)                             |
+| `staging-aishanet` external Docker network    | Cross-resource DNS on App VPS (created once, persistent)                                   |
 
 **Pipeline behaviors discovered and documented (these all apply to the prod migration too):**
 
@@ -70,11 +72,21 @@ Built `staging/` as a complete Coolify-managed deploy of the AiSHA stack to vali
 - Removed home-IP `agreeable-anteater-...` server entry from Coolify (security cleanup — was a deployment target reachable from a leaked Coolify SSH key).
 - Netdata polling on App VPS reduced from 1s to 5s (saves ~7.5% of one core continuously).
 
+### Phase 1.5 — Source migration to OneDev + calcom relocation (2026-04-30 / 2026-05-01)
+
+After Phase 1, the workstream pivoted to **dropping GitHub** entirely (Path B). Source mirror-pushed to OneDev (`repo.aishacrm.com/aishacrm.git`); staging compose files converted from `image: ghcr.io/...` to local `build:` directives so Coolify builds inline from OneDev clones, no registry roundtrip; new `staging/scripts/provision-coolify-onedev.py` provisions Coolify Applications pointing at the OneDev repo.
+
+Then on 2026-05-01: **staging Cal.com migrated from Staging server (VPS-1) to Services server (VPS-2)** so the staging topology mirrors prod (where calcom lives on VPS-2). This was both an architecture cleanup (symmetry across envs) and a stability move (Staging server's load avg held at 8.2 with calcom resident; the box's 5-core slice cap was over-subscribed). Staging calcom now lives at `staging/services/calcom/`, deploys directly via `docker compose --project-name staging-calcom` on VPS-2, and is reached via Staging cloudflared's existing tunnel (HTTP-over-WAN hop to `147.189.168.164:3004` with UFW restricting access to Staging's IP). Group 05 (`staging/05-scheduling-rare/`) was removed from the repo and from the Coolify provisioner.
+
+**P0 incident during the cutover** (logged in CHANGELOG): the first deploy attempt placed the staging compose in `/opt/aishacrm/` on VPS-2 alongside prod's compose. Both files declare service names `calcom` and `calcom-db`. Compose v2 derived project name `aishacrm` from the directory and matched the existing prod containers by `(project, service)`, recreating them under the staging definition — taking prod scheduler down for ~3 minutes. Recovery via `docker compose up -d --no-deps calcom calcom-db cloudflared` restored prod (volume `aishacrm_calcom_db_data` was untouched). Mitigation: dedicated deploy directory `/opt/staging-calcom/` + explicit `--project-name staging-calcom` on every compose command, both documented in `staging/services/calcom/docker-compose.yml` header and the matching README.
+
 ### What's NOT yet done
 
 - Production has not been migrated to Coolify-native build. It still deploys via `.github/workflows/docker-release.yml` matrix → GHCR → SCP/SSH to `/opt/aishacrm` → `docker compose up`.
 - Production `docker-compose.prod.yml` Cal.com image is still pinned to the v5-era `0aca8203...` digest — works only because the image is cached on the VPS. A `docker image prune` would break prod scheduling.
-- No memory caps on production compose services. Today's OOM was the warning shot.
+- No memory caps on production compose services. The April OOM was the warning shot.
+- GitHub paid plan is still active; cancellation gated on validating that all CI/CD paths route through OneDev cleanly for ≥1 week.
+- Cal.com `staging-scheduler.aishacrm.com` ingress still owned by the **VPS-1 cloudflared** (`aishacrm-tunnel`) doing an HTTP-over-WAN hop to VPS-2:3004. A future cleanup could move that ingress to VPS-2's `aishacrm-vps2` tunnel (which has direct Docker DNS access to staging-calcom) to eliminate the WAN hop. Tracked separately.
 
 ---
 
