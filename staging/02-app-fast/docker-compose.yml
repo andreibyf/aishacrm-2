@@ -27,6 +27,8 @@ services:
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-staging-${COOLIFY_RESOURCE_UUID:-unknown}}
     container_name: staging-aishacrm-frontend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:3000"
     mem_limit: 256m
     mem_reservation: 128m
     environment:

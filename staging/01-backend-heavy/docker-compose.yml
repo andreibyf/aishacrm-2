@@ -27,6 +27,8 @@ services:
       dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-backend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5001:3001"
     mem_limit: 3072m
     mem_reservation: 1024m
     environment:
