@@ -1,17 +1,50 @@
-# Staging — Group 4: braid
-# Services: braid-mcp-server (coordinator) + braid-mcp-1, braid-mcp-2 (workers)
+# Staging MCP — Coolify-native build target on Staging server (VPS-1).
 #
-# All three share the same image. Server stays internal — only the staging backend
-# calls it via http://staging-braid-mcp-server:8000. No Traefik label needed.
+# Mirror of `prod/02-mcp/docker-compose.yml` (created next). Same 3-container
+# distributed pattern (server + 2 workers) as prod, with stg_stg Doppler config
+# and the staging-aishanet external network.
+#
+# Applies all 9 Coolify v4 quirks discovered during the litellm migration:
+#
+# 1. context: `braid-mcp-node-server` (NOT `../../braid-mcp-node-server`).
+#    Coolify v4 invokes compose with `--project-directory <artifacts-root>`
+#    and resolves relative paths against THAT, not the compose file's dir.
+#
+# 2. Service names CURRENTLY use `-coolify` suffix to avoid DNS collision
+#    with the manually-deployed GHCR sibling (`aishacrm-braid-mcp-staging`,
+#    service name `braid-mcp-server` on aishanet-staging).
+#    AT CUTOVER (post-soak): rename `braid-mcp-server-coolify` -> `braid-mcp-server`
+#    + alias likewise, retire GHCR sibling. Backend's BRAID_MCP_URL stays at
+#    http://braid-mcp-server:8000 — Docker DNS resolves to new container.
+#
+# 3. Explicit network alias decouples DNS from Coolify's auto-generated
+#    container_name with embedded app UUID.
+#
+# 4. Network `staging-aishanet` maps to host network
+#    `aishacrm_aishanet-staging` via `name:` directive.
+#
+# 5. mem_limits per service:
+#    - braid-mcp-server-coolify: 512m (coordinator does the most work)
+#    - braid-mcp-1-coolify, braid-mcp-2-coolify: 384m each (workers, lighter)
+#
+# 6. Doppler stg_stg config matches existing GHCR sibling — same secrets.
+#
+# 7. depends_on with service_healthy ensures workers wait for server.
+#
+# 8. healthcheck on /health for orchestration.
+#
+# 9. log rotation set (json-file driver, 10m x 3) to prevent disk fill.
 
 services:
-  braid-mcp-server:
-    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+  braid-mcp-server-coolify:
+    image: aishacrm-mcp:coolify
     build:
-      context: ../../braid-mcp-node-server
+      context: braid-mcp-node-server
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-server
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     environment:
       - NODE_ENV=production
       - MCP_ROLE=server
@@ -19,11 +52,6 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      # Service names (not container_names) — Coolify v4 ignores `container_name`
-      # and auto-suffixes containers with the app UUID. Docker DNS on
-      # staging-aishanet only resolves the compose service name, so cross-stack
-      # references must use that name (group 1 compose: services.backend,
-      # services.redis-memory).
       - CRM_BACKEND_URL=http://backend:3001
       - REDIS_URL=redis://redis-memory:6379
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
@@ -32,24 +60,28 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     networks:
-      - staging-aishanet
+      staging-aishanet:
+        aliases:
+          - braid-mcp-server-coolify
 
-  braid-mcp-1:
-    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+  braid-mcp-1-coolify:
+    image: aishacrm-mcp:coolify
     build:
-      context: ../../braid-mcp-node-server
+      context: braid-mcp-node-server
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-1
     restart: unless-stopped
+    mem_limit: 384m
+    mem_reservation: 192m
     depends_on:
-      braid-mcp-server:
+      braid-mcp-server-coolify:
         condition: service_healthy
     environment:
       - NODE_ENV=production
@@ -58,7 +90,7 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - MCP_SERVER_URL=http://braid-mcp-server-coolify:8000
       - CRM_BACKEND_URL=http://backend:3001
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
@@ -66,24 +98,28 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     networks:
-      - staging-aishanet
+      staging-aishanet:
+        aliases:
+          - braid-mcp-1-coolify
 
-  braid-mcp-2:
-    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+  braid-mcp-2-coolify:
+    image: aishacrm-mcp:coolify
     build:
-      context: ../../braid-mcp-node-server
+      context: braid-mcp-node-server
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-2
     restart: unless-stopped
+    mem_limit: 384m
+    mem_reservation: 192m
     depends_on:
-      braid-mcp-server:
+      braid-mcp-server-coolify:
         condition: service_healthy
     environment:
       - NODE_ENV=production
@@ -92,7 +128,7 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - MCP_SERVER_URL=http://braid-mcp-server-coolify:8000
       - CRM_BACKEND_URL=http://backend:3001
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
@@ -100,16 +136,21 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     networks:
-      - staging-aishanet
+      staging-aishanet:
+        aliases:
+          - braid-mcp-2-coolify
 
 networks:
+  # External network shared with manually-deployed staging stack. Internal
+  # compose ref `staging-aishanet`, actual host network name from
+  # docker-compose.staging.yml is project-prefixed `aishacrm_aishanet-staging`.
   staging-aishanet:
-    name: staging-aishanet
     external: true
+    name: aishacrm_aishanet-staging
