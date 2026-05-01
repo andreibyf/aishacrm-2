@@ -80,12 +80,14 @@ test('staging-litellm: explicit DNS alias `litellm-coolify`', () => {
     'aliases: [- litellm-coolify] gives backend a stable DNS hostname independent of Coolify-generated container_name');
 });
 
-test('staging-litellm: top-level network declares staging-aishanet as external', () => {
+test('staging-litellm: top-level network declares staging-aishanet as external + correct host name', () => {
   const match = compose.match(/^networks:\s*\n([\s\S]+?)(?:^volumes:|^services:|$(?![\r\n]))/m);
   assert.ok(match, 'top-level networks: section missing');
   assert.match(match[1], /^\s+staging-aishanet:\s*$/m, 'staging-aishanet entry missing');
   assert.match(match[1], /^\s+external:\s*true\s*$/m,
     'staging-aishanet must be `external: true` — it is owned by docker-compose.staging.yml; Coolify must not recreate it');
+  assert.match(match[1], /^\s+name:\s*aishacrm_aishanet-staging\s*$/m,
+    'name: must map to the actual host network `aishacrm_aishanet-staging` (Compose project-prefixed name from docker-compose.staging.yml)');
 });
 
 test('staging-litellm: Doppler env points at stg_stg (not prd_prd)', () => {

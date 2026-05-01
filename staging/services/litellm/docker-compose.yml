@@ -67,8 +67,12 @@ services:
           - litellm-coolify
 
 networks:
-  # External network shared with the manually-deployed staging stack
-  # (docker-compose.staging.yml). Cloudflared + backend-staging + frontend-staging
-  # all live here. Coolify must NOT recreate this network.
+  # External network shared with the manually-deployed staging stack.
+  # The actual network name on the host is `aishacrm_aishanet-staging`
+  # (Compose prefixes networks declared inside docker-compose.staging.yml
+  # with the project name 'aishacrm'). The `name:` directive lets us refer
+  # to it as `staging-aishanet` inside this compose while binding to the
+  # real host network for `external: true`.
   staging-aishanet:
     external: true
+    name: aishacrm_aishanet-staging
