@@ -16,7 +16,10 @@ services:
     # compose source and Docker auto-creates an empty directory at the missing
     # source — same defect that crashed litellm with IsADirectoryError.
     # See calcom-db/Dockerfile for the full reasoning.
-    image: ghcr.io/andreibyf/aishacrm-2-calcom-db:${CALCOM_DB_IMAGE_TAG:-latest}
+    image: aishacrm-calcom-db:${CALCOM_DB_IMAGE_TAG:-staging}
+    build:
+      context: ../..
+      dockerfile: calcom-db/Dockerfile
     container_name: staging-aishacrm-calcom-db
     restart: unless-stopped
     environment:

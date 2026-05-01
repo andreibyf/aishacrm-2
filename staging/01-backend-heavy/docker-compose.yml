@@ -57,7 +57,12 @@ services:
       - staging-aishanet
 
   backend:
-    image: ghcr.io/andreibyf/aishacrm-2-backend:${BACKEND_IMAGE_TAG:-latest}
+    # Path B: build locally from OneDev source; no GHCR dependency.
+    # Image tag is the local cache key; compose treats `image:` as the tag for `build:`.
+    image: aishacrm-backend:${BACKEND_IMAGE_TAG:-staging}
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-backend
     restart: unless-stopped
     profiles: [app]

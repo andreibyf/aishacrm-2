@@ -6,7 +6,10 @@
 
 services:
   braid-mcp-server:
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+    build:
+      context: ../../braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-server
     restart: unless-stopped
     environment:
@@ -39,7 +42,10 @@ services:
       - staging-aishanet
 
   braid-mcp-1:
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+    build:
+      context: ../../braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-1
     restart: unless-stopped
     depends_on:
@@ -70,7 +76,10 @@ services:
       - staging-aishanet
 
   braid-mcp-2:
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:${MCP_IMAGE_TAG:-latest}
+    image: aishacrm-mcp:${MCP_IMAGE_TAG:-staging}
+    build:
+      context: ../../braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-2
     restart: unless-stopped
     depends_on:
