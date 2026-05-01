@@ -16,7 +16,7 @@ Hetzner host instead of pulling a pre-built image from GHCR.
                   +---------+---------+
                   |                   |
         BEFORE cutover           AFTER cutover
-        http://litellm:4000      http://aishacrm-litellm-coolify:4000
+        http://litellm:4000      http://litellm-coolify:4000
                   |                   |
         aishacrm-litellm         aishacrm-litellm-coolify
         (GHCR :latest pull)      (built from OneDev clone on Hetzner)
@@ -67,9 +67,14 @@ ssh root@178.156.140.86 'docker exec aishacrm-backend wget -qO- \
 
 ## Cutover (after ≥48h soak)
 
+The Coolify-built container is reachable at the network alias
+`http://litellm-coolify:4000` (Coolify v4 ignores `container_name`, so the
+auto-generated name like `litellm-coolify-<app-uuid>-<suffix>` is what
+appears in `docker ps`, but the alias on the `aishanet` network is stable).
+
 ```bash
 # 1. Flip LITELLM_BASE_URL on backend
-doppler secrets set LITELLM_BASE_URL=http://aishacrm-litellm-coolify:4000 \
+doppler secrets set LITELLM_BASE_URL=http://litellm-coolify:4000 \
   --project aishacrm --config prd_prd
 
 # 2. Restart prod backend (Doppler is read at startup)
