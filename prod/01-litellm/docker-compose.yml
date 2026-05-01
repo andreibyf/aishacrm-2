@@ -30,7 +30,13 @@
 #   That isolation is automatic with Coolify; no manual flag needed here.
 
 services:
-  litellm:
+  # Service name `litellm-coolify` (NOT `litellm`) so it doesn't collide with
+  # the GHCR-deployed sibling on the shared `aishanet` network during the
+  # ≥48h soak. Coolify v4 ignores `container_name`, but compose-derived DNS
+  # honors service names + explicit aliases (see networks: block below).
+  # Backend cutover flips Doppler `prd_prd.LITELLM_BASE_URL` from
+  # http://litellm:4000  ->  http://litellm-coolify:4000
+  litellm-coolify:
     # Local build from OneDev clone — no GHCR image dependency.
     #
     # Build context is `.` (NOT `../..`) because Coolify v4 invokes compose
@@ -80,7 +86,14 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - aishanet
+      aishanet:
+        # Explicit alias decouples DNS hostname from the auto-generated
+        # container_name (Coolify v4 ignores container_name and produces
+        # something like `litellm-coolify-<app-uuid>-<suffix>`). Backend
+        # reaches this container at http://litellm-coolify:4000 regardless
+        # of how Coolify names the container.
+        aliases:
+          - litellm-coolify
 
 networks:
   # External network shared with the GHCR-deployed prod stack

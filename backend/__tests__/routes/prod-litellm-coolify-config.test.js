@@ -35,19 +35,37 @@ function getServiceBlock(text, serviceName) {
   return after.slice(0, end);
 }
 
-const litellmBlock = getServiceBlock(compose, 'litellm');
+const litellmBlock = getServiceBlock(compose, 'litellm-coolify');
 
-test('prod-litellm: file is loadable + has litellm service block', () => {
-  assert.ok(litellmBlock.length > 200, 'litellm service block missing or truncated');
+test('prod-litellm: file is loadable + has litellm-coolify service block', () => {
+  assert.ok(litellmBlock.length > 200, 'litellm-coolify service block missing or truncated');
 });
 
-test('prod-litellm: container_name is suffixed with -coolify (no collision with GHCR sibling)', () => {
-  const line = litellmBlock.split('\n').find((l) => /^\s+container_name:/.test(l));
-  assert.ok(line, 'container_name directive missing');
+test('prod-litellm: service name is `litellm-coolify` (not `litellm`)', () => {
+  // Service name MUST be different from the GHCR sibling's `litellm`,
+  // otherwise Docker DNS on aishanet round-robins between the two
+  // containers and backend's LITELLM_BASE_URL=http://litellm:4000 could
+  // hit either — defeats the purpose of side-by-side soak.
   assert.match(
-    line,
-    /container_name:\s*aishacrm-litellm-coolify\b/,
-    'container_name must be `aishacrm-litellm-coolify` so it can run alongside the existing GHCR-built `aishacrm-litellm` during the soak window',
+    compose,
+    /^\s{2}litellm-coolify:\s*$/m,
+    'compose must declare service `litellm-coolify` (not `litellm`)',
+  );
+  assert.doesNotMatch(
+    compose,
+    /^\s{2}litellm:\s*$/m,
+    'compose must NOT declare a service named `litellm` — that collides with the GHCR sibling on aishanet',
+  );
+});
+
+test('prod-litellm: explicit network alias `litellm-coolify` for stable DNS', () => {
+  // Coolify v4 ignores `container_name`, so backend can't rely on it.
+  // The `aliases:` block under networks: aishanet: gives a stable
+  // hostname independent of Coolify's auto-naming.
+  assert.match(
+    litellmBlock,
+    /networks:\s*\n\s+aishanet:\s*\n[\s\S]+?aliases:\s*\n\s+-\s*litellm-coolify/m,
+    'service must declare aliases: [- litellm-coolify] under networks.aishanet so backend can reach it via a stable DNS name',
   );
 });
 
@@ -97,10 +115,13 @@ test('prod-litellm: mem_limit is set (within 256m..512m for soak coexistence)', 
 });
 
 test('prod-litellm: service joins external aishanet, not a new bridge', () => {
-  assert.match(
-    litellmBlock,
-    /networks:\s*\n\s+- aishanet/,
-    'litellm service must join the `aishanet` network so backend (also on aishanet) reaches it via Docker DNS',
+  // Accept either list-form (`- aishanet`) or dict-form (`aishanet:` with
+  // sub-keys like `aliases`). The dict form is required for aliases.
+  const listForm = /networks:\s*\n\s+- aishanet\s*$/m.test(litellmBlock);
+  const dictForm = /networks:\s*\n\s+aishanet:\s*$/m.test(litellmBlock);
+  assert.ok(
+    listForm || dictForm,
+    'litellm-coolify service must join the `aishanet` network so backend (also on aishanet) reaches it via Docker DNS',
   );
 });
 
