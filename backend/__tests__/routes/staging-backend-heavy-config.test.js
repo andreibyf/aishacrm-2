@@ -78,13 +78,12 @@ test('staging-backend-heavy: top-level network maps to aishacrm_aishanet-staging
   assert.match(tail, /^\s+name:\s*aishacrm_aishanet-staging\s*$/m);
 });
 
-test('staging-backend-heavy: traefik labels for staging-api.aishacrm.com', () => {
+test('staging-backend-heavy: SERVICE_FQDN_BACKEND env set (Coolify auto-routes)', () => {
   const block = getServiceBlock(compose, 'backend');
-  assert.match(block, /traefik\.enable=true/);
-  assert.match(block, /Host\(`staging-api\.aishacrm\.com`\)/);
-  assert.match(block, /loadbalancer\.server\.port=3001/);
+  const line = block.split('\n').find((l) => /^\s+- SERVICE_FQDN_BACKEND=/.test(l));
+  assert.ok(line, 'SERVICE_FQDN_BACKEND env required for Coolify auto-routing');
+  assert.match(line, /staging-api\.aishacrm\.com/);
 });
-
 test('staging-backend-heavy: BRAID_MCP_URL points at canonical braid-mcp-server', () => {
   const block = getServiceBlock(compose, 'backend');
   const line = block.split('\n').find((l) => /^\s+- BRAID_MCP_URL=/.test(l));

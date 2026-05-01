@@ -56,12 +56,6 @@ services:
       staging-aishanet:
         aliases:
           - frontend
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.staging-frontend.rule=Host(`staging-app.aishacrm.com`)
-      - traefik.http.routers.staging-frontend.entrypoints=https
-      - traefik.http.routers.staging-frontend.tls.certresolver=letsencrypt
-      - traefik.http.services.staging-frontend.loadbalancer.server.port=3000
 
   aisha-comms:
     image: aishacrm-backend:coolify

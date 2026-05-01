@@ -83,12 +83,12 @@ test('staging-app-fast: top-level network maps to aishacrm_aishanet-staging', ()
   assert.match(tail, /^\s+name:\s*aishacrm_aishanet-staging\s*$/m);
 });
 
-test('staging-app-fast: frontend has traefik routes for staging-app.aishacrm.com', () => {
+test('staging-app-fast: frontend has SERVICE_FQDN_FRONTEND set (Coolify auto-routes)', () => {
   const block = getServiceBlock(compose, 'frontend');
-  assert.match(block, /Host\(`staging-app\.aishacrm\.com`\)/);
-  assert.match(block, /loadbalancer\.server\.port=3000/);
+  const line = block.split('\n').find((l) => /^\s+- SERVICE_FQDN_FRONTEND=/.test(l));
+  assert.ok(line, 'SERVICE_FQDN_FRONTEND env required for Coolify auto-routing');
+  assert.match(line, /staging-app\.aishacrm\.com/);
 });
-
 test('staging-app-fast: aisha-comms CRM_BACKEND_URL uses aishacrm-backend alias', () => {
   const block = getServiceBlock(compose, 'aisha-comms');
   const line = block.split('\n').find((l) => /CRM_BACKEND_URL=/.test(l));

@@ -66,12 +66,6 @@ services:
         aliases:
           - backend
           - aishacrm-backend
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.staging-backend.rule=Host(`staging-api.aishacrm.com`)
-      - traefik.http.routers.staging-backend.entrypoints=https
-      - traefik.http.routers.staging-backend.tls.certresolver=letsencrypt
-      - traefik.http.services.staging-backend.loadbalancer.server.port=3001
 
 networks:
   # External network shared with manual stack and Coolify-managed siblings
