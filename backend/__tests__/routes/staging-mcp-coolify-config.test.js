@@ -23,11 +23,11 @@ function getServiceBlock(text, serviceName) {
   return after.slice(0, end);
 }
 
-// Services use `-coolify` suffix during soak to avoid DNS collision with
+// Services use canonical names post-cutover (GHCR sibling retired) to avoid DNS collision with
 // the existing GHCR sibling `aishacrm-braid-mcp-staging` (service name
 // `braid-mcp-server` on aishanet-staging). At cutover (post-soak), they
 // rename back — see staging-mcp-coolify-final-config.test.js for that.
-const SERVICES = ['braid-mcp-server-coolify', 'braid-mcp-1-coolify', 'braid-mcp-2-coolify'];
+const SERVICES = ['braid-mcp-server', 'braid-mcp-1', 'braid-mcp-2'];
 
 for (const svc of SERVICES) {
   test(`staging-mcp: ${svc} service block exists`, () => {
@@ -90,20 +90,20 @@ test('staging-mcp: top-level network maps staging-aishanet -> aishacrm_aishanet-
     'must map to actual host network aishacrm_aishanet-staging');
 });
 
-test('staging-mcp: workers depend on braid-mcp-server-coolify health', () => {
-  for (const svc of ['braid-mcp-1-coolify', 'braid-mcp-2-coolify']) {
+test('staging-mcp: workers depend on braid-mcp-server health', () => {
+  for (const svc of ['braid-mcp-1', 'braid-mcp-2']) {
     const block = getServiceBlock(compose, svc);
-    assert.match(block, /depends_on:\s*\n\s+braid-mcp-server-coolify:\s*\n\s+condition:\s*service_healthy/m,
-      `${svc} must wait for braid-mcp-server-coolify health`);
+    assert.match(block, /depends_on:\s*\n\s+braid-mcp-server:\s*\n\s+condition:\s*service_healthy/m,
+      `${svc} must wait for braid-mcp-server health`);
   }
 });
 
-test('staging-mcp: workers point MCP_SERVER_URL at -coolify sibling, not GHCR sibling', () => {
-  for (const svc of ['braid-mcp-1-coolify', 'braid-mcp-2-coolify']) {
+test('staging-mcp: workers point MCP_SERVER_URL at canonical braid-mcp-server', () => {
+  for (const svc of ['braid-mcp-1', 'braid-mcp-2']) {
     const block = getServiceBlock(compose, svc);
     const line = block.split('\n').find((l) => /^\s+- MCP_SERVER_URL=/.test(l));
     assert.ok(line, `${svc} MCP_SERVER_URL must be set`);
-    assert.match(line, /braid-mcp-server-coolify:8000/,
+    assert.match(line, /braid-mcp-server:8000/,
       `${svc} MCP_SERVER_URL must point at the Coolify-built coordinator (not the GHCR sibling)`);
   }
 });

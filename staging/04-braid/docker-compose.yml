@@ -10,12 +10,11 @@
 #    Coolify v4 invokes compose with `--project-directory <artifacts-root>`
 #    and resolves relative paths against THAT, not the compose file's dir.
 #
-# 2. Service names CURRENTLY use `-coolify` suffix to avoid DNS collision
-#    with the manually-deployed GHCR sibling (`aishacrm-braid-mcp-staging`,
-#    service name `braid-mcp-server` on aishanet-staging).
-#    AT CUTOVER (post-soak): rename `braid-mcp-server-coolify` -> `braid-mcp-server`
-#    + alias likewise, retire GHCR sibling. Backend's BRAID_MCP_URL stays at
-#    http://braid-mcp-server:8000 — Docker DNS resolves to new container.
+# 2. Service names AT CUTOVER claim canonical `braid-mcp-server` etc. that the
+#    GHCR sibling used to own. Backend BRAID_MCP_URL=http://braid-mcp-server:8000
+#    service name `braid-mcp-server` on aishanet-staging — RETIRED post-cutover).
+#    resolves to the new container with no env-var change. Stop + retire GHCR
+#    sibling (`aishacrm-braid-mcp-staging`) before redeploy.
 #
 # 3. Explicit network alias decouples DNS from Coolify's auto-generated
 #    container_name with embedded app UUID.
@@ -24,8 +23,8 @@
 #    `aishacrm_aishanet-staging` via `name:` directive.
 #
 # 5. mem_limits per service:
-#    - braid-mcp-server-coolify: 512m (coordinator does the most work)
-#    - braid-mcp-1-coolify, braid-mcp-2-coolify: 384m each (workers, lighter)
+#    - braid-mcp-server: 512m (coordinator does the most work)
+#    - braid-mcp-1, braid-mcp-2: 384m each (workers, lighter)
 #
 # 6. Doppler stg_stg config matches existing GHCR sibling — same secrets.
 #
@@ -36,7 +35,7 @@
 # 9. log rotation set (json-file driver, 10m x 3) to prevent disk fill.
 
 services:
-  braid-mcp-server-coolify:
+  braid-mcp-server:
     image: aishacrm-mcp:coolify
     build:
       context: braid-mcp-node-server
@@ -69,9 +68,9 @@ services:
     networks:
       staging-aishanet:
         aliases:
-          - braid-mcp-server-coolify
+          - braid-mcp-server
 
-  braid-mcp-1-coolify:
+  braid-mcp-1:
     image: aishacrm-mcp:coolify
     build:
       context: braid-mcp-node-server
@@ -81,7 +80,7 @@ services:
     mem_limit: 384m
     mem_reservation: 192m
     depends_on:
-      braid-mcp-server-coolify:
+      braid-mcp-server:
         condition: service_healthy
     environment:
       - NODE_ENV=production
@@ -90,7 +89,7 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://braid-mcp-server-coolify:8000
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
       - CRM_BACKEND_URL=http://backend:3001
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
@@ -107,9 +106,9 @@ services:
     networks:
       staging-aishanet:
         aliases:
-          - braid-mcp-1-coolify
+          - braid-mcp-1
 
-  braid-mcp-2-coolify:
+  braid-mcp-2:
     image: aishacrm-mcp:coolify
     build:
       context: braid-mcp-node-server
@@ -119,7 +118,7 @@ services:
     mem_limit: 384m
     mem_reservation: 192m
     depends_on:
-      braid-mcp-server-coolify:
+      braid-mcp-server:
         condition: service_healthy
     environment:
       - NODE_ENV=production
@@ -128,7 +127,7 @@ services:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
       - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
-      - MCP_SERVER_URL=http://braid-mcp-server-coolify:8000
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
       - CRM_BACKEND_URL=http://backend:3001
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
@@ -145,7 +144,7 @@ services:
     networks:
       staging-aishanet:
         aliases:
-          - braid-mcp-2-coolify
+          - braid-mcp-2
 
 networks:
   # External network shared with manually-deployed staging stack. Internal
