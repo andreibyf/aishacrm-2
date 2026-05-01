@@ -11,16 +11,13 @@
 #     the docker_compose_location.
 #   - Coolify clones the repo into the application's working dir on Hetzner,
 #     then `docker compose up -d` builds + runs.
-#   - Container `aishacrm-litellm-coolify` runs ALONGSIDE the existing
-#     GHCR-based `aishacrm-litellm` container during the soak window. Both
-#     join the external `aishanet` network. The backend reaches them via
-#     LITELLM_BASE_URL (Doppler-injected) — flipping that env var is the
-#     cutover trigger.
-#   - After ≥48h soak with the new container healthy, you flip
-#     `LITELLM_BASE_URL` from `http://litellm:4000` (GHCR-built) to
-#     `http://aishacrm-litellm-coolify:4000` (Coolify-built), restart backend.
-#   - After 48h post-cutover stability, the old `litellm` service entry can
-#     be removed from `docker-compose.prod.yml` and the GHCR image deleted.
+#   - This service claims the DNS name `litellm` on aishanet via the network
+#     alias. Backend's `LITELLM_BASE_URL=http://litellm:4000` continues to
+#     work without any env-var change — Docker DNS resolves to this container.
+#   - The GHCR-based `aishacrm-litellm` from `docker-compose.prod.yml` MUST
+#     be stopped/removed before this stack is deployed, or both containers
+#     will register the alias `litellm` and Docker DNS will round-robin
+#     between them, masking issues.
 #
 # Project namespace isolation:
 #   When deploying via Coolify, the project name is auto-derived from the
@@ -30,13 +27,14 @@
 #   That isolation is automatic with Coolify; no manual flag needed here.
 
 services:
-  # Service name `litellm-coolify` (NOT `litellm`) so it doesn't collide with
-  # the GHCR-deployed sibling on the shared `aishanet` network during the
-  # ≥48h soak. Coolify v4 ignores `container_name`, but compose-derived DNS
-  # honors service names + explicit aliases (see networks: block below).
-  # Backend cutover flips Doppler `prd_prd.LITELLM_BASE_URL` from
-  # http://litellm:4000  ->  http://litellm-coolify:4000
-  litellm-coolify:
+  # Service name `litellm` AND alias `litellm` on aishanet — backend keeps its
+  # existing `LITELLM_BASE_URL=http://litellm:4000` and Docker DNS resolves
+  # `litellm` to this Coolify-built container. The GHCR sibling that previously
+  # claimed this name is retired before this stack is deployed (see runbook
+  # in this folder's README.md). Coolify v4 ignores container_name, so the
+  # actual container will be `litellm-<app-uuid>-<suffix>` — only the alias
+  # below provides the stable DNS hostname.
+  litellm:
     # Local build from OneDev clone — no GHCR image dependency.
     #
     # Build context is `.` (NOT `../..`) because Coolify v4 invokes compose
@@ -60,10 +58,12 @@ services:
     container_name: aishacrm-litellm-coolify
     restart: unless-stopped
     cgroup_parent: aishacrm.slice
-    # Match the GHCR-deployed sibling's mem cap so the two containers running
-    # side-by-side during soak fit under the host's 8 GB budget.
-    mem_limit: 384m
-    mem_reservation: 192m
+    # 768m chosen after staging deploy showed 384m hit 97% utilization at idle.
+    # Hetzner has 8 GB; total prod compose budget at 768m here is 6.06 GiB
+    # (under the 6144 MiB ceiling). Steady-state ~370 MiB; cap headroom
+    # absorbs transient Python heap during chat completion requests.
+    mem_limit: 768m
+    mem_reservation: 256m
     environment:
       # Doppler injects LITELLM_MASTER_KEY + provider keys at runtime.
       # Note: this is the prd_prd Doppler config — same as the GHCR-deployed
@@ -87,13 +87,12 @@ services:
         max-file: "3"
     networks:
       aishanet:
-        # Explicit alias decouples DNS hostname from the auto-generated
-        # container_name (Coolify v4 ignores container_name and produces
-        # something like `litellm-coolify-<app-uuid>-<suffix>`). Backend
-        # reaches this container at http://litellm-coolify:4000 regardless
-        # of how Coolify names the container.
+        # Explicit alias `litellm` lets backend reach this container at the
+        # same DNS name the retired GHCR sibling used to serve from. The
+        # alias is independent of Coolify's auto-generated container_name
+        # (which has the app UUID baked in).
         aliases:
-          - litellm-coolify
+          - litellm
 
 networks:
   # External network shared with the GHCR-deployed prod stack

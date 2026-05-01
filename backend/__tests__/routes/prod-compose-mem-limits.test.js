@@ -16,11 +16,14 @@ import { dirname, resolve } from 'node:path';
 //   backend       3584m (4g -> 3.5g for build headroom)
 //   aisha-comms   768m
 //   frontend      256m
-//   litellm       384m
 //   redis-memory  384m  (wraps Redis maxmemory 256m + RDB fork headroom)
 //   redis-cache   640m  (wraps Redis maxmemory 512m)
 //
-// Total: ~5.93 GB capped + 2 GB build headroom = 7.93 GB peak usage.
+// (litellm moved to Coolify-built `prod/01-litellm/` and is no longer in
+//  docker-compose.prod.yml. Its 768m cap is asserted by
+//  prod-litellm-coolify-config.test.js instead.)
+//
+// Total: ~5.55 GB capped + 2.45 GB build/litellm headroom = 8 GB peak usage.
 
 const here = dirname(fileURLToPath(import.meta.url));
 const composePath = resolve(here, '..', '..', '..', 'docker-compose.prod.yml');
@@ -45,7 +48,8 @@ const REQUIRED_CAPS = {
   'redis-cache': { min: 384, max: 768 },
   backend: { min: 3072, max: 4096 },
   'aisha-comms': { min: 384, max: 1024 },
-  litellm: { min: 256, max: 512 },
+  // litellm moved to Coolify-managed prod/01-litellm/docker-compose.yml.
+  // Its mem_limit is asserted by prod-litellm-coolify-config.test.js.
   frontend: { min: 128, max: 384 },
 };
 

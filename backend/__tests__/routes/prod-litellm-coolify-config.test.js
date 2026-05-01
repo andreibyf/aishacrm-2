@@ -35,37 +35,32 @@ function getServiceBlock(text, serviceName) {
   return after.slice(0, end);
 }
 
-const litellmBlock = getServiceBlock(compose, 'litellm-coolify');
+const litellmBlock = getServiceBlock(compose, 'litellm');
 
-test('prod-litellm: file is loadable + has litellm-coolify service block', () => {
-  assert.ok(litellmBlock.length > 200, 'litellm-coolify service block missing or truncated');
+test('prod-litellm: file is loadable + has litellm service block', () => {
+  assert.ok(litellmBlock.length > 200, 'litellm service block missing or truncated');
 });
 
-test('prod-litellm: service name is `litellm-coolify` (not `litellm`)', () => {
-  // Service name MUST be different from the GHCR sibling's `litellm`,
-  // otherwise Docker DNS on aishanet round-robins between the two
-  // containers and backend's LITELLM_BASE_URL=http://litellm:4000 could
-  // hit either — defeats the purpose of side-by-side soak.
+test('prod-litellm: service name is `litellm` (claims DNS from retired GHCR sibling)', () => {
+  // After the GHCR-pulled aishacrm-litellm is retired (removed from
+  // docker-compose.prod.yml), the Coolify-built container claims the
+  // service name `litellm` on aishanet. Backend's LITELLM_BASE_URL=
+  // http://litellm:4000 resolves to this one — no env-var change needed.
   assert.match(
     compose,
-    /^\s{2}litellm-coolify:\s*$/m,
-    'compose must declare service `litellm-coolify` (not `litellm`)',
-  );
-  assert.doesNotMatch(
-    compose,
     /^\s{2}litellm:\s*$/m,
-    'compose must NOT declare a service named `litellm` — that collides with the GHCR sibling on aishanet',
+    'compose must declare service `litellm`',
   );
 });
 
-test('prod-litellm: explicit network alias `litellm-coolify` for stable DNS', () => {
+test('prod-litellm: explicit network alias `litellm` for stable DNS', () => {
   // Coolify v4 ignores `container_name`, so backend can't rely on it.
   // The `aliases:` block under networks: aishanet: gives a stable
   // hostname independent of Coolify's auto-naming.
   assert.match(
     litellmBlock,
-    /networks:\s*\n\s+aishanet:\s*\n[\s\S]+?aliases:\s*\n\s+-\s*litellm-coolify/m,
-    'service must declare aliases: [- litellm-coolify] under networks.aishanet so backend can reach it via a stable DNS name',
+    /networks:\s*\n\s+aishanet:\s*\n[\s\S]+?aliases:\s*\n\s+-\s*litellm\s*$/m,
+    'service must declare aliases: [- litellm] under networks.aishanet so backend can reach it via a stable DNS name',
   );
 });
 
@@ -100,9 +95,9 @@ test('prod-litellm: image is locally-built (no ghcr.io reference)', () => {
   );
 });
 
-test('prod-litellm: mem_limit is set (within 256m..512m for soak coexistence)', () => {
+test('prod-litellm: mem_limit is set (within 384m..1024m, headroom for chat completion bursts)', () => {
   const line = litellmBlock.split('\n').find((l) => /^\s+mem_limit:/.test(l));
-  assert.ok(line, 'mem_limit must be declared — the GHCR sibling is also running during soak; both must fit under host budget');
+  assert.ok(line, 'mem_limit must be declared — Hetzner has 8GB total budget, must fit alongside other prod services');
   const value = line.replace(/^\s+mem_limit:\s*/, '').trim();
   const mb = (() => {
     const m = value.match(/^(\d+)([gmk])$/i);
@@ -111,7 +106,9 @@ test('prod-litellm: mem_limit is set (within 256m..512m for soak coexistence)', 
     const u = m[2].toLowerCase();
     return u === 'g' ? n * 1024 : u === 'm' ? n : n / 1024;
   })();
-  assert.ok(mb && mb >= 256 && mb <= 768, `mem_limit=${value} (${mb}MB) must be between 256MB and 768MB`);
+  // Bumped from 384m after staging showed 97% utilization at idle.
+  // 768m gives headroom for transient Python heap during chat completions.
+  assert.ok(mb && mb >= 384 && mb <= 1024, `mem_limit=${value} (${mb}MB) must be between 384MB and 1024MB`);
 });
 
 test('prod-litellm: service joins external aishanet, not a new bridge', () => {
@@ -121,7 +118,7 @@ test('prod-litellm: service joins external aishanet, not a new bridge', () => {
   const dictForm = /networks:\s*\n\s+aishanet:\s*$/m.test(litellmBlock);
   assert.ok(
     listForm || dictForm,
-    'litellm-coolify service must join the `aishanet` network so backend (also on aishanet) reaches it via Docker DNS',
+    'litellm service must join the `aishanet` network so backend (also on aishanet) reaches it via Docker DNS',
   );
 });
 

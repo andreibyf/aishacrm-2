@@ -149,30 +149,15 @@ services:
       - default
       - aishanet
 
-  # LiteLLM - AI model proxy and router (OpenAI-compatible API)
-  litellm:
-    image: ghcr.io/andreibyf/aishacrm-2-litellm:latest
-    cgroup_parent: aishacrm.slice
-    # Python proxy with provider SDKs loaded; observed ~250-300 MiB steady.
-    mem_limit: 384m
-    mem_reservation: 192m
-    container_name: aishacrm-litellm
-    restart: unless-stopped
-    environment:
-      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
-      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
-      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
-    volumes:
-      - ./litellm_config.yaml:/app/config.yaml:ro
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - default
-      - aishanet
+  # NOTE: LiteLLM has been migrated to Coolify-native build (Phase 2).
+  # The Coolify Application `prod-litellm` deploys
+  # `prod/01-litellm/docker-compose.yml` which builds the image locally on
+  # Hetzner from the OneDev clone (no GHCR dependency). That container
+  # claims the `litellm` DNS alias on aishanet, so backend's
+  # `LITELLM_BASE_URL=http://litellm:4000` continues to work transparently.
+  # The old `litellm:` service block was removed from this file in commit
+  # f9a6361e and the GHCR image `ghcr.io/andreibyf/aishacrm-2-litellm:latest`
+  # is no longer pulled or run on Hetzner.
 
   # NOTE: MCP server is deployed separately from braid-mcp-node-server/
   # It must be on the 'aishanet' external network to be reachable by backend
