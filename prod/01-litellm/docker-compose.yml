@@ -32,9 +32,24 @@
 services:
   litellm:
     # Local build from OneDev clone — no GHCR image dependency.
+    #
+    # Build context is `.` (NOT `../..`) because Coolify v4 invokes compose
+    # with `--project-directory /artifacts/<uuid>/` (the cloned repo root)
+    # and resolves all relative paths against THAT, not against the compose
+    # file's own directory. `..` segments resolve from the project-dir and
+    # land outside the artifacts tree (`/litellm/...` instead of
+    # `/artifacts/<uuid>/litellm/...`), failing the build with
+    # "lstat /litellm: no such file or directory".
+    #
+    # Side effect: running `docker compose -f prod/01-litellm/docker-compose.yml`
+    # locally without `--project-directory <repo-root>` will fail similarly,
+    # because then `.` resolves to `prod/01-litellm/` (no Dockerfile there).
+    # If you need to run this compose locally for testing, add
+    # `--project-directory .` from the repo root, e.g.:
+    #   docker compose --project-directory . -f prod/01-litellm/docker-compose.yml build
     image: aishacrm-litellm:coolify
     build:
-      context: ../..
+      context: .
       dockerfile: litellm/Dockerfile
     container_name: aishacrm-litellm-coolify
     restart: unless-stopped

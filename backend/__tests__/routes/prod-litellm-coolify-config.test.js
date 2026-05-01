@@ -51,11 +51,21 @@ test('prod-litellm: container_name is suffixed with -coolify (no collision with 
   );
 });
 
-test('prod-litellm: build directive points at litellm/Dockerfile from repo root', () => {
+test('prod-litellm: build directive uses context: . (NOT ../..) and points at litellm/Dockerfile', () => {
+  // Coolify v4 invokes compose with `--project-directory /artifacts/<uuid>/`
+  // and resolves relative paths against that. Using `..` segments resolves
+  // outside the artifacts tree (lstat /litellm: no such file or directory).
+  // `context: .` resolves to the repo root via Coolify's project-directory,
+  // and dockerfile: litellm/Dockerfile points at the actual Dockerfile.
   assert.match(
     litellmBlock,
-    /\s+build:\s*\n\s+context:\s*\.\.\/\.\.\s*\n\s+dockerfile:\s*litellm\/Dockerfile/m,
-    'build context must be `../..` (repo root) with dockerfile `litellm/Dockerfile` — Coolify clones the repo to the Application working dir, then this compose builds locally',
+    /\s+build:\s*\n(?:[^\n]*\n)*?\s+context:\s*\.\s*\n(?:[^\n]*\n)*?\s+dockerfile:\s*litellm\/Dockerfile/m,
+    'build context must be `.` and dockerfile `litellm/Dockerfile` — Coolify resolves both against the project root via --project-directory',
+  );
+  assert.doesNotMatch(
+    litellmBlock,
+    /context:\s*\.\.\//,
+    'context must NOT use `..` segments — Coolify v4 resolves them outside the artifacts tree',
   );
 });
 
