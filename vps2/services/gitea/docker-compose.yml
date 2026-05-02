@@ -14,7 +14,7 @@
 # Coolify v4 quirks applied (per litellm/braid lessons):
 #   - Service name `gitea` + alias `gitea` on the Coolify per-app network
 #     (Coolify auto-generates the network; coolify-proxy joins it).
-#   - SERVICE_FQDN_GITEA=https://gitea.aishacrm.com → Coolify auto-generates
+#
 #     traefik routers; do NOT add manual traefik.* labels (caused 504s on
 #     staging when both my labels + Coolify's auto labels claimed the same
 #     Host).
@@ -45,7 +45,6 @@ services:
       - GITEA__security__INSTALL_LOCK=true
       - GITEA__log__LEVEL=Info
       - GITEA__log__MODE=console
-      - SERVICE_FQDN_GITEA=https://gitea.aishacrm.com
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/healthz || exit 1"]
       interval: 30s
@@ -58,6 +57,7 @@ services:
         max-size: "10m"
         max-file: "3"
     ports:
+      - "127.0.0.1:3000:3000"
       - "127.0.0.1:2222:2222"
     volumes:
       - gitea_data:/data
