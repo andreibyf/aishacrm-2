@@ -46,7 +46,11 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           set -euo pipefail
-          GITEA_URL="https://x-access-token:${GITEA_TOKEN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
+          # Strip trailing whitespace/newlines from the token. Pasting tokens
+          # into GitHub's UI sometimes captures a trailing \n; git refuses
+          # URLs containing newlines with "credential url cannot be parsed".
+          TOKEN_CLEAN=$(printf '%s' "$GITEA_TOKEN" | tr -d '\r\n\t ')
+          GITEA_URL="https://x-access-token:${TOKEN_CLEAN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
           # Force push — GitHub is the canonical source for this branch.
           # If Gitea has commits GitHub doesn't, they're discarded (intentional).
           git push --force "${GITEA_URL}" HEAD:refs/heads/main
@@ -56,7 +60,8 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           set -euo pipefail
-          GITEA_URL="https://x-access-token:${GITEA_TOKEN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
+          TOKEN_CLEAN=$(printf '%s' "$GITEA_TOKEN" | tr -d '\r\n\t ')
+          GITEA_URL="https://x-access-token:${TOKEN_CLEAN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
           # --no-verify skips any pre-push hooks; mirroring shouldn't be
           # gated by local quality checks (those ran on the GitHub PR already).
           git push --tags "${GITEA_URL}" || echo "  (no new tags or push failed; non-fatal)"
