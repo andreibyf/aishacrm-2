@@ -12,9 +12,11 @@ DOCKER_VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY}"
 DOCKER_VITE_SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY}"
 DOCKER_VITE_SYSTEM_TENANT_ID="${VITE_SYSTEM_TENANT_ID}"
 DOCKER_VITE_CALCOM_URL="${VITE_CALCOM_URL}"
-DOCKER_VITE_OPENREPLAY_PROJECT_KEY="${VITE_OPENREPLAY_PROJECT_KEY}"
-DOCKER_VITE_OPENREPLAY_INGEST_POINT="${VITE_OPENREPLAY_INGEST_POINT}"
-DOCKER_VITE_OPENREPLAY_DASHBOARD_URL="${VITE_OPENREPLAY_DASHBOARD_URL}"
+DOCKER_VITE_SESSION_REPLAY_PROVIDER="${VITE_SESSION_REPLAY_PROVIDER}"
+DOCKER_VITE_OPENREPLAY_ENABLED="${VITE_OPENREPLAY_ENABLED}"
+DOCKER_VITE_CLARITY_ENABLED="${VITE_CLARITY_ENABLED}"
+DOCKER_VITE_CLARITY_PROJECT_ID="${VITE_CLARITY_PROJECT_ID}"
+DOCKER_VITE_CLARITY_DASHBOARD_URL="${VITE_CLARITY_DASHBOARD_URL}"
 
 # Fetch secrets from Doppler if token is available
 if [ -n "$DOPPLER_TOKEN" ]; then
@@ -39,14 +41,16 @@ if [ -n "$DOPPLER_TOKEN" ]; then
   set_secret_from_doppler "VITE_SYSTEM_TENANT_ID" || true
   set_secret_from_doppler "VITE_CALCOM_URL" || true
 
-  # OpenReplay runtime values (optional)
-  set_secret_from_doppler "VITE_OPENREPLAY_PROJECT_KEY" || true
-  set_secret_from_doppler "VITE_OPENREPLAY_INGEST_POINT" || true
-  set_secret_from_doppler "VITE_OPENREPLAY_DASHBOARD_URL" || true
-  # Backward compatibility: some Doppler configs may still use non-VITE names
-  set_secret_from_doppler "OPENREPLAY_PROJECT_KEY" || true
-  set_secret_from_doppler "OPENREPLAY_INGEST_POINT" || true
-  set_secret_from_doppler "OPENREPLAY_DASHBOARD_URL" || true
+  # Session replay provider selector + per-provider toggles + Clarity runtime values.
+  # OpenReplay was retired 2026-04 in favor of Microsoft Clarity. The OpenReplay
+  # *_PROJECT_KEY/INGEST_POINT/DASHBOARD_URL keys were removed from Doppler. We
+  # still pass VITE_OPENREPLAY_ENABLED so the React hook bails defensively even
+  # if a stale build-time bundle has the URLs baked in.
+  set_secret_from_doppler "VITE_SESSION_REPLAY_PROVIDER" || true
+  set_secret_from_doppler "VITE_OPENREPLAY_ENABLED" || true
+  set_secret_from_doppler "VITE_CLARITY_ENABLED" || true
+  set_secret_from_doppler "VITE_CLARITY_PROJECT_ID" || true
+  set_secret_from_doppler "VITE_CLARITY_DASHBOARD_URL" || true
 
   # Misc optional runtime tuning
   set_secret_from_doppler "VITE_USER_HEARTBEAT_INTERVAL_MS" || true
@@ -77,27 +81,26 @@ fi
 if [ -n "$DOCKER_VITE_CALCOM_URL" ]; then
   VITE_CALCOM_URL="$DOCKER_VITE_CALCOM_URL"
 fi
-if [ -n "$DOCKER_VITE_OPENREPLAY_PROJECT_KEY" ]; then
-  VITE_OPENREPLAY_PROJECT_KEY="$DOCKER_VITE_OPENREPLAY_PROJECT_KEY"
+if [ -n "$DOCKER_VITE_SESSION_REPLAY_PROVIDER" ]; then
+  VITE_SESSION_REPLAY_PROVIDER="$DOCKER_VITE_SESSION_REPLAY_PROVIDER"
 fi
-if [ -n "$DOCKER_VITE_OPENREPLAY_INGEST_POINT" ]; then
-  VITE_OPENREPLAY_INGEST_POINT="$DOCKER_VITE_OPENREPLAY_INGEST_POINT"
+if [ -n "$DOCKER_VITE_OPENREPLAY_ENABLED" ]; then
+  VITE_OPENREPLAY_ENABLED="$DOCKER_VITE_OPENREPLAY_ENABLED"
 fi
-if [ -n "$DOCKER_VITE_OPENREPLAY_DASHBOARD_URL" ]; then
-  VITE_OPENREPLAY_DASHBOARD_URL="$DOCKER_VITE_OPENREPLAY_DASHBOARD_URL"
+if [ -n "$DOCKER_VITE_CLARITY_ENABLED" ]; then
+  VITE_CLARITY_ENABLED="$DOCKER_VITE_CLARITY_ENABLED"
+fi
+if [ -n "$DOCKER_VITE_CLARITY_PROJECT_ID" ]; then
+  VITE_CLARITY_PROJECT_ID="$DOCKER_VITE_CLARITY_PROJECT_ID"
+fi
+if [ -n "$DOCKER_VITE_CLARITY_DASHBOARD_URL" ]; then
+  VITE_CLARITY_DASHBOARD_URL="$DOCKER_VITE_CLARITY_DASHBOARD_URL"
 fi
 
-# Normalize OpenReplay env names so frontend runtime always gets VITE_* keys.
-# This allows Doppler projects using OPENREPLAY_* naming to work without renaming secrets.
-if [ -z "$VITE_OPENREPLAY_PROJECT_KEY" ] && [ -n "$OPENREPLAY_PROJECT_KEY" ]; then
-  export VITE_OPENREPLAY_PROJECT_KEY="$OPENREPLAY_PROJECT_KEY"
-fi
-if [ -z "$VITE_OPENREPLAY_INGEST_POINT" ] && [ -n "$OPENREPLAY_INGEST_POINT" ]; then
-  export VITE_OPENREPLAY_INGEST_POINT="$OPENREPLAY_INGEST_POINT"
-fi
-if [ -z "$VITE_OPENREPLAY_DASHBOARD_URL" ] && [ -n "$OPENREPLAY_DASHBOARD_URL" ]; then
-  export VITE_OPENREPLAY_DASHBOARD_URL="$OPENREPLAY_DASHBOARD_URL"
-fi
+# OpenReplay is retired. The env-name-normalization block that used to live
+# here (mapping bare OPENREPLAY_* -> VITE_OPENREPLAY_*) was removed in 2026-04
+# along with the corresponding Doppler secrets. Keep this comment as a marker
+# for git archaeology.
 
 # CRITICAL: Always use version baked into Docker image (/app/VERSION) as source of truth
 # This file is written during build with the git tag, ensuring version matches deployed code
@@ -117,7 +120,7 @@ echo "frontend start | build=${VITE_APP_BUILD_VERSION} | started=${START_TS}"
 
 # Runtime environment variable injection
 # Use JSON serialization to guarantee values are escaped safely for JavaScript.
-node -e "const fs=require('fs'); const env={ VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '', VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || '', VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '', VITE_AISHACRM_BACKEND_URL: process.env.VITE_AISHACRM_BACKEND_URL || '', VITE_CURRENT_BRANCH: process.env.VITE_CURRENT_BRANCH || 'main', VITE_CALCOM_URL: process.env.VITE_CALCOM_URL || '', VITE_OPENREPLAY_PROJECT_KEY: process.env.VITE_OPENREPLAY_PROJECT_KEY || process.env.OPENREPLAY_PROJECT_KEY || '', VITE_OPENREPLAY_INGEST_POINT: process.env.VITE_OPENREPLAY_INGEST_POINT || process.env.OPENREPLAY_INGEST_POINT || '', VITE_OPENREPLAY_DASHBOARD_URL: process.env.VITE_OPENREPLAY_DASHBOARD_URL || process.env.OPENREPLAY_DASHBOARD_URL || '', VITE_SYSTEM_TENANT_ID: process.env.VITE_SYSTEM_TENANT_ID || '', VITE_USER_HEARTBEAT_INTERVAL_MS: process.env.VITE_USER_HEARTBEAT_INTERVAL_MS || '90000', VITE_APP_BUILD_VERSION: process.env.VITE_APP_BUILD_VERSION || '' }; fs.writeFileSync('/app/dist/env-config.js', 'window._env_ = ' + JSON.stringify(env, null, 2) + ';\\n');"
+node -e "const fs=require('fs'); const env={ VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '', VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || '', VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '', VITE_AISHACRM_BACKEND_URL: process.env.VITE_AISHACRM_BACKEND_URL || '', VITE_CURRENT_BRANCH: process.env.VITE_CURRENT_BRANCH || 'main', VITE_CALCOM_URL: process.env.VITE_CALCOM_URL || '', VITE_SESSION_REPLAY_PROVIDER: process.env.VITE_SESSION_REPLAY_PROVIDER || '', VITE_OPENREPLAY_ENABLED: process.env.VITE_OPENREPLAY_ENABLED || 'false', VITE_CLARITY_ENABLED: process.env.VITE_CLARITY_ENABLED || '', VITE_CLARITY_PROJECT_ID: process.env.VITE_CLARITY_PROJECT_ID || '', VITE_CLARITY_DASHBOARD_URL: process.env.VITE_CLARITY_DASHBOARD_URL || '', VITE_SYSTEM_TENANT_ID: process.env.VITE_SYSTEM_TENANT_ID || '', VITE_USER_HEARTBEAT_INTERVAL_MS: process.env.VITE_USER_HEARTBEAT_INTERVAL_MS || '90000', VITE_APP_BUILD_VERSION: process.env.VITE_APP_BUILD_VERSION || '' }; fs.writeFileSync('/app/dist/env-config.js', 'window._env_ = ' + JSON.stringify(env, null, 2) + ';\\n');"
 
 : "${FRONTEND_PORT:=3000}"
 
