@@ -977,7 +977,13 @@ server.listen(PORT, async () => {
   } else if (!hasCampaignWorkerSupabaseConfig(process.env)) {
     logger.warn('[CampaignWorker] Not started (missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)');
   } else {
-    const campaignInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '5000', 10);
+    // Default raised from 5000ms to 60000ms in 2026-04 to reduce baseline CPU
+    // overhead. The previous 5s default produced ~12 ticks/min even with an
+    // empty queue, contributing to sustained kernel-scheduler work on the host.
+    // Override via CAMPAIGN_WORKER_INTERVAL_MS in Doppler if you need faster
+    // campaign delivery latency. .env.example already documented 30000 as the
+    // recommended value.
+    const campaignInterval = parseInt(process.env.CAMPAIGN_WORKER_INTERVAL_MS || '60000', 10);
     startCampaignWorker(pgPool, campaignInterval);
     logger.info({ intervalMs: campaignInterval }, '[CampaignWorker] Start requested');
   }
