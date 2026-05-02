@@ -211,3 +211,26 @@ fix_*.py
 tmp/
 _settings_head.txt
 test_output.txt
+
+# Operational scratchpads — debug scripts, env captures, cloudflared/coolify probes from sessions
+scripts/inventory-out/
+scripts/inventory-vps.ps1
+scripts/ai-review.js
+scripts/aishacrm.slice
+scripts/ufw-vps2.sh
+scripts/pre-push.hook
+
+# Per-VPS env captures (contain secrets — never commit)
+.env.vps2
+.env.vps2.*
+.env.staging
+.env.hetzner
+
+# Doppler config dumps and MCP test outputs (often contain raw secrets)
+doppler-prd.json
+doppler-mcp/test_set_secrets.py
+
+# Local cloudflared / hetzner-tunnel deploy artifacts (per-host, not portable)
+cloudflared-config-vps1.yml
+docker-compose.hetzner-cloudflared.yml
+docker-compose.staging.yml
