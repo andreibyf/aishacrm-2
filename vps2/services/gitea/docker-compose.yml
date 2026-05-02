@@ -54,10 +54,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    ports:
-      - "127.0.0.1:3030:3000"
+    networks:
+      coolify:
+        aliases:
+          - gitea
     volumes:
       - gitea_data:/data
+
+networks:
+  coolify:
+    external: true
 
 volumes:
   gitea_data:
