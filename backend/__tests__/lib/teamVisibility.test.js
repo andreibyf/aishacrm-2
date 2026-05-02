@@ -1105,3 +1105,142 @@ describe('teamVisibility — getAccessLevel', () => {
     });
   });
 });
+
+// ─── employee_role fallback for users without team memberships ──────────────
+
+describe('teamVisibility — employee_role fallback (no team membership)', () => {
+  beforeEach(() => {
+    clearVisibilityCache();
+    clearSettingsCache();
+  });
+
+  // Bug fix context: schema has TWO role columns:
+  //   users.role          — system auth role (user|admin|superadmin)
+  //   users.employee_role — CRM business role (member|manager|director|admin)
+  //
+  // Previously, getVisibilityScope only set highestRole from team_members.role,
+  // so a "Manager" with no team membership was mapped to highestRole='none' and
+  // mid-tier writes (e.g., editing unassigned-team leads) fell through to
+  // read-only. This contradicts what "Manager" implies in the UI badge.
+  //
+  // Fix: when memberships is empty, derive highestRole from users.employee_role.
+
+  it('manager with no team gets highestRole=manager', async () => {
+    const user = {
+      id: 'u1',
+      role: 'user',
+      tenant_id: 't1',
+      employee_role: 'manager',
+    };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.bypass, false);
+    assert.strictEqual(scope.highestRole, 'manager');
+  });
+
+  it('director with no team gets highestRole=director', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'director' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'director');
+  });
+
+  it('admin with no team gets highestRole=admin (but no bypass — system role still wins)', async () => {
+    // Note: admin via employee_role does NOT trigger the system-level bypass at
+    // getVisibilityScope:166. That bypass requires users.role='admin' or
+    // perm_settings/perm_employees. Here we just verify highestRole derivation.
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'admin' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.bypass, false);
+    assert.strictEqual(scope.highestRole, 'admin');
+  });
+
+  it('member employee_role gets highestRole=member', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'member' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'member');
+  });
+
+  it('employee employee_role aliases to member', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'employee' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'member');
+  });
+
+  it('uppercase employee_role is normalized', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'MANAGER' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'manager');
+  });
+
+  it('null employee_role preserves prior default (highestRole=none)', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: null };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'none');
+  });
+
+  it('unrecognized employee_role string falls back to none', async () => {
+    const user = { id: 'u1', role: 'user', tenant_id: 't1', employee_role: 'wizard' };
+    const sb = mockSupabase({
+      modulesettings: { data: null, error: null },
+      team_members: { data: [], error: null },
+    });
+    const scope = await getVisibilityScope(user, sb);
+    assert.strictEqual(scope.highestRole, 'none');
+  });
+
+  // The actual bug: with the fix in place, a Manager with no team can edit
+  // unassigned-team records — which is what the role implies.
+  it('integration: manager with no team can edit unassigned-team record', () => {
+    const scope = {
+      bypass: false,
+      teamIds: [],
+      employeeIds: ['u1'],
+      mode: 'hierarchical',
+      highestRole: 'manager', // ← derived from employee_role per the fix
+      permNotesAnywhere: true,
+    };
+    assert.strictEqual(
+      getAccessLevel(scope, /*recordTeamId*/ null, /*assignedTo*/ null, 'u1'),
+      'full',
+    );
+  });
+
+  it('integration: member with no team still read_notes on unassigned (not a regression)', () => {
+    const scope = {
+      bypass: false,
+      teamIds: [],
+      employeeIds: ['u1'],
+      mode: 'hierarchical',
+      highestRole: 'member',
+      permNotesAnywhere: true,
+    };
+    assert.strictEqual(getAccessLevel(scope, null, null, 'u1'), 'read_notes');
+  });
+});

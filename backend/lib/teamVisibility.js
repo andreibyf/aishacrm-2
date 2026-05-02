@@ -207,15 +207,46 @@ export async function getVisibilityScope(user, supabase) {
       return fallback;
     }
 
-    // No team membership → own records only (regardless of mode)
+    // No team membership → fall back to user's CRM employee_role for highestRole.
+    //
+    // The schema has two role columns:
+    //   users.role           — system-level auth role (user|admin|superadmin)
+    //   users.employee_role  — CRM business role (member|manager|director|admin)
+    //
+    // The UI displays employee_role as "CRM Role: Manager" but the access-control
+    // logic was previously deriving highestRole purely from team_members.role,
+    // leaving managers without a team mapped to highestRole='none'. That made
+    // every "Manager" with no team membership read-only on unassigned-team
+    // records, contradicting what the role implies.
+    //
+    // Resolution: when the user has no team_members rows, use employee_role
+    // (lowercased, with safe fallbacks) to derive highestRole. Visibility stays
+    // own-only — they still need to be on a team or have perm_all_records to
+    // SEE other teams' records — but if they get there via perm_all_records,
+    // their write level now matches their stated CRM role.
     if (!memberships || memberships.length === 0) {
-      logger.debug('[TeamVisibility]', user.email, 'has no team → own-only');
+      const empRoleRaw = (user.employee_role || '').toLowerCase().trim();
+      let derivedRole = 'none';
+      if (empRoleRaw === 'admin' || empRoleRaw === 'superadmin') {
+        derivedRole = 'admin';
+      } else if (empRoleRaw === 'director') {
+        derivedRole = 'director';
+      } else if (empRoleRaw === 'manager') {
+        derivedRole = 'manager';
+      } else if (empRoleRaw === 'member' || empRoleRaw === 'employee') {
+        derivedRole = 'member';
+      }
+      logger.debug(
+        '[TeamVisibility]',
+        user.email,
+        `has no team → own-only (highestRole=${derivedRole} from employee_role='${empRoleRaw}')`,
+      );
       const result = {
         bypass: false,
         teamIds: [],
         employeeIds: [user.id],
         mode,
-        highestRole: 'none',
+        highestRole: derivedRole,
       };
       _setCache(key, result);
       return result;
