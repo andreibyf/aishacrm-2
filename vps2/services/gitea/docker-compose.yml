@@ -57,7 +57,7 @@ services:
         max-size: "10m"
         max-file: "3"
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3030:3000"
       - "127.0.0.1:2222:2222"
     volumes:
       - gitea_data:/data
