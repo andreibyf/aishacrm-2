@@ -33,10 +33,8 @@ services:
       - USER_GID=1000
       - GITEA__server__DOMAIN=gitea.aishacrm.com
       - GITEA__server__ROOT_URL=https://gitea.aishacrm.com/
-      - GITEA__server__SSH_DOMAIN=gitea.aishacrm.com
       - GITEA__server__HTTP_PORT=3000
-      - GITEA__server__SSH_PORT=2222
-      - GITEA__server__START_SSH_SERVER=true
+      - GITEA__server__START_SSH_SERVER=false
       - GITEA__service__DISABLE_REGISTRATION=true
       - GITEA__service__REQUIRE_SIGNIN_VIEW=true
       - GITEA__webhook__ALLOWED_HOST_LIST=deploy.aishacrm.com,*.aishacrm.com,private,external
@@ -58,7 +56,6 @@ services:
         max-file: "3"
     ports:
       - "127.0.0.1:3030:3000"
-      - "127.0.0.1:2222:2222"
     volumes:
       - gitea_data:/data
 
