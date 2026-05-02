@@ -1,0 +1,62 @@
+# Mirror GitHub main -> Gitea main on every push.
+#
+# Why this exists: Coolify pulls from Gitea (origin) and Gitea is the
+# Coolify webhook source. When a PR is merged on GitHub (e.g., from the
+# Claude Code Action or any GitHub-side workflow), Gitea has no idea
+# until something explicitly syncs it. Without this workflow Coolify
+# deploys the previous commit, which is what bit us 2026-05-02.
+#
+# Trigger: every push to main on GitHub (which is where PRs get merged).
+# Effect: clones the just-pushed ref and force-pushes it to Gitea using
+# GITEA_TOKEN (a secret with write:repository scope on aishacrm-2 in Gitea).
+# Once the push lands on Gitea, Gitea's webhook fires Coolify, which
+# rebuilds the affected app(s) per its watch_paths config.
+#
+# Why force-push: the standard mirror flow is one-way GitHub -> Gitea, and
+# Gitea should NEVER diverge from GitHub. If it does (e.g., someone pushed
+# directly to Gitea bypassing this), GitHub wins.
+
+name: Mirror to Gitea
+
+on:
+  push:
+    branches: [main]
+  # Allow manual re-runs from the Actions tab if a sync was missed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-to-gitea
+  cancel-in-progress: false  # let queued mirrors finish in order
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # mirror needs all refs
+
+      - name: Push main to Gitea
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -euo pipefail
+          GITEA_URL="https://x-access-token:${GITEA_TOKEN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
+          # Force push — GitHub is the canonical source for this branch.
+          # If Gitea has commits GitHub doesn't, they're discarded (intentional).
+          git push --force "${GITEA_URL}" HEAD:refs/heads/main
+
+      - name: Push tags to Gitea
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -euo pipefail
+          GITEA_URL="https://x-access-token:${GITEA_TOKEN}@gitea.aishacrm.com/aishacrm/aishacrm-2.git"
+          # --no-verify skips any pre-push hooks; mirroring shouldn't be
+          # gated by local quality checks (those ran on the GitHub PR already).
+          git push --tags "${GITEA_URL}" || echo "  (no new tags or push failed; non-fatal)"
