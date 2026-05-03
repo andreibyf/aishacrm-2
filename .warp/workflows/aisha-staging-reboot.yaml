@@ -1,0 +1,11 @@
+---
+name: aisha staging reboot
+description: Reboot VPS-1 after a lockup, then verify slice + containers come back up
+command: |
+  echo "Rebooting VPS-1 (Staging)..."
+  ssh ${SSH_USER}@${STAGING_HOST} "sudo reboot" || true
+  echo "Waiting 90s for boot + Docker daemon + container restart policies..."
+  sleep 90
+  echo "Verifying server is back..."
+  ssh -o ConnectTimeout=15 ${SSH_USER}@${STAGING_HOST} 'uptime && echo "---" && systemctl is-active aishacrm.slice && echo "---" && docker ps --format "{{.Names}}" | wc -l && echo "containers running"'
+tags: [aisha, staging, recovery, vps-1]

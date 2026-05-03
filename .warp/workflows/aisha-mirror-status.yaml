@@ -1,0 +1,7 @@
+---
+name: aisha mirror status
+description: Show the last 5 GitHub→Gitea mirror workflow runs. Use after a push to verify the mirror fired and Coolify got the webhook.
+command: |
+  cd ${AISHA_REPO}
+  gh run list --workflow=mirror-to-gitea.yml --limit 5
+tags: [aisha, deploy, ci]

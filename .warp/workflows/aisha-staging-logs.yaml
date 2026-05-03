@@ -1,0 +1,12 @@
+---
+name: aisha staging logs
+description: Tail compose logs for a staging service (one-shot, last N lines)
+arguments:
+  - name: service
+    description: 'Service name (e.g. backend, frontend, aisha-comms, braid-mcp-server, litellm)'
+  - name: lines
+    description: 'Number of lines to tail'
+    default_value: '100'
+command: |
+  ssh ${SSH_USER}@${STAGING_HOST} 'docker logs --tail {{lines}} $(docker ps --filter name={{service}} --format "{{.Names}}" | head -1) 2>&1 | tail -{{lines}}'
+tags: [aisha, staging, logs, vps-1]

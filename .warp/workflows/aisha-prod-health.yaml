@@ -1,0 +1,6 @@
+---
+name: aisha prod health
+description: SSH Hetzner (Production) and show docker ps + slice status + uptime
+command: |
+  ssh ${SSH_USER}@${PROD_HOST} 'docker ps --format "table {{.Names}}\t{{.Status}}" && echo "---" && systemctl status aishacrm.slice --no-pager | head -15 && echo "---" && uptime && echo "---" && df -h / | tail -1'
+tags: [aisha, prod, health, hetzner]

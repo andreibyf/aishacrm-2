@@ -1,0 +1,16 @@
+---
+name: aisha last-reboot
+description: Show last 5 reboots on a host. Default = staging (the lockup-prone one).
+arguments:
+  - name: host
+    description: 'Host alias: staging, services, or prod'
+    default_value: 'staging'
+command: |
+  case "{{host}}" in
+    staging) HOST=$STAGING_HOST ;;
+    services) HOST=$SERVICES_HOST ;;
+    prod) HOST=$PROD_HOST ;;
+    *) echo "Unknown host: {{host}}. Use staging|services|prod"; exit 1 ;;
+  esac
+  ssh ${SSH_USER}@$HOST 'last -x reboot | head -5'
+tags: [aisha, recovery, diagnostic]

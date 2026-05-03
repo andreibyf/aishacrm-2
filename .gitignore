@@ -211,6 +211,7 @@ fix_*.py
 tmp/
 _settings_head.txt
 test_output.txt
+backend-test-output.txt
 
 # Operational scratchpads — debug scripts, env captures, cloudflared/coolify probes from sessions
 scripts/inventory-out/

@@ -1,0 +1,12 @@
+---
+name: aisha doppler get
+description: Fetch a secret value from Doppler dev_personal (most-used config). Override config arg for stg_stg or prd_prd.
+arguments:
+  - name: key
+    description: 'Secret key (e.g. SUPABASE_URL, VITE_SUPABASE_ANON_KEY)'
+  - name: config
+    description: 'Doppler config'
+    default_value: 'dev_personal'
+command: |
+  doppler secrets get {{key}} --plain --project ${DOPPLER_PROJECT} --config {{config}}
+tags: [aisha, doppler, secrets]

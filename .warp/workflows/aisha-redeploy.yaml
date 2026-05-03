@@ -1,0 +1,14 @@
+---
+name: aisha redeploy
+description: Trigger a Coolify redeploy for a specific app via API. Requires COOLIFY_TOKEN env var.
+arguments:
+  - name: app_uuid
+    description: 'Coolify app UUID (find in Coolify dashboard URL when viewing the app)'
+command: |
+  if [ -z "$COOLIFY_TOKEN" ]; then echo "COOLIFY_TOKEN not set; pull from your .env or Doppler"; exit 1; fi
+  curl -fsSL -X POST \
+    -H "Authorization: Bearer $COOLIFY_TOKEN" \
+    "${COOLIFY_URL}/api/v1/deploy?uuid={{app_uuid}}&force=true"
+  echo ""
+  echo "Watch deployments at ${COOLIFY_URL}"
+tags: [aisha, deploy, coolify]

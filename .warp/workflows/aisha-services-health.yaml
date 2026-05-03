@@ -1,0 +1,6 @@
+---
+name: aisha services health
+description: SSH VPS-2 (Services - Coolify, Gitea, Cal.com, Kuma) and show service status
+command: |
+  ssh ${SSH_USER}@${SERVICES_HOST} 'docker ps --format "table {{.Names}}\t{{.Status}}" && echo "---" && uptime && echo "---" && df -h / | tail -1'
+tags: [aisha, services, health, vps-2]

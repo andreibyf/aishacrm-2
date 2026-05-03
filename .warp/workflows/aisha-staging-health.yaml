@@ -1,0 +1,6 @@
+---
+name: aisha staging health
+description: SSH VPS-1 (Staging) and show docker ps + slice status + uptime
+command: |
+  ssh ${SSH_USER}@${STAGING_HOST} 'docker ps --format "table {{.Names}}\t{{.Status}}" && echo "---" && systemctl status aishacrm.slice --no-pager | head -15 && echo "---" && uptime && echo "---" && last -x reboot | head -3'
+tags: [aisha, staging, health, vps-1]
