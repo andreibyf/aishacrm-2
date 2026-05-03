@@ -173,8 +173,11 @@ services:
       # Dev-safe scheduler origin used by booking-shortlink canonicalization.
       # Production should set this explicitly in production compose/secrets.
       - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-http://localhost:3002}
-      # Supabase credentials (fallback if Doppler fails - from .env)
-      - SUPABASE_URL=${SUPABASE_URL:-https://nrtrjsatmsosslxwlmoj.supabase.co}
+      # Supabase credentials. No project-specific default — set SUPABASE_URL +
+      # SUPABASE_SERVICE_ROLE_KEY in .env (committed-default values per environment)
+      # so Doppler-only changes don't get clobbered and missing env fails loud.
+      # Removed nrtrjsatmsosslxwlmoj fallback 2026-05-02.
+      - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
       - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
@@ -257,7 +260,9 @@ services:
       - TENANT_RESOLVE_CACHE_TTL_MS=${TENANT_RESOLVE_CACHE_TTL_MS:-300000}
       - DEFAULT_TENANT_ID=a11dfb63-4b18-4eb8-872e-747af2e37c46
       - CRM_BACKEND_URL=http://backend:3001
-      - SUPABASE_URL=${SUPABASE_URL:-https://nrtrjsatmsosslxwlmoj.supabase.co}
+      # Supabase credentials sourced from .env (no project-specific default).
+      # See backend service block for rationale. Removed fallback 2026-05-02.
+      - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
       - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
@@ -373,8 +378,12 @@ services:
     build:
       context: .
       args:
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://nrtrjsatmsosslxwlmoj.supabase.co}
-        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-sb_publishable_tDd-qmWTa1v9Efuxfk1R2A_9_P6n6Lc}
+        # Supabase credentials baked into the bundle at build time. Sourced
+        # from .env / host shell — no project-specific default so missing env
+        # fails the build loudly instead of silently shipping the wrong project.
+        # Removed nrtrjsatmsosslxwlmoj/sb_publishable_tDd... fallback 2026-05-02.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-http://localhost:4001}
         # Build-time value must remain production-safe because Dockerfile blocks localhost in dist.
         # Runtime value is injected by frontend-entrypoint.sh from service env (below).
@@ -397,13 +406,14 @@ services:
       - DOPPLER_PROJECT=aishacrm
       - DOPPLER_CONFIG=dev_personal
       - PORT=${FRONTEND_PORT:-3000}
-      # Supabase credentials — Doppler dev_personal injects these at runtime via
-      # frontend-entrypoint.sh (writes window._env_), but a fallback is needed
-      # in case Doppler is unavailable. Default points at the current dev branch
-      # (Supabase preview branch off staging, project_ref nrtrjsatmsosslxwlmoj).
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://nrtrjsatmsosslxwlmoj.supabase.co}
-      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY:-sb_publishable_tDd-qmWTa1v9Efuxfk1R2A_9_P6n6Lc}
-      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-sb_publishable_tDd-qmWTa1v9Efuxfk1R2A_9_P6n6Lc}
+      # Supabase credentials. Set in .env so docker-compose interpolation
+      # resolves before the container starts; frontend-entrypoint.sh's
+      # "Docker compose wins over Doppler" precedence then preserves them
+      # at runtime. No project-specific defaults — missing env fails loud.
+      # Removed nrtrjsatmsosslxwlmoj/sb_publishable_tDd... fallback 2026-05-02.
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
       - VITE_AISHACRM_BACKEND_URL=http://localhost:4001
       - VITE_CALCOM_URL=${VITE_CALCOM_URL:-http://localhost:3002}
       - VITE_OPENREPLAY_ENABLED=${VITE_OPENREPLAY_ENABLED:-false}
