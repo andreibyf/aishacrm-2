@@ -59,9 +59,40 @@ cd ${AISHA_REPO}
 docker compose config --quiet && echo "OK"
 ```
 
-## 6. Seed tenant + superadmin
+## 6. Seed Dev Playground (test fixtures)
 
-In the Supabase dashboard SQL editor for the dev branch, paste:
+The backend test suite expects a "Dev Playground" tenant + admin user + 6 employees + 2 teams in the dev branch. Without these the suite has 86+ failures. Apply via psql or paste in the Supabase SQL editor for the dev branch:
+
+```sh
+# From repo root, with Doppler dev_personal active:
+psql "$(doppler secrets get DATABASE_URL --plain --project ${DOPPLER_PROJECT} --config dev_personal)" \
+  -f ${AISHA_REPO}/backend/__tests__/fixtures/dev-playground-seed.sql
+```
+
+Or manually paste the contents of `backend/__tests__/fixtures/dev-playground-seed.sql` into the Supabase SQL editor and run.
+
+Verify counts (expected: tenant DP=1, employees=6, teams=2, team_members=7):
+
+```sh
+echo "Run in Supabase SQL editor:"
+echo "SELECT 'tenant' AS t, COUNT(*) FROM public.tenant WHERE id='b62b764d-4f27-4e20-a8ad-8eb9b2e1055c' UNION ALL"
+echo "SELECT 'employees', COUNT(*) FROM public.employees WHERE tenant_id='b62b764d-4f27-4e20-a8ad-8eb9b2e1055c' UNION ALL"
+echo "SELECT 'teams', COUNT(*) FROM public.teams WHERE tenant_id='b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';"
+```
+
+## 6b. Apply billing migrations (154/155/155a)
+
+These billing tables (billing_plans, billing_accounts, tenant_subscriptions, invoices, invoice_line_items, payments, billing_events + tenant.billing_state column) aren't in the staging schema snapshot the branch was created from. Three test files assert their existence. Apply via Supabase SQL editor (run each migration in order):
+
+- `backend/migrations/154_platform_billing_foundation.sql`
+- `backend/migrations/155_billing_stripe_price_ids.sql`
+- `backend/migrations/155a_billing_plans_check_relax.sql`
+
+All idempotent. Skip this step if the branch was created after these migrations landed in staging.
+
+## 7. Seed your local-dev superadmin (login fixture)
+
+This is separate from the Dev Playground — it's the account YOU use to log in locally with `abyfield@4vdataconsulting.com`. In the Supabase dashboard SQL editor for the dev branch, paste:
 
 ```sql
 -- Dev branch seed: tenant + superadmin user
@@ -144,7 +175,7 @@ UNION ALL SELECT 'public.users', COUNT(*) FROM public.users;
 
 Verify counts: tenant=2, auth.users=1, auth.identities=1, public.users=1.
 
-## 7. Test the keys directly
+## 8. Test the keys directly
 
 ```sh
 ANON=$(doppler secrets get SUPABASE_ANON_KEY --plain --project ${DOPPLER_PROJECT} --config dev_personal)
@@ -160,7 +191,7 @@ curl -sS -X POST \
 Should return JSON with `access_token`. If `"Invalid API key"`, the keys
 don't match the URL — re-check Doppler values against Supabase dashboard.
 
-## 8. Rebuild local containers + verify login
+## 9. Rebuild local containers + verify login
 
 ```sh
 cd ${AISHA_REPO}
