@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -10,20 +10,24 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const composePath = resolve(here, '..', '..', '..', 'staging', '01-backend-heavy', 'docker-compose.yml');
-const compose = readFileSync(composePath, 'utf8');
 
-function getServiceBlock(text, serviceName) {
-  const startRe = new RegExp(`^ {2}${serviceName}:$`, 'm');
-  const startMatch = text.match(startRe);
-  if (!startMatch) return '';
-  const start = startMatch.index;
-  const after = text.slice(start + startMatch[0].length);
-  const endMatch = after.match(/^ {2}[a-z][\w-]*:$|^volumes:$|^networks:$/m);
-  const end = endMatch ? endMatch.index : after.length;
-  return after.slice(0, end);
-}
+if (!existsSync(composePath)) {
+  test.skip('compose file not reachable from cwd — these static-analysis tests only run from the repo root, not from inside the backend container', () => {});
+} else {
+  const compose = readFileSync(composePath, 'utf8');
 
-test('staging-backend-heavy: backend service block exists', () => {
+  function getServiceBlock(text, serviceName) {
+    const startRe = new RegExp(`^ {2}${serviceName}:$`, 'm');
+    const startMatch = text.match(startRe);
+    if (!startMatch) return '';
+    const start = startMatch.index;
+    const after = text.slice(start + startMatch[0].length);
+    const endMatch = after.match(/^ {2}[a-z][\w-]*:$|^volumes:$|^networks:$/m);
+    const end = endMatch ? endMatch.index : after.length;
+    return after.slice(0, end);
+  }
+
+  test('staging-backend-heavy: backend service block exists', () => {
   const block = getServiceBlock(compose, 'backend');
   assert.ok(block.length > 200, 'backend service block missing or truncated');
 });
@@ -90,3 +94,4 @@ test('staging-backend-heavy: BRAID_MCP_URL points at canonical braid-mcp-server'
   assert.ok(line);
   assert.match(line, /http:\/\/braid-mcp-server:8000/);
 });
+}

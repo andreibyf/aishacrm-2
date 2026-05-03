@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -33,9 +33,13 @@ const composePath = resolve(
   'calcom',
   'docker-compose.yml',
 );
-const compose = readFileSync(composePath, 'utf8');
 
-function getServiceBlock(text, serviceName) {
+if (!existsSync(composePath)) {
+  test.skip('compose file not reachable from cwd — these static-analysis tests only run from the repo root, not from inside the backend container', () => {});
+} else {
+  const compose = readFileSync(composePath, 'utf8');
+
+  function getServiceBlock(text, serviceName) {
   // Extract a service block — from `  <name>:` to the next top-level
   // service definition or a `volumes:` / `networks:` top-level key. Good
   // enough for static string searches; we don't need a full YAML parser.
@@ -255,3 +259,4 @@ test('staging compose: calcom has memory cap (mem_limit or deploy.resources.limi
     'calcom service must declare a memory cap (`mem_limit:` or `deploy.resources.limits.memory:`) — VPS-2 hosts other services and an unbounded calcom risks OOM',
   );
 });
+}

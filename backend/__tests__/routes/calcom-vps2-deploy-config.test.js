@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -37,9 +37,13 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const composePath = resolve(here, '..', '..', '..', 'docker-compose.vps2.yml');
-const compose = readFileSync(composePath, 'utf8');
 
-function getCalcomBlock(text) {
+if (!existsSync(composePath)) {
+  test.skip('compose file not reachable from cwd — these static-analysis tests only run from the repo root, not from inside the backend container', () => {});
+} else {
+  const compose = readFileSync(composePath, 'utf8');
+
+  function getCalcomBlock(text) {
   // Extract the calcom service block — from `  calcom:` to the next top-level
   // service definition or a deploy/volumes top-level key. Good enough for static
   // string searches; we don't need a full YAML parser.
@@ -134,3 +138,4 @@ test('docker-compose.vps2.yml: NEXT_PUBLIC_WEBAPP_URL points at scheduler.aishac
     'NEXT_PUBLIC_WEBAPP_URL must reference scheduler.aishacrm.com (default or hardcoded)',
   );
 });
+}

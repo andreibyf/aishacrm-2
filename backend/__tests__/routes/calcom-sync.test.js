@@ -14,6 +14,7 @@
  * Uses Node.js native test runner. No Jest/Vitest.
  */
 
+import net from 'node:net';
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
@@ -29,6 +30,50 @@ const CALCOM_DB_URL =
   process.env.CALCOM_DB_URL || 'postgresql://calcom:calcom_local@calcom-db:5432/calcom';
 
 const SHOULD_RUN = process.env.CI ? process.env.CI_BACKEND_TESTS === 'true' : true;
+
+// ---------------------------------------------------------------------------
+// Reachability probe — calcom-db lives behind the `scheduling` Docker profile
+// and is not started by default. Skip the integration suites cleanly when it
+// isn't reachable so plain `npm test` runs stay green.
+// ---------------------------------------------------------------------------
+
+function parseCalcomDbHostPort(url) {
+  try {
+    const u = new URL(url);
+    return {
+      host: u.hostname || 'calcom-db',
+      port: Number(u.port) || 5432,
+    };
+  } catch {
+    return { host: 'calcom-db', port: 5432 };
+  }
+}
+
+async function isCalcomDbReachable() {
+  const { host, port } = parseCalcomDbHostPort(CALCOM_DB_URL);
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host, port });
+    const done = (ok) => {
+      try {
+        sock.destroy();
+      } catch {
+        /* ignore */
+      }
+      resolve(ok);
+    };
+    sock.setTimeout(1000);
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+    sock.once('timeout', () => done(false));
+  });
+}
+
+const CALCOM_AVAILABLE = await isCalcomDbReachable();
+const SKIP_REASON = !SHOULD_RUN
+  ? true
+  : !CALCOM_AVAILABLE
+    ? 'calcom-db not reachable; run with `docker compose --profile scheduling up -d`'
+    : false;
 
 // ---------------------------------------------------------------------------
 // DB helpers
@@ -196,7 +241,7 @@ async function deleteTestActivity(id) {
 // pushActivityToCalcom
 // ---------------------------------------------------------------------------
 
-describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: !SHOULD_RUN }, () => {
+describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: SKIP_REASON }, () => {
   let activity;
   let createdUid;
 
@@ -335,7 +380,7 @@ describe('pushActivityToCalcom — creates Booking in calcom-db', { skip: !SHOUL
 // removeActivityFromCalcom
 // ---------------------------------------------------------------------------
 
-describe('removeActivityFromCalcom — cancels Booking in calcom-db', { skip: !SHOULD_RUN }, () => {
+describe('removeActivityFromCalcom — cancels Booking in calcom-db', { skip: SKIP_REASON }, () => {
   let activity;
   let blockUid;
 
@@ -387,7 +432,7 @@ describe('removeActivityFromCalcom — cancels Booking in calcom-db', { skip: !S
 
 describe(
   'pullCalcomBookings — syncs calcom-db Bookings to booking_sessions',
-  { skip: !SHOULD_RUN },
+  { skip: SKIP_REASON },
   () => {
     const testUid = `test-pull-${Date.now()}`;
     let calcomUserId = 1;
