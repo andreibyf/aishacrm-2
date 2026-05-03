@@ -35,6 +35,8 @@ services:
       dockerfile: litellm/Dockerfile
     container_name: aishacrm-litellm-staging-coolify
     restart: unless-stopped
+    # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
+    cgroup_parent: aishacrm.slice
     # Original 384m was too tight (97% utilization at idle in first deploy).
     # Bumped to 768m for headroom; one real chat completion request needs
     # ~50-100 MiB transient on top of the steady ~370 MiB resident set.

@@ -27,6 +27,8 @@ services:
         APP_BUILD_VERSION: ${APP_BUILD_VERSION:-staging-${COOLIFY_RESOURCE_UUID:-unknown}}
     container_name: staging-aishacrm-frontend
     restart: unless-stopped
+    # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
+    cgroup_parent: aishacrm.slice
     ports:
       - "127.0.0.1:5000:3000"
     mem_limit: 256m
@@ -66,6 +68,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-comms
     restart: unless-stopped
+    cgroup_parent: aishacrm.slice
     mem_limit: 768m
     mem_reservation: 256m
     command: ["npm", "run", "worker:communications"]

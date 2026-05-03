@@ -42,6 +42,8 @@ services:
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-server
     restart: unless-stopped
+    # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
+    cgroup_parent: aishacrm.slice
     mem_limit: 512m
     mem_reservation: 256m
     environment:
@@ -77,6 +79,7 @@ services:
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-1
     restart: unless-stopped
+    cgroup_parent: aishacrm.slice
     mem_limit: 384m
     mem_reservation: 192m
     depends_on:
@@ -115,6 +118,7 @@ services:
       dockerfile: Dockerfile
     container_name: staging-braid-mcp-2
     restart: unless-stopped
+    cgroup_parent: aishacrm.slice
     mem_limit: 384m
     mem_reservation: 192m
     depends_on:

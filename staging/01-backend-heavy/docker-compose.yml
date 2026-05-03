@@ -27,6 +27,12 @@ services:
       dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-backend
     restart: unless-stopped
+    # Bind to host-level aggregate CPU/mem slice. Without cgroup_parent the
+    # backend can saturate all available cores; aishacrm.slice enforces
+    # CPUQuota=500% across the full staging stack so the aggregate stays under
+    # Zap VPS-1's 5.5-core sustained cap. Slice must be installed on the host
+    # (scripts/aishacrm.slice → /etc/systemd/system/aishacrm.slice).
+    cgroup_parent: aishacrm.slice
     ports:
       - "127.0.0.1:5001:3001"
     mem_limit: 3072m
