@@ -5,11 +5,11 @@
 ### 1. Backend Infrastructure
 
 #### Created Files:
+
 - **`backend/lib/cronExecutors.js`** - Job executor registry with three job functions:
   - `markUsersOffline` - Marks users/employees offline after 5 minutes of inactivity
   - `cleanOldActivities` - Placeholder for cleaning old activity records
   - `syncDenormalizedFields` - Placeholder for data sync operations
-  
 - **`backend/scripts/seed-cron-jobs.js`** - Seeds 3 default cron jobs into database
   - Mark Users Offline (every_5_minutes, active)
   - Clean Old Activities (daily, inactive)
@@ -30,6 +30,7 @@
   - Troubleshooting guide
 
 #### Modified Files:
+
 - **`backend/routes/cron.js`** - Complete refactor from stub to full implementation
   - GET `/api/cron/jobs` - List jobs with filtering
   - POST `/api/cron/jobs` - Create new job
@@ -41,8 +42,9 @@
 ### 2. Frontend Integration
 
 #### Modified Files:
+
 - **`src/components/shared/CronHeartbeat.jsx`** - Updated to use local backend
-  - Changed from Base44 SDK `cronJobRunner()` to `fetch('/api/cron/run')`
+  - Calls `fetch('/api/cron/run')` against the local backend
   - Uses `VITE_AISHACRM_BACKEND_URL` environment variable
   - Maintains same error handling and circuit breaker logic
   - Runs every 5 minutes for admin/superadmin users
@@ -50,6 +52,7 @@
 ### 3. Database Setup
 
 #### Seeded Data:
+
 ```sql
 -- 3 default cron jobs created:
 1. Mark Users Offline
@@ -73,6 +76,7 @@
 ## 🧪 Test Results
 
 ### Integration Test Output:
+
 ```
 ✅ Found 3 cron job(s) in database
 ✅ Created 2 test users with stale presence (10 minutes old)
@@ -83,6 +87,7 @@
 ```
 
 ### Key Metrics:
+
 - **Jobs tested:** markUsersOffline
 - **Users processed:** 2 test users marked offline correctly
 - **Execution time:** ~100ms for job execution
@@ -121,28 +126,33 @@ Backend
 
 ## 🔑 Key Features
 
-### 1. **Independent from Base44**
-- No external dependencies for cron execution
+### 1. **Self-Contained**
+
+- No external scheduler dependencies
 - Local database storage
 - Local backend execution
 - Complete control over job scheduling
 
 ### 2. **Flexible Scheduling**
+
 - Supports common intervals: every_5_minutes, hourly, daily, weekly
 - Supports custom cron expressions: `cron:0 2 * * *`
 - Automatic next_run calculation
 
 ### 3. **Error Handling**
+
 - Jobs execute sequentially (failed job doesn't block others)
 - Errors logged in `metadata.last_error` and `metadata.error_count`
 - Success tracked in `metadata.execution_count`
 
 ### 4. **Extensibility**
+
 - Easy to add new jobs via executor registry
 - Supports tenant-specific and global jobs
 - Configurable via metadata JSON field
 
 ### 5. **Monitoring**
+
 - Execution history in metadata
 - Last run and next run timestamps
 - Frontend circuit breaker (auto-disable after 3 failures)
@@ -161,33 +171,33 @@ await fetch('/api/cron/jobs', {
     schedule: 'daily',
     function_name: 'cleanupOldRecords',
     is_active: true,
-    metadata: { retention_days: 30 }
-  })
+    metadata: { retention_days: 30 },
+  }),
 });
 
 // Then implement in cronExecutors.js:
 export async function cleanupOldRecords(supabase, jobMetadata) {
   const retentionDays = jobMetadata.retention_days || 30;
   const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-  
+
   const { data, error } = await supabase
     .from('records')
     .delete()
     .lt('created_at', cutoffDate.toISOString())
     .select();
-  
+
   if (error) throw error;
-  
+
   return {
     success: true,
-    deleted: data?.length || 0
+    deleted: data?.length || 0,
   };
 }
 
 // Add to registry:
 export const jobExecutors = {
   // ...
-  cleanupOldRecords
+  cleanupOldRecords,
 };
 ```
 
@@ -195,7 +205,7 @@ export const jobExecutors = {
 
 ```sql
 -- View all jobs with execution status
-SELECT 
+SELECT
   name,
   is_active,
   last_run,
@@ -207,7 +217,7 @@ FROM cron_job
 ORDER BY next_run;
 
 -- View users currently online vs offline
-SELECT 
+SELECT
   COUNT(*) FILTER (WHERE metadata->>'live_status' = 'online') as online,
   COUNT(*) FILTER (WHERE metadata->>'live_status' = 'offline') as offline
 FROM users;
@@ -216,6 +226,7 @@ FROM users;
 ## 📝 Next Steps
 
 ### Immediate (Production Ready):
+
 1. ✅ All core functionality working
 2. ✅ Tests passing
 3. ✅ Documentation complete
@@ -223,12 +234,14 @@ FROM users;
 5. ⚠️ **Hard refresh frontend** to load updated CronHeartbeat component
 
 ### Short Term (Enhancements):
+
 1. Implement `cleanOldActivities` job function
 2. Implement `syncDenormalizedFields` job function
 3. Add admin UI for job management (Settings → System → Cron Jobs)
 4. Add real-time job execution logs viewer
 
 ### Long Term (Advanced Features):
+
 1. Job dependencies (run Job B only after Job A succeeds)
 2. Parallel execution for independent jobs
 3. Job priority/queue system
@@ -244,13 +257,15 @@ All tests passing, no lint errors, full integration verified.
 ### Monitoring Recommendations:
 
 1. **Check job execution regularly:**
+
    ```sql
-   SELECT name, last_run, metadata->>'last_execution_status' 
-   FROM cron_job 
+   SELECT name, last_run, metadata->>'last_execution_status'
+   FROM cron_job
    WHERE is_active = true;
    ```
 
 2. **Watch for failed jobs:**
+
    ```sql
    SELECT name, metadata->>'last_error', metadata->>'error_count'
    FROM cron_job
@@ -259,7 +274,7 @@ All tests passing, no lint errors, full integration verified.
 
 3. **Verify presence tracking:**
    ```sql
-   SELECT 
+   SELECT
      COUNT(*) FILTER (WHERE metadata->>'live_status' = 'online') as online_users,
      AVG(EXTRACT(EPOCH FROM (NOW() - (metadata->>'last_seen')::timestamptz))/60) as avg_idle_minutes
    FROM users;

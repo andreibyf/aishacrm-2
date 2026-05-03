@@ -97,7 +97,7 @@ test.describe('[PLATFORM] @billing Payment Portal page (tenant mode)', () => {
 
     await expect(consoleBody.or(emptyTenant)).toBeVisible({ timeout: 30_000 });
 
-    // The old Base44 BillingSettings ghost should not appear anywhere
+    // The legacy BillingSettings UI must not appear (regression guard for the pre-Stripe migration)
     await expect(page.getByText(/select a subscription plan/i, { exact: false })).toHaveCount(0);
   });
 });

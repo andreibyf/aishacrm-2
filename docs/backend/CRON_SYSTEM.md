@@ -49,13 +49,16 @@ CREATE TABLE cron_job (
 ## API Endpoints
 
 ### GET `/api/cron/jobs`
+
 List all cron jobs with optional filtering.
 
 **Query Parameters:**
+
 - `tenant_id` - Filter by tenant (optional)
 - `is_active` - Filter by active status (optional)
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -77,9 +80,11 @@ List all cron jobs with optional filtering.
 ```
 
 ### POST `/api/cron/jobs`
+
 Create a new cron job.
 
 **Body:**
+
 ```json
 {
   "name": "My Custom Job",
@@ -92,15 +97,19 @@ Create a new cron job.
 ```
 
 ### PUT `/api/cron/jobs/:id`
+
 Update an existing cron job. Automatically recalculates `next_run` if schedule changes.
 
 ### DELETE `/api/cron/jobs/:id`
+
 Delete a cron job.
 
 ### POST `/api/cron/run`
+
 Execute all due cron jobs (where `next_run <= NOW()`).
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -135,15 +144,15 @@ Execute all due cron jobs (where `next_run <= NOW()`).
 
 The system supports the following schedule formats:
 
-| Expression | Description | Next Run Calculation |
-|------------|-------------|---------------------|
-| `every_5_minutes` | Every 5 minutes | +5 minutes |
-| `every_15_minutes` | Every 15 minutes | +15 minutes |
-| `every_30_minutes` | Every 30 minutes | +30 minutes |
-| `hourly` | Every hour | +1 hour |
-| `daily` | Every day at midnight UTC | +1 day |
-| `weekly` | Every Monday at midnight UTC | +7 days |
-| `cron:* * * * *` | Standard cron expression | Parsed via cron library |
+| Expression         | Description                  | Next Run Calculation    |
+| ------------------ | ---------------------------- | ----------------------- |
+| `every_5_minutes`  | Every 5 minutes              | +5 minutes              |
+| `every_15_minutes` | Every 15 minutes             | +15 minutes             |
+| `every_30_minutes` | Every 30 minutes             | +30 minutes             |
+| `hourly`           | Every hour                   | +1 hour                 |
+| `daily`            | Every day at midnight UTC    | +1 day                  |
+| `weekly`           | Every Monday at midnight UTC | +7 days                 |
+| `cron:* * * * *`   | Standard cron expression     | Parsed via cron library |
 
 ### Custom Cron Expressions
 
@@ -162,6 +171,7 @@ For complex schedules, use the `cron:` prefix:
 **Schedule:** `every_5_minutes` (active by default)
 
 **Configuration:**
+
 ```json
 {
   "timeout_minutes": 5
@@ -169,12 +179,14 @@ For complex schedules, use the `cron:` prefix:
 ```
 
 **How it works:**
+
 - Queries `users` and `employees` tables
 - Finds records where `last_seen` < (NOW - timeout_minutes)
 - Updates `metadata.live_status = 'offline'`
 - Returns count of users marked offline
 
 **Example Output:**
+
 ```json
 {
   "users_marked_offline": 12,
@@ -190,6 +202,7 @@ For complex schedules, use the `cron:` prefix:
 **Schedule:** `daily` (inactive by default)
 
 **Configuration:**
+
 ```json
 {
   "retention_days": 90
@@ -215,16 +228,16 @@ Add to `backend/lib/cronExecutors.js`:
 ```javascript
 export async function myNewJob(supabase, jobMetadata = {}) {
   const config = jobMetadata.my_config || 'default';
-  
+
   try {
     // Your job logic here using Supabase client
     const { data, error } = await supabase.from('table_name').select('*');
     if (error) throw error;
-    
+
     return {
       success: true,
       processed: data?.length || 0,
-      config
+      config,
     };
   } catch (error) {
     console.error('myNewJob error:', error);
@@ -240,7 +253,7 @@ export const jobExecutors = {
   markUsersOffline,
   cleanOldActivities,
   syncDenormalizedFields,
-  myNewJob  // Add here
+  myNewJob, // Add here
 };
 ```
 
@@ -250,14 +263,7 @@ export const jobExecutors = {
 await pool.query(
   `INSERT INTO cron_job (name, schedule, function_name, is_active, next_run, metadata)
    VALUES ($1, $2, $3, $4, $5, $6)`,
-  [
-    'My New Job',
-    'hourly',
-    'myNewJob',
-    true,
-    new Date(),
-    { my_config: 'value' }
-  ]
+  ['My New Job', 'hourly', 'myNewJob', true, new Date(), { my_config: 'value' }],
 );
 ```
 
@@ -277,6 +283,7 @@ node test-cron-system.js
 ```
 
 This test:
+
 - Creates test users with stale presence
 - Executes `markUsersOffline` job
 - Verifies users are marked offline
@@ -301,6 +308,7 @@ The `CronHeartbeat` component automatically triggers job execution:
 ```
 
 **Behavior:**
+
 - Runs every 5 minutes (300,000ms)
 - Initial delay of 10 seconds
 - Admin/SuperAdmin only
@@ -313,7 +321,7 @@ The `CronHeartbeat` component automatically triggers job execution:
 Check `metadata` field for execution history:
 
 ```sql
-SELECT 
+SELECT
   name,
   is_active,
   last_run,
@@ -356,6 +364,7 @@ ORDER BY (metadata->>'last_seen')::timestamptz DESC;
 ### Jobs Not Running
 
 1. Check if jobs are active:
+
    ```sql
    SELECT name, is_active, next_run FROM cron_job;
    ```
@@ -369,6 +378,7 @@ ORDER BY (metadata->>'last_seen')::timestamptz DESC;
 ### Jobs Failing
 
 1. Check metadata for error details:
+
    ```sql
    SELECT name, metadata->>'last_error' as error, metadata->>'error_count' as count
    FROM cron_job
@@ -395,21 +405,16 @@ ORDER BY (metadata->>'last_seen')::timestamptz DESC;
   WHERE schedule = 'every_5_minutes';
   ```
 
-## Migration from Base44
+## Architecture Summary
 
-The cron system is now **independent from Base44**:
+The cron system is fully self-contained:
 
 - ✅ Local database storage (`cron_job` table)
 - ✅ Local backend execution (`/api/cron/run`)
-- ✅ No external dependencies
+- ✅ No external scheduler dependencies
 
-**Old approach (deprecated):**
-```javascript
-import { cronJobRunner } from '@/api/functions'; // Base44 SDK
-await cronJobRunner({});
-```
+**Invocation:**
 
-**New approach:**
 ```javascript
 await fetch(`${BACKEND_URL}/api/cron/run`, { method: 'POST' });
 ```

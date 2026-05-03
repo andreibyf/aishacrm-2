@@ -43,6 +43,7 @@ The Aisha CRM call flow system provides comprehensive handling of both inbound a
 Main orchestration module that processes calls through a standardized flow:
 
 #### Inbound Call Flow
+
 1. **Contact Resolution**: Lookup contact/lead by phone number
 2. **Auto-Creation**: Create new lead if caller is unknown
 3. **Transcript Analysis**: Summarize with AI if transcript provided
@@ -51,6 +52,7 @@ Main orchestration module that processes calls through a standardized flow:
 6. **Webhook Emission**: Notify integrations of call event
 
 #### Outbound Call Flow
+
 1. **Contact Validation**: Verify contact exists (or find by phone)
 2. **Transcript Analysis**: Process if call was answered
 3. **Activity Logging**: Record outcome and duration
@@ -87,6 +89,7 @@ API endpoints for webhook handling:
 **Endpoint**: `POST /api/telephony/prepare-call`
 
 **Request**:
+
 ```json
 {
   "tenant_id": "uuid",
@@ -96,6 +99,7 @@ API endpoints for webhook handling:
 ```
 
 **Response**:
+
 ```json
 {
   "contact": {
@@ -138,12 +142,14 @@ API endpoints for webhook handling:
 ```
 
 **What AI Agent Gets**:
+
 - **WHO**: Contact name, company, title
 - **WHAT NUMBER**: Primary phone number to dial
 - **WHAT TO SAY**: Campaign script, call purpose, talking points
 - **CONTEXT**: Recent interactions, company info, relationship history
 
 **Usage in Campaign Worker**:
+
 1. Campaign worker identifies next contact to call
 2. Calls `prepareOutboundCall()` to fetch full context
 3. Passes context to AI provider (CallFluent/Thoughtly)
@@ -156,11 +162,13 @@ API endpoints for webhook handling:
 ### Twilio Setup
 
 Configure webhook URL in Twilio console:
+
 ```
 https://your-domain.com/api/telephony/webhook/twilio/inbound?tenant_id={YOUR_TENANT_ID}
 ```
 
 Twilio will POST:
+
 ```json
 {
   "CallSid": "CA1234...",
@@ -177,6 +185,7 @@ Twilio will POST:
 ### SignalWire Setup
 
 Similar to Twilio:
+
 ```
 https://your-domain.com/api/telephony/webhook/signalwire/inbound?tenant_id={YOUR_TENANT_ID}
 ```
@@ -184,11 +193,13 @@ https://your-domain.com/api/telephony/webhook/signalwire/inbound?tenant_id={YOUR
 ### CallFluent Setup
 
 Configure in CallFluent dashboard:
+
 ```
 https://your-domain.com/api/telephony/webhook/callfluent/outbound?tenant_id={YOUR_TENANT_ID}
 ```
 
 CallFluent payload:
+
 ```json
 {
   "call_id": "cf_abc123",
@@ -206,11 +217,13 @@ CallFluent payload:
 ### Thoughtly Setup
 
 Configure in Thoughtly platform:
+
 ```
 https://your-domain.com/api/telephony/webhook/thoughtly/outbound?tenant_id={YOUR_TENANT_ID}
 ```
 
 Thoughtly payload:
+
 ```json
 {
   "call_id": "th_xyz789",
@@ -230,6 +243,7 @@ Thoughtly payload:
 When calling generic endpoints directly (not via provider adapters), use this format:
 
 ### Inbound Webhook Payload
+
 ```json
 {
   "tenant_id": "uuid",
@@ -240,8 +254,8 @@ When calling generic endpoints directly (not via provider adapters), use this fo
   "duration": 120,
   "recording_url": "https://...",
   "transcript": "Optional transcript text",
-  "caller_name": "John Smith",  // AI agent extracted from conversation
-  "caller_email": "john@example.com",  // Optional: if caller provided during call
+  "caller_name": "John Smith", // AI agent extracted from conversation
+  "caller_email": "john@example.com", // Optional: if caller provided during call
   "provider": "twilio|signalwire|callfluent|thoughtly",
   "metadata": {
     "custom_field": "value"
@@ -250,6 +264,7 @@ When calling generic endpoints directly (not via provider adapters), use this fo
 ```
 
 ### Outbound Webhook Payload
+
 ```json
 {
   "tenant_id": "uuid",
@@ -331,26 +346,32 @@ When a transcript is provided, the system:
 The system extracts action items by detecting common phrases:
 
 **Follow-Up Requests**:
+
 - "send me..." → Creates email task: "Send [material]"
 - "email me..." → Creates email task with high priority
 - "call me back" → Creates follow-up call task (medium priority)
 
 **Meetings & Appointments**:
+
 - "schedule", "meeting", "appointment" → Creates meeting task (high priority)
 
 **Commitments**:
+
 - "I will...", "we will...", "I'll...", "we'll..." → Captured as commitments made
 
 **Questions**:
+
 - "can you...", "could you..." → Captured as customer requests
 
 **Example Input**:
+
 ```
 Customer: "Can you send me the pricing information? I'd like to schedule a meeting next week."
 Agent: "I'll send you the pricing details by end of day and we'll schedule that meeting."
 ```
 
 **Example Output**:
+
 ```json
 {
   "summary": "Call with customer discussing positive topics. 2 action item(s) identified.",
@@ -359,10 +380,7 @@ Agent: "I'll send you the pricing details by end of day and we'll schedule that 
     { "task": "Send pricing information", "priority": "high", "type": "email", "dueDate": null },
     { "task": "Schedule meeting", "priority": "high", "type": "meeting", "dueDate": null }
   ],
-  "customerRequests": [
-    "Requested: pricing information",
-    "Requested meeting/appointment"
-  ],
+  "customerRequests": ["Requested: pricing information", "Requested meeting/appointment"],
   "commitmentsMade": [
     "I'll send you the pricing details by end of day",
     "we'll schedule that meeting"
@@ -385,6 +403,7 @@ Call with customer discussing positive topics. 2 action item(s) identified.
 ```
 
 **Priority Icons**:
+
 - 🔴 High priority (1 day due)
 - 🟡 Medium priority (3 days due)
 - 🟢 Low priority (7 days due)
@@ -412,17 +431,20 @@ For high/medium priority action items, the system **automatically creates follow
 ```
 
 **Activity Type Mapping**:
+
 - Action type `email` → Activity type `email`
 - Action type `call` → Activity type `call`
 - Action type `meeting` → Activity type `meeting`
 - Action type `task`/`general` → Activity type `task`
 
 **Due Date Logic**:
+
 - **High priority**: 1 day (tomorrow)
 - **Medium priority**: 3 days
 - **Low priority**: 7 days (not auto-created)
 
 **Benefits**:
+
 - ✅ No manual task creation needed
 - ✅ Nothing falls through the cracks
 - ✅ Automatic reminders for team
@@ -435,12 +457,14 @@ For high/medium priority action items, the system **automatically creates follow
 The system **detects when activities are fulfilled** and automatically closes them:
 
 **Fulfillment Detection Patterns**:
+
 - "I sent you..." / "emailed you..." → Closes pending email activities
 - "I scheduled..." / "booked the meeting" → Closes pending meeting activities
 - "Following up as promised..." → Closes pending call activities
 - "Sent the proposal/quote" → Closes pending proposal activities
 
 **Example Workflow**:
+
 1. **Day 1**: Customer calls → "Can you send me pricing?"
    - System creates: Email activity "Action: Send pricing information" (status: pending, due tomorrow)
 2. **Day 2**: You call customer → "I sent you the pricing this morning"
@@ -450,15 +474,17 @@ The system **detects when activities are fulfilled** and automatically closes th
    - Metadata updated: `{"completed_by":"call_transcript_analysis","completion_activity_id":"456","auto_completed":true}`
 
 **Completion Logic**:
+
 - Searches for **pending activities** of matching type (email/call/meeting)
 - Filters to **last 30 days** to avoid closing very old tasks
 - Completes **most recent** activity of that type
 - Adds completion metadata linking back to the call that fulfilled it
 
 **Example Query**:
+
 ```sql
 -- Find auto-completed activities
-SELECT 
+SELECT
     id,
     subject,
     status,
@@ -479,6 +505,7 @@ ORDER BY completed_at DESC;
 Uses the braid-mcp-node-server for AI-powered transcript analysis with intelligent tenant-specific API key resolution.
 
 **Enable in `.env`:**
+
 ```bash
 USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=true
 BRAID_MCP_URL=http://braid-mcp-node-server:8000
@@ -486,11 +513,13 @@ TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
 ```
 
 **Start Braid MCP Server:**
+
 ```bash
 cd braid-mcp-node-server && docker compose up -d --build
 ```
 
 **Benefits:**
+
 - ✅ Automatic tenant-specific OpenAI key resolution
 - ✅ Unified AI operations interface
 - ✅ Redis-backed agent memory
@@ -501,6 +530,7 @@ cd braid-mcp-node-server && docker compose up -d --build
 - ✅ Context-aware customer requests
 
 **How It Works:**
+
 1. Call flow sends transcript to `http://braid-mcp-node-server:8000/mcp/run`
 2. Braid MCP resolves OpenAI API key:
    - Checks `tenant_integrations` table for tenant-specific key
@@ -515,11 +545,13 @@ cd braid-mcp-node-server && docker compose up -d --build
 Direct API calls to OpenAI (requires uncommenting code in `analyzeTranscript()`).
 
 **Enable:**
+
 1. Add `OPENAI_API_KEY` to `.env`
 2. Set `USE_BRAID_MCP_TRANSCRIPT_ANALYSIS=false`
 3. Uncomment OpenAI code in `callFlowHandler.js`
 
 **Limitations:**
+
 - No tenant-specific key resolution
 - Manual error handling
 - No Redis memory layer
@@ -564,10 +596,12 @@ INSERT INTO activities (
 ## Note Creation
 
 Automatic notes are created when:
+
 - Transcript is provided AND
 - AI summary is generated
 
 Notes table structure:
+
 ```sql
 INSERT INTO notes (
   tenant_id,
@@ -607,7 +641,7 @@ For outbound calls from AI campaigns:
 
 ```sql
 UPDATE ai_campaigns
-SET 
+SET
   target_contacts = /* Update specific contact status */,
   metadata = /* Increment progress counters */
 WHERE tenant_id = $1 AND id = $2
@@ -621,6 +655,7 @@ The system emits tenant-specific webhooks for:
 - `call.outbound` - When outbound call completed
 
 Payload includes:
+
 ```json
 {
   "contact_id": "uuid",
@@ -641,6 +676,7 @@ Payload includes:
 ### Manual Testing via Postman
 
 #### Test Inbound Call
+
 ```bash
 POST http://localhost:4001/api/telephony/inbound-webhook
 Content-Type: application/json
@@ -658,12 +694,14 @@ Content-Type: application/json
 ```
 
 Expected result:
+
 - New lead created for +15551234567 (if not exists)
 - Activity logged with "Inbound call from Unknown Caller"
 - Note created with AI summary
 - Returns `{ success: true, contact_id: "uuid", activity_id: "uuid", summary: "..." }`
 
 #### Test Outbound Call
+
 ```bash
 POST http://localhost:4001/api/telephony/outbound-webhook
 Content-Type: application/json
@@ -682,6 +720,7 @@ Content-Type: application/json
 ```
 
 #### Test Provider-Specific Webhook (Twilio)
+
 ```bash
 POST http://localhost:4001/api/telephony/webhook/twilio/inbound?tenant_id=your-tenant-uuid
 Content-Type: application/x-www-form-urlencoded
@@ -692,6 +731,7 @@ CallSid=CA1234&From=%2B15551234567&To=%2B15559876543&CallStatus=completed&CallDu
 ### Database Verification
 
 Check created records:
+
 ```sql
 -- Check for auto-created lead
 SELECT * FROM leads WHERE phone = '+15551234567';
@@ -735,26 +775,22 @@ function verifyTwilioSignature(req) {
   const signature = req.headers['x-twilio-signature'];
   const url = `https://your-domain.com${req.originalUrl}`;
   const params = req.body;
-  
-  return twilio.validateRequest(
-    process.env.TWILIO_AUTH_TOKEN,
-    signature,
-    url,
-    params
-  );
+
+  return twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, params);
 }
 ```
 
 ### Rate Limiting
 
 Add rate limiting to webhook endpoints:
+
 ```javascript
 import rateLimit from 'express-rate-limit';
 
 const webhookLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 100, // 100 requests per minute
-  message: 'Too many webhook requests'
+  message: 'Too many webhook requests',
 });
 
 router.post('/webhook/:provider/inbound', webhookLimiter, async (req, res) => {
@@ -765,6 +801,7 @@ router.post('/webhook/:provider/inbound', webhookLimiter, async (req, res) => {
 ### Tenant Isolation
 
 All queries include `tenant_id` filter to ensure data isolation:
+
 ```sql
 WHERE tenant_id = $1 AND ...
 ```
@@ -772,24 +809,28 @@ WHERE tenant_id = $1 AND ...
 ## Troubleshooting
 
 ### Call not logged
+
 1. Check webhook URL configuration in provider dashboard
 2. Verify `tenant_id` is passed correctly (query param or body)
 3. Check backend logs: `docker logs aishacrm-backend`
 4. Verify database connection: `SELECT 1 FROM contacts LIMIT 1`
 
 ### Contact not created
+
 1. Verify phone number format (E.164 recommended: +15551234567)
 2. Check leads table: `SELECT * FROM leads WHERE phone LIKE '%555123%'`
 3. Review activity logs for errors
 4. Ensure database has write permissions
 
 ### Transcript not summarized
+
 1. Check if OpenAI API key is configured
 2. Verify `analyzeTranscript()` function is called (see logs)
 3. Currently returns mock data - OpenAI integration pending
 4. Check note creation: `SELECT * FROM notes WHERE metadata->>'note_type' = 'call_summary'`
 
 ### Campaign not updating
+
 1. Verify `campaign_id` is in webhook payload
 2. Check campaign exists: `SELECT * FROM ai_campaigns WHERE id = 'uuid'`
 3. Ensure `target_contacts` array includes contact
@@ -798,6 +839,7 @@ WHERE tenant_id = $1 AND ...
 ## Future Enhancements
 
 ### Planned Features
+
 - [ ] OpenAI transcript summarization integration
 - [ ] Real-time call transcription (live streaming)
 - [ ] Sentiment-based lead scoring
@@ -808,6 +850,7 @@ WHERE tenant_id = $1 AND ...
 - [ ] Voice biometric identification
 
 ### Integration Opportunities
+
 - [ ] CRM sync (Salesforce, HubSpot)
 - [ ] Calendar integration (schedule callbacks)
 - [ ] Email follow-up automation
@@ -817,6 +860,7 @@ WHERE tenant_id = $1 AND ...
 ## API Reference
 
 See OpenAPI documentation at `/api/docs` for:
+
 - Full endpoint specifications
 - Request/response schemas
 - Authentication requirements
@@ -825,7 +869,7 @@ See OpenAPI documentation at `/api/docs` for:
 ## Support
 
 For issues or questions:
+
 - Check backend logs: `docker logs aishacrm-backend -f`
 - Review database state: Connect to Supabase console
 - Test webhooks: Use Postman collection (TBD)
-- Contact: app@base44.com

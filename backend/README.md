@@ -1,10 +1,11 @@
 # Aisha CRM Backend Server
 
-Your own independent backend infrastructure - no more dependency on Base44!
+Node.js + Express API server backed by Supabase (Postgres + Auth) with Doppler-managed secrets. The production deployment runs on a Hetzner host orchestrated by Coolify (GHCR-pinned images for the v7.1.31 release; `prod-litellm` is built natively by Coolify), and staging is fully Coolify-native via Gitea push-to-deploy.
 
 ## 🚀 Quick Start
 
 1. **Install dependencies:**
+
    ```bash
    npm install
    ```
@@ -14,15 +15,17 @@ Your own independent backend infrastructure - no more dependency on Base44!
    - When using Docker Compose, env vars are loaded from `backend/.env` (service env_file) and/or the compose `environment` block.
 
 3. **Set up PostgreSQL database:**
+
    ```sql
    CREATE DATABASE aishacrm;
    ```
 
 4. **Start the server:**
+
    ```bash
    # Production mode (manual restart required)
    npm start
-   
+
    # Development mode (auto-restart on file changes)
    npm run dev
    ```
@@ -41,16 +44,19 @@ npm run dev
 ```
 
 This uses a custom wrapper (`dev-server.js`) that:
+
 - ✅ Automatically restarts when `.js` files change
 - ✅ **Limits to 10 restarts per minute** (prevents infinite crash loops)
 - ✅ **2-second cooldown** between restarts (debounces rapid saves)
 - ✅ **Auto-exits** if limit exceeded (forces you to fix the issue)
 
 **Restart Policy:**
+
 - **Safe Mode (default):** `npm run dev` - Max 10 restarts/min, 2s cooldown
 - **Unlimited Mode:** `npm run dev:unlimited` - No limits (use with caution)
 
 **Benefits:**
+
 - ✅ Instant feedback - changes apply in ~2 seconds
 - ✅ Prevents crash loops from going unnoticed
 - ✅ Forces immediate attention to critical errors
@@ -87,7 +93,7 @@ POST /api/validation/find-duplicates
   "tenant_id": "your_tenant_id"
 }
 
-# Sync database from Base44
+# Database sync stub (no-op; retained for backwards compatibility)
 POST /api/database/sync
 {
   "tenant_id": "your_tenant_id",
@@ -101,9 +107,9 @@ The AI chat endpoints under `/api/ai/*` now use the Supabase JavaScript client f
 
 - Migration 037 adds `conversations.title` and `conversations.topic` with helpful indexes. Run the SQL in Supabase (see docs below).
 - On the first user message in a conversation, the backend:
-   - Auto-generates a title from the first ~50 chars of the message
-   - Auto-classifies a topic from keywords (leads, accounts, opportunities, contacts, support, general)
-   - Never overwrites a non-general, manually set topic
+  - Auto-generates a title from the first ~50 chars of the message
+  - Auto-classifies a topic from keywords (leads, accounts, opportunities, contacts, support, general)
+  - Never overwrites a non-general, manually set topic
 - Frontend sidebar shows titles, topic badges, topic filter, and inline rename.
 
 See: `docs/AI_CONVERSATIONS.md` for migration SQL, endpoints, and testing steps.
@@ -113,12 +119,14 @@ See: `docs/AI_CONVERSATIONS.md` for migration SQL, endpoints, and testing steps.
 The backend supports multiple LLM providers with automatic failover via the `lib/aiEngine/` module:
 
 **Supported Providers:**
+
 - **OpenAI:** gpt-4o, gpt-4o-mini (default)
 - **Anthropic:** claude-3-5-sonnet, claude-3-haiku
 - **Groq:** llama-3.3-70b, llama-3.1-8b
 - **Local:** Any OpenAI-compatible server
 
 **Configuration:**
+
 ```bash
 # Primary provider
 LLM_PROVIDER=openai
@@ -133,6 +141,7 @@ LLM_FAILOVER_CHAIN=openai,anthropic,groq
 ```
 
 **Key Functions:**
+
 - `selectLLMConfigForTenant(capability, tenantId)` - Get provider+model for a task
 - `callLLMWithFailover(options)` - Auto-failover across providers
 - `resolveLLMApiKey(options)` - Cascading key resolution
@@ -144,11 +153,13 @@ See: `lib/aiEngine/README.md` for full documentation.
 Real-time monitoring of all LLM calls with token usage tracking.
 
 **API Endpoints:**
+
 - `GET /api/system/llm-activity` - Get recent LLM calls (with filters)
 - `GET /api/system/llm-activity/stats` - Aggregated stats (tokens, providers, durations)
 - `DELETE /api/system/llm-activity` - Clear activity log
 
 **Query Parameters for `/llm-activity`:**
+
 - `limit` - Max entries (default: 100)
 - `provider` - Filter by provider (openai, anthropic, groq)
 - `capability` - Filter by capability (chat_tools, json_strict, etc.)
@@ -156,6 +167,7 @@ Real-time monitoring of all LLM calls with token usage tracking.
 - `since` - ISO timestamp for incremental fetches
 
 **Stats Response:**
+
 ```json
 {
   "totalEntries": 42,
@@ -194,9 +206,11 @@ MODEL_CHAT_TOOLS__TENANT_FASTCO=llama-3.3-70b-versatile
 Automatic generation of AI-powered executive summaries for lead/contact profiles with built-in 24-hour caching to prevent excessive API calls.
 
 **Endpoint:**
+
 - `POST /api/ai/summarize-person-profile` - Generate or retrieve cached AI summary
 
 **Request Body:**
+
 ```json
 {
   "person_id": "uuid",
@@ -220,12 +234,14 @@ Automatic generation of AI-powered executive summaries for lead/contact profiles
 ```
 
 **Features:**
+
 - **Automatic Caching:** Returns cached summary if fresher than 24 hours
 - **Smart Generation:** Only calls AI engine on cache miss or stale data
 - **Multi-Provider:** Uses AI engine failover (OpenAI → Anthropic → Groq)
 - **Database Persistence:** Stores summaries in `public.ai_person_profile` table
 
 **Response:**
+
 ```json
 {
   "ai_summary": "Executive summary text (2-3 sentences)..."
@@ -252,7 +268,7 @@ Update your frontend `.env` to point to this backend:
 VITE_AISHACRM_BACKEND_URL=http://localhost:3001
 ```
 
-Then use the fallback system in `src/api/fallbackFunctions.js` to automatically switch between Base44 and your backend.
+The frontend uses a circuit-breaker fallback layer in `src/api/fallbackFunctions.js` that automatically switches from remote backend calls to local in-process implementations when the API is unavailable, providing graceful degradation under failure.
 
 ## 📦 Project Structure
 
@@ -289,6 +305,7 @@ This backend has **21 runtime dependencies** carefully selected for essential fu
 ## 🛠️ Development
 
 Watch mode with auto-reload:
+
 ```bash
 npm run dev
 ```
@@ -304,11 +321,13 @@ npm run dev
 ## 📊 Monitoring
 
 View server metrics:
+
 ```bash
 curl http://localhost:3001/api/system/metrics
 ```
 
 Run diagnostics:
+
 ```bash
 curl -X POST http://localhost:3001/api/system/diagnostics
 ```
@@ -316,17 +335,15 @@ curl -X POST http://localhost:3001/api/system/diagnostics
 ## 🚨 Troubleshooting
 
 **Database connection failed:**
+
 - Check `DATABASE_URL` in `.env`
 - Verify PostgreSQL is running
 - Test connection: `POST /api/system/test-connection`
 
 **Port already in use:**
+
 - Change `PORT` in `.env`
 - Or stop the other process on port 3001
-
-**Base44 sync not working:**
-- Update `BASE44_APP_ID` in `.env`
-- Check Base44 is accessible
 
 ## 📝 Next Steps
 
@@ -339,7 +356,8 @@ curl -X POST http://localhost:3001/api/system/diagnostics
 ## 🎯 Your Independence
 
 This backend means:
-- ✅ No downtime when Base44 goes down
+
+- ✅ Backend runs independently of any external CRM platform; data sovereignty via Supabase
 - ✅ Own your data in your database
 - ✅ Full control over all functions
 - ✅ Can run on-premise or your own cloud

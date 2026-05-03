@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AiSHA CRM application uses the **Circuit Breaker pattern** to provide resilient integration with external dependencies (primarily Base44 cloud functions). This pattern prevents cascading failures and provides automatic failover to local implementations when external services are unavailable.
+The AiSHA CRM application uses the **Circuit Breaker pattern** to provide resilient integration with the remote backend API. This pattern prevents cascading failures and provides automatic failover to local in-process implementations when the backend is unavailable.
 
 ## Architecture
 
@@ -14,8 +14,8 @@ The AiSHA CRM application uses the **Circuit Breaker pattern** to provide resili
    - Event-based logging for observability
 
 2. **Fallback Functions** (`src/api/fallbackFunctions.js`)
-   - Integration layer that wraps Base44 cloud functions
-   - Automatic failover to local backend implementations
+   - Integration layer that wraps remote backend API calls
+   - Automatic failover to local in-process implementations
    - All critical functions protected by circuit breakers
 
 3. **Health Monitoring** (`src/hooks/useCircuitBreakerHealth.js`)
@@ -68,7 +68,7 @@ export const myCustomFunction = createResilientFunction(
 
 ### Closed (Normal Operation)
 
-- Circuit is healthy and requests go to primary function (Base44)
+- Circuit is healthy and requests go to the primary (remote backend) function
 - Success and failure metrics are tracked
 - If error rate exceeds threshold, circuit opens
 
@@ -133,8 +133,8 @@ console.log(health);
 {
   "timestamp": "2026-01-02T18:55:00.000Z",
   "circuitBreakers": {
-    "base44_getDashboardStats": {
-      "name": "base44_getDashboardStats",
+    "cb_getDashboardStats": {
+      "name": "cb_getDashboardStats",
       "state": "closed",
       "stats": {
         "successes": 145,
@@ -179,10 +179,10 @@ function MyComponent() {
 Circuit state changes automatically log to console:
 
 ```
-⚠️  Circuit breaker "base44_getDashboardStats" opened - too many failures
-🔄 Circuit breaker "base44_getDashboardStats" half-open - testing recovery
-✅ Circuit breaker "base44_getDashboardStats" closed - service recovered
-🔄 Using fallback for base44_getDashboardStats
+⚠️  Circuit breaker "cb_getDashboardStats" opened - too many failures
+🔄 Circuit breaker "cb_getDashboardStats" half-open - testing recovery
+✅ Circuit breaker "cb_getDashboardStats" closed - service recovered
+🔄 Using fallback for cb_getDashboardStats
 ```
 
 ### Production Logging
@@ -264,7 +264,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 ### Manual Testing
 
 1. **Test Fallback:**
-   - Stop Base44 service (or block network)
+   - Stop the backend service (or block network)
    - Trigger protected function
    - Verify fallback is used
    - Check console for fallback log
@@ -276,7 +276,7 @@ npm run test:file src/lib/circuitBreaker.test.js
 
 3. **Test Recovery:**
    - Wait for resetTimeout
-   - Restore Base44 service
+   - Restore the backend service
    - Verify circuit closes after successful tests
    - Check console for recovery logs
 

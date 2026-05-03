@@ -552,7 +552,7 @@ aishacrm-2/
 │   ├── api/                     # API client layer
 │   │   ├── entities.js          # Entity CRUD operations
 │   │   ├── functions.js         # Business logic functions
-│   │   └── fallbackFunctions.js # Base44 failover logic
+│   │   └── fallbackFunctions.js # Circuit-breaker fallback for backend API calls
 │   ├── components/              # React components
 │   │   ├── ui/                  # shadcn/ui components
 │   │   ├── shared/              # Shared utilities
@@ -748,8 +748,9 @@ The company/organization for a contact is always retrieved via the accounts FK j
 **Tables WITHOUT**: `contacts`, `accounts`, `opportunities`, `activities`
 
 In the frontend, `contact.account_name` is the flattened version — populated by `contacts.v2.js` via:
+
 ```javascript
-expanded.account_name = contact.account.name;  // contacts.v2.js ~line 281
+expanded.account_name = contact.account.name; // contacts.v2.js ~line 281
 ```
 
 #### activities.v2.js — lookupRelatedEntity
@@ -758,11 +759,14 @@ The `lookupRelatedEntity` function in `activities.v2.js` resolves the display na
 
 ```javascript
 const entityConfig = {
-  lead:         { table: 'leads',         select: 'company, first_name, last_name, email' },
-  contact:      { table: 'contacts',      select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)' },
-  account:      { table: 'accounts',      select: 'name, email, phone' },
-  opportunity:  { table: 'opportunities', select: 'name' },
-  bizdev_source:{ table: 'bizdev_sources',select: 'company_name, first_name, last_name, email' },
+  lead: { table: 'leads', select: 'company, first_name, last_name, email' },
+  contact: {
+    table: 'contacts',
+    select: 'first_name, last_name, email, accounts!contacts_account_id_fkey(name)',
+  },
+  account: { table: 'accounts', select: 'name, email, phone' },
+  opportunity: { table: 'opportunities', select: 'name' },
+  bizdev_source: { table: 'bizdev_sources', select: 'company_name, first_name, last_name, email' },
 };
 ```
 
@@ -786,12 +790,14 @@ emailWorker [backend/workers/emailWorker.js]
 SMTP send via tenant-configured provider
 ```
 
-**Key services:**  
-- `backend/services/aiEmailDraftingSupport.js` — builds entity context, selects columns, formats AI context block  
-- `backend/services/scheduledAiEmailService.js` — orchestrates the full draft generation and notification workflow  
-- `backend/workers/emailWorker.js` — polls for approved email activities and sends via SMTP  
+**Key services:**
+
+- `backend/services/aiEmailDraftingSupport.js` — builds entity context, selects columns, formats AI context block
+- `backend/services/scheduledAiEmailService.js` — orchestrates the full draft generation and notification workflow
+- `backend/workers/emailWorker.js` — polls for approved email activities and sends via SMTP
 
 **Important:** `buildEntitySelectColumns()` in `aiEmailDraftingSupport.js` must never request `company` from the `contacts` table:
+
 ```javascript
 // contacts branch must use accounts FK join:
 if (entityType === 'contact')
@@ -2588,12 +2594,12 @@ window.addEventListener('error', (event) => {
 
 ### Database Endpoints
 
-| Method | Endpoint                        | Description              |
-| ------ | ------------------------------- | ------------------------ |
-| POST   | `/api/database/sync`            | Sync from Base44         |
-| POST   | `/api/database/archive`         | Archive old records      |
-| POST   | `/api/database/cleanup`         | Clean up orphaned data   |
-| GET    | `/api/database/test-connection` | Test database connection |
+| Method | Endpoint                        | Description                                                      |
+| ------ | ------------------------------- | ---------------------------------------------------------------- |
+| POST   | `/api/database/sync`            | Database sync stub (no-op; retained for backwards compatibility) |
+| POST   | `/api/database/archive`         | Archive old records                                              |
+| POST   | `/api/database/cleanup`         | Clean up orphaned data                                           |
+| GET    | `/api/database/test-connection` | Test database connection                                         |
 
 ### Contact Endpoints
 

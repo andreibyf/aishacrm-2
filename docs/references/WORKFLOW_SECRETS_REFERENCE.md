@@ -37,7 +37,7 @@ This document provides a quick reference for all secrets used across GitHub Acti
 | ---------------------- | ------------------------------------------------------------------------------- | -------------------------- |
 | `docker-release.yml`   | `PROD_VPS_HOST`<br>`PROD_VPS_USER`<br>`PROD_VPS_KEY`<br>`PROD_MCP_GITHUB_TOKEN` | Production deployment      |
 | `api-schema-tests.yml` | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`DATABASE_URL`                 | Database integration tests |
-| `e2e.yml`              | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`<br>`BASE44_API_KEY`             | End-to-end tests           |
+| `e2e.yml`              | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`                                 | End-to-end tests           |
 | `mcp-audit-test.yml`   | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`                                   | MCP server tests           |
 
 ## Secret Categories
@@ -96,11 +96,6 @@ This document provides a quick reference for all secrets used across GitHub Acti
 - Scope: `repo` (read access)
 
 ### 4. API Keys
-
-**BASE44_API_KEY**
-
-- API key for Base44 cloud service
-- Used for AI/LLM features
 
 **VITE\_\* Prefixed**
 

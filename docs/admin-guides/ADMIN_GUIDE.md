@@ -392,9 +392,6 @@ cp .env.example .env
 # 🚨 CRITICAL: Must use port 4001 for Docker
 VITE_AISHACRM_BACKEND_URL=http://localhost:4001
 
-# Base44 (for migration/legacy only)
-VITE_BASE44_APP_ID=your_app_id_here
-
 # =============================================
 # FEATURE FLAGS
 # =============================================
@@ -3901,14 +3898,13 @@ Ensure `trigger_payload` contains the C.A.R.E. escalation data.
 
 ### Root .env (Frontend Configuration)
 
-| Variable                    | Type    | Required | Example                 | Description                    |
-| --------------------------- | ------- | -------- | ----------------------- | ------------------------------ |
-| `VITE_AISHACRM_BACKEND_URL` | URL     | Yes      | `http://localhost:4001` | Backend API URL (Docker port)  |
-| `VITE_BASE44_APP_ID`        | String  | No       | `app_xyz123`            | Base44 app ID (migration only) |
-| `VITE_ENABLE_AI`            | Boolean | No       | `true`                  | Enable AI features             |
-| `VITE_ENABLE_DOCS`          | Boolean | No       | `true`                  | Enable document processing     |
-| `VITE_ENABLE_ANALYTICS`     | Boolean | No       | `true`                  | Enable analytics               |
-| `NODE_ENV`                  | String  | No       | `production`            | Environment mode               |
+| Variable                    | Type    | Required | Example                 | Description                   |
+| --------------------------- | ------- | -------- | ----------------------- | ----------------------------- |
+| `VITE_AISHACRM_BACKEND_URL` | URL     | Yes      | `http://localhost:4001` | Backend API URL (Docker port) |
+| `VITE_ENABLE_AI`            | Boolean | No       | `true`                  | Enable AI features            |
+| `VITE_ENABLE_DOCS`          | Boolean | No       | `true`                  | Enable document processing    |
+| `VITE_ENABLE_ANALYTICS`     | Boolean | No       | `true`                  | Enable analytics              |
+| `NODE_ENV`                  | String  | No       | `production`            | Environment mode              |
 
 ### backend/.env (Backend Configuration)
 

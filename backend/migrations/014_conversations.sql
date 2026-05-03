@@ -1,5 +1,5 @@
 -- Migration 014: AI Conversations and Messages
--- Creates tables for AI agent conversations, replacing Base44 agents API
+-- Creates tables for AI agent conversations
 
 -- Conversations table
 CREATE TABLE IF NOT EXISTS conversations (
