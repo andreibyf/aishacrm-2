@@ -254,6 +254,8 @@ import createCarePlaybookRoutes from './routes/carePlaybooks.js';
 import createSessionPackageRoutes from './routes/session-packages.js';
 import createSessionCreditsRoutes from './routes/session-credits.js';
 import calcomWebhookRouter from './routes/calcom-webhook.js';
+import docusealRouter from './routes/docuseal.js';
+import docusealWebhookRouter from './routes/docuseal-webhook.js';
 import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
 import createCalcomSyncRoutes from './routes/calcom-sync.js';
 import { shortlinkCreateRouter, shortlinkRedirectRouter } from './routes/booking-shortlink.js';
@@ -622,6 +624,12 @@ app.use('/api/calcom-sync', defaultLimiter, authenticateRequest, createCalcomSyn
 // Cal.com webhook — no auth middleware; HMAC signature verified inside handler
 logger.debug('Mounting /api/webhooks/calcom route');
 app.use('/api/webhooks', defaultLimiter, calcomWebhookRouter);
+// DocuSeal CRM-side routes (auth + tenant scoping inside)
+logger.debug('Mounting /api/docuseal routes');
+app.use('/api/docuseal', defaultLimiter, authenticateRequest, docusealRouter);
+// DocuSeal webhook — no auth middleware; HMAC signature verified inside handler
+logger.debug('Mounting /api/webhooks/docuseal route');
+app.use('/api/webhooks', defaultLimiter, docusealWebhookRouter);
 // Stripe webhook — no auth middleware; raw body + Stripe-Signature HMAC verification inside handler
 logger.debug('Mounting /api/webhooks/stripe route');
 app.use('/api/webhooks', defaultLimiter, stripeWebhookRouter);

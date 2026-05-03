@@ -27,6 +27,9 @@ import {
   Calendar,
   HardDrive,
   Server,
+  FileSignature,
+  Copy,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -96,6 +99,20 @@ export function applyIntegrationTypeDefaults(formData, nextType) {
         ...(formData.config || {}),
         auto_provision:
           formData.config?.auto_provision === undefined ? true : formData.config.auto_provision,
+      },
+    };
+  }
+
+  if (nextType === 'docuseal') {
+    return {
+      ...formData,
+      integration_type: nextType,
+      integration_name: formData.integration_name || 'DocuSeal',
+      config: {
+        ...(formData.config || {}),
+        base_url:
+          formData.config?.base_url ||
+          'http://docuseal-vv17acequgm4r0g5ek0fvu6w.147.189.168.164.sslip.io',
       },
     };
   }
@@ -417,6 +434,7 @@ export default function TenantIntegrationSettings() {
       slack: MessageSquare,
       google_calendar: Calendar,
       calcom: Calendar,
+      docuseal: FileSignature,
       zapier: Zap,
       other: Link,
     };
@@ -689,6 +707,14 @@ function IntegrationForm({ integration, onSave, onCancel }) {
       toast.error('Twilio Account SID and Auth Token are required.');
       return;
     }
+    if (formData.integration_type === 'docuseal' && !formData.api_credentials.api_key) {
+      toast.error('DocuSeal API Key is required.');
+      return;
+    }
+    if (formData.integration_type === 'docuseal' && !formData.config?.base_url) {
+      toast.error('DocuSeal Base URL is required.');
+      return;
+    }
     // [2026-02-24 Claude] WhatsApp requires own Twilio credentials for tenant isolation
     if (
       formData.integration_type === 'whatsapp' &&
@@ -796,6 +822,7 @@ function IntegrationForm({ integration, onSave, onCancel }) {
             <SelectItem value="slack">Slack</SelectItem>
             <SelectItem value="google_calendar">Google Calendar</SelectItem>
             <SelectItem value="calcom">Booking Scheduler</SelectItem>
+            <SelectItem value="docuseal">DocuSeal (eSigning)</SelectItem>
             <SelectItem value="other">Other</SelectItem>
           </SelectContent>
         </Select>
@@ -1830,6 +1857,169 @@ function IntegrationForm({ integration, onSave, onCancel }) {
               />
               <p className="text-xs text-muted-foreground">
                 Base URL of your self-hosted scheduling instance.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── DocuSeal (eSigning) ── */}
+      {formData.integration_type === 'docuseal' && (
+        <Card className="p-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+          <CardContent className="space-y-4 pt-4">
+            <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <AlertDescription className="text-sm">
+                Connect your self-hosted DocuSeal instance for embedded eSigning. Generate a webhook
+                secret here and paste both the webhook URL and the secret into your DocuSeal admin
+                settings.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label htmlFor="docuseal_api_key" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                API Key
+              </Label>
+              <Input
+                id="docuseal_api_key"
+                type="password"
+                value={formData.api_credentials.api_key || ''}
+                onChange={(e) => handleCredentialChange('api_key', e.target.value)}
+                placeholder="Your DocuSeal API key"
+                className="font-mono"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Found in DocuSeal admin → Settings → API.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="docuseal_webhook_secret" className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-muted-foreground" />
+                Webhook Secret
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="docuseal_webhook_secret"
+                  type="password"
+                  value={formData.api_credentials.webhook_secret || ''}
+                  onChange={(e) => handleCredentialChange('webhook_secret', e.target.value)}
+                  placeholder="Generated 32-char hex secret"
+                  className="font-mono flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    // 32 hex chars = two UUIDs concatenated and stripped of dashes (yields 64),
+                    // truncated to 32. Falls back if crypto.randomUUID is unavailable.
+                    let secret = '';
+                    if (
+                      typeof globalThis !== 'undefined' &&
+                      globalThis.crypto?.randomUUID
+                    ) {
+                      const a = globalThis.crypto.randomUUID().replace(/-/g, '');
+                      const b = globalThis.crypto.randomUUID().replace(/-/g, '');
+                      secret = (a + b).slice(0, 32);
+                    } else {
+                      // Fallback: 32 random hex chars
+                      const bytes = new Uint8Array(16);
+                      if (
+                        typeof globalThis !== 'undefined' &&
+                        globalThis.crypto?.getRandomValues
+                      ) {
+                        globalThis.crypto.getRandomValues(bytes);
+                      } else {
+                        for (let i = 0; i < bytes.length; i += 1) {
+                          bytes[i] = Math.floor(Math.random() * 256);
+                        }
+                      }
+                      secret = Array.from(bytes)
+                        .map((b) => b.toString(16).padStart(2, '0'))
+                        .join('');
+                    }
+                    handleCredentialChange('webhook_secret', secret);
+                    toast.success('Webhook secret generated');
+                  }}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Generate
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Used to verify webhook signatures from DocuSeal. Paste the same secret into the
+                DocuSeal webhook configuration.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="docuseal_base_url">Base URL</Label>
+              <Input
+                id="docuseal_base_url"
+                value={formData.config.base_url || ''}
+                onChange={(e) => handleConfigChange('base_url', e.target.value)}
+                placeholder="http://docuseal-vv17acequgm4r0g5ek0fvu6w.147.189.168.164.sslip.io"
+                className="font-mono"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                The base URL of your DocuSeal instance. Will become{' '}
+                <code className="text-xs">https://docuseal.aishacrm.com</code> after the tunnel
+                route is added.
+              </p>
+            </div>
+
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 p-3 space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Webhook URL (paste this into DocuSeal admin)
+              </Label>
+              {(() => {
+                let backendUrl = '';
+                try {
+                  backendUrl = getBackendUrl();
+                } catch {
+                  backendUrl = '';
+                }
+                const webhookUrl = backendUrl
+                  ? `${backendUrl.replace(/\/$/, '')}/api/webhooks/docuseal`
+                  : '/api/webhooks/docuseal (set VITE_AISHACRM_BACKEND_URL)';
+                return (
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={webhookUrl}
+                      className="font-mono text-xs flex-1"
+                      onFocus={(e) => e.target.select()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          if (
+                            typeof navigator !== 'undefined' &&
+                            navigator.clipboard?.writeText
+                          ) {
+                            await navigator.clipboard.writeText(webhookUrl);
+                            toast.success('Webhook URL copied');
+                          } else {
+                            toast.error('Clipboard not available');
+                          }
+                        } catch (err) {
+                          toast.error(`Copy failed: ${err?.message || 'unknown error'}`);
+                        }
+                      }}
+                    >
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy
+                    </Button>
+                  </div>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                In DocuSeal admin → Settings → Webhooks, add a new webhook pointing here and use the
+                webhook secret above.
               </p>
             </div>
           </CardContent>
