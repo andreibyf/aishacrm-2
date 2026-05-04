@@ -116,7 +116,37 @@ export default function SendDocumentDialog({
       }
 
       const submission = json?.data || json?.submission || json;
-      toast.success('Document sent for signature');
+      // 4VD-7: backend now returns { signing_url, email_sent, email_reason }
+      // alongside the submission row. Show different UX for the two paths
+      // so the user knows whether they need to share the link manually.
+      if (submission?.email_sent === false) {
+        const reason = submission?.email_reason;
+        const reasonText =
+          reason === 'no_provider'
+            ? "this tenant doesn't have an SMTP provider configured"
+            : reason === 'send_failed'
+              ? 'the SMTP provider rejected the message'
+              : `email skipped (${reason || 'unknown'})`;
+        if (submission?.signing_url) {
+          toast.success(
+            `Document created. Email not sent — ${reasonText}. Copy the signing link to share manually.`,
+            {
+              duration: 12000,
+              action: {
+                label: 'Copy link',
+                onClick: () => {
+                  navigator.clipboard?.writeText(submission.signing_url).catch(() => {});
+                  toast.success('Signing link copied to clipboard');
+                },
+              },
+            },
+          );
+        } else {
+          toast.warning(`Document created, but no signing URL was generated.`);
+        }
+      } else {
+        toast.success('Document sent — recipient will receive a tenant-branded email.');
+      }
       if (typeof onSent === 'function') {
         onSent(submission);
       }

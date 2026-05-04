@@ -21,6 +21,21 @@ import { useTenant } from '../shared/tenantContext';
 import { useUser } from '@/components/shared/useUser.js';
 
 /**
+ * Validate tenant slug shape. MUST stay in sync with the SQL CHECK constraint
+ * `tenant_slug_format` from backend/migrations/161_tenant_slug.sql.
+ *   ^[a-z0-9](-?[a-z0-9])+$  + length 2..64
+ */
+const TENANT_SLUG_PATTERN = /^[a-z0-9](-?[a-z0-9])+$/;
+function isValidTenantSlug(slug) {
+  return (
+    typeof slug === 'string' &&
+    slug.length >= 2 &&
+    slug.length <= 64 &&
+    TENANT_SLUG_PATTERN.test(slug)
+  );
+}
+
+/**
  * Validate URL is safe for use in img src.
  * Allows http:, https:, and non-SVG data:image/ (SVG can contain scripts).
  * In dev mode, data:image/svg+xml is also allowed for convenience.
@@ -144,11 +159,16 @@ export default function BrandingSettings() {
 
   const [brandingData, setBrandingData] = useState({
     companyName: 'Ai-SHA CRM',
+    slug: '',
     logoUrl: '',
     primaryColor: '#06b6d4',
     accentColor: '#6366f1',
     footerLogoUrl: '',
   });
+
+  // Slug-specific UX: track validation + uniqueness errors so the Save button
+  // can be disabled and the user gets inline feedback before the round-trip.
+  const [slugError, setSlugError] = useState('');
 
   // NEW: State for SystemBranding (global footer)
   const [me, setMe] = React.useState(null);
@@ -215,6 +235,7 @@ export default function BrandingSettings() {
           const bs = t?.branding_settings || {};
           setBrandingData({
             companyName: t?.name || 'Ai-SHA CRM',
+            slug: t?.slug || '',
             logoUrl: t?.logo_url || '',
             primaryColor: t?.primary_color || '#06b6d4',
             accentColor: t?.accent_color || '#6366f1',
@@ -392,14 +413,26 @@ export default function BrandingSettings() {
           ...(tenant?.branding_settings || {}),
           footerLogoUrl: safeFooterLogo,
         };
-        await Tenant.update(tenantIdToUpdate, {
+        // Only send `slug` if it actually changed, so reads of unchanged
+        // tenants don't churn the column or hit unnecessary uniqueness checks.
+        const slugChanged = (brandingData.slug || '') !== (tenant?.slug || '');
+        if (slugChanged && !isValidTenantSlug(brandingData.slug)) {
+          setSlugError(
+            'Slug must be 2–64 chars, lowercase letters, digits, and single hyphens between alphanumerics.',
+          );
+          setSaving(false);
+          return;
+        }
+        const updatePayload = {
           // name is editable here only if they changed it; otherwise keep existing
           name: brandingData.companyName || tenant?.name,
           logo_url: safeLogoUrl,
           primary_color: brandingData.primaryColor,
           accent_color: brandingData.accentColor,
           branding_settings: nextBrandingSettings,
-        });
+        };
+        if (slugChanged) updatePayload.slug = brandingData.slug;
+        await Tenant.update(tenantIdToUpdate, updatePayload);
         setMessage('Tenant branding saved. Refreshing to apply...');
         console.log('[BrandingSettings] Tenant branding saved successfully');
         // Simple and reliable: reload to rebind CSS variables across app
@@ -496,6 +529,37 @@ export default function BrandingSettings() {
             )}
           </div>
 
+          {tenant && (
+            <div className="grid gap-2">
+              <Label className="text-slate-200">URL Slug</Label>
+              <Input
+                value={brandingData.slug || ''}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  onChange('slug', v);
+                  if (v === '' || v === (tenant?.slug || '')) {
+                    setSlugError('');
+                  } else if (!isValidTenantSlug(v)) {
+                    setSlugError(
+                      'Use 2–64 lowercase letters, digits, and single hyphens between alphanumerics.',
+                    );
+                  } else {
+                    setSlugError('');
+                  }
+                }}
+                className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-400 font-mono"
+                placeholder="acme-corp"
+              />
+              <p className="text-xs text-slate-400">
+                Recipients will see:{' '}
+                <span className="font-mono text-slate-300">
+                  {window.location.origin}/sign/{brandingData.slug || '<slug>'}/&lt;token&gt;
+                </span>
+              </p>
+              {slugError && <p className="text-xs text-rose-400">{slugError}</p>}
+            </div>
+          )}
+
           <div className="grid sm:grid-cols-2 gap-6">
             <div className="grid gap-2">
               <Label className="text-slate-200">Primary Color</Label>
@@ -587,7 +651,7 @@ export default function BrandingSettings() {
           <div className="flex justify-end">
             <Button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !!slugError}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               {saving ? (

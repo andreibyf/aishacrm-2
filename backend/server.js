@@ -256,6 +256,7 @@ import createSessionCreditsRoutes from './routes/session-credits.js';
 import calcomWebhookRouter from './routes/calcom-webhook.js';
 import docusealRouter from './routes/docuseal.js';
 import docusealWebhookRouter from './routes/docuseal-webhook.js';
+import publicDocusealRouter from './routes/public-docuseal.js';
 import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
 import createCalcomSyncRoutes from './routes/calcom-sync.js';
 import { shortlinkCreateRouter, shortlinkRedirectRouter } from './routes/booking-shortlink.js';
@@ -630,6 +631,10 @@ app.use('/api/docuseal', defaultLimiter, authenticateRequest, docusealRouter);
 // DocuSeal webhook — no auth middleware; HMAC signature verified inside handler
 logger.debug('Mounting /api/webhooks/docuseal route');
 app.use('/api/webhooks', defaultLimiter, docusealWebhookRouter);
+// DocuSeal PUBLIC route — no auth; recipients are not CRM users.
+// Authorization is the slug+token pair. See public-docuseal.js for details.
+logger.debug('Mounting /api/public/docuseal route');
+app.use('/api/public/docuseal', defaultLimiter, publicDocusealRouter);
 // Stripe webhook — no auth middleware; raw body + Stripe-Signature HMAC verification inside handler
 logger.debug('Mounting /api/webhooks/stripe route');
 app.use('/api/webhooks', defaultLimiter, stripeWebhookRouter);

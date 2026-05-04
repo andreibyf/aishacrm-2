@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-route
 import AuthResetPage from './AuthReset.jsx';
 import ForgotPasswordPage from './ForgotPassword.jsx';
 import AcceptInvitePage from './AcceptInvite.jsx';
+import SignPage from './SignPage.jsx';
 import Layout from './Layout.jsx';
 import { TenantProvider } from '@/components/shared/tenantContext';
 import { useImpersonationNavigationSync } from '@/hooks/useImpersonationNavigationSync';
@@ -89,6 +90,11 @@ function PagesContent() {
 
         {/* Public route - accept invitation (no Layout wrapper) */}
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
+
+        {/* Public route - white-label DocuSeal signing page (4VD-7).
+            Recipients are not CRM users; the slug+token pair gates access.
+            No Layout wrapper, no auth, no app shell. */}
+        <Route path="/sign/:slug/:token" element={<SignPage />} />
 
         {/* Profile webpages — standalone (no Layout sidebar) but wrapped in TenantProvider
             so hooks like useTenant() resolve correctly for Task AiSHA etc. */}
