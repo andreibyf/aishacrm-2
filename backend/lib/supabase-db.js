@@ -28,7 +28,13 @@ export function initSupabaseDB(url, serviceRoleKey) {
 
 /**
  * Get Supabase client instance
- * Returns a proxy that lazily initializes on first use
+ * Returns a proxy that lazily initializes on first use.
+ *
+ * Typed as SupabaseClient<Database> so routes get compile-time validation
+ * of `.from('table').select('cols')` calls against backend/types/database.types.ts.
+ * Regenerate the type file with `npm run db:types` after every migration.
+ *
+ * @returns {import('@supabase/supabase-js').SupabaseClient<import('../types/database.types.ts').Database>}
  */
 export function getSupabaseClient() {
   if (!supabaseClient) {

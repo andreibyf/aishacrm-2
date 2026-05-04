@@ -6,7 +6,16 @@
     "baseUrl": ".",
     "paths": {
       "@backend/*": ["./*"]
-    }
+    },
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["**/*.js", "**/*.ts"]
+  "include": ["**/*.js", "**/*.ts", "types/**/*.ts"],
+  "exclude": ["node_modules", "**/__tests__/**", "scripts/**"]
 }
