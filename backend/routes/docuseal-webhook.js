@@ -24,9 +24,17 @@
 import express from 'express';
 import crypto from 'crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// Constants for the Supabase Storage mirror (4VD-13)
+// ---------------------------------------------------------------------------
+
+const DOCUSEAL_FETCH_TIMEOUT_MS = 30_000; // signed PDFs can be a few MB
+const DOCUSEAL_PDF_CONTENT_TYPE = 'application/pdf';
 
 // ---------------------------------------------------------------------------
 // Webhook health tracking on tenant_integrations
@@ -150,15 +158,182 @@ async function createActivity(supabase, tenantId, submission, activityType, body
 }
 
 // ---------------------------------------------------------------------------
+// Supabase Storage mirror (4VD-13)
+//
+// On submission.completed we fetch the signed PDF from DocuSeal and upload it
+// into the tenant-assets bucket so the document survives a DocuSeal volume
+// loss. Best-effort: any failure is logged and swallowed — the webhook still
+// returns 200 and signed_document_url remains the DocuSeal-hosted URL.
+// ---------------------------------------------------------------------------
+
+/**
+ * Sanitize a free-form template name into a filesystem-safe slug.
+ * Replaces anything outside [A-Za-z0-9._-] with '_' and trims length.
+ */
+export function sanitizeTemplateName(name) {
+  const fallback = 'document';
+  if (!name || typeof name !== 'string') return fallback;
+  const slug = name
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  return (slug || fallback).slice(0, 80);
+}
+
+/**
+ * Compose the canonical Supabase Storage object key for a mirrored signed PDF.
+ *   uploads/{tenant_id}/docuseal/{submission_id}_{template}.pdf
+ */
+export function buildDocusealStorageKey({ tenantId, submissionId, templateName }) {
+  const safeTemplate = sanitizeTemplateName(templateName);
+  return `uploads/${tenantId}/docuseal/${submissionId}_${safeTemplate}.pdf`;
+}
+
+/**
+ * Fetch the signed PDF from DocuSeal with a hard timeout and return the bytes
+ * as a Buffer. The DocuSeal-hosted signed_document_url is generally accessible
+ * unauthenticated (it's the same URL emailed to recipients), but we send the
+ * tenant API key as X-Auth-Token in case the tenant configured private docs.
+ */
+export async function fetchDocusealSignedPdf({ url, apiKey, fetchImpl = fetch }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DOCUSEAL_FETCH_TIMEOUT_MS);
+  try {
+    const headers = { Accept: DOCUSEAL_PDF_CONTENT_TYPE };
+    if (apiKey) headers['X-Auth-Token'] = apiKey;
+    const res = await fetchImpl(url, { headers, signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`docuseal_pdf_fetch_failed: HTTP ${res.status}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Mirror a signed PDF into Supabase Storage and update the related rows.
+ * Pure-ish helper: receives explicit clients/fetch so it can be unit-tested
+ * without a network or a real Supabase project.
+ *
+ * Idempotency: caller is expected to short-circuit when
+ * docuseal_submissions.supabase_storage_path IS NOT NULL — this helper does
+ * not re-check, so it can be invoked from a backfill script too.
+ *
+ * Returns { storagePath, publicUrl, bytesUploaded } on success. Throws on
+ * any unrecoverable error so the caller can decide whether to swallow it.
+ */
+export async function mirrorSignedPdfToStorage({
+  supabase,
+  storageAdmin,
+  bucket,
+  tenantId,
+  submission, // existing docuseal_submissions row (must include id, signed_document_url, docuseal_submission_id, template_name)
+  apiKey, // tenant DocuSeal API key (optional, sent as X-Auth-Token)
+  fetchImpl = fetch,
+}) {
+  if (!submission?.signed_document_url) {
+    throw new Error('mirror_skipped: no signed_document_url');
+  }
+
+  const storagePath = buildDocusealStorageKey({
+    tenantId,
+    submissionId: submission.docuseal_submission_id,
+    templateName: submission.template_name,
+  });
+
+  // 1. Pull the PDF
+  const pdfBuffer = await fetchDocusealSignedPdf({
+    url: submission.signed_document_url,
+    apiKey,
+    fetchImpl,
+  });
+
+  // 2. Upload to Supabase Storage (upsert so backfills replace any partial mirror)
+  const { error: uploadError } = await storageAdmin.storage
+    .from(bucket)
+    .upload(storagePath, pdfBuffer, {
+      contentType: DOCUSEAL_PDF_CONTENT_TYPE,
+      upsert: true,
+    });
+  if (uploadError) {
+    throw new Error(`storage_upload_failed: ${uploadError.message}`);
+  }
+
+  // 3. Resolve a durable URL for the documents.file_url flip. Public bucket
+  //    yields a public URL; if the bucket is private, fall back to a 7-day
+  //    signed URL (storage.js uses the same pattern). The frontend already
+  //    handles both shapes via UniversalDetailPanel.
+  let publicUrl = null;
+  try {
+    const { data: pub } = storageAdmin.storage.from(bucket).getPublicUrl(storagePath);
+    publicUrl = pub?.publicUrl || null;
+  } catch (err) {
+    logger.debug('[DocusealWebhook] getPublicUrl threw', { error: err.message });
+  }
+  if (!publicUrl) {
+    try {
+      const { data: signed, error: signErr } = await storageAdmin.storage
+        .from(bucket)
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+      if (!signErr && signed?.signedUrl) publicUrl = signed.signedUrl;
+    } catch (err) {
+      logger.debug('[DocusealWebhook] createSignedUrl threw', { error: err.message });
+    }
+  }
+
+  // 4. Persist the storage path on docuseal_submissions
+  const { error: updErr } = await supabase
+    .from('docuseal_submissions')
+    .update({ supabase_storage_path: storagePath })
+    .eq('id', submission.id);
+  if (updErr) {
+    // Mirror is uploaded but DB pointer didn't land — surface so the caller
+    // can log; the bytes are durable, retry will overwrite via upsert.
+    throw new Error(`storage_path_update_failed: ${updErr.message}`);
+  }
+
+  // 5. Flip documents.file_url to the durable Supabase URL (if a row exists
+  //    from the documents-mirror in the original step 8b). Only the URL is
+  //    changed; metadata.docuseal_submission_id remains the join key.
+  if (publicUrl) {
+    const { error: docErr } = await supabase
+      .from('documents')
+      .update({ file_url: publicUrl })
+      .eq('tenant_id', tenantId)
+      .filter('metadata->>docuseal_submission_id', 'eq', submission.docuseal_submission_id);
+    if (docErr) {
+      // Non-fatal — the storage path itself is recorded.
+      logger.warn('[DocusealWebhook] documents.file_url flip failed', { error: docErr.message });
+    }
+  }
+
+  return {
+    storagePath,
+    publicUrl,
+    bytesUploaded: pdfBuffer.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Event dispatcher — maps DocuSeal event types to status + activity
 // ---------------------------------------------------------------------------
 
 const EVENT_MAP = {
-  'form.viewed':           { status: 'viewed',    activity: 'document_viewed',    timestampField: 'viewed_at' },
-  'form.completed':        { status: 'signed',    activity: 'document_signed',    timestampField: null },
-  'submission.completed':  { status: 'completed', activity: 'document_completed', timestampField: 'completed_at' },
-  'submission.declined':   { status: 'declined',  activity: 'document_declined',  timestampField: null },
-  'submission.expired':    { status: 'expired',   activity: 'document_expired',   timestampField: null },
+  'form.viewed': { status: 'viewed', activity: 'document_viewed', timestampField: 'viewed_at' },
+  'form.completed': { status: 'signed', activity: 'document_signed', timestampField: null },
+  'submission.completed': {
+    status: 'completed',
+    activity: 'document_completed',
+    timestampField: 'completed_at',
+  },
+  'submission.declined': {
+    status: 'declined',
+    activity: 'document_declined',
+    timestampField: null,
+  },
+  'submission.expired': { status: 'expired', activity: 'document_expired', timestampField: null },
 };
 
 // ---------------------------------------------------------------------------
@@ -168,7 +343,8 @@ const EVENT_MAP = {
 router.post('/docuseal', async (req, res) => {
   const supabase = getSupabaseClient();
   const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : JSON.stringify(req.body));
-  const signatureHeader = req.headers['x-docuseal-signature'] || req.headers['X-Docuseal-Signature'];
+  const signatureHeader =
+    req.headers['x-docuseal-signature'] || req.headers['X-Docuseal-Signature'];
 
   // 1. Verify signature, resolve tenant
   const matched = await resolveTenantFromSignature(supabase, rawBody, signatureHeader);
@@ -181,9 +357,10 @@ router.post('/docuseal', async (req, res) => {
   // 2. Parse payload
   let payload;
   try {
-    payload = typeof req.body === 'object' && !Buffer.isBuffer(req.body)
-      ? req.body
-      : JSON.parse(rawBody.toString('utf8'));
+    payload =
+      typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+        ? req.body
+        : JSON.parse(rawBody.toString('utf8'));
   } catch (err) {
     logger.error('[DocusealWebhook] Failed to parse JSON body', err);
     return res.status(400).json({ error: 'invalid_json' });
@@ -198,7 +375,10 @@ router.post('/docuseal', async (req, res) => {
   const docusealSubmissionId = String(data.submission_id || data.id || '');
 
   if (!eventType || !docusealSubmissionId) {
-    logger.warn('[DocusealWebhook] Missing event_type or submission id', { eventType, docusealSubmissionId });
+    logger.warn('[DocusealWebhook] Missing event_type or submission id', {
+      eventType,
+      docusealSubmissionId,
+    });
     return res.status(200).json({ ok: true, ignored: 'missing_fields' });
   }
 
@@ -219,7 +399,11 @@ router.post('/docuseal', async (req, res) => {
     // Race: send-route INSERT may not have committed yet, OR this is an event
     // for a submission we don't track. Log and return 200 — DocuSeal will not
     // retry for non-error responses.
-    logger.info('[DocusealWebhook] Unknown submission id; ignoring', { tenant_id, docusealSubmissionId, eventType });
+    logger.info('[DocusealWebhook] Unknown submission id; ignoring', {
+      tenant_id,
+      docusealSubmissionId,
+      eventType,
+    });
     return res.status(200).json({ ok: true, ignored: 'unknown_submission' });
   }
 
@@ -347,6 +531,41 @@ router.post('/docuseal', async (req, res) => {
       logger.warn('[DocusealWebhook] documents-mirror insert failed', {
         error: docErr.message,
       });
+    }
+
+    // 8c. (4VD-13) Mirror the signed PDF into Supabase Storage so we don't
+    // depend on DocuSeal's container volume for durability. Idempotent via
+    // the supabase_storage_path NULL guard. Best-effort: any failure is
+    // logged and swallowed so the webhook never returns 5xx for a mirror
+    // miss. The DocuSeal-hosted signed_document_url remains valid in the
+    // meantime; a future event or backfill job can re-attempt.
+    if (!updated.supabase_storage_path) {
+      try {
+        const apiKey = matched.integration?.api_key || null;
+        const result = await mirrorSignedPdfToStorage({
+          supabase,
+          storageAdmin: getSupabaseAdmin(),
+          bucket: getBucketName(),
+          tenantId: tenant_id,
+          submission: updated,
+          apiKey,
+        });
+        logger.info('[DocusealWebhook] Signed PDF mirrored to Supabase Storage', {
+          tenantId: tenant_id,
+          submissionId: updated.docuseal_submission_id,
+          storagePath: result.storagePath,
+          bytes: result.bytesUploaded,
+        });
+      } catch (mirrorErr) {
+        // Surface the error.message directly in the log message string so
+        // pino-pretty doesn't drop it. Stack trace stays in metadata for the
+        // structured backend.
+        logger.warn(`[DocusealWebhook] Storage mirror failed (non-fatal): ${mirrorErr.message}`, {
+          tenantId: tenant_id,
+          submissionId: updated.docuseal_submission_id,
+          stack: mirrorErr.stack,
+        });
+      }
     }
   }
 
