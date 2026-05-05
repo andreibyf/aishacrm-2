@@ -286,8 +286,14 @@ export default function ContactDetailPanel({
               s.template_name || s.template_title || s.template_id || 'Document';
             const recipient = s.recipient_email || s.recipient_name || '';
             const sentAt = s.sent_at || s.created_at || s.created_date;
-            const showSigned =
-              (status === 'completed' || status === 'signed') && s.signed_document_url;
+            // Prefer the durable Supabase Storage mirror (`mirror_url`,
+            // populated by the webhook step 8b mirror) over DocuSeal's hosted
+            // URL (`signed_document_url`). The mirror survives a DocuSeal
+            // volume loss; the DocuSeal URL does not. Falls back to the
+            // DocuSeal URL if the mirror hasn't run yet (e.g., right after
+            // completion before the storage upload finishes).
+            const signedHref = s.mirror_url || s.signed_document_url;
+            const showSigned = (status === 'completed' || status === 'signed') && signedHref;
             return (
               <li
                 key={s.id || `${s.template_id}-${sentAt}`}
@@ -315,7 +321,7 @@ export default function ContactDetailPanel({
                   <Badge className={getDocuSealStatusClass(status)}>{status}</Badge>
                   {showSigned && (
                     <a
-                      href={s.signed_document_url}
+                      href={signedHref}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-blue-500 hover:text-blue-400 hover:underline"

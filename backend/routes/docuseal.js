@@ -349,6 +349,58 @@ router.post('/submissions', async (req, res) => {
 // GET /api/docuseal/submissions?related_to=&related_id=
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve a Supabase Storage path to a viewable URL. Mirrors the pattern in
+ * routes/storage.js: prefer the bucket's public URL, fall back to a 7-day
+ * signed URL if the bucket is configured private. Returns null on failure.
+ *
+ * Exported so tests can stub the storage client.
+ */
+export async function resolveSupabaseStorageUrl(supabase, bucket, path) {
+  if (!path) return null;
+  try {
+    const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+    if (pub?.publicUrl) return pub.publicUrl;
+    const { data: signed, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(path, 60 * 60 * 24 * 7);
+    if (error) {
+      logger.warn('[Docuseal] Storage signed-url generation failed', {
+        path,
+        bucket,
+        error: error.message,
+      });
+      return null;
+    }
+    return signed?.signedUrl || null;
+  } catch (e) {
+    logger.warn('[Docuseal] resolveSupabaseStorageUrl threw', { path, error: e.message });
+    return null;
+  }
+}
+
+/**
+ * Enrich a submissions list with `mirror_url` — the resolved Supabase
+ * Storage URL of the signed PDF, when supabase_storage_path is set. Frontend
+ * prefers `mirror_url` over the DocuSeal-hosted `signed_document_url` for
+ * durability: the mirror survives a DocuSeal volume loss; the DocuSeal URL
+ * does not. Exported so other endpoints can reuse the same enrichment.
+ */
+export async function enrichSubmissionsWithMirrorUrl(
+  supabase,
+  submissions,
+  { bucket = 'tenant-assets' } = {},
+) {
+  if (!Array.isArray(submissions) || submissions.length === 0) return submissions || [];
+  return Promise.all(
+    submissions.map(async (s) => {
+      if (!s?.supabase_storage_path) return s;
+      const mirror_url = await resolveSupabaseStorageUrl(supabase, bucket, s.supabase_storage_path);
+      return mirror_url ? { ...s, mirror_url } : s;
+    }),
+  );
+}
+
 router.get('/submissions', async (req, res) => {
   const tenantId = req.tenant?.id;
   if (!tenantId) {
@@ -374,7 +426,8 @@ router.get('/submissions', async (req, res) => {
     return res.status(500).json({ error: 'list_failed', message: error.message });
   }
 
-  return res.json(data || []);
+  const enriched = await enrichSubmissionsWithMirrorUrl(supabase, data || []);
+  return res.json(enriched);
 });
 
 export default router;
