@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
 import { getAuthorizationHeader } from '@/api/functions';
@@ -44,6 +52,65 @@ export default function SendDocumentDialog({
   const [sending, setSending] = useState(false);
   const [configError, setConfigError] = useState(false);
 
+  // 4VD-8: dropdown of templates fetched from the tenant's DocuSeal account.
+  // The list is tenant-isolated server-side: GET /api/docuseal/templates
+  // resolves the per-tenant API key from tenant_integrations and proxies to
+  // DocuSeal — DocuSeal Community filters templates by the user owning the
+  // key, so this list never contains another tenant's templates.
+  //
+  // Three template-input modes:
+  //   'loading'  : initial fetch in flight
+  //   'dropdown' : list rendered, user picks by name
+  //   'paste'    : fallback (config missing or upstream error) — paste field
+  // The 'paste' mode preserves the MVP behaviour so the dialog never becomes
+  // unusable when something upstream is misconfigured.
+  const [templateMode, setTemplateMode] = useState('loading');
+  const [templates, setTemplates] = useState([]);
+  const [templatesError, setTemplatesError] = useState('');
+
+  const fetchTemplates = useCallback(async ({ refresh = false } = {}) => {
+    setTemplateMode('loading');
+    setTemplatesError('');
+    try {
+      const BACKEND_URL = getBackendUrl();
+      const headers = {};
+      const authHeader = await getAuthorizationHeader();
+      if (authHeader) headers['Authorization'] = authHeader;
+      const tenantId =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || ''
+          : '';
+      if (tenantId) headers['x-tenant-id'] = tenantId;
+
+      const url = `${BACKEND_URL}/api/docuseal/templates${refresh ? '?refresh=1' : ''}`;
+      const resp = await fetch(url, { headers, credentials: 'include' });
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        if (resp.status === 400 && json?.error === 'docuseal_not_configured') {
+          setConfigError(true);
+          setTemplateMode('paste');
+          return;
+        }
+        // Any other error: fall back to paste mode so the user can still send.
+        setTemplatesError(json?.error || `Failed to load templates (${resp.status})`);
+        setTemplateMode('paste');
+        return;
+      }
+
+      const list = Array.isArray(json?.data) ? json.data : [];
+      setTemplates(list);
+      // Empty list isn't an error — it means the tenant hasn't created any
+      // templates in DocuSeal yet. Render the dropdown anyway so the user
+      // sees an empty-state hint, but allow them to escape to paste mode.
+      setTemplateMode('dropdown');
+    } catch (err) {
+      console.error('Error loading DocuSeal templates:', err);
+      setTemplatesError(err?.message || 'Network error');
+      setTemplateMode('paste');
+    }
+  }, []);
+
   // Reset/refresh form whenever the dialog opens
   useEffect(() => {
     if (open) {
@@ -53,8 +120,11 @@ export default function SendDocumentDialog({
       setMessage('');
       setConfigError(false);
       setSending(false);
+      setTemplates([]);
+      setTemplatesError('');
+      fetchTemplates();
     }
-  }, [open, defaultRecipientName, defaultRecipientEmail]);
+  }, [open, defaultRecipientName, defaultRecipientEmail, fetchTemplates]);
 
   const handleSend = async () => {
     if (!templateId.trim()) {
@@ -181,22 +251,88 @@ export default function SendDocumentDialog({
           )}
 
           <div>
-            <Label htmlFor="docuseal-template-id" className="text-slate-300">
-              Template ID <span className="text-red-400">*</span>
-            </Label>
-            <Input
-              id="docuseal-template-id"
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              placeholder="Paste the DocuSeal template ID"
-              className="mt-2 bg-slate-700 border-slate-600 text-slate-200"
-              disabled={sending}
-              required
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              MVP: paste the template ID from your DocuSeal admin UI. A template picker is coming
-              soon.
-            </p>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="docuseal-template" className="text-slate-300">
+                Template <span className="text-red-400">*</span>
+              </Label>
+              {templateMode === 'dropdown' && (
+                <button
+                  type="button"
+                  onClick={() => fetchTemplates({ refresh: true })}
+                  disabled={sending}
+                  className="text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1"
+                  title="Refresh template list (bypass cache)"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Refresh
+                </button>
+              )}
+            </div>
+            {templateMode === 'loading' && (
+              <div className="mt-2 px-3 py-2 rounded-md bg-slate-700 border border-slate-600 text-slate-400 text-sm">
+                Loading templates…
+              </div>
+            )}
+            {templateMode === 'dropdown' && templates.length > 0 && (
+              <Select
+                value={templateId}
+                onValueChange={setTemplateId}
+                disabled={sending}
+              >
+                <SelectTrigger
+                  id="docuseal-template"
+                  className="mt-2 bg-slate-700 border-slate-600 text-slate-200"
+                >
+                  <SelectValue placeholder="Choose a template…" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {templateMode === 'dropdown' && templates.length === 0 && (
+              <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-200">
+                No templates found in DocuSeal for this tenant. Create one in DocuSeal admin, then
+                click Refresh.
+                <button
+                  type="button"
+                  onClick={() => setTemplateMode('paste')}
+                  className="ml-2 text-amber-100 underline"
+                >
+                  Paste an ID instead
+                </button>
+              </div>
+            )}
+            {templateMode === 'paste' && (
+              <>
+                <Input
+                  id="docuseal-template"
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  placeholder="Paste the DocuSeal template ID"
+                  className="mt-2 bg-slate-700 border-slate-600 text-slate-200"
+                  disabled={sending}
+                  required
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  {templatesError
+                    ? `Couldn't load template list (${templatesError}). Paste the template ID from DocuSeal admin.`
+                    : 'Paste the DocuSeal template ID from the admin UI.'}{' '}
+                  <button
+                    type="button"
+                    onClick={() => fetchTemplates()}
+                    className="text-blue-400 underline hover:text-blue-300"
+                    disabled={sending}
+                  >
+                    Try the dropdown again
+                  </button>
+                </p>
+              </>
+            )}
           </div>
 
           <div>

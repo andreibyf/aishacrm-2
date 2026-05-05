@@ -401,6 +401,136 @@ export async function enrichSubmissionsWithMirrorUrl(
   );
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/docuseal/templates — list non-archived templates for a tenant
+// ---------------------------------------------------------------------------
+//
+// Tenant isolation model:
+//
+//   - validateTenantAccess middleware sets req.tenant.id from auth context
+//   - loadDocusealConfig looks up the integration row for THAT tenant_id only
+//   - the X-Auth-Token header sent to DocuSeal is the per-tenant API key
+//     stored on tenant_integrations.api_credentials.api_key
+//   - DocuSeal Community filters templates by the user that owns the API key,
+//     so the returned list never contains another DocuSeal user's templates
+//
+// The cache below is keyed by tenant_id ONLY. Cross-tenant leakage would
+// require a bug here — the unit tests in docuseal-templates.test.js pin
+// the isolation invariant ("tenant A's cached list is never returned for
+// tenant B") so a future "share the cache across tenants for performance"
+// PR can't silently regress it. If you ever need a shared cache layer
+// (e.g., Redis), the key MUST include tenant_id.
+
+const TEMPLATES_CACHE_TTL_MS = 60 * 1000; // 60s — DocuSeal templates change rarely; tighten if stale views become a complaint
+const templatesCache = new Map(); // tenantId -> { data, expiresAt }
+
+/** Test seam: clear the per-tenant templates cache. */
+export function _clearTemplatesCacheForTest() {
+  templatesCache.clear();
+}
+
+/**
+ * Normalise a DocuSeal template record to the shape the dropdown needs.
+ * Exported so tests can pin the contract independent of fetch behaviour.
+ */
+export function normalizeDocusealTemplate(t) {
+  if (!t || typeof t !== 'object') return null;
+  const id = t.id ?? t.template_id ?? null;
+  if (id == null) return null;
+  return {
+    id: String(id),
+    name: typeof t.name === 'string' && t.name.trim() ? t.name.trim() : `Template ${id}`,
+    slug: typeof t.slug === 'string' ? t.slug : null,
+    archived_at: t.archived_at || null,
+    created_at: t.created_at || null,
+    updated_at: t.updated_at || null,
+  };
+}
+
+/**
+ * Call DocuSeal `GET /api/templates` with the tenant's API key. Returns the
+ * normalised list (non-archived, sorted by name) or throws on transport /
+ * upstream error. Pure with respect to the in-process cache — caller wraps
+ * with caching.
+ *
+ * `fetchImpl` is injectable for tests.
+ */
+export async function fetchDocusealTemplates({ apiKey, baseUrl, fetchImpl = fetch }) {
+  const res = await fetchImpl(`${baseUrl}/api/templates?limit=200`, {
+    method: 'GET',
+    headers: {
+      'X-Auth-Token': apiKey,
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    const err = new Error(`docuseal_templates_failed: ${res.status}`);
+    err.status = res.status;
+    err.body = errBody.slice(0, 500);
+    throw err;
+  }
+  const json = await res.json();
+  // DocuSeal returns either a bare array or { data: [...] } depending on version
+  const raw = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+  return raw
+    .map(normalizeDocusealTemplate)
+    .filter((t) => t && !t.archived_at)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+router.get('/templates', async (req, res) => {
+  const tenantId = req.tenant?.id;
+  if (!tenantId) {
+    return res.status(400).json({ error: 'tenant_context_missing' });
+  }
+
+  const refresh = String(req.query.refresh || '') === '1';
+
+  // Cache hit (per-tenant). Cache key is tenant_id ONLY — never leaks across
+  // tenants. The integration tests pin this invariant.
+  if (!refresh) {
+    const cached = templatesCache.get(tenantId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.json({ data: cached.data, cached: true });
+    }
+  }
+
+  const supabase = getSupabaseClient();
+  const cfg = await loadDocusealConfig(supabase, tenantId);
+  if (cfg.error) {
+    return res.status(400).json({
+      error: cfg.error,
+      message:
+        cfg.error === 'docuseal_not_configured'
+          ? 'DocuSeal not configured for this tenant. Add the integration in Settings → Integrations.'
+          : 'Failed to load DocuSeal integration.',
+    });
+  }
+
+  let templates;
+  try {
+    templates = await fetchDocusealTemplates({ apiKey: cfg.apiKey, baseUrl: cfg.baseUrl });
+  } catch (err) {
+    logger.warn('[Docuseal] Templates fetch failed', {
+      tenantId,
+      status: err.status,
+      message: err.message,
+    });
+    if (err.status >= 400 && err.status < 500) {
+      return res.status(err.status).json({
+        error: 'docuseal_templates_failed',
+        status: err.status,
+        body: err.body || null,
+      });
+    }
+    return res.status(503).json({ error: 'docuseal_unreachable', message: err.message });
+  }
+
+  templatesCache.set(tenantId, { data: templates, expiresAt: Date.now() + TEMPLATES_CACHE_TTL_MS });
+  return res.json({ data: templates, cached: false });
+});
+
 router.get('/submissions', async (req, res) => {
   const tenantId = req.tenant?.id;
   if (!tenantId) {
