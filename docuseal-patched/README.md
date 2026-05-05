@@ -15,10 +15,17 @@ The proper "white-label embed" path in DocuSeal Pro uses a separate `<docuseal-f
 ```bash
 cd docuseal-patched
 
-# Pin to whatever tag is currently running. Check with:
+# The Docker Hub repo is `docuseal/docuseal` (NOT `docusealco/docuseal`,
+# which doesn't exist). Verify what tag is currently running with:
 #   docker inspect docuseal-vv17acequgm4r0g5ek0fvu6w --format '{{.Config.Image}}'
-# Default is `latest` if you don't pass the arg.
-docker build --build-arg DOCUSEAL_TAG=1.10.5 -t docuseal-aishacrm:patched-2026-05-04 .
+# Available tags: https://hub.docker.com/r/docuseal/docuseal/tags
+#
+# DocuSeal Community is typically deployed pinned to `:latest`; if so, omit
+# the build-arg and let the Dockerfile default kick in:
+docker build -t docuseal-aishacrm:patched-2026-05-04 .
+
+# To pin to a specific upstream version instead:
+# docker build --build-arg DOCUSEAL_TAG=<version> -t docuseal-aishacrm:patched-2026-05-04 .
 ```
 
 ## Deploy

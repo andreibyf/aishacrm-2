@@ -19,11 +19,16 @@
 #   docker build -t docuseal-aishacrm:patched-2026-05-04 .
 #
 # Deploy on VPS-2 via Coolify: change the image source for the docuseal app
-# from `docusealco/docuseal:<tag>` to `docuseal-aishacrm:patched-2026-05-04`
+# from `docuseal/docuseal:<tag>` to `docuseal-aishacrm:patched-2026-05-04`
 # (or push to a registry and pull from there). Restart container.
+#
+# NOTE: The Docker Hub repo is `docuseal/docuseal` (not `docusealco/docuseal`,
+# which does not exist). DocuSeal Community publishes `:latest` plus version
+# tags — confirm available tags at https://hub.docker.com/r/docuseal/docuseal/tags
+# before pinning.
 
 ARG DOCUSEAL_TAG=latest
-FROM docusealco/docuseal:${DOCUSEAL_TAG}
+FROM docuseal/docuseal:${DOCUSEAL_TAG}
 
 # Idempotent CSRF skip on SubmitFormController#update.
 # - Inserts `skip_before_action :verify_authenticity_token, only: :update`
