@@ -14,11 +14,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
+import crypto from 'node:crypto';
 import {
   sanitizeTemplateName,
   buildDocusealStorageKey,
   fetchDocusealSignedPdf,
   mirrorSignedPdfToStorage,
+  verifyDocusealSignature,
 } from '../../routes/docuseal-webhook.js';
 
 // ---------------------------------------------------------------------------
@@ -362,5 +364,67 @@ describe('mirrorSignedPdfToStorage', () => {
       fetchImpl: makeFakeFetch(),
     });
     assert.equal(result.publicUrl, 'https://supabase.example/signed.pdf?token=zzz');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verifyDocusealSignature — auth model for inbound webhooks (4VD-7 follow-up).
+//
+// DocuSeal Community sends `webhook_url.secret` as a static key/value HTTP
+// header (it is NOT an HMAC). We recommend operators set
+//   Key=X-Docuseal-Signature, Value=<the same secret stored in api_credentials>
+// and compare via constant-time string equality. DocuSeal Pro-style HMAC
+// signatures (`sha256=<hex>`) are still supported for forward compatibility.
+// ---------------------------------------------------------------------------
+
+describe('verifyDocusealSignature — static-secret mode (DocuSeal Community)', () => {
+  const SECRET = '84511e1ff4bf8779b56b7909a1336b8c14b05fad145e9b560790913bb9ce4f2b';
+
+  test('accepts header equal to the stored secret', () => {
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), SECRET, SECRET), true);
+  });
+
+  test('rejects header that differs by one character', () => {
+    const wrong = SECRET.slice(0, -1) + (SECRET.slice(-1) === 'b' ? 'c' : 'b');
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), wrong, SECRET), false);
+  });
+
+  test('rejects when header is empty', () => {
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), '', SECRET), false);
+  });
+
+  test('rejects when stored secret is empty/null', () => {
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), SECRET, ''), false);
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), SECRET, null), false);
+  });
+
+  test('rejects header of different length even if it has the same prefix', () => {
+    // timingSafeEqual would throw on length mismatch; we guard with a length
+    // check before calling it. Ensures the wrapper catches the throw and
+    // returns false rather than 500-ing the request.
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), SECRET + 'a', SECRET), false);
+    assert.equal(verifyDocusealSignature(Buffer.from('{}'), SECRET.slice(0, -1), SECRET), false);
+  });
+});
+
+describe('verifyDocusealSignature — HMAC mode (DocuSeal Pro fallback)', () => {
+  const SECRET = 'shared-secret';
+  const body = Buffer.from(JSON.stringify({ event_type: 'submission.completed' }));
+  const expectedHex = crypto.createHmac('sha256', SECRET).update(body).digest('hex');
+
+  test('accepts a valid HMAC with the sha256= prefix', () => {
+    assert.equal(verifyDocusealSignature(body, `sha256=${expectedHex}`, SECRET), true);
+  });
+
+  test('rejects HMAC of a different body', () => {
+    assert.equal(
+      verifyDocusealSignature(Buffer.from('{}'), `sha256=${expectedHex}`, SECRET),
+      false,
+    );
+  });
+
+  test('rejects malformed sha256= header', () => {
+    assert.equal(verifyDocusealSignature(body, 'sha256=notreallyhex', SECRET), false);
+    assert.equal(verifyDocusealSignature(body, 'sha256=', SECRET), false);
   });
 });

@@ -61,17 +61,48 @@ async function persistDocusealWebhookHealth(supabase, tenantId, updates) {
 // ---------------------------------------------------------------------------
 
 /**
- * DocuSeal sends X-Docuseal-Signature: sha256=<hex> (or just <hex>).
- * Compute HMAC-SHA256 over raw body using the tenant's webhook_secret.
+ * Verify the inbound webhook is from a tenant we trust.
+ *
+ * DocuSeal Community's webhook_url.secret is a JSON hash that's spread as
+ * HTTP headers on every outbound webhook (Ruby: `**webhook_url.secret.to_h`).
+ * It is NOT an HMAC — it's a static shared secret typed by the operator in
+ * the DocuSeal admin UI ("Webhook Secret" dialog with Key + Value fields).
+ *
+ * Community-deployment auth model: operator sets
+ *   Key   = X-Docuseal-Signature
+ *   Value = <the same 64-char hex stored on tenant_integrations.api_credentials.webhook_secret>
+ * and we verify the inbound `x-docuseal-signature` header equals the stored
+ * secret via constant-time compare. The slug in /s/:slug is itself a per-
+ * submitter UUID capability token, so a leaked secret would let an attacker
+ * forge completion events but couldn't enumerate other tenants' submissions.
+ *
+ * Pro/Cloud-deployment auth model (future): if DocuSeal Pro adds real
+ * HMAC-SHA256 signing (`X-Docuseal-Signature: sha256=<hex>`), we fall back
+ * to HMAC verification — detected by the `sha256=` prefix on the header.
  */
-function verifyDocusealSignature(rawBody, signatureHeader, secret) {
+export function verifyDocusealSignature(rawBody, signatureHeader, secret) {
   if (!secret || !signatureHeader) return false;
-  const computedHex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-  const normalise = (s) => (s.startsWith('sha256=') ? s.slice(7) : s);
-  const incoming = normalise(signatureHeader);
-  const expected = normalise(computedHex);
+
+  // HMAC-SHA256 mode (DocuSeal Pro-style; kept for forward compatibility).
+  if (signatureHeader.startsWith('sha256=')) {
+    const computedHex = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const incoming = signatureHeader.slice(7);
+    try {
+      return (
+        incoming.length === computedHex.length &&
+        crypto.timingSafeEqual(Buffer.from(incoming), Buffer.from(computedHex))
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // Static-secret mode (DocuSeal Community — the production case for this CRM).
   try {
-    return crypto.timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
+    return (
+      signatureHeader.length === secret.length &&
+      crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(secret))
+    );
   } catch {
     return false;
   }
