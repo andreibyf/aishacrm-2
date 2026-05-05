@@ -221,6 +221,16 @@ scripts/aishacrm.slice
 scripts/ufw-vps2.sh
 scripts/pre-push.hook
 
+# VPS-2 SSH bridge for Claude Cowork sessions — contain VPS-2 root password,
+# transient command/output files. Never commit.
+scripts/vps2-askpass.cmd
+scripts/vps2-askpass.sh
+scripts/vps2-ssh.cmd
+scripts/vps2-run.sh
+scripts/vps2-cmd.txt
+scripts/vps2-last.out
+scripts/vps2-last.err
+
 # Per-VPS env captures (contain secrets — never commit)
 .env.vps2
 .env.vps2.*

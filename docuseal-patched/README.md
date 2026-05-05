@@ -30,13 +30,23 @@ docker build -t docuseal-aishacrm:patched-2026-05-04 .
 
 ## Deploy
 
-Two paths, depending on how Coolify is wired:
+DocuSeal on VPS-2 is a Coolify **Service** (template-managed), so the image isn't user-configurable through the Coolify UI. The current staging deploy edits the generated compose file directly and recreates the container:
 
-**A. If Coolify pulls from a registry:** push the patched image to your registry (GHCR, Docker Hub, internal), update the Coolify app's image source from `docusealco/docuseal:<tag>` to `your-registry/docuseal-aishacrm:patched-2026-05-04`, redeploy.
+```bash
+ssh root@vps-2
+COMPOSE=/data/coolify/services/vv17acequgm4r0g5ek0fvu6w/docker-compose.yml
+cp "$COMPOSE" "$COMPOSE.bak.4vd23"
+# Replace `image: 'docuseal/docuseal:latest'` with the patched tag and add pull_policy: never
+sed -i "s|image: 'docuseal/docuseal:latest'|image: 'docuseal-aishacrm:patched-2026-05-04'  # AISHACRM_4VD23\n    pull_policy: never|" "$COMPOSE"
+cd /data/coolify/services/vv17acequgm4r0g5ek0fvu6w
+docker compose up -d --no-deps --force-recreate docuseal
+```
 
-**B. If VPS-2 builds locally:** copy this directory to VPS-2, run `docker build` there, update Coolify to use the local image tag (`docuseal-aishacrm:patched-2026-05-04`), redeploy.
+> ⚠️ **Coolify "Redeploy" overwrites this file.** If anyone clicks Redeploy on the DocuSeal service in the Coolify UI, the compose file is regenerated from the template and the patched image is replaced with `docuseal/docuseal:latest`. After any Coolify-driven redeploy, re-run the steps above. Long-term fix: convert the service to a Coolify "App from Docker Image" so the image is configurable through the UI.
 
-After redeploy, restart the container so the patched controller loads. Verify:
+For prod-grade deploys, push `docuseal-aishacrm:patched-2026-05-04` to a registry (GHCR or Docker Hub), then point the swap at the registry tag rather than a local-only image. Same Coolify-template caveat applies.
+
+Verify the patch is live in the running container:
 
 ```bash
 docker exec docuseal-vv17acequgm4r0g5ek0fvu6w grep AISHACRM_4VD23_CSRF_SKIP /app/app/controllers/submit_form_controller.rb
