@@ -156,11 +156,15 @@ export default function SignPage() {
           className="w-full"
           style={{ minHeight: '80vh', border: 0 }}
           // Sandbox: allow forms, scripts, and same-origin behavior so the
-          // DocuSeal page itself functions; allow-popups so download links
-          // work; do NOT include allow-top-navigation (recipients shouldn't
-          // be able to navigate this frame to arbitrary sites if a content-
+          // DocuSeal page itself functions; allow-popups so the
+          // post-signing share/print sheet can open; allow-downloads so the
+          // "Download" button on the completion screen actually saves the
+          // signed PDF (modern browsers silently block iframe-initiated
+          // downloads without this token, which was the 4VD-7 staging bug);
+          // do NOT include allow-top-navigation (recipients shouldn't be
+          // able to navigate this frame to arbitrary sites if a content-
           // injection bug exists upstream).
-          sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals"
+          sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
           // referrerpolicy 'no-referrer' so DocuSeal can't see which tenant
           // slug the recipient came from beyond what's in embed_src itself.
           referrerPolicy="no-referrer"
