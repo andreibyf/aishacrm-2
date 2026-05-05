@@ -16,40 +16,34 @@
  *    falls back to a "please contact the sender" screen.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getBackendUrl } from '@/api/backendUrl';
 
-// DocuSeal's embeddable signing form is loaded from their CDN as a JS
-// web component. We inject the script tag once on mount and rely on the
-// custom-element lifecycle to render the form when the data-src prop
-// becomes available.
-const DOCUSEAL_SCRIPT_SRC = 'https://cdn.docuseal.com/js/form.js';
-
-function ensureDocusealScriptLoaded() {
-  if (typeof window === 'undefined') return Promise.resolve();
-  if (window.customElements?.get('docuseal-form')) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${DOCUSEAL_SCRIPT_SRC}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', reject);
-      return;
-    }
-    const s = document.createElement('script');
-    s.src = DOCUSEAL_SCRIPT_SRC;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
+// We deliberately use a plain <iframe> against DocuSeal's hosted signing
+// page (`embed_src` returns a URL like https://docuseal.aishacrm.com/s/<token>)
+// rather than the `<docuseal-form>` web component shipped via DocuSeal's CDN.
+//
+// Why: the web component renders the form in-page by calling DocuSeal's
+// /embed/forms API with `credentials: 'include'`. DocuSeal's default CORS
+// config returns `Access-Control-Allow-Origin: *`, which the browser rejects
+// when paired with credentialed requests (per the spec). DocuSeal Community
+// has no env var to swap in a specific allowed origin, so we sidestep it.
+//
+// Framing: DocuSeal Community sets `X-Frame-Options: SAMEORIGIN` baked into
+// Rails. We rewrite that header on the way out via the Cloudflare Worker
+// at `cloudflare-workers/docuseal-iframe-allowlist/`, scoped to AiSHA CRM
+// origins only. The Worker MUST be deployed to docuseal.aishacrm.com
+// before this iframe will render — see that directory's README.
+//
+// Iframe trade-off: a small strip of DocuSeal chrome shows inside the frame.
+// The host page provides the tenant logo + colors as outer chrome, so the
+// recipient still primarily sees the tenant brand. Server-side HTML proxy
+// is the heavier alternative if full white-label matters more later.
 
 export default function SignPage() {
   const { slug, token } = useParams();
   const [state, setState] = useState({ status: 'loading' });
-  const [scriptReady, setScriptReady] = useState(false);
-  const containerRef = useRef(null);
 
   // Fetch the submission + branding once on mount
   useEffect(() => {
@@ -77,22 +71,6 @@ export default function SignPage() {
       cancelled = true;
     };
   }, [slug, token]);
-
-  // Lazy-load DocuSeal's web component script once the data resolves
-  useEffect(() => {
-    if (state.status !== 'ready' || state.data?.fallback) return;
-    let cancelled = false;
-    ensureDocusealScriptLoaded()
-      .then(() => {
-        if (!cancelled) setScriptReady(true);
-      })
-      .catch(() => {
-        if (!cancelled) setScriptReady(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [state]);
 
   // Apply tenant brand colors to CSS variables on the container
   const brandStyle = (() => {
@@ -171,16 +149,22 @@ export default function SignPage() {
         {tenant?.name || 'Sender'} has sent you a document for signature.
       </h1>
       {template_name && <p className="mt-1 text-sm text-slate-500">{template_name}</p>}
-      <div ref={containerRef} className="mt-6">
-        {scriptReady ? (
-          // The DocuSeal web component renders its own iframe + form chrome
-          // when the data-src attribute is present. Using React's
-          // dangerouslySetInnerHTML would also work, but the custom-element
-          // approach is cleaner and benefits from React's diffing.
-          <docuseal-form data-src={embed_src} data-email={state.data?.recipient_email || ''} />
-        ) : (
-          <div className="text-sm text-slate-500">Loading signing form…</div>
-        )}
+      <div className="mt-6 rounded-md overflow-hidden border border-slate-200">
+        <iframe
+          src={embed_src}
+          title="Document signing"
+          className="w-full"
+          style={{ minHeight: '80vh', border: 0 }}
+          // Sandbox: allow forms, scripts, and same-origin behavior so the
+          // DocuSeal page itself functions; allow-popups so download links
+          // work; do NOT include allow-top-navigation (recipients shouldn't
+          // be able to navigate this frame to arbitrary sites if a content-
+          // injection bug exists upstream).
+          sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals"
+          // referrerpolicy 'no-referrer' so DocuSeal can't see which tenant
+          // slug the recipient came from beyond what's in embed_src itself.
+          referrerPolicy="no-referrer"
+        />
       </div>
     </BrandedFrame>
   );

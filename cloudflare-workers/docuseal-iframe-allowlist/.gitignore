@@ -1,0 +1,4 @@
+.test-out.txt
+.test-err.txt
+node_modules/
+.wrangler/
