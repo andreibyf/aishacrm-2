@@ -13,12 +13,18 @@
 
 services:
   frontend:
-    # Pull pre-built image from GHCR. Build args (VITE_*) are baked at CI build
-    # time via .github/workflows/build-staging.yml; runtime entrypoint
-    # (frontend-entrypoint.sh) populates env-config.js from container env so
-    # runtime overrides are still honored.
-    # Migrated from in-place `build:` block on 2026-05-05.
-    image: ghcr.io/andreibyf/aishacrm-2-frontend:staging-latest
+    image: aishacrm-frontend:coolify
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-https://staging-api.aishacrm.com}
+        VITE_CALCOM_URL: ${VITE_CALCOM_URL:-https://staging-scheduler.aishacrm.com}
+        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
+        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-staging-${COOLIFY_RESOURCE_UUID:-unknown}}
     container_name: staging-aishacrm-frontend
     restart: unless-stopped
     # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
@@ -41,7 +47,9 @@ services:
       - SERVICE_FQDN_FRONTEND=https://staging-app.aishacrm.com
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
-      interval: 30s
+      # 60s interval: user-facing static asset serve. Reduced from 30s → 60s
+      # on 2026-05-06. See 4VD-24.
+      interval: 60s
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -56,9 +64,10 @@ services:
           - frontend
 
   aisha-comms:
-    # Reuses the backend image with a different `command:`. Pulls from GHCR.
-    # Migrated from in-place `build:` block on 2026-05-05.
-    image: ghcr.io/andreibyf/aishacrm-2-backend:staging-latest
+    image: aishacrm-backend:coolify
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: staging-aishacrm-comms
     restart: unless-stopped
     cgroup_parent: aishacrm.slice
@@ -80,7 +89,11 @@ services:
       test:
         - "CMD-SHELL"
         - "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const c=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(c)&&c>0?c:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\""
-      interval: 30s
+      # 120s interval: background worker, not user-facing. Heartbeat lag check
+      # already tolerates up to 3× poll interval (default 180s), so 120s
+      # healthcheck cadence still detects worker stalls promptly.
+      # Reduced from 30s → 120s on 2026-05-06. See 4VD-24.
+      interval: 120s
       timeout: 5s
       retries: 3
       start_period: 30s

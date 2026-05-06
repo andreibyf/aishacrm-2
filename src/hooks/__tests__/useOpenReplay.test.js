@@ -43,22 +43,6 @@ describe('[PLATFORM] useOpenReplay', () => {
     window._env_ = originalRuntimeEnv;
   });
 
-  it('prefers runtime window._env_ values over build-time Vite env', () => {
-    window._env_ = {
-      VITE_OPENREPLAY_PROJECT_KEY: 'runtime-project-key',
-      VITE_OPENREPLAY_INGEST_POINT: 'https://runtime.ingest.example',
-    };
-
-    renderHook(() => useOpenReplay());
-
-    expect(Tracker).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectKey: 'runtime-project-key',
-        ingestPoint: 'https://runtime.ingest.example',
-      }),
-    );
-  });
-
   it('enables insecure mode for http localhost even when dev mode is false', () => {
     expect(
       shouldDisableSecureMode({

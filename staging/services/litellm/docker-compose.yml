@@ -29,9 +29,10 @@ services:
     # outside the artifacts tree (`/litellm/...`) and the build fails with
     # "lstat /litellm: no such file or directory". Documented and tested
     # in detail on prod/01-litellm/docker-compose.yml.
-    # Pull pre-built image from GHCR. Migrated from in-place `build:` block
-    # on 2026-05-05 (eliminates build CPU on VPS-1).
-    image: ghcr.io/andreibyf/aishacrm-2-litellm:staging-latest
+    image: aishacrm-litellm-staging:coolify
+    build:
+      context: .
+      dockerfile: litellm/Dockerfile
     container_name: aishacrm-litellm-staging-coolify
     restart: unless-stopped
     # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
@@ -52,7 +53,10 @@ services:
       test:
         - CMD-SHELL
         - "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness')\" || exit 1"
-      interval: 30s
+      # 120s interval: internal LLM router. Python startup for the healthcheck
+      # is heavy (50-100ms per probe), so 30s cadence was particularly costly.
+      # Reduced from 30s → 120s on 2026-05-06. See 4VD-24.
+      interval: 120s
       timeout: 10s
       retries: 5
       start_period: 30s

@@ -41,7 +41,7 @@ test('every AiSHA-owned staging compose file binds services to aishacrm.slice', 
     const serviceLines = (yaml.match(/^\s{2}[a-zA-Z0-9_-]+:\s*$/gm) || []).filter(
       (l) => !/^\s{2}(networks|volumes|configs|secrets):/.test(l),
     );
-    const parentLines = (yaml.match(/^\s+cgroup_parent:\s*aishacrm\.slice\s*$/gm) || []);
+    const parentLines = yaml.match(/^\s+cgroup_parent:\s*aishacrm\.slice\s*$/gm) || [];
 
     assert.ok(
       parentLines.length >= 1,
@@ -59,10 +59,14 @@ test('every AiSHA-owned staging compose file binds services to aishacrm.slice', 
 });
 
 test('aishacrm.slice unit is shipped in the repo with the documented cap', () => {
+  // Tightened 2026-05-06 from 500% to 400% — combined with coolify.slice
+  // (100%) and system.slice (400%) the realized budget stays under Zap's
+  // 550% hypervisor cap. Original 500% sum-with-coolify-150% was 650%,
+  // already over Zap's cap. See 4VD-24.
   const sliceFile = path.join(REPO, 'scripts', 'aishacrm.slice');
   assert.ok(fs.existsSync(sliceFile), 'scripts/aishacrm.slice must exist');
   const content = fs.readFileSync(sliceFile, 'utf8');
-  assert.match(content, /CPUQuota=500%/, 'aishacrm.slice must declare CPUQuota=500%');
+  assert.match(content, /^CPUQuota=400%$/m, 'aishacrm.slice must declare CPUQuota=400%');
   assert.match(content, /MemoryMax=12G/, 'aishacrm.slice must declare MemoryMax=12G');
   assert.match(content, /MemoryHigh=8G/, 'aishacrm.slice must declare MemoryHigh=8G');
 });
@@ -74,6 +78,22 @@ test('coolify.slice sibling unit is shipped to cover Coolify-managed escapees', 
     'scripts/coolify.slice must exist — added during VPS-1 cap-coverage fix',
   );
   const content = fs.readFileSync(sliceFile, 'utf8');
-  assert.match(content, /CPUQuota=\d+%/, 'coolify.slice must declare a CPUQuota');
+  // Tightened 2026-05-06 from 150% → 100%. See 4VD-24.
+  assert.match(content, /^CPUQuota=100%$/m, 'coolify.slice must declare CPUQuota=100%');
   assert.match(content, /MemoryMax=/, 'coolify.slice must declare a MemoryMax');
+});
+
+test('system.slice cap drop-in is shipped to bound dockerd/containerd/snapd/journald', () => {
+  // Origin: 2026-05-06 — system.slice processes (dockerd, containerd, snapd,
+  // cloudflared, journald, kworker) cumulatively consumed ~8 cores on a
+  // 5.5-core Zap cap, triggering the VM lock at 10:02:32 UTC. Capping
+  // system.slice halved real CPU consumption (821% → 396% measured via
+  // /proc/stat) without bouncing any container. See 4VD-24.
+  const dropinFile = path.join(REPO, 'scripts', 'system-slice-cap.conf');
+  assert.ok(
+    fs.existsSync(dropinFile),
+    'scripts/system-slice-cap.conf must exist — system.slice cap was the actual fix for the Zap lock',
+  );
+  const content = fs.readFileSync(dropinFile, 'utf8');
+  assert.match(content, /^CPUQuota=400%$/m, 'system-slice-cap.conf must declare CPUQuota=400%');
 });

@@ -1,0 +1,104 @@
+name: 'Coolify Deploy'
+description: >
+  POST a deploy to Coolify and poll its status until terminal. Fails loudly
+  with the deployment_uuid in the error message so the caller can dig into
+  Coolify's UI directly.
+inputs:
+  base_url:
+    description: 'Coolify base URL (e.g. https://deploy.aishacrm.com)'
+    required: true
+  application_uuid:
+    description: 'Coolify Application UUID to deploy'
+    required: true
+  application_name:
+    description: 'Human-readable name (used in logs only)'
+    required: true
+  token:
+    description: 'Coolify deploy bearer token'
+    required: true
+  force_rebuild:
+    description: 'Pass force=true to bust Coolify build cache'
+    required: false
+    default: 'false'
+  poll_interval_seconds:
+    description: 'How often to poll deployment status'
+    required: false
+    default: '15'
+  poll_max_attempts:
+    description: 'Bail after this many polls (default 40 = 10 min @ 15s interval)'
+    required: false
+    default: '40'
+runs:
+  using: 'composite'
+  steps:
+    - name: Trigger deploy and poll until terminal
+      shell: bash
+      env:
+        BASE: ${{ inputs.base_url }}
+        UUID: ${{ inputs.application_uuid }}
+        APP: ${{ inputs.application_name }}
+        TOKEN: ${{ inputs.token }}
+        FORCE: ${{ inputs.force_rebuild }}
+        INTERVAL: ${{ inputs.poll_interval_seconds }}
+        MAX: ${{ inputs.poll_max_attempts }}
+      run: |
+        set -euo pipefail
+
+        echo "::group::POST $BASE/api/v1/deploy?uuid=$UUID&force=$FORCE"
+        # Capture HTTP status separately so we can fail with full body.
+        HTTP_BODY="$(mktemp)"
+        HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w '%{http_code}' \
+          -X POST "$BASE/api/v1/deploy?uuid=$UUID&force=$FORCE" \
+          -H "Authorization: Bearer $TOKEN" \
+          --max-time 30)
+        BODY="$(cat "$HTTP_BODY")"
+        rm -f "$HTTP_BODY"
+        echo "HTTP $HTTP_CODE"
+        echo "$BODY"
+        echo "::endgroup::"
+
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "::error::Coolify deploy POST returned HTTP $HTTP_CODE for $APP ($UUID): $BODY"
+          exit 1
+        fi
+
+        DEPLOY_UUID="$(echo "$BODY" | jq -r '.deployments[0].deployment_uuid // empty')"
+        if [ -z "$DEPLOY_UUID" ]; then
+          echo "::error::Could not extract deployment_uuid from response for $APP ($UUID): $BODY"
+          exit 1
+        fi
+        echo "deployment_uuid=$DEPLOY_UUID"
+        echo "deployment_url=$BASE/project/.../deployment/$DEPLOY_UUID  (UI link approximate)"
+
+        ATTEMPT=0
+        while [ "$ATTEMPT" -lt "$MAX" ]; do
+          ATTEMPT=$((ATTEMPT + 1))
+          sleep "$INTERVAL"
+          STATUS_BODY="$(mktemp)"
+          STATUS_CODE=$(curl -sS -o "$STATUS_BODY" -w '%{http_code}' \
+            "$BASE/api/v1/deployments/$DEPLOY_UUID" \
+            -H "Authorization: Bearer $TOKEN" \
+            --max-time 20 || echo '000')
+          if [ "$STATUS_CODE" != "200" ]; then
+            echo "[$APP] poll $ATTEMPT/$MAX: HTTP $STATUS_CODE — retrying"
+            rm -f "$STATUS_BODY"
+            continue
+          fi
+          STATUS="$(jq -r '.status // empty' "$STATUS_BODY")"
+          UPDATED="$(jq -r '.updated_at // empty' "$STATUS_BODY")"
+          rm -f "$STATUS_BODY"
+          echo "[$APP] poll $ATTEMPT/$MAX: status=$STATUS updated=$UPDATED"
+          case "$STATUS" in
+            finished)
+              echo "::notice::$APP deployment $DEPLOY_UUID finished successfully"
+              exit 0
+              ;;
+            failed|cancelled-by-user|cancelled)
+              echo "::error::$APP deployment $DEPLOY_UUID terminal status: $STATUS"
+              exit 1
+              ;;
+          esac
+        done
+
+        echo "::error::$APP deployment $DEPLOY_UUID did not reach terminal status within $((MAX * INTERVAL))s. Check Coolify UI."
+        exit 1

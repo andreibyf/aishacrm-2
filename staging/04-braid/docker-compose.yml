@@ -36,9 +36,10 @@
 
 services:
   braid-mcp-server:
-    # Pull pre-built image from GHCR. Migrated from in-place `build:` block
-    # on 2026-05-05 (eliminates build CPU on VPS-1).
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-server
     restart: unless-stopped
     # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
@@ -57,7 +58,9 @@ services:
       - DEFAULT_TENANT_ID=${DEFAULT_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
-      interval: 30s
+      # 120s interval: internal MCP coordinator; not user-facing.
+      # Reduced from 30s → 120s on 2026-05-06. See 4VD-24.
+      interval: 120s
       timeout: 3s
       retries: 3
       start_period: 30s
@@ -72,8 +75,10 @@ services:
           - braid-mcp-server
 
   braid-mcp-1:
-    # Same image as braid-mcp-server (different MCP_ROLE env). Pulled from GHCR.
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-1
     restart: unless-stopped
     cgroup_parent: aishacrm.slice
@@ -94,7 +99,8 @@ services:
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
-      interval: 30s
+      # 120s interval: internal MCP worker. See 4VD-24.
+      interval: 120s
       timeout: 3s
       retries: 3
       start_period: 30s
@@ -109,8 +115,10 @@ services:
           - braid-mcp-1
 
   braid-mcp-2:
-    # Same image as braid-mcp-server (different MCP_ROLE env). Pulled from GHCR.
-    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
     container_name: staging-braid-mcp-2
     restart: unless-stopped
     cgroup_parent: aishacrm.slice
@@ -131,7 +139,8 @@ services:
       - REDIS_URL=redis://redis-memory:6379
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
-      interval: 30s
+      # 120s interval: internal MCP worker. See 4VD-24.
+      interval: 120s
       timeout: 3s
       retries: 3
       start_period: 30s
