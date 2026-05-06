@@ -133,7 +133,7 @@ async function resolveTenantFromSignature(supabase, rawBody, signatureHeader) {
 // Status transition guard — prevent regressions (e.g., completed → viewed)
 // ---------------------------------------------------------------------------
 
-const STATUS_RANK = {
+export const STATUS_RANK = {
   pending: 0,
   sent: 1,
   viewed: 2,
@@ -144,7 +144,7 @@ const STATUS_RANK = {
   failed: 4,
 };
 
-function canTransition(currentStatus, newStatus) {
+export function canTransition(currentStatus, newStatus) {
   const cur = STATUS_RANK[currentStatus] ?? 0;
   const next = STATUS_RANK[newStatus] ?? 0;
   return next >= cur;
@@ -351,9 +351,44 @@ export async function mirrorSignedPdfToStorage({
 // Event dispatcher — maps DocuSeal event types to status + activity
 // ---------------------------------------------------------------------------
 
-const EVENT_MAP = {
+/**
+ * DocuSeal Community → CRM event mapping.
+ *
+ * The full DocuSeal v1.10+ admin webhook event list is:
+ *
+ *   form.viewed     form.started    form.completed   form.declined
+ *   submission.created    submission.completed   submission.expired   submission.archived
+ *   template.created      template.updated       template.archived
+ *
+ * Of those, the events that mean something for our CRM lifecycle are
+ * mapped below. Unmapped events (form.started's submission counterpart,
+ * archive events, template events) get a 200 + ignored response so DocuSeal
+ * doesn't retry, but their last_event_id still updates so a future
+ * revision can pick them up idempotently.
+ *
+ * Naming notes:
+ *   - DocuSeal renamed `submission.declined` → `form.declined` somewhere
+ *     between MVP rollout and 2026-05. We map BOTH so older DocuSeal
+ *     installs (or future revivals) keep working.
+ *   - `form.started` fires on first open of the signing form. Treat it as
+ *     equivalent to `form.viewed` — same status, same activity, same
+ *     1-hour dedupe in createActivity. Some installs only fire `started`
+ *     and never `viewed`; some fire both. Mapping both is harmless because
+ *     the dedupe in createActivity collapses duplicate activities and
+ *     canTransition rejects the second status update.
+ *
+ * EVENT_MAP is exported so unit tests can assert the contract without
+ * spinning up the route handler.
+ */
+export const EVENT_MAP = {
   'form.viewed': { status: 'viewed', activity: 'document_viewed', timestampField: 'viewed_at' },
+  'form.started': { status: 'viewed', activity: 'document_viewed', timestampField: 'viewed_at' },
   'form.completed': { status: 'signed', activity: 'document_signed', timestampField: null },
+  'form.declined': {
+    status: 'declined',
+    activity: 'document_declined',
+    timestampField: null,
+  },
   'submission.completed': {
     status: 'completed',
     activity: 'document_completed',
