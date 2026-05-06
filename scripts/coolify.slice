@@ -1,0 +1,31 @@
+[Unit]
+Description=Coolify control-plane infra (sentinel, proxy, landing) — capped sibling to aishacrm.slice
+Documentation=https://www.freedesktop.org/software/systemd/man/systemd.slice.html
+Before=docker.service
+After=basic.target
+
+[Slice]
+# These are control-plane / sidecar containers that Coolify manages directly,
+# outside aishacrm.slice. Without a cap they can drift unbounded over hours
+# (notably coolify-sentinel) and crowd the host into the lockup pattern
+# observed on VPS-1 (~5h between manual reboots).
+#
+# Cap is small on purpose — these are infra agents, not workload.
+#   1.5 cores sustained, 2 GB memory ceiling.
+#
+# Install:
+#   sudo cp scripts/coolify.slice /etc/systemd/system/coolify.slice
+#   sudo systemctl daemon-reload
+#   sudo systemctl start coolify.slice
+#
+# Then for each Coolify-managed compose, add cgroup_parent: coolify.slice
+# (or set it in Coolify's "Custom Docker Options" per service).
+CPUQuota=150%
+CPUAccounting=yes
+
+MemoryHigh=1.5G
+MemoryMax=2G
+MemoryAccounting=yes
+
+IOAccounting=yes
+TasksAccounting=yes

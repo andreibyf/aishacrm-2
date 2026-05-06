@@ -21,10 +21,12 @@
 
 services:
   backend:
-    image: aishacrm-backend:coolify
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    # Pull pre-built image from GHCR. CI builds on every push to main via
+    # .github/workflows/build-staging.yml and tags `:staging-latest`.
+    # Migrated from in-place `build:` block on 2026-05-05 to eliminate build
+    # CPU spike on VPS-1 (Zap's 5.5-core sustained cap was being tripped by
+    # parallel npm install + vite build during deploys).
+    image: ghcr.io/andreibyf/aishacrm-2-backend:staging-latest
     container_name: staging-aishacrm-backend
     restart: unless-stopped
     # Bind to host-level aggregate CPU/mem slice. Without cgroup_parent the

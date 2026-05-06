@@ -1,0 +1,313 @@
+name: Build Staging Images (GHCR)
+
+# Builds AiSHA service images on every push to `main` and pushes them to GHCR
+# tagged `:staging-<sha>` and `:staging-latest`. The staging Coolify Applications
+# (staging-backend-heavy, staging-app-fast, staging-braid, staging-litellm) are
+# being migrated to pull these pre-built images instead of building on VPS-1.
+#
+# Why this exists: VPS-1 lockup investigation (2026-05-05) found that Coolify's
+# build phase runs OUTSIDE aishacrm.slice — uncapped CPU during npm install +
+# vite build occasionally tips the box past Zap's 5.5-core sustained hypervisor
+# cap, causing CPU steal → in-slice services miss healthchecks → kernel
+# softlockup → manual reboot required. Moving builds to GitHub Actions
+# eliminates the build CPU on VPS-1 entirely.
+#
+# Companion: docker-release.yml (tag-driven, prod). This file (push-driven, staging).
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+# Cancel in-flight builds when a new push arrives. Avoids racing image tags.
+concurrency:
+  group: build-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Detect which service folders changed so we only rebuild what's needed.
+  # Matches Coolify Watch Paths in the corresponding Application config.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      litellm: ${{ steps.filter.outputs.litellm }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'staging/01-backend-heavy/**'
+            frontend:
+              - 'src/**'
+              - 'public/**'
+              - 'index.html'
+              - 'Dockerfile'
+              - 'frontend-entrypoint.sh'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'vite.config.ts'
+              - 'tailwind.config.js'
+              - 'postcss.config.js'
+              - 'staging/02-app-fast/**'
+            mcp:
+              - 'braid-mcp-node-server/**'
+              - 'staging/04-braid/**'
+            litellm:
+              - 'litellm/**'
+              - 'staging/services/litellm/**'
+
+  build:
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.mcp == 'true' ||
+      needs.changes.outputs.litellm == 'true'
+    strategy:
+      # Don't fail the whole matrix if one service build fails — staging is best-effort.
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: .
+            dockerfile: ./Dockerfile
+            image: ghcr.io/${{ github.repository }}-frontend
+            change_key: frontend
+          - service: backend
+            context: .
+            dockerfile: ./backend/Dockerfile
+            image: ghcr.io/${{ github.repository }}-backend
+            change_key: backend
+          - service: mcp
+            context: ./braid-mcp-node-server
+            dockerfile: ./braid-mcp-node-server/Dockerfile
+            image: ghcr.io/${{ github.repository }}-mcp
+            change_key: mcp
+          - service: litellm
+            context: .
+            dockerfile: ./litellm/Dockerfile
+            image: ghcr.io/${{ github.repository }}-litellm
+            change_key: litellm
+
+    steps:
+      - name: Skip if service unchanged
+        id: gate
+        run: |
+          declare -A flags=(
+            [backend]=${{ needs.changes.outputs.backend }}
+            [frontend]=${{ needs.changes.outputs.frontend }}
+            [mcp]=${{ needs.changes.outputs.mcp }}
+            [litellm]=${{ needs.changes.outputs.litellm }}
+          )
+          if [ "${flags[${{ matrix.change_key }}]}" != "true" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping ${{ matrix.service }} — no changes in its watched paths."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.gate.outputs.build == 'true'
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata (tags + labels)
+        if: steps.gate.outputs.build == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          # Two tags: immutable per-commit + moving alias for Coolify to track.
+          tags: |
+            type=raw,value=staging-latest
+            type=raw,value=staging-${{ github.sha }}
+            type=raw,value=staging-${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=AiSHA CRM ${{ matrix.service }} (staging)
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Guard backend import paths (matches prod workflow)
+        if: steps.gate.outputs.build == 'true' && matrix.service == 'backend'
+        run: |
+          MATCHES=$(grep -RInE --exclude-dir node_modules --exclude-dir __tests__ --exclude-dir tests "from ['\"](\.\./){2,}|require\(['\"](\.\./){2,}" backend || true)
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES" | grep -v "braid-llm-kit" | grep -v "shared/" | grep -v "pep/" > /tmp/bad-imports.txt || true
+            if [ -s /tmp/bad-imports.txt ]; then
+              echo "ERROR: backend imports root-relative paths not in image:"
+              cat /tmp/bad-imports.txt
+              exit 1
+            fi
+          fi
+
+      - name: Build and push ${{ matrix.service }}
+        if: steps.gate.outputs.build == 'true'
+        timeout-minutes: 25
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Separate cache scope per service so cross-service builds don't invalidate.
+          # Separate from prod cache (suffix `-staging`) so staging churn doesn't
+          # poison prod's tag-driven cache.
+          cache-from: type=gha,scope=${{ matrix.service }}-staging
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-staging
+          build-args: |
+            VITE_APP_BUILD_VERSION=staging-${{ github.sha }}
+            VITE_CURRENT_BRANCH=${{ github.ref_name }}
+            VITE_SUPABASE_URL=${{ vars.VITE_STAGING_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ vars.VITE_STAGING_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+            VITE_AISHACRM_BACKEND_URL=https://staging-api.aishacrm.com
+            VITE_CALCOM_URL=https://staging-scheduler.aishacrm.com
+            PUPPETEER_SKIP_DOWNLOAD=1
+            USE_SYSTEM_CHROMIUM=false
+            CACHE_BUST=${{ github.sha }}
+
+      - name: Image summary
+        if: steps.gate.outputs.build == 'true'
+        run: |
+          {
+            echo "### Staging image: ${{ matrix.service }}"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "Coolify on VPS-1 will pull \`staging-latest\` on next deploy."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Trigger Coolify redeploy for each app that needs to pull a new image.
+  # Mapping (note staging-app-fast contains both frontend AND aisha-comms which
+  # runs the backend image — so a backend rebuild MUST redeploy both apps):
+  #   backend  -> staging-backend-heavy + staging-app-fast (for aisha-comms)
+  #   frontend -> staging-app-fast
+  #   mcp      -> staging-braid
+  #   litellm  -> staging-litellm
+  #
+  # auto_deploy_enabled on the staging apps is set to false (in Coolify DB) so
+  # git push doesn't race this CI image-push. Coolify only deploys via this
+  # job's webhook calls.
+  #
+  # Required repo secret: COOLIFY_DEPLOY_TOKEN
+  deploy:
+    needs: [changes, build]
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      COOLIFY_BASE: https://deploy.aishacrm.com
+      UUID_BACKEND: d24ro1fqm0zyl7pd72g6snd2
+      UUID_APP_FAST: di7ko49ikfd2mz8yh0q7id8q
+      UUID_BRAID: tw8zmua5jyzwnhh1oxw15kkm
+      UUID_LITELLM: zsy5fsbw9hccxvoznkbpy1il
+    steps:
+      - name: Verify deploy token is configured
+        run: |
+          if [ -z "${{ secrets.COOLIFY_DEPLOY_TOKEN }}" ]; then
+            echo "::error::Repository secret COOLIFY_DEPLOY_TOKEN is not set"
+            echo "Add it at: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+
+      - name: Compute apps to redeploy
+        id: apps
+        run: |
+          APPS=()
+          if [ "${{ needs.changes.outputs.backend }}" = "true" ]; then
+            APPS+=("$UUID_BACKEND")
+            APPS+=("$UUID_APP_FAST")  # aisha-comms uses backend image
+          fi
+          if [ "${{ needs.changes.outputs.frontend }}" = "true" ]; then
+            # Skip if backend already triggered app-fast above
+            if [[ ! " ${APPS[*]} " =~ " $UUID_APP_FAST " ]]; then
+              APPS+=("$UUID_APP_FAST")
+            fi
+          fi
+          if [ "${{ needs.changes.outputs.mcp }}" = "true" ]; then
+            APPS+=("$UUID_BRAID")
+          fi
+          if [ "${{ needs.changes.outputs.litellm }}" = "true" ]; then
+            APPS+=("$UUID_LITELLM")
+          fi
+          echo "Apps to redeploy: ${APPS[*]:-(none)}"
+          # Pass to next step as space-separated string
+          echo "uuids=${APPS[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Coolify redeploys
+        if: steps.apps.outputs.uuids != ''
+        run: |
+          set -euo pipefail
+          for uuid in ${{ steps.apps.outputs.uuids }}; do
+            echo "Triggering deploy for $uuid ..."
+            HTTP_CODE=$(curl -sS -o /tmp/coolify-resp.json -w "%{http_code}" \
+              -X POST \
+              -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_TOKEN }}" \
+              -H "Accept: application/json" \
+              "$COOLIFY_BASE/api/v1/deploy?uuid=$uuid&force=false")
+            echo "  HTTP $HTTP_CODE"
+            cat /tmp/coolify-resp.json || true
+            echo
+            if [ "$HTTP_CODE" -ge 400 ]; then
+              echo "::error::Coolify deploy trigger failed for $uuid (HTTP $HTTP_CODE)"
+              exit 1
+            fi
+            # Small inter-app pause so we don't wave-saturate VPS-1 with
+            # simultaneous pulls. The actual deploy is async on Coolify's side.
+            sleep 5
+          done
+
+      - name: Result summary
+        if: always()
+        run: |
+          {
+            echo "### Coolify redeploy summary"
+            echo ""
+            echo "- Apps triggered: \`${{ steps.apps.outputs.uuids || '(none — no service changed)' }}\`"
+            echo "- Coolify base: \`$COOLIFY_BASE\`"
+            echo ""
+            echo "Watch progress: https://deploy.aishacrm.com/projects"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Summary job — succeeds only if any build that ran succeeded. Useful as the
+  # required check for branch protection without blocking unchanged-only pushes.
+  summary:
+    needs: [changes, build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Result
+        run: |
+          echo "Changes: backend=${{ needs.changes.outputs.backend }} frontend=${{ needs.changes.outputs.frontend }} mcp=${{ needs.changes.outputs.mcp }} litellm=${{ needs.changes.outputs.litellm }}"
+          echo "Build job result:  ${{ needs.build.result }}"
+          echo "Deploy job result: ${{ needs.deploy.result }}"
+          # Treat 'skipped' (no service changed) as success.
+          if [ "${{ needs.build.result }}" = "failure" ] || [ "${{ needs.deploy.result }}" = "failure" ]; then
+            exit 1
+          fi

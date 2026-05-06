@@ -36,10 +36,9 @@
 
 services:
   braid-mcp-server:
-    image: aishacrm-mcp:coolify
-    build:
-      context: braid-mcp-node-server
-      dockerfile: Dockerfile
+    # Pull pre-built image from GHCR. Migrated from in-place `build:` block
+    # on 2026-05-05 (eliminates build CPU on VPS-1).
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
     container_name: staging-braid-mcp-server
     restart: unless-stopped
     # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
@@ -73,10 +72,8 @@ services:
           - braid-mcp-server
 
   braid-mcp-1:
-    image: aishacrm-mcp:coolify
-    build:
-      context: braid-mcp-node-server
-      dockerfile: Dockerfile
+    # Same image as braid-mcp-server (different MCP_ROLE env). Pulled from GHCR.
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
     container_name: staging-braid-mcp-1
     restart: unless-stopped
     cgroup_parent: aishacrm.slice
@@ -112,10 +109,8 @@ services:
           - braid-mcp-1
 
   braid-mcp-2:
-    image: aishacrm-mcp:coolify
-    build:
-      context: braid-mcp-node-server
-      dockerfile: Dockerfile
+    # Same image as braid-mcp-server (different MCP_ROLE env). Pulled from GHCR.
+    image: ghcr.io/andreibyf/aishacrm-2-mcp:staging-latest
     container_name: staging-braid-mcp-2
     restart: unless-stopped
     cgroup_parent: aishacrm.slice

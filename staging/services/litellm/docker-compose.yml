@@ -29,10 +29,9 @@ services:
     # outside the artifacts tree (`/litellm/...`) and the build fails with
     # "lstat /litellm: no such file or directory". Documented and tested
     # in detail on prod/01-litellm/docker-compose.yml.
-    image: aishacrm-litellm-staging:coolify
-    build:
-      context: .
-      dockerfile: litellm/Dockerfile
+    # Pull pre-built image from GHCR. Migrated from in-place `build:` block
+    # on 2026-05-05 (eliminates build CPU on VPS-1).
+    image: ghcr.io/andreibyf/aishacrm-2-litellm:staging-latest
     container_name: aishacrm-litellm-staging-coolify
     restart: unless-stopped
     # Aggregate CPU/mem slice — see staging/01-backend-heavy comments.
