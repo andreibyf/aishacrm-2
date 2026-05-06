@@ -4,6 +4,10 @@
 # Runs before git push. Blocks push if anything fails.
 # Skip with: git push --no-verify
 # ============================================================
+# v4.9.4 — Drop hardcoded --pool=forks; let vitest.config.ts pick.
+#   On Windows the config selects vmForks (forks pool times out
+#   starting workers). The hardcoded flag was forcing forks
+#   even there, producing "Timeout starting forks runner".
 # v4.9.3 — POSIX sh compat: replace bash arrays with conditionals
 # v4.9.2 — Vitest 4.x compat:
 #   - Replace --related <files> (removed in v4) with --changed origin/main
@@ -23,7 +27,7 @@ set -e
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
-echo "║        PRE-PUSH CHECKS (v4.9.3)             ║"
+echo "║        PRE-PUSH CHECKS (v4.9.4)             ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -88,7 +92,6 @@ CHANGED_SRC=$(git diff --name-only --diff-filter=d origin/main HEAD -- 'src/**/*
 CHANGED_SRC_COUNT=$(echo "$CHANGED_SRC" | grep '[^[:space:]]' 2>/dev/null | wc -l | tr -d ' \t')
 
 # Determine vitest run mode (full, changed, or skip)
-# --changed origin/main lets Vitest resolve affected tests itself (no file paths needed)
 VITEST_MODE="full"
 if [ "$CHANGED_SRC_COUNT" -eq 0 ]; then
   echo "   No frontend source files changed — skipping Vitest"
@@ -99,16 +102,19 @@ elif [ "$CHANGED_SRC_COUNT" -le 50 ]; then
   VITEST_MODE="changed"
 else
   echo "   $CHANGED_SRC_COUNT files changed — running full test suite..."
-  set -- run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON"
 fi
+
+# Pool selection: vitest.config.ts already picks `vmForks` on Windows
+# (forks pool times out starting worker processes there) and `threads` on
+# *nix. Don't pass --pool here — the config is the source of truth.
 
 if [ "${SKIP_VITEST:-}" != "1" ]; then
   set +e
   if command -v timeout >/dev/null 2>&1; then
     if [ "$VITEST_MODE" = "changed" ]; then
-      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
     else
-      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+      timeout ${VITEST_TIMEOUT}s env -u NODE_OPTIONS ./node_modules/.bin/vitest run --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
     fi
     VITEST_EXIT=$?
     if [ $VITEST_EXIT -eq 124 ]; then
@@ -127,9 +133,9 @@ if [ "${SKIP_VITEST:-}" != "1" ]; then
     fi
   else
     if [ "$VITEST_MODE" = "changed" ]; then
-      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --changed origin/main --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
     else
-      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
+      env -u NODE_OPTIONS ./node_modules/.bin/vitest run --reporter=verbose --reporter=json "--outputFile=$VITEST_JSON" > "$VITEST_LOG" 2>&1
     fi
     VITEST_EXIT=$?
     cat "$VITEST_LOG"
@@ -142,9 +148,9 @@ if [ "${SKIP_VITEST:-}" != "1" ]; then
     echo "⚠️  Vitest exited with code $VITEST_EXIT but reported 0 test failures"
     echo "✅ Frontend tests passed (0 failures)"
   elif grep -qi 'failed to find the runner\|Timeout starting .*runner' "$VITEST_LOG"; then
-    echo "⚠️  Vitest runner bootstrap failed — retrying once in safe mode..."
+    echo "⚠️  Vitest runner bootstrap failed — retrying once with --maxWorkers=1 (config-default pool)..."
     set +e
-    env -u NODE_OPTIONS ./node_modules/.bin/vitest run --pool=forks --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
+    env -u NODE_OPTIONS ./node_modules/.bin/vitest run --maxWorkers=1 --reporter=verbose --reporter=json --outputFile="$VITEST_JSON" > "$VITEST_LOG" 2>&1
     VITEST_EXIT=$?
     cat "$VITEST_LOG"
     set -e
@@ -177,13 +183,6 @@ echo ""
 #
 # Override with: BACKEND_TESTS=full git push
 # Skip with:     BACKEND_TESTS=skip git push   (or `git push --no-verify`)
-#
-# Why default `precheck`: the heavier tiers (`safe`, full) require live
-# Supabase + Redis + Postgres. When those services point at staging
-# (e.g. after a Doppler config swap) or when running locally without
-# `docker compose up`, those tests fail for environmental reasons unrelated
-# to the change being pushed. Precheck pins the deterministic-only subset
-# so pushes remain trustworthy without needing a full local stack up.
 BACKEND_TESTS="${BACKEND_TESTS:-precheck}"
 echo "▶ [4/4] Running backend tests (tier: ${BACKEND_TESTS})..."
 
@@ -200,9 +199,6 @@ elif docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | g
     *)        echo "❌ Unknown BACKEND_TESTS tier: '$BACKEND_TESTS' (valid: precheck|safe|full|skip)"; exit 1 ;;
   esac
 
-  # Container may have a stale package.json (e.g. test:precheck added on host
-  # but image not rebuilt yet). If the script doesn't exist in the container,
-  # fall back to running on the host where the working tree is current.
   if [ "$BACKEND_TESTS" != "skip" ] \
      && ! docker exec aishacrm-backend grep -q "\"${BACKEND_TESTS}\":" /app/package.json /app/backend/package.json 2>/dev/null \
      && [ "$BACKEND_TESTS" != "full" ] && [ "$BACKEND_TESTS" != "safe" ]; then
@@ -210,7 +206,6 @@ elif docker ps --filter "name=aishacrm-backend" --filter "status=running" -q | g
     if (cd backend && npm run "test:${BACKEND_TESTS}") 2>&1; then
       echo "✅ Backend tests passed (${BACKEND_TESTS}, host fallback)"
       echo ""
-      # Skip the rest of the docker block by ending here; host run was authoritative.
       true
     else
       echo ""

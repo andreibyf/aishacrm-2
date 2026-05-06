@@ -20,7 +20,7 @@ After=basic.target
 #
 # Then for each Coolify-managed compose, add cgroup_parent: coolify.slice
 # (or set it in Coolify's "Custom Docker Options" per service).
-CPUQuota=150%
+CPUQuota=100%
 CPUAccounting=yes
 
 MemoryHigh=1.5G
