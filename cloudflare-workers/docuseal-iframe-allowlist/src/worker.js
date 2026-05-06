@@ -75,13 +75,22 @@ export function rewriteCsp(originalCsp) {
 export default {
   async fetch(req, env, ctx) {
     const originalRes = await fetch(req);
-    const allowed = detectAllowlistedOrigin(req);
-    if (!allowed) {
-      // Not an allowlisted CRM origin — keep DocuSeal's headers intact so
-      // direct visits and untrusted framers still see clickjacking
-      // protection.
-      return originalRes;
-    }
+
+    // ALWAYS rewrite framing headers. The `frame-ancestors` CSP directive
+    // is itself the access control: browsers will only allow framing from
+    // the explicit allowlist regardless of the request's Origin/Referer.
+    //
+    // Per-request origin detection (the previous design) was insufficient
+    // because browsers don't send `Origin` on iframe navigations, and they
+    // sometimes strip `Referer` under `referrer-policy: strict-origin`.
+    // The result was that real iframe requests fell through unmodified
+    // and X-Frame-Options: SAMEORIGIN blocked the load.
+    //
+    // Security: stripping X-Frame-Options globally would be unsafe IF we
+    // didn't replace it with a stricter `frame-ancestors`. We do — the
+    // allowlist is enforced by the browser on every framing attempt.
+    // detectAllowlistedOrigin remains exported for tests/observability
+    // but is no longer used to gate the rewrite.
     const headers = new Headers(originalRes.headers);
     headers.delete('X-Frame-Options');
     const csp = headers.get('Content-Security-Policy');
