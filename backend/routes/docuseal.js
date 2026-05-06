@@ -204,7 +204,11 @@ router.post('/submissions', async (req, res) => {
     template_id,
     recipient_email,
     recipient_name,
-    externalId: tenantId, // 4VD-15: stamp tenant_id for cross-tenant isolation
+    // 4VD-15: stamp tenant_id only on the platform-key path. On the legacy
+    // per-tenant path, tagging new submissions with external_id is harmless
+    // but inconsistent with existing untagged data — defer until the
+    // backfill runs.
+    externalId: cfg.source === 'platform' ? tenantId : undefined,
   });
   let docusealResponse;
   try {
@@ -560,13 +564,16 @@ router.get('/templates', async (req, res) => {
 
   let templates;
   try {
-    // 4VD-15: external_id == tenantId is THE tenant isolation boundary.
-    // Without this filter the shared platform key would return every
-    // tenant's templates.
+    // 4VD-15: external_id == tenantId is THE tenant isolation boundary on
+    // the platform-key path. Skip the filter on the legacy per-tenant
+    // path because existing templates predate this migration and aren't
+    // yet tagged with external_id — applying the filter would return 0
+    // results until a backfill runs. The legacy path's tenant isolation
+    // still comes from the per-tenant DocuSeal user / API key.
     templates = await fetchDocusealTemplates({
       apiKey: cfg.apiKey,
       baseUrl: cfg.baseUrl,
-      externalId: tenantId,
+      externalId: cfg.source === 'platform' ? tenantId : undefined,
     });
   } catch (err) {
     logger.warn('[Docuseal] Templates fetch failed', {
