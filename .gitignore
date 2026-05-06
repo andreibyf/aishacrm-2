@@ -230,6 +230,16 @@ scripts/vps2-run.sh
 scripts/vps2-cmd.txt
 scripts/vps2-last.out
 scripts/vps2-last.err
+scripts/vps2-commit-msg.txt
+
+# VPS-1 SSH bridge for Claude Cowork sessions — same pattern as VPS-2 above.
+scripts/vps1-askpass.cmd
+scripts/vps1-askpass.sh
+scripts/vps1-ssh.cmd
+scripts/vps1-run.sh
+scripts/vps1-cmd.txt
+scripts/vps1-last.out
+scripts/vps1-last.err
 
 # Per-VPS env captures (contain secrets — never commit)
 .env.vps2
