@@ -1,0 +1,201 @@
+# Auto-deploy staging on push to main.
+#
+# Replaces the reverted `build-staging.yml` from 4VD-24's first attempt.
+# Approach is webhook-only (4VD-30 Option A): on changed paths per app, fire
+# the Coolify deploy webhook and wait for terminal status. Coolify performs
+# the actual build inside `coolify.slice` (CPUQuota=100%) so VPS-1 stays
+# under Zap's 5.5-core cap — see 4VD-24 for the slice-cap context.
+#
+# Path filters mirror Coolify's own watch_paths config per app (verified
+# 2026-05-06 via GET /api/v1/applications/<uuid>). If you change either side,
+# update both — the staging-deploy-paths-coverage test asserts they match.
+#
+# Tickets: 4VD-30 (this workflow), 4VD-24 (slice caps + revert that orphaned
+# the original workflow).
+
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Force-deploy these apps (comma-separated: app-fast,backend-heavy,braid,litellm). Empty = auto-detect.'
+        required: false
+        default: ''
+      force_rebuild:
+        description: 'Pass force=true to bust Coolify build cache'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+env:
+  COOLIFY_BASE_URL: https://deploy.aishacrm.com
+
+jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      app-fast: ${{ steps.decide.outputs.app-fast }}
+      backend-heavy: ${{ steps.decide.outputs.backend-heavy }}
+      braid: ${{ steps.decide.outputs.braid }}
+      litellm: ${{ steps.decide.outputs.litellm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need previous commit so dorny/paths-filter can diff
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            app-fast:
+              - 'src/**'
+              - 'public/**'
+              - 'index.html'
+              - 'Dockerfile'
+              - 'frontend-entrypoint.sh'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'vite.config.ts'
+              - 'tailwind.config.js'
+              - 'postcss.config.js'
+              - 'staging/02-app-fast/**'
+            backend-heavy:
+              - 'backend/**'
+              - 'staging/01-backend-heavy/**'
+            braid:
+              - 'braid-mcp-node-server/**'
+              - 'staging/04-braid/**'
+            litellm:
+              - 'litellm/**'
+              - 'staging/services/litellm/**'
+
+      - id: decide
+        # On workflow_dispatch with explicit apps, override path-filter outputs.
+        # Otherwise pass through filter outputs verbatim.
+        run: |
+          set -euo pipefail
+          APPS_INPUT="${{ github.event.inputs.apps || '' }}"
+          declare -A FORCE
+          IFS=',' read -ra TOKS <<< "$APPS_INPUT"
+          for t in "${TOKS[@]}"; do
+            t="$(echo "$t" | tr -d ' ')"
+            [ -n "$t" ] && FORCE[$t]=true
+          done
+
+          for app in app-fast backend-heavy braid litellm; do
+            if [ "${FORCE[$app]:-}" = "true" ]; then
+              echo "$app=true" >> "$GITHUB_OUTPUT"
+            else
+              # take from path-filter step
+              case "$app" in
+                app-fast)       echo "$app=${{ steps.filter.outputs.app-fast }}"       >> "$GITHUB_OUTPUT" ;;
+                backend-heavy)  echo "$app=${{ steps.filter.outputs.backend-heavy }}"  >> "$GITHUB_OUTPUT" ;;
+                braid)          echo "$app=${{ steps.filter.outputs.braid }}"          >> "$GITHUB_OUTPUT" ;;
+                litellm)        echo "$app=${{ steps.filter.outputs.litellm }}"        >> "$GITHUB_OUTPUT" ;;
+              esac
+            fi
+          done
+
+          echo "::group::Computed deploy targets"
+          cat "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+  deploy-app-fast:
+    name: Deploy staging-app-fast
+    needs: changes
+    if: needs.changes.outputs.app-fast == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: di7ko49ikfd2mz8yh0q7id8q
+          application_name: staging-app-fast
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+
+  deploy-backend-heavy:
+    name: Deploy staging-backend-heavy
+    needs: changes
+    if: needs.changes.outputs.backend-heavy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: d24ro1fqm0zyl7pd72g6snd2
+          application_name: staging-backend-heavy
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+
+  deploy-braid:
+    name: Deploy staging-braid
+    needs: changes
+    if: needs.changes.outputs.braid == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: tw8zmua5jyzwnhh1oxw15kkm
+          application_name: staging-braid
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+
+  deploy-litellm:
+    name: Deploy staging-litellm
+    needs: changes
+    if: needs.changes.outputs.litellm == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: zsy5fsbw9hccxvoznkbpy1il
+          application_name: staging-litellm
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+
+  summary:
+    name: Deploy summary
+    needs: [changes, deploy-app-fast, deploy-backend-heavy, deploy-braid, deploy-litellm]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print deploy summary
+        run: |
+          echo "## Staging deploy summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| App | Triggered | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          declare -A TRIG
+          TRIG[app-fast]='${{ needs.changes.outputs.app-fast }}'
+          TRIG[backend-heavy]='${{ needs.changes.outputs.backend-heavy }}'
+          TRIG[braid]='${{ needs.changes.outputs.braid }}'
+          TRIG[litellm]='${{ needs.changes.outputs.litellm }}'
+          declare -A RES
+          RES[app-fast]='${{ needs.deploy-app-fast.result }}'
+          RES[backend-heavy]='${{ needs.deploy-backend-heavy.result }}'
+          RES[braid]='${{ needs.deploy-braid.result }}'
+          RES[litellm]='${{ needs.deploy-litellm.result }}'
+          for app in app-fast backend-heavy braid litellm; do
+            echo "| $app | ${TRIG[$app]} | ${RES[$app]} |" >> "$GITHUB_STEP_SUMMARY"
+          done
