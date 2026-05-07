@@ -232,8 +232,25 @@ router.post('/submissions', async (req, res) => {
   // See rewriteEmbedSrcToBaseUrl docs above.
   const rawEmbedSrc = submissionPayload?.embed_src || null;
   const embedSrc = rewriteEmbedSrcToBaseUrl(rawEmbedSrc, cfg.baseUrl);
-  const templateName =
+
+  // 4VD-34: DocuSeal Community's POST /api/submissions response does NOT
+  // include the template name (only template_id, slug, embed_src, etc.).
+  // Resolve via the per-tenant templates cache populated by GET /templates —
+  // the user just used the dropdown, so the cache is almost always warm and
+  // this is a free lookup. Falls through to one upstream fetch on cold-cache,
+  // returns null on error (graceful — submission still succeeds).
+  // Optimistic read of submission response first in case future DocuSeal
+  // versions start including the name; fall back to the cache resolver.
+  const templateNameFromResponse =
     submissionPayload?.template?.name || submissionPayload?.template_name || null;
+  const templateName =
+    templateNameFromResponse ||
+    (await resolveTemplateNameForTenant({
+      tenantId,
+      apiKey: cfg.apiKey,
+      baseUrl: cfg.baseUrl,
+      templateId: template_id,
+    }));
 
   // Insert tracking row — store embed_src on metadata for the public route
   const { data: inserted, error: insertError } = await supabase
@@ -480,6 +497,79 @@ export function normalizeDocusealTemplate(t) {
  *
  * `fetchImpl` is injectable for tests.
  */
+/**
+ * 4VD-34: Resolve a template name for a tenant by template_id, using the
+ * per-tenant cache as the primary source. DocuSeal Community's
+ * `POST /api/submissions` response does NOT include the template name, so we
+ * have to look it up separately. The cache populated by `GET /api/docuseal/templates`
+ * (the dropdown that the user just selected from) is almost always warm —
+ * meaning this is a free O(1) lookup on the hot send path. Cold-cache or
+ * cache-miss paths fall through to one upstream `GET /api/templates` round-trip,
+ * gracefully returning null on error so the send still succeeds (template_name
+ * stays null in the row, same as the legacy behaviour).
+ *
+ * Tenant isolation: `fetchDocusealTemplates` always passes `externalId: tenantId`,
+ * so a template_id from another tenant simply won't be in the result and this
+ * returns null. That's a defense-in-depth layer beyond the upstream-side
+ * external_id filter — Option C surfaces cross-tenant leaks naturally.
+ *
+ * @param {object} args
+ * @param {string} args.tenantId
+ * @param {string} args.apiKey - DocuSeal API key (from loadDocusealConfig)
+ * @param {string} args.baseUrl - DocuSeal base URL (from loadDocusealConfig)
+ * @param {string|number} args.templateId
+ * @param {Function} [args.fetchImpl] - injectable for tests
+ * @returns {Promise<string|null>}
+ */
+export async function resolveTemplateNameForTenant({
+  tenantId,
+  apiKey,
+  baseUrl,
+  templateId,
+  fetchImpl = fetch,
+}) {
+  if (!tenantId || templateId == null) return null;
+  const want = String(templateId);
+
+  // Hot path: cache is warm (the user just opened the dropdown), look up O(1).
+  const cached = templatesCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) {
+    const hit = cached.data.find((t) => t.id === want);
+    if (hit) return hit.name;
+    // Cache hit but template not in list — could mean the user picked a
+    // template added after the dropdown loaded, OR a template_id was somehow
+    // injected from outside this tenant's scope. Fall through to a fresh
+    // fetch to disambiguate; if it's still missing, return null.
+  }
+
+  // Cold path: fetch + populate the same cache the dropdown uses.
+  let templates;
+  try {
+    templates = await fetchDocusealTemplates({
+      apiKey,
+      baseUrl,
+      externalId: tenantId,
+      fetchImpl,
+    });
+  } catch (err) {
+    // Graceful degrade — submission still succeeds, just template_name=null.
+    // Better than blocking a legitimate send because the templates fetch hiccups.
+    logger.warn('[Docuseal] resolveTemplateNameForTenant fetch failed', {
+      tenantId,
+      templateId: want,
+      status: err.status,
+      message: err.message,
+    });
+    return null;
+  }
+  templatesCache.set(tenantId, {
+    data: templates,
+    expiresAt: Date.now() + TEMPLATES_CACHE_TTL_MS,
+  });
+  const hit = templates.find((t) => t.id === want);
+  return hit ? hit.name : null;
+}
+
 export async function fetchDocusealTemplates({ apiKey, baseUrl, externalId, fetchImpl = fetch }) {
   const params = new URLSearchParams({ limit: '200' });
   if (externalId) {
