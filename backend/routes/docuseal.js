@@ -69,10 +69,21 @@ export function rewriteEmbedSrcToBaseUrl(embedSrc, baseUrl) {
 // email, not DocuSeal's — so this helper deliberately has no message field.
 //
 // Exported for the unit test in __tests__/routes/docuseal-submission-payload.test.js.
-export function buildDocusealSubmissionPayload({ template_id, recipient_email, recipient_name }) {
+//
+// 4VD-15: `externalId` is the CRM tenant_id. Stamping it on every submission
+// lets the webhook handler validate that inbound events match the tenant
+// they were created against, and lets us filter `GET /api/submissions` by
+// tenant in CRM proxy without per-tenant DocuSeal users.
+export function buildDocusealSubmissionPayload({
+  template_id,
+  recipient_email,
+  recipient_name,
+  externalId,
+}) {
   return {
     template_id,
     send_email: false,
+    ...(externalId ? { external_id: String(externalId) } : {}),
     submitters: [
       {
         email: recipient_email,
@@ -83,30 +94,36 @@ export function buildDocusealSubmissionPayload({ template_id, recipient_email, r
 }
 
 // ---------------------------------------------------------------------------
-// Helper: load tenant's DocuSeal config
+// Helper: load DocuSeal config
 // ---------------------------------------------------------------------------
-
-async function loadDocusealConfig(supabase, tenantId) {
-  const { data, error } = await supabase
-    .from('tenant_integrations')
-    .select('api_credentials, config, is_active')
-    .eq('tenant_id', tenantId)
-    .eq('integration_type', 'docuseal')
-    .maybeSingle();
-
-  if (error) {
-    logger.error('[Docuseal] Failed to load tenant integration', error);
-    return { error: 'integration_lookup_failed' };
+//
+// 4VD-15 architecture: DocuSeal is a SHARED install across all CRM tenants.
+// DocuSeal Community only allows ONE API key (the per-user X-Auth-Token),
+// so we use that as the platform-level key and isolate tenants at the
+// application layer via the `external_id` field on templates and submissions.
+//
+// Required env (Doppler-injected):
+//   DOCUSEAL_PLATFORM_API_KEY   — the X-Auth-Token from DocuSeal admin
+//   DOCUSEAL_PLATFORM_BASE_URL  — e.g. https://docuseal.aishacrm.com
+//
+// Both must be set; if either is missing the route returns 400 so the
+// operator notices immediately. The function `supabase` and `tenantId`
+// arguments are kept on the signature for now in case a future feature
+// (e.g., per-tenant DocuSeal accounts on Pro) wants to override at the
+// tenant level — today they're unused.
+//
+// Exported for unit tests.
+// eslint-disable-next-line no-unused-vars
+export async function loadDocusealConfig(supabase, tenantId) {
+  const platformKey = process.env.DOCUSEAL_PLATFORM_API_KEY;
+  const platformBaseUrl = process.env.DOCUSEAL_PLATFORM_BASE_URL;
+  if (!platformKey || !platformBaseUrl) {
+    return { error: 'docuseal_platform_not_configured' };
   }
-  if (!data || !data.is_active) {
-    return { error: 'docuseal_not_configured' };
-  }
-  const apiKey = data.api_credentials?.api_key;
-  const baseUrl = data.config?.base_url;
-  if (!apiKey || !baseUrl) {
-    return { error: 'docuseal_not_configured' };
-  }
-  return { apiKey, baseUrl: baseUrl.replace(/\/$/, '') };
+  return {
+    apiKey: platformKey,
+    baseUrl: platformBaseUrl.replace(/\/$/, ''),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +184,7 @@ router.post('/submissions', async (req, res) => {
     template_id,
     recipient_email,
     recipient_name,
+    externalId: tenantId, // 4VD-15: stamp tenant_id for cross-tenant isolation
   });
   let docusealResponse;
   try {
@@ -448,15 +466,27 @@ export function normalizeDocusealTemplate(t) {
 }
 
 /**
- * Call DocuSeal `GET /api/templates` with the tenant's API key. Returns the
+ * Call DocuSeal `GET /api/templates` with the platform API key. Returns the
  * normalised list (non-archived, sorted by name) or throws on transport /
  * upstream error. Pure with respect to the in-process cache — caller wraps
  * with caching.
  *
+ * 4VD-15: when `externalId` is provided, the upstream call appends
+ * `&external_id=<id>` so DocuSeal returns only templates tagged with that
+ * CRM tenant_id. This is the primary tenant isolation enforcement point.
+ * Verified via DocuSeal source: `app/controllers/api/templates_controller.rb:95`
+ *   templates = templates.where(external_id: params[:external_id]) if params[:external_id].present?
+ * Live probe 2026-05-06: filter returns 1 for matching tag, 0 for unknown tag.
+ *
  * `fetchImpl` is injectable for tests.
  */
-export async function fetchDocusealTemplates({ apiKey, baseUrl, fetchImpl = fetch }) {
-  const res = await fetchImpl(`${baseUrl}/api/templates?limit=200`, {
+export async function fetchDocusealTemplates({ apiKey, baseUrl, externalId, fetchImpl = fetch }) {
+  const params = new URLSearchParams({ limit: '200' });
+  if (externalId) {
+    params.set('external_id', String(externalId));
+  }
+  const url = `${baseUrl}/api/templates?${params.toString()}`;
+  const res = await fetchImpl(url, {
     method: 'GET',
     headers: {
       'X-Auth-Token': apiKey,
@@ -510,7 +540,14 @@ router.get('/templates', async (req, res) => {
 
   let templates;
   try {
-    templates = await fetchDocusealTemplates({ apiKey: cfg.apiKey, baseUrl: cfg.baseUrl });
+    // 4VD-15: external_id == tenantId is THE tenant isolation boundary.
+    // The platform key has access to ALL tenants' templates upstream; this
+    // filter is what makes the response tenant-scoped.
+    templates = await fetchDocusealTemplates({
+      apiKey: cfg.apiKey,
+      baseUrl: cfg.baseUrl,
+      externalId: tenantId,
+    });
   } catch (err) {
     logger.warn('[Docuseal] Templates fetch failed', {
       tenantId,
