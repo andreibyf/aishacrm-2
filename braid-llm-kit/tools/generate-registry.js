@@ -94,10 +94,34 @@ function inferDescription(fnName, _params) {
 }
 
 /**
- * Infer policy from function effects and name
+ * Resolve policy for a function. Reads the explicit `@policy(...)` annotation
+ * from the AST first (the source of truth declared by the .braid author),
+ * and falls back to a name-prefix heuristic only when no annotation is
+ * present (e.g., legacy files that haven't been audited yet).
+ *
+ * Annotation precedence is critical because the heuristic is incomplete by
+ * design — it can't enumerate every write verb in English (e.g., "send",
+ * "publish", "fire", "reject") and silently misclassifies any new verb as
+ * READ_ONLY. That defeats the whole point of having explicit @policy
+ * declarations: the author wrote WRITE_OPERATIONS, the registry should
+ * honor it.
  */
-function inferPolicy(fnName, _effects) {
-  // Write operations
+function inferPolicy(fnName, _effects, annotations = []) {
+  // 1. Explicit @policy(...) annotation wins. The .braid AST exposes
+  //    annotations as { name, args } objects; @policy(WRITE_OPERATIONS)
+  //    becomes { name: 'policy', args: ['WRITE_OPERATIONS'] }.
+  const policyAnn = annotations.find((a) => a && a.name === 'policy');
+  if (policyAnn && Array.isArray(policyAnn.args) && policyAnn.args[0]) {
+    const declared = String(policyAnn.args[0]);
+    // Coerce DELETE_OPERATIONS to WRITE_OPERATIONS for registry purposes
+    // (the registry's policy field is { READ_ONLY | WRITE_OPERATIONS }).
+    if (declared === 'DELETE_OPERATIONS') return 'WRITE_OPERATIONS';
+    if (declared === 'READ_ONLY' || declared === 'WRITE_OPERATIONS') return declared;
+    // Unknown policy string — fall through to heuristic so we don't emit
+    // an invalid value into the registry.
+  }
+
+  // 2. Fallback heuristic for files without @policy annotations.
   const writePatterns = [
     'create',
     'update',
@@ -111,11 +135,17 @@ function inferPolicy(fnName, _effects) {
     'reject',
     'apply',
     'trigger',
+    'send',
+    'publish',
+    'archive',
+    'promote',
   ];
   const isWrite = writePatterns.some((p) => fnName.toLowerCase().startsWith(p));
 
   return isWrite ? 'WRITE_OPERATIONS' : 'READ_ONLY';
 }
+
+export { inferPolicy };
 
 /**
  * Parse a Braid file and extract function definitions
@@ -136,6 +166,10 @@ function parseBraidFile(filePath) {
           snakeName: toSnakeCase(item.name),
           params: item.params.map((p) => p.name),
           effects: item.effects || [],
+          // Annotations carry @policy(WRITE_OPERATIONS) etc. — the source of
+          // truth for inferPolicy(). Preserve them verbatim so the registry
+          // generator doesn't have to re-parse the source.
+          annotations: item.annotations || [],
           returnType: item.ret?.text || 'unknown',
           file: filename,
         });
@@ -218,7 +252,7 @@ function generateRegistry(functions, options = {}) {
   for (const [file, funcs] of Object.entries(byFile).sort()) {
     lines.push(`  // ${file}`);
     for (const fn of funcs) {
-      const policy = inferPolicy(fn.name, fn.effects);
+      const policy = inferPolicy(fn.name, fn.effects, fn.annotations);
       lines.push(
         `  ${fn.snakeName}: { file: '${fn.file}', function: '${fn.name}', policy: '${policy}' },`,
       );
@@ -252,10 +286,10 @@ function generateRegistry(functions, options = {}) {
   lines.push(`// Total tools: ${functions.length}`);
   lines.push(`// Files scanned: ${Object.keys(byFile).length}`);
   lines.push(
-    `// Read-only tools: ${functions.filter((f) => inferPolicy(f.name, f.effects) === 'READ_ONLY').length}`,
+    `// Read-only tools: ${functions.filter((f) => inferPolicy(f.name, f.effects, f.annotations) === 'READ_ONLY').length}`,
   );
   lines.push(
-    `// Write tools: ${functions.filter((f) => inferPolicy(f.name, f.effects) === 'WRITE_OPERATIONS').length}`,
+    `// Write tools: ${functions.filter((f) => inferPolicy(f.name, f.effects, f.annotations) === 'WRITE_OPERATIONS').length}`,
   );
 
   return lines.join('\n');
