@@ -86,11 +86,20 @@ describe('build-docuseal-patched.yml — 4VD-27 Phase 1 coverage', () => {
         'DOCUSEAL_TAG build-arg required so workflow_dispatch can pin upstream');
     });
 
-    test('tag set includes :staging-latest, :<sha>, and :upstream-<tag>-<sha>', () => {
+    test('tag set includes :staging-latest and :upstream-<tag>-<sha>', () => {
       assert.ok(workflow.includes(':staging-latest'), 'staging-latest moving tag required');
-      assert.ok(workflow.includes(':$SHA'), 'per-sha immutable tag required for audit trail');
       assert.ok(workflow.includes(':upstream-$TAG-$SHA'),
         'upstream-version-coupled tag required so we can correlate patch builds to upstream releases');
+    });
+
+    test(':<sha> tag is gated on push events only (Codex P2 review fix)', () => {
+      // The bare :<sha> tag is overwritable across workflow_dispatch reruns
+      // of the same commit with different docuseal_tag inputs. Restrict to
+      // push events where the input combo is fully determined by the commit.
+      assert.ok(workflow.includes('if [ "$EVENT" = "push" ]'),
+        'workflow must gate :<sha> tag on github.event_name == "push" so dispatch reruns do not overwrite');
+      assert.ok(/EVENT="\$\{\{\s*github\.event_name\s*\}\}"/.test(workflow),
+        'workflow must read github.event_name into a shell var to drive the gate');
     });
   });
 
@@ -117,6 +126,18 @@ describe('build-docuseal-patched.yml — 4VD-27 Phase 1 coverage', () => {
     test('writes a summary to GITHUB_STEP_SUMMARY', () => {
       assert.ok(workflow.includes('GITHUB_STEP_SUMMARY'),
         'workflow should write to step summary so the operator sees what was published without digging into logs');
+    });
+  });
+
+  describe('concurrency (Codex P1 review fix)', () => {
+    test('declares a concurrency block at workflow scope', () => {
+      // Two commits landing close together can race: an older run can
+      // finish last and repoint :staging-latest at stale code. Cancel
+      // in-progress runs on the same group to prevent that.
+      assert.ok(/concurrency:\s*\n\s+group:\s*build-docuseal-patched/.test(workflow),
+        'concurrency block with group=build-docuseal-patched-* required to prevent stale :staging-latest pushes');
+      assert.ok(/cancel-in-progress:\s*true/.test(workflow),
+        'cancel-in-progress must be true so older runs are killed when a newer commit arrives');
     });
   });
 });

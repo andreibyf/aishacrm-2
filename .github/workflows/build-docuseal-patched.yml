@@ -55,6 +55,15 @@ permissions:
   contents: read
   packages: write
 
+# 4VD-27 Phase 1 — Codex P1 review fix:
+# Without this, two commits landing close together can race: the older
+# workflow run can finish last and repoint :staging-latest at stale code.
+# Group key is workflow-name-only (not commit-sha), so pushes on top of
+# each other on `main` cancel the in-flight build instead of stacking.
+concurrency:
+  group: build-docuseal-patched-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}-docuseal-patched
@@ -98,19 +107,36 @@ jobs:
 
       - name: Compose tag list
         id: tags
+        # 4VD-27 Phase 1 — Codex P2 review fix:
+        # The bare `:<sha>` tag is overwritable across workflow_dispatch
+        # reruns of the same commit with different `docuseal_tag` inputs —
+        # same tag, different content, defeats the "immutable per-build
+        # audit trail" claim. Solution: only publish `:<sha>` on push
+        # events (where there's exactly one input combo per commit).
+        # workflow_dispatch reruns get `:upstream-<TAG>-<sha>` which
+        # already encodes both inputs that determine the image content,
+        # so it stays immutable-per-content across reruns.
         run: |
           set -euo pipefail
           IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           SHA="${{ steps.args.outputs.short_sha }}"
           TAG="${{ steps.args.outputs.docuseal_tag }}"
           PUSH_LATEST="${{ steps.args.outputs.push_latest }}"
+          EVENT="${{ github.event_name }}"
           TAGS="$IMG:staging-latest"
-          TAGS="$TAGS,$IMG:$SHA"
           TAGS="$TAGS,$IMG:upstream-$TAG-$SHA"
+          if [ "$EVENT" = "push" ]; then
+            # On push to main: input combo is fully determined by the
+            # commit, so `:<sha>` is content-immutable.
+            TAGS="$TAGS,$IMG:$SHA"
+          fi
           if [ "$PUSH_LATEST" = "true" ]; then
             TAGS="$TAGS,$IMG:latest"
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          # The verify step needs a stable handle. Pick the upstream-coupled
+          # tag because it's emitted on every event type.
+          echo "verify_tag=$IMG:upstream-$TAG-$SHA" >> "$GITHUB_OUTPUT"
           echo "::notice::Pushing tags: $TAGS"
 
       - name: Build + push
@@ -131,7 +157,10 @@ jobs:
       - name: Verify the CSRF skip marker is present in the published image
         run: |
           set -euo pipefail
-          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.args.outputs.short_sha }}"
+          # Use the upstream-coupled tag so this works on both push and
+          # workflow_dispatch (the bare :<sha> tag is push-only since the
+          # Codex P2 review fix).
+          IMG="${{ steps.tags.outputs.verify_tag }}"
           docker pull "$IMG"
           if docker run --rm --entrypoint sh "$IMG" -c "grep -q AISHACRM_4VD23_CSRF_SKIP /app/app/controllers/submit_form_controller.rb"; then
             echo "::notice::Patch marker present in $IMG"
