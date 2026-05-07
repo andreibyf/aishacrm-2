@@ -33,11 +33,29 @@ readonly LOG=/var/log/coolify-drift-guard.log
 readonly STAGING_IDS='12,13,15,19'
 readonly TS="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-# Find drifted rows
-DRIFTED=$(docker exec coolify-db psql -U coolify -d coolify -t -A -c \
+# Find drifted rows. Capture stdout AND stderr together, check exit code separately.
+# Errors here (DB container down, renamed, auth failure, schema drift) MUST be reported
+# loudly — silently dropping stderr would let the guard report "healthy" when broken.
+# NOTE on `|| SQL_RC=$?`: a bare `var=$(failing-cmd)` would trip `set -e` and abort the
+# script BEFORE the rc check below could log the error. The `|| ...` branch keeps `set -e`
+# happy on the failure path. SQL_RC defaults to 0 when the command succeeds.
+SQL_RC=0
+SQL_OUT=$(docker exec coolify-db psql -U coolify -d coolify -t -A -c \
     "SELECT application_id FROM application_settings
-     WHERE application_id IN (${STAGING_IDS}) AND is_auto_deploy_enabled = true;" 2>/dev/null || true)
+     WHERE application_id IN (${STAGING_IDS}) AND is_auto_deploy_enabled = true;" 2>&1) || SQL_RC=$?
 
+# Fail loud on infra problems. The whole point of this timer is outage prevention —
+# a non-functional guard is itself a critical alert, not a no-op.
+if [[ $SQL_RC -ne 0 ]]; then
+    ERR_MSG="${TS} GUARD CHECK FAILED (rc=${SQL_RC}): ${SQL_OUT}"
+    echo "${ERR_MSG}" | tee -a "${LOG}" >&2
+    logger -t coolify-drift-guard -p user.err "${ERR_MSG}"
+    exit 1
+fi
+
+DRIFTED="${SQL_OUT}"
+
+# Only treat empty result as healthy when SQL_RC was 0 above.
 if [[ -z "${DRIFTED}" ]]; then
     # Healthy state, exit silently. No log noise.
     exit 0
@@ -49,11 +67,22 @@ MSG="${TS} DRIFT DETECTED: app(s) [${DRIFTED_LIST}] had is_auto_deploy_enabled=t
 echo "${MSG}" | tee -a "${LOG}"
 logger -t coolify-drift-guard -p user.warning "${MSG}"
 
-docker exec coolify-db psql -U coolify -d coolify -c \
+UPDATE_RC=0
+UPDATE_OUT=$(docker exec coolify-db psql -U coolify -d coolify -c \
     "UPDATE application_settings
      SET is_auto_deploy_enabled = false, updated_at = NOW()
      WHERE application_id IN (${STAGING_IDS}) AND is_auto_deploy_enabled = true
-     RETURNING application_id;" 2>&1 | tee -a "${LOG}"
+     RETURNING application_id;" 2>&1) || UPDATE_RC=$?
+echo "${UPDATE_OUT}" | tee -a "${LOG}"
+
+# Correction itself must succeed too — otherwise we logged "DRIFT DETECTED"
+# but never fixed it, which leaves staging in the bad state until the next tick.
+if [[ $UPDATE_RC -ne 0 ]]; then
+    FAIL_MSG="${TS} DRIFT CORRECTION FAILED (rc=${UPDATE_RC}) for apps [${DRIFTED_LIST}]: ${UPDATE_OUT}"
+    echo "${FAIL_MSG}" | tee -a "${LOG}" >&2
+    logger -t coolify-drift-guard -p user.err "${FAIL_MSG}"
+    exit 1
+fi
 
 CONFIRM_MSG="${TS} DRIFT CORRECTED for apps [${DRIFTED_LIST}]"
 echo "${CONFIRM_MSG}" | tee -a "${LOG}"

@@ -52,24 +52,76 @@ test('correction SQL is idempotent — only updates drifted rows', () => {
   assert.match(src, /RETURNING application_id;/, 'must RETURN updated rows for log audit trail');
 });
 
-test('script exits 0 silently on healthy state (no log noise every 5 min)', () => {
+function loadGuardHeredoc() {
   const src = loadInstaller();
-  // The heredoc must contain `if [[ -z "${DRIFTED}" ]]; then exit 0; fi`
-  // (or equivalent) BEFORE any tee/logger call.
   const heredocMatch = src.match(
     /cat > \/usr\/local\/bin\/coolify-auto-deploy-drift-guard\.sh <<'GUARD'\n([\s\S]*?)\nGUARD/,
   );
   assert.ok(heredocMatch, 'GUARD heredoc must be present');
-  const guardScript = heredocMatch[1];
+  return heredocMatch[1];
+}
 
-  // Healthy-path early-exit must come BEFORE any logging
-  const healthyExitIdx = guardScript.search(/if \[\[ -z "\$\{DRIFTED\}" \]\]; then[\s\S]*?exit 0/);
-  const firstLogIdx = guardScript.search(/tee -a "\$\{LOG\}"|logger -t coolify-drift-guard/);
-  assert.notStrictEqual(healthyExitIdx, -1, 'healthy-state early exit must exist');
-  assert.notStrictEqual(firstLogIdx, -1, 'logging must exist for drift case');
-  assert.ok(
-    healthyExitIdx < firstLogIdx,
-    'early-exit on healthy state must come BEFORE any tee/logger calls — otherwise the timer floods logs every 5 minutes',
+test('healthy-state path exits 0 silently — the if/exit/fi block contains no logging', () => {
+  const guardScript = loadGuardHeredoc();
+  // The healthy-state block: `if [[ -z "${DRIFTED}" ]]; then ... exit 0 ... fi`
+  // Inside that block (between `then` and the matching `fi`) there must be NO tee/logger,
+  // otherwise the timer floods logs every 5 minutes on the 99.9% healthy path.
+  const healthyBlockMatch = guardScript.match(
+    /if \[\[ -z "\$\{DRIFTED\}" \]\]; then\s*([\s\S]*?)\s*fi/,
+  );
+  assert.ok(healthyBlockMatch, 'healthy-state if/then/fi block must exist');
+  const healthyBlockBody = healthyBlockMatch[1];
+  assert.doesNotMatch(
+    healthyBlockBody,
+    /tee -a "\$\{LOG\}"|logger -t coolify-drift-guard/,
+    'healthy-state path must not invoke tee or logger — silent exit only',
+  );
+  assert.match(healthyBlockBody, /exit 0/, 'healthy-state path must exit 0');
+});
+
+test('drift detection captures exit code and fails loud on infra errors (not silently)', () => {
+  const guardScript = loadGuardHeredoc();
+  // The detection SQL output capture must NOT use `2>/dev/null || true` — that would
+  // mask docker exec / psql failures (DB down, container renamed, auth) as healthy.
+  // Instead it must capture stderr (`2>&1`), the exit code (`$?`), and bail with a
+  // logged error if rc != 0. Otherwise the guard becomes a no-op the moment Coolify
+  // is unreachable, which is exactly when staging is most at risk.
+  // Scope to the guard heredoc — the wrapper .ps1 has the same string in a comment.
+  assert.doesNotMatch(
+    guardScript,
+    /2>\/dev\/null \|\| true/,
+    'guard heredoc must NOT swallow drift-check errors with `2>/dev/null || true`',
+  );
+  // Detection SQL: `SQL_RC=0` then `SQL_OUT=$(...) 2>&1) || SQL_RC=$?`
+  // The `|| SQL_RC=$?` form is required so `set -e` doesn't kill the script
+  // BEFORE the rc check fires (a bare $() assignment would).
+  assert.match(
+    guardScript,
+    /SQL_RC=0\s*\nSQL_OUT=\$\(docker exec coolify-db psql[\s\S]*?2>&1\) \|\| SQL_RC=\$\?/,
+    'detection SQL must use `SQL_RC=0` + `... 2>&1) || SQL_RC=$?` pattern (set -e safe)',
+  );
+  assert.match(
+    guardScript,
+    /if \[\[ \$SQL_RC -ne 0 \]\]; then[\s\S]*?logger -t coolify-drift-guard -p user\.err[\s\S]*?exit 1[\s\S]*?fi/,
+    'on rc != 0 the guard must log at user.err priority and exit 1 (alert + systemd marks failed)',
+  );
+});
+
+test('drift correction also fails loud — UPDATE failure cannot be silently lost', () => {
+  const guardScript = loadGuardHeredoc();
+  // Symmetric to the detection check: if drift is detected and the UPDATE fails,
+  // we must NOT exit 0 thinking the guard "ran". The previous tick logged
+  // "DRIFT DETECTED"; if we don't log "CORRECTION FAILED" too, journals will show
+  // the drift but no resolution and the next push will still double-fire.
+  assert.match(
+    guardScript,
+    /UPDATE_RC=0\s*\nUPDATE_OUT=\$\(docker exec coolify-db psql[\s\S]*?2>&1\) \|\| UPDATE_RC=\$\?/,
+    'correction UPDATE must use `UPDATE_RC=0` + `... 2>&1) || UPDATE_RC=$?` pattern (set -e safe)',
+  );
+  assert.match(
+    guardScript,
+    /if \[\[ \$UPDATE_RC -ne 0 \]\]; then[\s\S]*?logger -t coolify-drift-guard -p user\.err[\s\S]*?exit 1[\s\S]*?fi/,
+    'on UPDATE rc != 0 the guard must log at user.err priority and exit 1',
   );
 });
 
