@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { scanDirectory } from './generate-registry.js';
+import { scanDirectory, inferPolicy } from './generate-registry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS_DIR = path.join(__dirname, '..', 'examples', 'assistant');
@@ -71,25 +71,13 @@ function generateToolRegistryBlock(functions) {
       }`,
     );
     for (const fn of funcs) {
-      // Infer policy
-      const writePatterns = [
-        'create',
-        'update',
-        'delete',
-        'mark',
-        'convert',
-        'qualify',
-        'advance',
-        'schedule',
-        'approve',
-        'reject',
-        'apply',
-        'trigger',
-        'promote',
-        'archive',
-      ];
-      const isWrite = writePatterns.some((p) => fn.name.toLowerCase().startsWith(p));
-      const policy = isWrite ? 'WRITE_OPERATIONS' : 'READ_ONLY';
+      // Use the shared inferPolicy from generate-registry.js, which reads
+      // the explicit @policy(...) annotation as the source of truth and
+      // only falls back to a name-prefix heuristic for legacy files.
+      // Without this, a duplicated heuristic-only inline copy here
+      // would silently misclassify any verb not in the allowlist
+      // (e.g., sendDocumentForSigning → READ_ONLY).
+      const policy = inferPolicy(fn.name, fn.effects, fn.annotations);
 
       lines.push(
         `  ${fn.snakeName}: { file: '${fn.file}', function: '${fn.name}', policy: '${policy}' },`,
@@ -130,20 +118,47 @@ function generateParamOrderBlock(functions) {
 }
 
 /**
- * Compare registries and report differences
+ * Compare registries and report differences.
+ *
+ * Detects:
+ *   - added: tools in generated but not in current
+ *   - removed: tools in current but not in generated
+ *   - changed: tools whose entry text (e.g., policy) differs between current
+ *              and generated. Without this, a policy correction (READ_ONLY
+ *              → WRITE_OPERATIONS) on an existing tool is silently treated
+ *              as "in sync" because tool-name set membership is unchanged.
  */
 function compareRegistries(current, generated) {
-  const currentTools = new Set(
-    (current.match(/\b\w+:\s*\{/g) || []).map((m) => m.replace(/:\s*\{/, '')),
-  );
-  const generatedTools = new Set(
-    (generated.match(/\b\w+:\s*\{/g) || []).map((m) => m.replace(/:\s*\{/, '')),
-  );
+  const extractEntries = (block) => {
+    const map = new Map();
+    // Match "tool_name: { ... }," — non-greedy across the closing brace.
+    const re = /(\w+):\s*\{[^}]*\}/g;
+    let m;
+    while ((m = re.exec(block)) !== null) {
+      map.set(m[1], m[0]);
+    }
+    return map;
+  };
 
-  const added = [...generatedTools].filter((t) => !currentTools.has(t));
-  const removed = [...currentTools].filter((t) => !generatedTools.has(t));
+  const currentEntries = extractEntries(current);
+  const generatedEntries = extractEntries(generated);
 
-  return { added, removed };
+  const currentNames = new Set(currentEntries.keys());
+  const generatedNames = new Set(generatedEntries.keys());
+
+  const added = [...generatedNames].filter((t) => !currentNames.has(t));
+  const removed = [...currentNames].filter((t) => !generatedNames.has(t));
+
+  // Policy/value drift on existing tools
+  const changed = [];
+  for (const [name, generatedEntry] of generatedEntries) {
+    const currentEntry = currentEntries.get(name);
+    if (currentEntry && currentEntry !== generatedEntry) {
+      changed.push({ name, before: currentEntry, after: generatedEntry });
+    }
+  }
+
+  return { added, removed, changed };
 }
 
 function main() {
@@ -174,7 +189,7 @@ function main() {
   // Compare
   const diff = compareRegistries(currentRegistry, newRegistry);
 
-  if (diff.added.length === 0 && diff.removed.length === 0) {
+  if (diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0) {
     console.log('✅ Registry is in sync with .braid files');
     process.exit(0);
   }
@@ -185,6 +200,14 @@ function main() {
   }
   if (diff.removed.length > 0) {
     console.log(`   ➖ Removed tools: ${diff.removed.join(', ')}`);
+  }
+  if (diff.changed.length > 0) {
+    console.log(`   ✏️  Changed tools: ${diff.changed.map((c) => c.name).join(', ')}`);
+    for (const c of diff.changed) {
+      console.log(`      ${c.name}:`);
+      console.log(`        before: ${c.before}`);
+      console.log(`        after:  ${c.after}`);
+    }
   }
 
   if (checkOnly) {
