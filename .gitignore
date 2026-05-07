@@ -232,6 +232,10 @@ scripts/vps2-last.out
 scripts/vps2-last.err
 scripts/vps2-commit-msg.txt
 
+# Probe / install script stdout captures — transient, not source of truth.
+scripts/*-out.txt
+scripts/drift-guard-test.txt
+
 # VPS-1 SSH bridge for Claude Cowork sessions — same pattern as VPS-2 above.
 scripts/vps1-askpass.cmd
 scripts/vps1-askpass.sh
