@@ -49,6 +49,10 @@ export default function SendDocumentDialog({
   const [recipientName, setRecipientName] = useState(defaultRecipientName);
   const [recipientEmail, setRecipientEmail] = useState(defaultRecipientEmail);
   const [message, setMessage] = useState('');
+  // 4VD-33: "Follow up by" defaults to next day 5pm in the user's local timezone.
+  // Initialized in the open-effect below so the value always reflects "now+1 day"
+  // each time the dialog opens (not stale across sessions).
+  const [dueAt, setDueAt] = useState('');
   const [sending, setSending] = useState(false);
   const [configError, setConfigError] = useState(false);
 
@@ -118,6 +122,19 @@ export default function SendDocumentDialog({
       setRecipientName(defaultRecipientName || '');
       setRecipientEmail(defaultRecipientEmail || '');
       setMessage('');
+      // 4VD-33: default "Follow up by" to next-day 5pm local time.
+      // Format as "YYYY-MM-DDTHH:MM" for <input type="datetime-local">.
+      // The user's browser timezone is what they see; the backend gets a
+      // tenant-tz default if the user clears the field.
+      const tomorrow5pm = new Date();
+      tomorrow5pm.setDate(tomorrow5pm.getDate() + 1);
+      tomorrow5pm.setHours(17, 0, 0, 0);
+      const pad = (n) => String(n).padStart(2, '0');
+      setDueAt(
+        `${tomorrow5pm.getFullYear()}-${pad(tomorrow5pm.getMonth() + 1)}-${pad(
+          tomorrow5pm.getDate(),
+        )}T${pad(tomorrow5pm.getHours())}:${pad(tomorrow5pm.getMinutes())}`,
+      );
       setConfigError(false);
       setSending(false);
       setTemplates([]);
@@ -164,6 +181,16 @@ export default function SendDocumentDialog({
       };
       if (message.trim()) {
         body.message = message.trim();
+      }
+      // 4VD-33: send the user's "Follow up by" as wall-clock fields.
+      // datetime-local format is "YYYY-MM-DDTHH:MM" — split into the two
+      // fields the activities table actually stores. No timezone conversion
+      // needed because both columns are stored as wall-clock values.
+      if (dueAt && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(dueAt)) {
+        const [datePart, timePart] = dueAt.split('T');
+        body.due_date = datePart;
+        // Append seconds if the input omitted them (most browsers do).
+        body.due_time = timePart.length === 5 ? `${timePart}:00` : timePart;
       }
 
       const resp = await fetch(`${BACKEND_URL}/api/docuseal/submissions`, {
@@ -378,6 +405,26 @@ export default function SendDocumentDialog({
               rows={3}
               disabled={sending}
             />
+          </div>
+
+          {/* 4VD-33: "Follow up by" — sets due_at on the activity row.
+              Defaults to next-day 5pm in the user's local timezone. */}
+          <div>
+            <Label htmlFor="docuseal-due-at" className="text-slate-300">
+              Follow up by
+            </Label>
+            <Input
+              id="docuseal-due-at"
+              type="datetime-local"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="mt-2 bg-slate-700 border-slate-600 text-slate-200"
+              disabled={sending}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              When you should follow up if the document hasn&apos;t been signed.
+              Defaults to tomorrow at 5:00 PM in your local timezone.
+            </p>
           </div>
         </div>
 

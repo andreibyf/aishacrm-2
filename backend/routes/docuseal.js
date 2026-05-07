@@ -19,6 +19,8 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import { sendTenantEmail } from '../lib/sendTenantEmail.js';
 import { buildDocusealSignRequestEmail } from '../lib/docusealSignRequestEmail.js';
+import { computeDocumentDueFields } from '../lib/docusealActivityDueAt.js';
+import { resolveRelatedEntityFields } from '../lib/resolveRelatedEntityFields.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
@@ -136,8 +138,20 @@ router.post('/submissions', async (req, res) => {
     return res.status(400).json({ error: 'tenant_context_missing' });
   }
 
-  const { template_id, related_to, related_id, recipient_email, recipient_name, message } =
-    req.body || {};
+  const {
+    template_id,
+    related_to,
+    related_id,
+    recipient_email,
+    recipient_name,
+    message,
+    // 4VD-33: frontend may supply "Follow up by" as wall-clock fields. The
+    // activities table stores `due_date date` + `due_time time` (matching the
+    // existing convention used by calcom-webhook). No timezone math here —
+    // datetime-local input is wall-clock by definition.
+    due_date: dueDateOverride,
+    due_time: dueTimeOverride,
+  } = req.body || {};
 
   // Validation
   if (!template_id || !related_to || !related_id || !recipient_email) {
@@ -348,28 +362,140 @@ router.post('/submissions', async (req, res) => {
     logger.warn('[Docuseal] Tenant has no slug — signing URL not constructable', { tenantId });
   }
 
-  // Log activity (sent)
+  // 4VD-33: log a single status-tracking activity row for this submission.
+  //   - status starts at 'pending' (NOT 'completed') so the row reflects
+  //     "waiting on signature, follow up by `due_at`"
+  //   - due_at defaults to next day 5pm in the tenant's timezone; the
+  //     frontend can override via the request body (SendDocumentDialog's
+  //     "Follow up by" picker)
+  //   - subsequent webhook events (viewed/signed/completed/declined/expired)
+  //     UPDATE this same row instead of inserting more rows; the docuseal
+  //     submission_id in metadata is the join key
+  // Validate the override (if any). Frontend sends YYYY-MM-DD + HH:MM[:SS];
+  // anything malformed falls through to the computed default rather than
+  // poisoning the row with garbage.
+  const isValidDate = typeof dueDateOverride === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dueDateOverride);
+  const isValidTime =
+    typeof dueTimeOverride === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(dueTimeOverride);
+
+  let dueDate = isValidDate ? dueDateOverride : null;
+  let dueTime = isValidTime
+    ? dueTimeOverride.length === 5
+      ? `${dueTimeOverride}:00`
+      : dueTimeOverride
+    : null;
+
+  if (!dueDate || !dueTime) {
+    try {
+      const defaults = await computeDocumentDueFields(supabase, tenantId);
+      if (!dueDate) dueDate = defaults.due_date;
+      if (!dueTime) dueTime = defaults.due_time;
+    } catch (err) {
+      logger.warn('[Docuseal] computeDocumentDueFields failed; row inserts without due fields', {
+        tenantId,
+        error: err.message,
+      });
+      // best-effort: leave nulls so the row still inserts
+    }
+  }
+
+  // 4VD-39: resolve related entity's display name + email so the activity
+  // timeline renders "[Lead Name]" as the hyperlink instead of "View Lead".
+  // Activities.jsx reads activity.related_name and falls back to "View {entity}"
+  // when null. Helper degrades gracefully (null) on lookup failure.
+  const { related_name, related_email } = await resolveRelatedEntityFields(
+    supabase,
+    tenantId,
+    related_to,
+    related_id,
+  );
+
+  // 4VD-33 follow-up (PR review P1): UPDATE-OR-INSERT instead of unconditional
+  // INSERT. Symmetric with the webhook's createActivity. If a webhook (e.g.,
+  // form.viewed) beats this code to creating the row via its fallback INSERT
+  // path, our INSERT here would produce a SECOND row for the same submission —
+  // exactly the duplicate-row bug 4VD-33 is supposed to eliminate. By doing
+  // an upsert keyed on metadata->>docuseal_submission_id, whichever path
+  // arrives first wins the INSERT and the other does an UPDATE that merges
+  // its initial-send fields (signing_url, sent_at, due_date, etc.) into the
+  // existing row WITHOUT clobbering any lifecycle progress already made.
+  const sendInitialMetadata = {
+    docuseal_submission_id: docusealSubmissionId,
+    docuseal_template_id: String(template_id),
+    signing_url: signingUrl,
+    email_sent: emailResult.ok,
+    email_reason: emailResult.ok ? null : emailResult.reason,
+    sent_at: new Date().toISOString(),
+    // Pre-create webhook lifecycle slots so the UPDATE path has somewhere
+    // to land its values; webhooks fill these in.
+    viewed_at: null,
+    signed_at: null,
+    completed_at: null,
+    declined_at: null,
+  };
+  const sendInitialSubject = `Document sent — ${templateName || 'unnamed template'}`;
+  const sendInitialBody = emailResult.ok
+    ? `Sent to ${recipient_email} (branded email delivered).`
+    : `Sent to ${recipient_email}. Signing link: ${signingUrl || '(unavailable)'}`;
+
   try {
-    await supabase.from('activities').insert({
-      tenant_id: tenantId,
-      related_to,
-      related_id,
-      type: 'document_sent',
-      subject: `Document sent — ${templateName || 'unnamed template'}`,
-      body: emailResult.ok
-        ? `Sent to ${recipient_email} (branded email delivered).`
-        : `Sent to ${recipient_email}. Signing link: ${signingUrl || '(unavailable)'}`,
-      status: 'completed',
-      metadata: {
-        docuseal_submission_id: docusealSubmissionId,
-        docuseal_template_id: String(template_id),
+    const { data: existingRows } = await supabase
+      .from('activities')
+      .select('id, status, metadata')
+      .eq('tenant_id', tenantId)
+      .filter('metadata->>docuseal_submission_id', 'eq', docusealSubmissionId)
+      .limit(1);
+
+    if (existingRows && existingRows.length > 0) {
+      // Webhook beat us. Merge our send-side metadata WITHOUT clobbering
+      // anything the webhook already stamped (viewed_at / signed_at / etc.).
+      // Status: don't downgrade — if the webhook already moved the row to
+      // completed/cancelled, leave it; only set to 'pending' from null/undefined.
+      const row = existingRows[0];
+      const mergedMetadata = {
+        ...sendInitialMetadata,
+        ...(row.metadata || {}),
+        // The send-side fields that are unconditionally authoritative for
+        // any newly-created row by the webhook fallback: it didn't have
+        // these, so we provide them.
         signing_url: signingUrl,
         email_sent: emailResult.ok,
         email_reason: emailResult.ok ? null : emailResult.reason,
-      },
-    });
+        sent_at: (row.metadata && row.metadata.sent_at) || sendInitialMetadata.sent_at,
+      };
+      const update = {
+        // Only set initial subject/body if the row is still pending (no lifecycle
+        // event has rewritten them yet). Otherwise leave the webhook's update.
+        ...(row.status && row.status !== 'pending' ? {} : {
+          subject: sendInitialSubject,
+          body: sendInitialBody,
+        }),
+        ...(row.status ? {} : { status: 'pending' }),
+        ...(related_name ? { related_name } : {}),
+        ...(related_email ? { related_email } : {}),
+        ...(dueDate ? { due_date: dueDate } : {}),
+        ...(dueTime ? { due_time: dueTime } : {}),
+        metadata: mergedMetadata,
+      };
+      await supabase.from('activities').update(update).eq('id', row.id);
+    } else {
+      await supabase.from('activities').insert({
+        tenant_id: tenantId,
+        related_to,
+        related_id,
+        ...(related_name ? { related_name } : {}),
+        ...(related_email ? { related_email } : {}),
+        type: 'document_sent',
+        subject: sendInitialSubject,
+        body: sendInitialBody,
+        status: 'pending',
+        ...(dueDate ? { due_date: dueDate } : {}),
+        ...(dueTime ? { due_time: dueTime } : {}),
+        metadata: sendInitialMetadata,
+      });
+    }
   } catch (activityErr) {
-    logger.warn('[Docuseal] Activity insert failed', { error: activityErr.message });
+    logger.warn('[Docuseal] Activity upsert failed', { error: activityErr.message });
   }
 
   return res.status(201).json({
