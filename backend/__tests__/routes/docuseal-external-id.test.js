@@ -28,7 +28,7 @@ import {
 // loadDocusealConfig — platform key vs tenant fallback
 // ----------------------------------------------------------------------------
 
-describe('loadDocusealConfig — platform key fast path', () => {
+describe('loadDocusealConfig — platform-key-only', () => {
   const originalApiKey = process.env.DOCUSEAL_PLATFORM_API_KEY;
   const originalBaseUrl = process.env.DOCUSEAL_PLATFORM_BASE_URL;
 
@@ -51,7 +51,7 @@ describe('loadDocusealConfig — platform key fast path', () => {
     const fakeSupabase = {
       from() {
         supabaseCalled = true;
-        throw new Error('platform path should not query Supabase');
+        throw new Error('loadDocusealConfig should not query Supabase');
       },
     };
 
@@ -59,66 +59,44 @@ describe('loadDocusealConfig — platform key fast path', () => {
     assert.equal(cfg.error, undefined);
     assert.equal(cfg.apiKey, 'platform-key-xyz');
     assert.equal(cfg.baseUrl, 'https://docuseal.aishacrm.com'); // trailing slash stripped
-    assert.equal(cfg.source, 'platform');
-    assert.equal(supabaseCalled, false, 'platform path must not hit DB');
+    assert.equal(supabaseCalled, false, 'config must not hit DB — platform key is the only path');
   });
 
-  test('falls back to tenant lookup when only one platform env var is set', async () => {
-    process.env.DOCUSEAL_PLATFORM_API_KEY = 'partial-platform';
-    // DOCUSEAL_PLATFORM_BASE_URL deliberately unset
-
-    const fakeSupabase = makeFakeSupabaseWithRow({
-      api_credentials: { api_key: 'tenant-key' },
-      config: { base_url: 'https://tenant.example.com' },
-      is_active: true,
-    });
-
-    const cfg = await loadDocusealConfig(fakeSupabase, 'tenant-A');
-    assert.equal(cfg.error, undefined);
-    // source==='tenant' is sufficient evidence the DB path was taken; if the
-    // platform fast path had matched, source would be 'platform'.
-    assert.equal(cfg.source, 'tenant');
-    assert.equal(cfg.apiKey, 'tenant-key');
-  });
-
-  test('falls back to tenant lookup when neither platform env var is set', async () => {
-    const fakeSupabase = makeFakeSupabaseWithRow({
-      api_credentials: { api_key: 'tenant-key' },
-      config: { base_url: 'https://tenant.example.com' },
-      is_active: true,
-    });
-
-    const cfg = await loadDocusealConfig(fakeSupabase, 'tenant-A');
-    assert.equal(cfg.source, 'tenant');
-    assert.equal(cfg.apiKey, 'tenant-key');
-  });
-
-  test('returns docuseal_not_configured when both paths fail', async () => {
-    const fakeSupabase = makeFakeSupabaseWithRow(null);
-    const cfg = await loadDocusealConfig(fakeSupabase, 'tenant-A');
-    assert.equal(cfg.error, 'docuseal_not_configured');
-  });
-
-  test('platform path overrides even when a tenant row exists (no Supabase call)', async () => {
-    process.env.DOCUSEAL_PLATFORM_API_KEY = 'platform-wins';
+  test('returns docuseal_platform_not_configured when API key env is missing', async () => {
     process.env.DOCUSEAL_PLATFORM_BASE_URL = 'https://docuseal.aishacrm.com';
+    // DOCUSEAL_PLATFORM_API_KEY deliberately unset
+    const cfg = await loadDocusealConfig({}, 'tenant-A');
+    assert.equal(cfg.error, 'docuseal_platform_not_configured');
+  });
 
+  test('returns docuseal_platform_not_configured when base URL env is missing', async () => {
+    process.env.DOCUSEAL_PLATFORM_API_KEY = 'platform-key-xyz';
+    // DOCUSEAL_PLATFORM_BASE_URL deliberately unset
+    const cfg = await loadDocusealConfig({}, 'tenant-A');
+    assert.equal(cfg.error, 'docuseal_platform_not_configured');
+  });
+
+  test('returns docuseal_platform_not_configured when both envs missing', async () => {
+    const cfg = await loadDocusealConfig({}, 'tenant-A');
+    assert.equal(cfg.error, 'docuseal_platform_not_configured');
+  });
+
+  test('never queries Supabase regardless of env state (legacy tenant_integrations lookup is gone)', async () => {
     let supabaseCalled = false;
     const fakeSupabase = {
       from() {
         supabaseCalled = true;
-        return makeFakeSupabaseWithRow({
-          api_credentials: { api_key: 'tenant-key' },
-          config: { base_url: 'https://tenant.example.com' },
-          is_active: true,
-        }).from();
+        throw new Error('this code path should be unreachable');
       },
     };
-
-    const cfg = await loadDocusealConfig(fakeSupabase, 'tenant-A');
-    assert.equal(cfg.apiKey, 'platform-wins', 'platform key must win when set');
-    assert.equal(cfg.source, 'platform');
-    assert.equal(supabaseCalled, false, 'platform path must short-circuit Supabase');
+    // Both with envs set and unset, Supabase should NEVER be queried.
+    process.env.DOCUSEAL_PLATFORM_API_KEY = 'k';
+    process.env.DOCUSEAL_PLATFORM_BASE_URL = 'https://x';
+    await loadDocusealConfig(fakeSupabase, 'tenant-A');
+    delete process.env.DOCUSEAL_PLATFORM_API_KEY;
+    delete process.env.DOCUSEAL_PLATFORM_BASE_URL;
+    await loadDocusealConfig(fakeSupabase, 'tenant-A');
+    assert.equal(supabaseCalled, false);
   });
 });
 
@@ -257,20 +235,3 @@ function jsonResponse(body, status = 200) {
   };
 }
 
-function makeFakeSupabaseWithRow(row) {
-  return {
-    from() {
-      return {
-        select() {
-          return this;
-        },
-        eq() {
-          return this;
-        },
-        async maybeSingle() {
-          return { data: row, error: null };
-        },
-      };
-    },
-  };
-}

@@ -98,52 +98,32 @@ export function buildDocusealSubmissionPayload({
 // ---------------------------------------------------------------------------
 //
 // 4VD-15 architecture: DocuSeal is a SHARED install across all CRM tenants.
-// One platform-level API key is read from process.env.DOCUSEAL_PLATFORM_API_KEY
-// (Doppler-injected). Tenant isolation is enforced at the application layer
-// via the `external_id` field on templates and submissions — every list call
-// filters by `external_id == tenant_id`, every read/update/delete validates
-// `template.external_id === req.tenant.id` before mutating.
+// DocuSeal Community only allows ONE API key (the per-user X-Auth-Token),
+// so we use that as the platform-level key and isolate tenants at the
+// application layer via the `external_id` field on templates and submissions.
 //
-// Backward-compat path: if DOCUSEAL_PLATFORM_API_KEY is unset, fall back to
-// the legacy per-tenant lookup against tenant_integrations. This lets the
-// platform-key migration land without breaking environments that haven't
-// yet had the secret added to Doppler. New code should always provide the
-// platform key.
+// Required env (Doppler-injected):
+//   DOCUSEAL_PLATFORM_API_KEY   — the X-Auth-Token from DocuSeal admin
+//   DOCUSEAL_PLATFORM_BASE_URL  — e.g. https://docuseal.aishacrm.com
+//
+// Both must be set; if either is missing the route returns 400 so the
+// operator notices immediately. The function `supabase` and `tenantId`
+// arguments are kept on the signature for now in case a future feature
+// (e.g., per-tenant DocuSeal accounts on Pro) wants to override at the
+// tenant level — today they're unused.
 //
 // Exported for unit tests.
+// eslint-disable-next-line no-unused-vars
 export async function loadDocusealConfig(supabase, tenantId) {
-  // Platform-key fast path (preferred).
   const platformKey = process.env.DOCUSEAL_PLATFORM_API_KEY;
   const platformBaseUrl = process.env.DOCUSEAL_PLATFORM_BASE_URL;
-  if (platformKey && platformBaseUrl) {
-    return {
-      apiKey: platformKey,
-      baseUrl: platformBaseUrl.replace(/\/$/, ''),
-      source: 'platform',
-    };
+  if (!platformKey || !platformBaseUrl) {
+    return { error: 'docuseal_platform_not_configured' };
   }
-
-  // Legacy per-tenant lookup (deprecated; kept for back-compat).
-  const { data, error } = await supabase
-    .from('tenant_integrations')
-    .select('api_credentials, config, is_active')
-    .eq('tenant_id', tenantId)
-    .eq('integration_type', 'docuseal')
-    .maybeSingle();
-
-  if (error) {
-    logger.error('[Docuseal] Failed to load tenant integration', error);
-    return { error: 'integration_lookup_failed' };
-  }
-  if (!data || !data.is_active) {
-    return { error: 'docuseal_not_configured' };
-  }
-  const apiKey = data.api_credentials?.api_key;
-  const baseUrl = data.config?.base_url;
-  if (!apiKey || !baseUrl) {
-    return { error: 'docuseal_not_configured' };
-  }
-  return { apiKey, baseUrl: baseUrl.replace(/\/$/, ''), source: 'tenant' };
+  return {
+    apiKey: platformKey,
+    baseUrl: platformBaseUrl.replace(/\/$/, ''),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -204,11 +184,7 @@ router.post('/submissions', async (req, res) => {
     template_id,
     recipient_email,
     recipient_name,
-    // 4VD-15: stamp tenant_id only on the platform-key path. On the legacy
-    // per-tenant path, tagging new submissions with external_id is harmless
-    // but inconsistent with existing untagged data — defer until the
-    // backfill runs.
-    externalId: cfg.source === 'platform' ? tenantId : undefined,
+    externalId: tenantId, // 4VD-15: stamp tenant_id for cross-tenant isolation
   });
   let docusealResponse;
   try {
@@ -564,16 +540,13 @@ router.get('/templates', async (req, res) => {
 
   let templates;
   try {
-    // 4VD-15: external_id == tenantId is THE tenant isolation boundary on
-    // the platform-key path. Skip the filter on the legacy per-tenant
-    // path because existing templates predate this migration and aren't
-    // yet tagged with external_id — applying the filter would return 0
-    // results until a backfill runs. The legacy path's tenant isolation
-    // still comes from the per-tenant DocuSeal user / API key.
+    // 4VD-15: external_id == tenantId is THE tenant isolation boundary.
+    // The platform key has access to ALL tenants' templates upstream; this
+    // filter is what makes the response tenant-scoped.
     templates = await fetchDocusealTemplates({
       apiKey: cfg.apiKey,
       baseUrl: cfg.baseUrl,
-      externalId: cfg.source === 'platform' ? tenantId : undefined,
+      externalId: tenantId,
     });
   } catch (err) {
     logger.warn('[Docuseal] Templates fetch failed', {
