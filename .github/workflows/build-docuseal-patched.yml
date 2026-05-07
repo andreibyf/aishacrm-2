@@ -1,0 +1,182 @@
+# Build the patched DocuSeal image (4VD-23 CSRF skip on top of upstream
+# docuseal/docuseal) and publish to GHCR. Coolify pulls from GHCR rather
+# than depending on an image that only exists on VPS-2's local Docker
+# daemon — eliminating the regen footgun where Coolify Service redeploys
+# silently lose the patched image.
+#
+# Trigger:
+#   - push to main when docuseal-patched/** changes (image rebuild needed)
+#   - push to main when this workflow file itself changes
+#   - workflow_dispatch (manual rebuild when DocuSeal upstream releases a
+#     new version — bump DOCUSEAL_TAG and re-run)
+#
+# Tags published per build:
+#   :latest                 — moving pointer for general "give me the
+#                             current patched image" use cases
+#   :staging-latest         — what the new Coolify App in 4VD-27 Phase 2
+#                             will pull. Decoupled from :latest so a
+#                             future "tag for prod separately" flow can
+#                             land without breaking staging.
+#   :<short-sha>            — immutable per-build, audit trail
+#   :upstream-<DOCUSEAL_TAG>-<short-sha>
+#                           — couples our patch version to the upstream
+#                             version it was built against, so when
+#                             upstream releases a new tag we can see at
+#                             a glance which images correspond
+#
+# Linear: 4VD-27. Companion ticket 4VD-23 (Done) shipped the sed patch
+# itself; this workflow promotes it from "local image on one VPS" to
+# "registry-hosted image any Coolify host can pull".
+
+name: Build DocuSeal Patched Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docuseal-patched/**'
+      - '.github/workflows/build-docuseal-patched.yml'
+  workflow_dispatch:
+    inputs:
+      docuseal_tag:
+        description: 'Upstream docuseal/docuseal tag to base the patch on (default: latest)'
+        required: false
+        default: 'latest'
+      push_latest:
+        description: 'Also tag :latest (uncheck for off-cycle prod-only rebuilds)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  packages: write
+
+# 4VD-27 Phase 1 — Codex P1 review fix:
+# Without this, two commits landing close together can race: the older
+# workflow run can finish last and repoint :staging-latest at stale code.
+# Group key is workflow-name-only (not commit-sha), so pushes on top of
+# each other on `main` cancel the in-flight build instead of stacking.
+concurrency:
+  group: build-docuseal-patched-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-docuseal-patched
+
+jobs:
+  build:
+    name: Build + push patched image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve build args
+        id: args
+        run: |
+          set -euo pipefail
+          DOCUSEAL_TAG="${{ github.event.inputs.docuseal_tag }}"
+          if [ -z "$DOCUSEAL_TAG" ]; then
+            DOCUSEAL_TAG=latest
+          fi
+          SHORT_SHA="$(echo ${{ github.sha }} | cut -c1-7)"
+          PUSH_LATEST="${{ github.event.inputs.push_latest }}"
+          if [ -z "$PUSH_LATEST" ]; then
+            PUSH_LATEST=true
+          fi
+          echo "docuseal_tag=$DOCUSEAL_TAG" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA"      >> "$GITHUB_OUTPUT"
+          echo "push_latest=$PUSH_LATEST"  >> "$GITHUB_OUTPUT"
+          echo "::group::Computed args"
+          cat "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose tag list
+        id: tags
+        # 4VD-27 Phase 1 — Codex P2 review fix:
+        # The bare `:<sha>` tag is overwritable across workflow_dispatch
+        # reruns of the same commit with different `docuseal_tag` inputs —
+        # same tag, different content, defeats the "immutable per-build
+        # audit trail" claim. Solution: only publish `:<sha>` on push
+        # events (where there's exactly one input combo per commit).
+        # workflow_dispatch reruns get `:upstream-<TAG>-<sha>` which
+        # already encodes both inputs that determine the image content,
+        # so it stays immutable-per-content across reruns.
+        run: |
+          set -euo pipefail
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          SHA="${{ steps.args.outputs.short_sha }}"
+          TAG="${{ steps.args.outputs.docuseal_tag }}"
+          PUSH_LATEST="${{ steps.args.outputs.push_latest }}"
+          EVENT="${{ github.event_name }}"
+          TAGS="$IMG:staging-latest"
+          TAGS="$TAGS,$IMG:upstream-$TAG-$SHA"
+          if [ "$EVENT" = "push" ]; then
+            # On push to main: input combo is fully determined by the
+            # commit, so `:<sha>` is content-immutable.
+            TAGS="$TAGS,$IMG:$SHA"
+          fi
+          if [ "$PUSH_LATEST" = "true" ]; then
+            TAGS="$TAGS,$IMG:latest"
+          fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          # The verify step needs a stable handle. Pick the upstream-coupled
+          # tag because it's emitted on every event type.
+          echo "verify_tag=$IMG:upstream-$TAG-$SHA" >> "$GITHUB_OUTPUT"
+          echo "::notice::Pushing tags: $TAGS"
+
+      - name: Build + push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docuseal-patched
+          file: ./docuseal-patched/Dockerfile
+          push: true
+          build-args: |
+            DOCUSEAL_TAG=${{ steps.args.outputs.docuseal_tag }}
+          tags: ${{ steps.tags.outputs.tags }}
+          # Cache key includes the upstream tag so swapping versions
+          # invalidates correctly. cache-to mode=max keeps intermediate
+          # layers reusable across runs.
+          cache-from: type=gha,scope=docuseal-patched-${{ steps.args.outputs.docuseal_tag }}
+          cache-to: type=gha,scope=docuseal-patched-${{ steps.args.outputs.docuseal_tag }},mode=max
+
+      - name: Verify the CSRF skip marker is present in the published image
+        run: |
+          set -euo pipefail
+          # Use the upstream-coupled tag so this works on both push and
+          # workflow_dispatch (the bare :<sha> tag is push-only since the
+          # Codex P2 review fix).
+          IMG="${{ steps.tags.outputs.verify_tag }}"
+          docker pull "$IMG"
+          if docker run --rm --entrypoint sh "$IMG" -c "grep -q AISHACRM_4VD23_CSRF_SKIP /app/app/controllers/submit_form_controller.rb"; then
+            echo "::notice::Patch marker present in $IMG"
+          else
+            echo "::error::Patch marker MISSING in $IMG — sed step in Dockerfile must have failed silently"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Patched DocuSeal image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Repository | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Upstream | \`docuseal/docuseal:${{ steps.args.outputs.docuseal_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tags | \`${{ steps.tags.outputs.tags }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Patch marker | \`AISHACRM_4VD23_CSRF_SKIP\` verified present |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Pull command | \`docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest\` |" >> "$GITHUB_STEP_SUMMARY"
