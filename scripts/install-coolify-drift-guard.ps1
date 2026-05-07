@@ -159,6 +159,53 @@ docker exec coolify-db psql -U coolify -d coolify -c \
     "SELECT application_id, is_auto_deploy_enabled, updated_at
      FROM application_settings WHERE application_id IN (12,13,15,19) ORDER BY application_id;"
 
+# HARD ASSERTION: every staging app must be is_auto_deploy_enabled=false after the
+# guard runs. Without this, a regression where the guard exits cleanly but does NOT
+# correct drift (e.g., wrong app IDs, broken UPDATE SQL, role permission change)
+# would silently ship — `set -e` only catches exit codes, not wrong outcomes.
+#
+# Note on the format: PostgreSQL `||` concatenation coerces booleans to the text
+# 'true' / 'false' (full words), NOT 't' / 'f'. So a healthy row reads "12:false"
+# and a drifted row reads "13:true". Grep accordingly.
+echo ""
+echo "=== Self-test assertion: all 4 apps must have is_auto_deploy_enabled=false ==="
+ASSERT_RC=0
+ASSERT_OUT=$(docker exec coolify-db psql -U coolify -d coolify -t -A -c \
+    "SELECT application_id || ':' || is_auto_deploy_enabled
+     FROM application_settings
+     WHERE application_id IN (12,13,15,19)
+     ORDER BY application_id;" 2>&1) || ASSERT_RC=$?
+
+if [[ $ASSERT_RC -ne 0 ]]; then
+    echo "FAIL: self-test verification query exited rc=${ASSERT_RC}"
+    echo "${ASSERT_OUT}"
+    exit 1
+fi
+
+# Strip CR (the script may have been uploaded from Windows with CRLF endings —
+# psql output is LF-only, but be defensive against future regressions in upload tooling)
+ASSERT_OUT_NORM=$(echo "${ASSERT_OUT}" | tr -d '\r')
+
+# Anything not ending in ":false" is still drifted (or malformed).
+DRIFTED_ROWS=$(echo "${ASSERT_OUT_NORM}" | grep -v ':false$' || true)
+ROW_COUNT=$(echo "${ASSERT_OUT_NORM}" | grep -c ':' || true)
+
+if [[ -n "${DRIFTED_ROWS}" ]] || [[ "${ROW_COUNT}" -ne 4 ]]; then
+    echo ""
+    echo "FAIL: install self-test could not confirm all 4 staging apps are at"
+    echo "      is_auto_deploy_enabled=false after running the guard."
+    echo "      Expected 4 rows ending in ':false'. Got:"
+    echo "${ASSERT_OUT}" | sed 's/^/        /'
+    if [[ -n "${DRIFTED_ROWS}" ]]; then
+        echo "      Drifted (still true) or malformed rows:"
+        echo "${DRIFTED_ROWS}" | sed 's/^/        /'
+    fi
+    exit 1
+fi
+
+echo "PASS: all 4 staging apps confirmed is_auto_deploy_enabled=false"
+echo "${ASSERT_OUT}" | sed 's/^/  /'
+
 echo ""
 echo "=== Drift guard log so far ==="
 tail -20 /var/log/coolify-drift-guard.log 2>/dev/null || echo "(log file not yet populated)"

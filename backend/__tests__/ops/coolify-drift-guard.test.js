@@ -184,6 +184,55 @@ test('installer self-tests the guard end-to-end before declaring success', () =>
   );
 });
 
+test('installer hard-fails if post-guard state is not all false (no silent regressions)', () => {
+  const src = loadInstaller();
+  // `set -e` only catches non-zero exit codes — it does NOT catch a guard that
+  // exits cleanly but failed to actually correct the drift (e.g., wrong app IDs,
+  // broken UPDATE SQL, role permission change). We need an explicit outcome check
+  // that exits 1 if any of the 4 staging apps is still is_auto_deploy_enabled=true
+  // after the guard ran. Without this, regressions ship unnoticed.
+
+  // Verification query uses the parseable `id || ':' || bool` shape so we can
+  // grep for rows that don't end in `:f` (i.e., still drifted).
+  assert.match(
+    src,
+    /SELECT application_id \|\| ':' \|\| is_auto_deploy_enabled[\s\S]*?FROM application_settings[\s\S]*?WHERE application_id IN \(12,13,15,19\)/,
+    'installer must run a parseable verification query (id||:||bool format)',
+  );
+  // Output must be normalized (CR stripped) before grep — the heredoc may have
+  // been uploaded from Windows with CRLF endings, which would defeat `$` anchoring.
+  assert.match(
+    src,
+    /ASSERT_OUT_NORM=\$\(echo "\$\{ASSERT_OUT\}" \| tr -d '\\r'\)/,
+    'must strip CR from psql output before line-end matching (CRLF-safe)',
+  );
+  // Drift-detection grep: rows NOT ending in `:false` are still drifted.
+  // (PostgreSQL `||` coerces boolean to text 'true'/'false' — full words, not 't'/'f'.)
+  assert.match(
+    src,
+    /DRIFTED_ROWS=\$\(echo "\$\{ASSERT_OUT_NORM\}" \| grep -v ':false\$' \|\| true\)/,
+    'must grep against CR-stripped output for rows not ending in `:false`',
+  );
+  // Row count check: must be exactly 4 (all staging apps present).
+  assert.match(
+    src,
+    /ROW_COUNT=\$\(echo "\$\{ASSERT_OUT_NORM\}" \| grep -c ':' \|\| true\)/,
+    'must count CR-stripped rows so a missing staging app row also fails the assertion',
+  );
+  // The actual fail-loud branch: `if [[ -n DRIFTED || ROW_COUNT != 4 ]]; ...; exit 1; fi`
+  assert.match(
+    src,
+    /if \[\[ -n "\$\{DRIFTED_ROWS\}" \]\] \|\| \[\[ "\$\{ROW_COUNT\}" -ne 4 \]\]; then[\s\S]*?exit 1[\s\S]*?fi/,
+    'installer must `exit 1` if any row is still drifted OR if not all 4 rows present',
+  );
+  // The verification query itself must also be set-e safe (use `|| ASSERT_RC=$?`).
+  assert.match(
+    src,
+    /ASSERT_RC=0\s*\nASSERT_OUT=\$\(docker exec coolify-db psql[\s\S]*?\) \|\| ASSERT_RC=\$\?/,
+    'verification query must capture exit code via `|| ASSERT_RC=$?` (set -e safe)',
+  );
+});
+
 test('timer is enabled to start automatically on VPS-2 reboot', () => {
   const src = loadInstaller();
   assert.match(
