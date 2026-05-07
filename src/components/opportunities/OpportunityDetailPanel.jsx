@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
 import ErrorBoundary from '../shared/ErrorBoundary';
+import SendDocumentDialog from '../docuseal/SendDocumentDialog';
+import { getAuthorizationHeader } from '@/api/functions';
+import { getBackendUrl } from '@/api/backendUrl';
 
 import {
   DropdownMenu,
@@ -28,6 +31,7 @@ import {
   Mail,
   CheckCircle,
   FileText,
+  FileSignature,
   Presentation,
   ExternalLink,
   ChevronDown,
@@ -40,6 +44,35 @@ import { createPageUrl } from '@/utils';
 import { Link } from 'react-router-dom';
 import StatusHelper from '../shared/StatusHelper'; // New import
 import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
+
+// Mirror of ContactDetailPanel's status palette so the Document Signatures
+// section looks identical across Contact / Lead / Account / Opportunity (4VD-6).
+const DOCUSEAL_STATUS_BADGE_CLASS = {
+  pending: 'bg-blue-100 text-blue-800 border border-blue-200',
+  sent: 'bg-blue-100 text-blue-800 border border-blue-200',
+  viewed: 'bg-amber-100 text-amber-800 border border-amber-200',
+  signed: 'bg-green-100 text-green-800 border border-green-200',
+  completed: 'bg-green-100 text-green-800 border border-green-200',
+  declined: 'bg-red-100 text-red-800 border border-red-200',
+  expired: 'bg-red-100 text-red-800 border border-red-200',
+  failed: 'bg-red-100 text-red-800 border border-red-200',
+};
+
+function getDocuSealStatusClass(status) {
+  return (
+    DOCUSEAL_STATUS_BADGE_CLASS[String(status || '').toLowerCase()] ||
+    'bg-slate-100 text-slate-800 border border-slate-200'
+  );
+}
+
+function formatDocuSealDate(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return String(value);
+  }
+}
 
 export default function OpportunityDetailPanel({
   opportunity,
@@ -57,7 +90,56 @@ export default function OpportunityDetailPanel({
   const [relatedActivities, setRelatedActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [creatingActivity, setCreatingActivity] = useState(false);
+  const [showSendDocDialog, setShowSendDocDialog] = useState(false);
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const { getCardLabel } = useStatusCardPreferences();
+
+  // Load DocuSeal submissions tied to this opportunity (4VD-6).
+  const loadSubmissions = useCallback(async () => {
+    if (!localOpportunity?.id) return;
+    try {
+      const BACKEND_URL = getBackendUrl();
+      const headers = { 'Content-Type': 'application/json' };
+      const authHeader = await getAuthorizationHeader();
+      if (authHeader) {
+        headers['Authorization'] = authHeader;
+      }
+      const tenantId =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || ''
+          : '';
+      if (tenantId) {
+        headers['x-tenant-id'] = tenantId;
+      }
+
+      const url = `${BACKEND_URL}/api/docuseal/submissions?related_to=opportunity&related_id=${encodeURIComponent(
+        localOpportunity.id,
+      )}`;
+      const resp = await fetch(url, { headers, credentials: 'include' });
+      if (!resp.ok) return;
+      const json = await resp.json().catch(() => ({}));
+      const list = Array.isArray(json) ? json : json?.data || json?.submissions || [];
+      setSubmissions(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error('Error loading DocuSeal submissions:', err);
+    }
+  }, [localOpportunity?.id]);
+
+  useEffect(() => {
+    if (!localOpportunity?.id) return undefined;
+    let cancelled = false;
+    setSubmissionsLoading(true);
+    (async () => {
+      await loadSubmissions();
+      if (!cancelled) setSubmissionsLoading(false);
+    })();
+    const interval = setInterval(loadSubmissions, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [localOpportunity?.id, loadSubmissions]);
 
   const stageToCardId = {
     closed_won: 'opportunity_won',
@@ -354,6 +436,16 @@ export default function OpportunityDetailPanel({
               Edit
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSendDocDialog(true)}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              <FileSignature className="w-4 h-4 mr-2" />
+              Send Document
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -570,6 +662,78 @@ export default function OpportunityDetailPanel({
             </CardContent>
           </Card>
 
+          {/* Document Signatures (4VD-6) — DocuSeal lifecycle for documents
+              sent against this opportunity. Mirror of the Contact panel
+              section so the timeline + status badges are consistent. */}
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200 flex items-center gap-2">
+                <FileSignature className="w-5 h-5 text-blue-400" />
+                Document Signatures ({submissions.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {submissionsLoading && submissions.length === 0 ? (
+                <div className="text-center py-4 text-slate-400 text-sm">
+                  Loading documents...
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className="text-center py-4 text-slate-400 text-sm">
+                  No documents sent yet.
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {submissions.map((s) => {
+                    const status = String(s.status || 'pending').toLowerCase();
+                    const templateName =
+                      s.template_name || s.template_title || s.template_id || 'Document';
+                    const recipient = s.recipient_email || s.recipient_name || '';
+                    const sentAt = s.sent_at || s.created_at || s.created_date;
+                    const signedHref = s.mirror_url || s.signed_document_url;
+                    const showSigned =
+                      (status === 'completed' || status === 'signed') && signedHref;
+                    return (
+                      <li
+                        key={s.id || `${s.template_id}-${sentAt}`}
+                        className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-sm font-medium text-slate-200 truncate">
+                              {templateName}
+                            </span>
+                          </div>
+                          {recipient && (
+                            <p className="text-xs text-slate-400 ml-6 truncate">{recipient}</p>
+                          )}
+                          {sentAt && (
+                            <p className="text-xs text-slate-400 ml-6">
+                              Sent {formatDocuSealDate(sentAt)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 ml-6 sm:ml-0 mt-1 sm:mt-0">
+                          <Badge className={getDocuSealStatusClass(status)}>{status}</Badge>
+                          {showSigned && (
+                            <a
+                              href={signedHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:text-blue-300 hover:underline"
+                            >
+                              View signed PDF
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Description */}
           {localOpportunity.description && (
             <Card className="bg-slate-700/50 border-slate-600">
@@ -672,6 +836,35 @@ export default function OpportunityDetailPanel({
           </Card>
         </div>
       </div>
+
+      <SendDocumentDialog
+        open={showSendDocDialog}
+        onOpenChange={setShowSendDocDialog}
+        relatedTo="opportunity"
+        relatedId={localOpportunity.id}
+        defaultRecipientName={
+          (() => {
+            const c = contacts?.find((cn) => cn.id === localOpportunity.contact_id);
+            if (c) {
+              return (
+                c.name ||
+                `${c.first_name || ''} ${c.last_name || ''}`.trim() ||
+                ''
+              );
+            }
+            return localOpportunity.name || '';
+          })()
+        }
+        defaultRecipientEmail={
+          contacts?.find((cn) => cn.id === localOpportunity.contact_id)?.email || ''
+        }
+        onSent={(submission) => {
+          if (submission && typeof submission === 'object') {
+            setSubmissions((prev) => [submission, ...prev]);
+          }
+          loadSubmissions();
+        }}
+      />
     </ErrorBoundary>
   );
 }
