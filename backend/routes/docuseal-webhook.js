@@ -25,6 +25,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
+import { resolveRelatedEntityFields } from '../lib/resolveRelatedEntityFields.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
@@ -154,39 +155,167 @@ export function canTransition(currentStatus, newStatus) {
 // Activity creation helper
 // ---------------------------------------------------------------------------
 
-async function createActivity(supabase, tenantId, submission, activityType, body) {
-  // Skip viewed dedupe: don't create duplicate 'document_viewed' within 1h
-  if (activityType === 'document_viewed') {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const { data: recent } = await supabase
-      .from('activities')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('type', 'document_viewed')
-      .gte('created_at', oneHourAgo)
-      .filter('metadata->>docuseal_submission_id', 'eq', submission.docuseal_submission_id)
-      .limit(1);
-    if (recent && recent.length > 0) {
-      return; // already logged a viewed event recently
+/**
+ * 4VD-33: status field that the activity row should reflect for a given
+ * webhook event. The send-route inserts with status='pending'; webhooks
+ * update it as the lifecycle progresses.
+ */
+function activityStatusFor(activityType) {
+  switch (activityType) {
+    case 'document_viewed':
+      return 'pending'; // still waiting on signature
+    case 'document_signed':
+    case 'document_completed':
+      return 'completed';
+    case 'document_declined':
+    case 'document_expired':
+    case 'document_failed':
+      return 'cancelled';
+    default:
+      return 'pending';
+  }
+}
+
+/**
+ * 4VD-33: which metadata timestamp slot the event should populate.
+ * The send-route INSERT pre-creates these slots as null; webhooks fill them in.
+ */
+function metadataTimestampFieldFor(activityType) {
+  switch (activityType) {
+    case 'document_viewed':
+      return 'viewed_at';
+    case 'document_signed':
+      return 'signed_at';
+    case 'document_completed':
+      return 'completed_at';
+    case 'document_declined':
+      return 'declined_at';
+    case 'document_expired':
+      return 'expired_at';
+    case 'document_failed':
+      return 'failed_at';
+    default:
+      return null;
+  }
+}
+
+/**
+ * 4VD-33: collapse the 4 webhook events (sent → viewed → signed → completed)
+ * into a SINGLE activity row that the timeline renders as one status-tracking
+ * entry. The row is created by the send route; webhooks update it.
+ *
+ * Strategy:
+ *   1. Look up the existing row by `tenant_id` + `metadata->>docuseal_submission_id`.
+ *   2. If found: UPDATE in place — refresh type/subject/body/status, and merge the
+ *      lifecycle timestamp into metadata. Status transitions:
+ *      pending → pending (viewed) → completed (signed/completed)
+ *                                 → cancelled (declined/expired/failed)
+ *   3. If NOT found (race with the send-side INSERT, or send-side INSERT failed):
+ *      INSERT a new row as fallback so we never lose the lifecycle event entirely.
+ *
+ * The 1-hour dedupe for `document_viewed` is gone — there's only one row per
+ * submission now, so the duplicate-row problem it solved doesn't exist. Multiple
+ * `viewed` events on the same row simply re-stamp `viewed_at` (the LAST view wins,
+ * which is the more useful semantic anyway).
+ *
+ * **Ordering assumption** (intentional, not a bug): the state machine assumes
+ * webhooks arrive in DocuSeal-chronological order. If a `document_signed` event
+ * arrives before `document_viewed` (delivery reorder, retry storm, etc.), the
+ * row will jump pending → completed and a later-arriving `document_viewed`
+ * won't downgrade it — `viewed` maps to status='pending' which the
+ * `canTransition` guard at the submissions-table level rejects as a regression
+ * from completed. The metadata.viewed_at slot still gets stamped (delivery
+ * order, not chronological), so the full lifecycle data is preserved even if
+ * the headline status reflects the latest definitive event.
+ */
+async function createActivity(supabase, tenantId, submission, activityType, body, eventTimestamp) {
+  const subject = `Document ${activityType.replace('document_', '')} — ${submission.template_name || 'unnamed template'}`;
+  const newStatus = activityStatusFor(activityType);
+  const tsField = metadataTimestampFieldFor(activityType);
+  // 4VD-33 follow-up (PR review P2): use the DocuSeal event timestamp, not
+  // processing time. Delayed/retried deliveries would otherwise stamp the
+  // lifecycle metadata with "when our handler ran", which is wrong for
+  // any timeline analytics built on these fields.
+  const eventTs = eventTimestamp || new Date().toISOString();
+
+  // 4VD-39: resolve related entity's display name + email so the timeline
+  // hyperlink renders "[Lead Name]" instead of "View Lead". Done up-front
+  // because BOTH paths below need it — the UPDATE path may need to backfill
+  // older rows that were created before this fix landed, and the fallback
+  // INSERT obviously needs it on new rows.
+  const { related_name, related_email } = await resolveRelatedEntityFields(
+    supabase,
+    tenantId,
+    submission.related_to,
+    submission.related_id,
+  );
+
+  // 1. Look up existing row (created by the send route)
+  const { data: existing } = await supabase
+    .from('activities')
+    .select('id, metadata, related_name, related_email')
+    .eq('tenant_id', tenantId)
+    .filter('metadata->>docuseal_submission_id', 'eq', submission.docuseal_submission_id)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    const row = existing[0];
+    // Merge metadata: keep existing keys (incl. signing_url, sent_at), update
+    // signed_document_url if we have a fresher one, stamp the lifecycle ts.
+    const mergedMetadata = {
+      ...(row.metadata || {}),
+      docuseal_submission_id: submission.docuseal_submission_id,
+      docuseal_template_id: submission.docuseal_template_id,
+    };
+    if (submission.signed_document_url) {
+      mergedMetadata.signed_document_url = submission.signed_document_url;
     }
+    if (tsField) {
+      mergedMetadata[tsField] = eventTs;
+    }
+    // 4VD-39: backfill related_name/related_email on existing rows that
+    // pre-date this fix (only when the row currently has them blank, so
+    // we don't clobber a value the operator may have edited).
+    const update = {
+      type: activityType,
+      subject,
+      body,
+      status: newStatus,
+      metadata: mergedMetadata,
+    };
+    if (!row.related_name && related_name) update.related_name = related_name;
+    if (!row.related_email && related_email) update.related_email = related_email;
+
+    await supabase.from('activities').update(update).eq('id', row.id);
+    return;
   }
 
-  const subject = `Document ${activityType.replace('document_', '')} — ${submission.template_name || 'unnamed template'}`;
+  // 2. Fallback INSERT (no row exists — race with send-route, or its INSERT failed)
+  const fallbackMetadata = {
+    docuseal_submission_id: submission.docuseal_submission_id,
+    docuseal_template_id: submission.docuseal_template_id,
+    signed_document_url: submission.signed_document_url || null,
+  };
+  if (tsField) {
+    fallbackMetadata[tsField] = eventTs;
+  }
   await supabase.from('activities').insert({
     tenant_id: tenantId,
     related_to: submission.related_to,
     related_id: submission.related_id,
+    ...(related_name ? { related_name } : {}),
+    ...(related_email ? { related_email } : {}),
     type: activityType,
     subject,
     body,
-    status: 'completed',
-    metadata: {
-      docuseal_submission_id: submission.docuseal_submission_id,
-      docuseal_template_id: submission.docuseal_template_id,
-      signed_document_url: submission.signed_document_url,
-    },
+    status: newStatus,
+    metadata: fallbackMetadata,
   });
 }
+
+// Exported for unit tests so the activity-status / timestamp-field contract
+// is locked independent of the supabase mock surface.
+export { activityStatusFor, metadataTimestampFieldFor };
 
 // ---------------------------------------------------------------------------
 // Supabase Storage mirror (4VD-13)
@@ -549,7 +678,10 @@ router.post('/docuseal', async (req, res) => {
           : mapping.activity === 'document_viewed'
             ? `${updated.recipient_email} viewed ${updated.template_name || 'document'}.`
             : `${updated.recipient_email}: ${eventType.replace('submission.', '')}`;
-    await createActivity(supabase, tenant_id, updated, mapping.activity, body);
+    // 4VD-33 follow-up: pass DocuSeal's event timestamp so retried/delayed
+    // webhook deliveries stamp metadata.viewed_at / signed_at / completed_at
+    // with the actual lifecycle moment, not "when our handler happened to run".
+    await createActivity(supabase, tenant_id, updated, mapping.activity, body, eventTimestamp);
   } catch (activityErr) {
     // Don't fail the webhook on activity errors — the submission update is the source of truth
     logger.warn('[DocusealWebhook] Activity creation failed', { error: activityErr.message });
