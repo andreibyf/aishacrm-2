@@ -36,6 +36,7 @@ const ORDER = [
   'CashFlow',
   'DocumentProcessing',
   'DocumentManagement',
+  'DocumentTemplates',
   'AICampaigns',
   'Employees',
   'Reports',
