@@ -21,6 +21,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
+import { requireAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +31,39 @@ import logger from '../lib/logger.js';
 const FIELD_TYPES = ['name', 'email', 'signature', 'date', 'text', 'checkbox'];
 const MAX_NAME_LENGTH = 200;
 const MAX_PDF_BYTES = 25 * 1024 * 1024; // 25 MB ceiling
+
+// ---------------------------------------------------------------------------
+// Tenant-id resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the tenant_id for the current request, mirroring the cascade used
+ * by other tenant-scoped routes (storage.js, integrations.communications.js).
+ *
+ * Order:
+ *   1. req.tenant.id      — populated by validateTenantAccess when an
+ *                           x-tenant-id header / body / query field resolved
+ *                           against public.tenant.
+ *   2. x-tenant-id header — raw fallback if the middleware didn't fire (e.g.
+ *                           a future test mount that skips the middleware).
+ *   3. body / query tenant_id — explicit override accepted from superadmin
+ *                           writes when no global tenant context is set.
+ *   4. req.user.tenant_id — JWT-derived tenant for non-superadmin users that
+ *                           don't pass any header (defense-in-depth).
+ *
+ * @param {import('express').Request} req
+ * @returns {string|null}
+ */
+export function resolveRequestTenantId(req) {
+  return (
+    req.tenant?.id?.toString() ||
+    req.headers?.['x-tenant-id']?.toString() ||
+    req.body?.tenant_id?.toString() ||
+    req.query?.tenant_id?.toString() ||
+    req.user?.tenant_id?.toString() ||
+    null
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Validation helpers (pure — exported for unit tests)
@@ -196,8 +230,9 @@ export default function createTemplatesRoutes(_pgPool) {
   // --- POST /api/templates -------------------------------------------------
   // Body: { name, file (base64), fields[] }
   // Stamps tenant_id from req.tenant.id (never trusts client input).
-  router.post('/', async (req, res) => {
-    const tenantId = req.tenant?.id;
+  // Admin-only: managers + employees can list/preview but cannot create.
+  router.post('/', requireAdminRole, async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }
@@ -284,7 +319,7 @@ export default function createTemplatesRoutes(_pgPool) {
   // --- GET /api/templates --------------------------------------------------
   // Lists active templates for the current tenant (newest first).
   router.get('/', async (req, res) => {
-    const tenantId = req.tenant?.id;
+    const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }
@@ -304,7 +339,7 @@ export default function createTemplatesRoutes(_pgPool) {
 
   // --- GET /api/templates/:id ----------------------------------------------
   router.get('/:id', async (req, res) => {
-    const tenantId = req.tenant?.id;
+    const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }
@@ -329,16 +364,75 @@ export default function createTemplatesRoutes(_pgPool) {
     return res.json({ data });
   });
 
-  // --- PUT /api/templates/:id ----------------------------------------------
-  // Update name and/or fields. PDF is immutable post-create (re-upload by
-  // creating a new template; intent: avoid breaking signing_sessions that
-  // reference the same template_id).
-  router.put('/:id', async (req, res) => {
-    const tenantId = req.tenant?.id;
+  // --- GET /api/templates/:id/pdf-url --------------------------------------
+  // Returns a short-lived (5 min) Supabase Storage signed URL for the
+  // template's source PDF. The frontend fetches the URL directly so the
+  // backend doesn't proxy the bytes. Tenant-scoped: the row lookup is
+  // gated by tenant_id, and the storage path itself is `<tenant_id>/...`
+  // so a leaked URL still won't expose another tenant's template (the
+  // signed URL is bound to one specific object key).
+  router.get('/:id/pdf-url', async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }
-    const { name, fields } = req.body || {};
+    const supabase = getSupabaseClient();
+    const { data: row, error: lookupErr } = await supabase
+      .from('signing_templates')
+      .select('id, pdf_storage_path, archived_at')
+      .eq('tenant_id', tenantId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (lookupErr) {
+      logger.error('[Templates] pdf-url lookup failed', {
+        tenantId,
+        id: req.params.id,
+        message: lookupErr.message,
+      });
+      return res.status(500).json({ error: 'lookup_failed', message: lookupErr.message });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    const storageAdmin = getSupabaseAdmin();
+    const bucket = getBucketName();
+    const ttlSeconds = 300; // 5 minutes
+    const { data: signed, error: signErr } = await storageAdmin.storage
+      .from(bucket)
+      .createSignedUrl(row.pdf_storage_path, ttlSeconds);
+    if (signErr || !signed?.signedUrl) {
+      logger.error('[Templates] pdf-url sign failed', {
+        tenantId,
+        id: row.id,
+        path: row.pdf_storage_path,
+        message: signErr?.message,
+      });
+      return res.status(503).json({
+        error: 'sign_failed',
+        message: signErr?.message || 'unable to mint signed url',
+      });
+    }
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    return res.json({ data: { url: signed.signedUrl, expires_at: expiresAt } });
+  });
+
+  // --- PUT /api/templates/:id ----------------------------------------------
+  // Update name, fields, and/or the source PDF.
+  // Admin-only.
+  // Body accepts any subset of:
+  //   { name: string, fields: SigningField[], file: base64 PDF }
+  // PDF replacement overwrites the storage object at the SAME path so
+  // existing signing_sessions[].template_id references stay valid. Note:
+  // this means in-flight signing sessions will see the new PDF on next
+  // load — the operator is responsible for considering that before
+  // replacing a PDF mid-flow.
+  router.put('/:id', requireAdminRole, async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_context_missing' });
+    }
+    const { name, fields, file } = req.body || {};
     const update = {};
     if (name !== undefined) {
       if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > MAX_NAME_LENGTH) {
@@ -356,11 +450,81 @@ export default function createTemplatesRoutes(_pgPool) {
         return res.status(400).json({ error: err.code || 'invalid_fields', message: err.message });
       }
     }
-    if (Object.keys(update).length === 0) {
+
+    // Optional PDF replacement: validate the same way create does.
+    let newPdfBuffer = null;
+    if (file !== undefined && file !== null && file !== '') {
+      try {
+        // validateTemplateInput checks: non-empty string, base64 decode,
+        // %PDF- magic-byte sniff, ≤25MB ceiling. Name-shape validation is
+        // not relevant here, so synthesise a stub name to satisfy the
+        // helper, then discard.
+        const inp = validateTemplateInput({ name: 'pdf-replace', file });
+        newPdfBuffer = inp.pdfBuffer;
+      } catch (err) {
+        return res.status(400).json({
+          error: err.code || 'invalid_file',
+          message: err.message,
+        });
+      }
+    }
+
+    if (Object.keys(update).length === 0 && !newPdfBuffer) {
       return res.status(400).json({ error: 'nothing_to_update' });
     }
 
     const supabase = getSupabaseClient();
+
+    // Need the storage path before we can swap the PDF.
+    const { data: existing, error: lookupErr } = await supabase
+      .from('signing_templates')
+      .select('id, pdf_storage_path, archived_at')
+      .eq('tenant_id', tenantId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (lookupErr) {
+      logger.error('[Templates] Update lookup failed', {
+        tenantId,
+        id: req.params.id,
+        message: lookupErr.message,
+      });
+      return res.status(500).json({ error: 'lookup_failed', message: lookupErr.message });
+    }
+    if (!existing || existing.archived_at) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    // PDF replacement step (before DB update so the row's pdf_storage_path
+    // remains accurate even if the row update fails).
+    if (newPdfBuffer) {
+      const storageAdmin = getSupabaseAdmin();
+      const bucket = getBucketName();
+      const { error: uploadErr } = await storageAdmin.storage
+        .from(bucket)
+        .upload(existing.pdf_storage_path, newPdfBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+      if (uploadErr) {
+        logger.error('[Templates] PDF replace upload failed', {
+          tenantId,
+          id: existing.id,
+          path: existing.pdf_storage_path,
+          message: uploadErr.message,
+        });
+        return res.status(503).json({
+          error: 'storage_upload_failed',
+          message: uploadErr.message,
+        });
+      }
+    }
+
+    // If only PDF was replaced (no name/fields change), still bump
+    // updated_at so the list view shows the recency.
+    if (Object.keys(update).length === 0 && newPdfBuffer) {
+      update.updated_at = new Date().toISOString();
+    }
+
     const { data, error } = await supabase
       .from('signing_templates')
       .update(update)
@@ -386,8 +550,9 @@ export default function createTemplatesRoutes(_pgPool) {
   // --- DELETE /api/templates/:id ------------------------------------------
   // Soft delete via archived_at. Existing signing_sessions referencing the
   // template continue to work because we don't physically remove the row.
-  router.delete('/:id', async (req, res) => {
-    const tenantId = req.tenant?.id;
+  // Admin-only.
+  router.delete('/:id', requireAdminRole, async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }

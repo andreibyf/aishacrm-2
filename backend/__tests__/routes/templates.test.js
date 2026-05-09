@@ -18,6 +18,7 @@ import {
   validateSigningFields,
   validateTemplateInput,
   buildTemplateStorageKey,
+  resolveRequestTenantId,
 } from '../../routes/templates.js';
 
 // ---------------------------------------------------------------------------
@@ -329,5 +330,201 @@ describe('buildTemplateStorageKey', () => {
   test('is deterministic', () => {
     const args = { tenantId: 't1', templateId: 't2' };
     assert.equal(buildTemplateStorageKey(args), buildTemplateStorageKey(args));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveRequestTenantId — tenant-id cascade
+// ---------------------------------------------------------------------------
+
+describe('resolveRequestTenantId', () => {
+  const TENANT_A = '759a83e8-7340-4482-a586-cd2d049fb0b5';
+  const TENANT_B = 'b62b764d-cccc-cccc-cccc-cccccccccccc';
+
+  test('returns null when no source provides a tenant id', () => {
+    const req = { headers: {}, body: {}, query: {} };
+    assert.equal(resolveRequestTenantId(req), null);
+  });
+
+  test('prefers req.tenant.id (set by validateTenantAccess)', () => {
+    const req = {
+      tenant: { id: TENANT_A },
+      headers: { 'x-tenant-id': TENANT_B },
+      body: { tenant_id: TENANT_B },
+      query: { tenant_id: TENANT_B },
+      user: { tenant_id: TENANT_B },
+    };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('falls back to x-tenant-id header when middleware did not populate req.tenant', () => {
+    const req = {
+      headers: { 'x-tenant-id': TENANT_A },
+      body: {},
+      query: {},
+    };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('honours body.tenant_id when neither middleware nor header is set', () => {
+    const req = {
+      headers: {},
+      body: { tenant_id: TENANT_A },
+      query: {},
+    };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('honours query.tenant_id as a final external override', () => {
+    const req = {
+      headers: {},
+      body: {},
+      query: { tenant_id: TENANT_A },
+    };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('falls back to req.user.tenant_id (JWT) when nothing else is set', () => {
+    const req = {
+      headers: {},
+      body: {},
+      query: {},
+      user: { tenant_id: TENANT_A },
+    };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('coerces non-string values via .toString()', () => {
+    const req = { headers: { 'x-tenant-id': { toString: () => TENANT_A } } };
+    assert.equal(resolveRequestTenantId(req), TENANT_A);
+  });
+
+  test('does not throw when req has no headers/body/query/user shape', () => {
+    assert.equal(resolveRequestTenantId({}), null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Role gate — POST/PUT/DELETE require admin/superadmin (4VD-43 day 1.5)
+//
+// Spins up an Express app with a fake user-injection middleware in front of
+// the templates router so we can assert that non-admin roles get a 403
+// before the route ever reaches Supabase. The actual Supabase + Storage
+// integration tests for the success paths are deferred to 4VD-43 day 6
+// (per the test file header). We do NOT need them here because
+// requireAdminRole short-circuits before any DB call is made.
+// ---------------------------------------------------------------------------
+
+describe('Role gate on POST/PUT/DELETE', () => {
+  let express;
+  let createTemplatesRoutes;
+  let bodyParser;
+
+  // Lazy-load Express + the route factory once per suite.
+  test('boot suite', async () => {
+    const expressMod = await import('express');
+    express = expressMod.default;
+    const routeMod = await import('../../routes/templates.js');
+    createTemplatesRoutes = routeMod.default;
+    bodyParser = express.json;
+    assert.equal(typeof express, 'function');
+    assert.equal(typeof createTemplatesRoutes, 'function');
+  });
+
+  function buildApp(user) {
+    const app = express();
+    app.use(bodyParser());
+    // Inject a synthetic user (mimicking what authenticateRequest does)
+    // and a tenant context (mimicking validateTenantAccess) so the route
+    // sees the same shape it would in production.
+    app.use((req, _res, next) => {
+      req.user = user;
+      req.tenant = { id: '759a83e8-7340-4482-a586-cd2d049fb0b5' };
+      next();
+    });
+    app.use('/api/templates', createTemplatesRoutes());
+    return app;
+  }
+
+  async function send(app, method, path, body) {
+    const { default: http } = await import('node:http');
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(app).listen(0, async () => {
+        try {
+          const port = server.address().port;
+          const url = `http://127.0.0.1:${port}${path}`;
+          const init = {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+          };
+          if (body !== undefined) init.body = JSON.stringify(body);
+          const resp = await fetch(url, init);
+          const json = await resp.json().catch(() => ({}));
+          server.close();
+          resolve({ status: resp.status, body: json });
+        } catch (err) {
+          server.close();
+          reject(err);
+        }
+      });
+    });
+  }
+
+  test('POST as employee -> 403', async () => {
+    const app = buildApp({ id: 'u1', role: 'employee' });
+    const { status } = await send(app, 'POST', '/api/templates', {
+      name: 'T',
+      file: MINIMAL_PDF_BASE64,
+      fields: [VALID_FIELD],
+    });
+    assert.equal(status, 403);
+  });
+
+  test('POST as manager -> 403', async () => {
+    const app = buildApp({ id: 'u2', role: 'manager' });
+    const { status } = await send(app, 'POST', '/api/templates', {
+      name: 'T',
+      file: MINIMAL_PDF_BASE64,
+      fields: [VALID_FIELD],
+    });
+    assert.equal(status, 403);
+  });
+
+  test('PUT as manager -> 403', async () => {
+    const app = buildApp({ id: 'u3', role: 'manager' });
+    const { status } = await send(app, 'PUT', '/api/templates/abc', {
+      name: 'T2',
+    });
+    assert.equal(status, 403);
+  });
+
+  test('DELETE as manager -> 403', async () => {
+    const app = buildApp({ id: 'u4', role: 'manager' });
+    const { status } = await send(app, 'DELETE', '/api/templates/abc');
+    assert.equal(status, 403);
+  });
+
+  test('admin role passes the gate (reaches DB layer, Supabase will fail without real creds — that is fine)', async () => {
+    const app = buildApp({ id: 'u5', role: 'admin' });
+    const { status } = await send(app, 'DELETE', '/api/templates/abc');
+    // Whatever the post-gate behavior is (Supabase error, 404, etc.), the
+    // important assertion is that the request is NOT 403 — the gate let
+    // the admin through.
+    assert.notEqual(status, 403);
+  });
+
+  test('superadmin role passes the gate', async () => {
+    const app = buildApp({ id: 'u6', role: 'superadmin' });
+    const { status } = await send(app, 'DELETE', '/api/templates/abc');
+    assert.notEqual(status, 403);
+  });
+
+  test('GET as manager passes (no role gate on reads)', async () => {
+    const app = buildApp({ id: 'u7', role: 'manager' });
+    const { status } = await send(app, 'GET', '/api/templates');
+    // GET uses Supabase — it may return 500 in the unit-test environment
+    // because there is no real DB. The only thing we care about is that
+    // the role gate did NOT veto the read.
+    assert.notEqual(status, 403);
   });
 });

@@ -51,6 +51,10 @@ export default function TemplateBuilderCanvas({
   setFields,
   pageDimsByPage,
   setPageDimsByPage,
+  // 4VD-43: when readOnly, the sidebar's "add field" + per-field controls
+  // are hidden and each Rnd is locked (no drag, no resize). Used by the
+  // preview mode in DocumentTemplates.jsx.
+  readOnly = false,
 }) {
   const [doc, setDoc] = useState(null);
   const [numPages, setNumPages] = useState(0);
@@ -236,60 +240,74 @@ export default function TemplateBuilderCanvas({
               size={{ width: f.box.w, height: f.box.h }}
               position={{ x: f.box.x, y: f.box.y }}
               bounds="parent"
-              onDragStop={(_e, d) => updateFieldBox(f.clientId, { x: d.x, y: d.y })}
-              onResizeStop={(_e, _dir, ref, _delta, position) =>
+              disableDragging={readOnly}
+              enableResizing={!readOnly}
+              onDragStop={(_e, d) => {
+                if (readOnly) return;
+                updateFieldBox(f.clientId, { x: d.x, y: d.y });
+              }}
+              onResizeStop={(_e, _dir, ref, _delta, position) => {
+                if (readOnly) return;
                 updateFieldBox(f.clientId, {
                   x: position.x,
                   y: position.y,
                   w: parseFloat(ref.style.width),
                   h: parseFloat(ref.style.height),
-                })
+                });
+              }}
+              className={
+                readOnly
+                  ? 'border-2 border-blue-400/70 bg-blue-400/10'
+                  : 'border-2 border-blue-500 bg-blue-500/20 hover:border-blue-600 group'
               }
-              className="border-2 border-blue-500 bg-blue-500/20 hover:border-blue-600 group"
               minWidth={20}
               minHeight={16}
             >
               <div className="absolute inset-0 flex items-center justify-center text-[10px] font-mono pointer-events-none">
                 {f.name}
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeField(f.clientId);
-                }}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs leading-none hidden group-hover:flex items-center justify-center"
-                title="Remove field"
-              >
-                ×
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeField(f.clientId);
+                  }}
+                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs leading-none hidden group-hover:flex items-center justify-center"
+                  title="Remove field"
+                >
+                  ×
+                </button>
+              )}
             </Rnd>
           ))}
         </div>
       </div>
 
       <div className="space-y-3">
-        <div className="border rounded-md p-3 space-y-2">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Add field to page
-          </Label>
-          <div className="grid grid-cols-2 gap-2">
-            {__FIELD_TYPES__.map((t) => (
-              <Button
-                key={t}
-                variant="outline"
-                size="sm"
-                onClick={() => addField(t)}
-                disabled={!pageDimsByPage.get(pageIndex)}
-              >
-                + {t}
-              </Button>
-            ))}
+        {!readOnly && (
+          <div className="border rounded-md p-3 space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Add field to page
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              {__FIELD_TYPES__.map((t) => (
+                <Button
+                  key={t}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addField(t)}
+                  disabled={!pageDimsByPage.get(pageIndex)}
+                >
+                  + {t}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Drag the blue box to reposition; drag corners to resize. Hover to delete.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Drag the blue box to reposition; drag corners to resize. Hover to delete.
-          </p>
-        </div>
+        )}
 
         <div className="border rounded-md p-3 space-y-2">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -299,14 +317,31 @@ export default function TemplateBuilderCanvas({
             <p className="text-xs text-muted-foreground">None yet.</p>
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto">
-              {currentPageFields.map((f) => (
-                <FieldEditor
-                  key={f.clientId}
-                  field={f}
-                  onChange={(patch) => updateFieldMeta(f.clientId, patch)}
-                  onRemove={() => removeField(f.clientId)}
-                />
-              ))}
+              {currentPageFields.map((f) =>
+                readOnly ? (
+                  <div
+                    key={f.clientId}
+                    className="border rounded p-2 bg-background flex items-center justify-between gap-2"
+                  >
+                    <Badge variant="secondary" className="text-[10px] shrink-0">
+                      {f.type}
+                    </Badge>
+                    <span className="text-xs font-mono truncate flex-1">{f.name}</span>
+                    {f.required ? (
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        required
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : (
+                  <FieldEditor
+                    key={f.clientId}
+                    field={f}
+                    onChange={(patch) => updateFieldMeta(f.clientId, patch)}
+                    onRemove={() => removeField(f.clientId)}
+                  />
+                ),
+              )}
             </div>
           )}
         </div>

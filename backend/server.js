@@ -341,7 +341,15 @@ app.use(
 );
 app.use('/api/storage', defaultLimiter, authenticateRequest, createStorageRoutes(measuredPgPool));
 // 4VD-43: in-house eSign engine. /api/templates owns CRUD on signing_templates.
-app.use('/api/templates', defaultLimiter, authenticateRequest, createTemplatesRoutes(measuredPgPool));
+// validateTenantAccess populates req.tenant from JWT/headers — the route
+// reads req.tenant.id to enforce tenant isolation on all writes.
+app.use(
+  '/api/templates',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createTemplatesRoutes(measuredPgPool),
+);
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
 app.use('/api/system-settings', defaultLimiter, createSystemSettingsRoutes(measuredPgPool));

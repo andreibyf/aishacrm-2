@@ -168,6 +168,22 @@ const defaultModules = [
     ],
   },
   {
+    id: 'document_templates_esign',
+    name: 'Document Templates (eSign)',
+    description:
+      'In-house e-signature engine: upload PDFs, drop signature/text/date fields, send for signing, track status (4VD-43)',
+    icon: FileText,
+    features: [
+      'PDF Upload & Field Placement',
+      'Drag-and-drop Signature / Text / Date / Checkbox',
+      'Tenant-isolated Template Catalogue',
+      'Preview / Edit / Soft-Delete',
+      'Send-for-Signature (day 2+)',
+      'Public Recipient Signing Page (day 4+)',
+      'Audit Trail & Certificate of Completion (day 5+)',
+    ],
+  },
+  {
     id: 'ai_campaigns',
     name: 'AI Campaigns',
     description: 'Create and manage AI-powered calling and outreach campaigns',
