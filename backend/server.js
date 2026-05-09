@@ -187,6 +187,7 @@ import { stripePlatformWebhookRouter } from './routes/stripe-platform-webhook.js
 import createStorageRoutes from './routes/storage.js';
 import createTemplatesRoutes from './routes/templates.js'; // 4VD-43 in-house eSign engine
 import createSubmissionsRoutes from './routes/submissions.js'; // 4VD-43 day 2 send-for-signing
+import createPublicSignRoutes from './routes/public-sign.js'; // 4VD-43 day 3 public recipient routes
 import createWebhookRoutes from './routes/webhooks.js';
 import createSystemRoutes from './routes/system.js';
 import createSystemSettingsRoutes from './routes/system-settings.js';
@@ -275,7 +276,7 @@ import createBundleRoutes from './routes/bundles.js';
 import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
 import { validateTenantAccess } from './middleware/validateTenant.js';
-import { defaultLimiter } from './middleware/rateLimiter.js';
+import { defaultLimiter, publicLimiter } from './middleware/rateLimiter.js';
 import { trafficMonitor } from './middleware/trafficMonitor.js';
 import { startMetricsCollection } from './lib/systemMetrics.js';
 
@@ -363,6 +364,13 @@ app.use(
   validateTenantAccess,
   createSubmissionsRoutes(),
 );
+// 4VD-43 day 3: public sign routes for recipients. NO auth, NO tenant
+// validation — recipient is anonymous. Capability-token-gated; the route
+// handlers enforce token format + status + expiry themselves and use
+// service_role to read/update across tenants. publicLimiter (60 req/min
+// per IP) is tighter than defaultLimiter to bound abuse on the public
+// surface.
+app.use('/api/sign', publicLimiter, createPublicSignRoutes());
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
 app.use('/api/system-settings', defaultLimiter, createSystemSettingsRoutes(measuredPgPool));
