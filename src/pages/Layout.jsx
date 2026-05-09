@@ -125,6 +125,7 @@ const primaryNavIconMap = {
   CashFlow: DollarSign,
   DocumentProcessing: FileText,
   DocumentManagement: FolderOpen,
+  DocumentTemplates: FileText,
   AICampaigns: Megaphone,
   AISuggestions: Sparkles,
   Employees: Users,

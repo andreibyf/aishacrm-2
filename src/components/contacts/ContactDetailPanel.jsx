@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import UniversalDetailPanel from '../shared/UniversalDetailPanel';
 import BookingWidget from '../scheduling/BookingWidget';
-import SendDocumentDialog from '../docuseal/SendDocumentDialog';
-import { Star, Phone, Mail, CalendarCheck, FileSignature, FileText } from 'lucide-react';
+// 4VD-43: Send Document + Document signatures sections were removed when
+// DocuSeal was decommissioned (2026-05-09). They will be re-introduced in
+// 4VD-43 day 2+ on top of the new signing_sessions / signing_templates
+// schema. Nothing currently consumes these surfaces in the UI.
+import { Star, Phone, Mail, CalendarCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
 import ErrorBoundary from '../shared/ErrorBoundary';
 import {
@@ -16,38 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { universalAICall, getAuthorizationHeader } from '@/api/functions';
+import { universalAICall } from '@/api/functions';
 import { generateAIEmailDraft } from '@/api/functions';
 import { sendAIEmail } from '@/api/functions';
-import { getBackendUrl } from '@/api/backendUrl';
 import { toast } from 'sonner';
-
-const DOCUSEAL_STATUS_BADGE_CLASS = {
-  pending: 'bg-blue-100 text-blue-800 border border-blue-200',
-  sent: 'bg-blue-100 text-blue-800 border border-blue-200',
-  viewed: 'bg-amber-100 text-amber-800 border border-amber-200',
-  signed: 'bg-green-100 text-green-800 border border-green-200',
-  completed: 'bg-green-100 text-green-800 border border-green-200',
-  declined: 'bg-red-100 text-red-800 border border-red-200',
-  expired: 'bg-red-100 text-red-800 border border-red-200',
-  failed: 'bg-red-100 text-red-800 border border-red-200',
-};
-
-function getDocuSealStatusClass(status) {
-  return (
-    DOCUSEAL_STATUS_BADGE_CLASS[String(status || '').toLowerCase()] ||
-    'bg-slate-100 text-slate-800 border border-slate-200'
-  );
-}
-
-function formatDocuSealDate(value) {
-  if (!value) return '';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return String(value);
-  }
-}
 
 export default function ContactDetailPanel({
   contact,
@@ -68,59 +42,6 @@ export default function ContactDetailPanel({
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
-  const [showSendDocDialog, setShowSendDocDialog] = useState(false);
-  const [submissions, setSubmissions] = useState([]);
-  const [submissionsLoading, setSubmissionsLoading] = useState(false);
-
-  const contactId = contact?.id;
-
-  const loadSubmissions = useCallback(async () => {
-    if (!contactId) return;
-    try {
-      const BACKEND_URL = getBackendUrl();
-      const headers = { 'Content-Type': 'application/json' };
-      const authHeader = await getAuthorizationHeader();
-      if (authHeader) {
-        headers['Authorization'] = authHeader;
-      }
-      const tenantId =
-        typeof localStorage !== 'undefined'
-          ? localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || ''
-          : '';
-      if (tenantId) {
-        headers['x-tenant-id'] = tenantId;
-      }
-
-      const url = `${BACKEND_URL}/api/docuseal/submissions?related_to=contact&related_id=${encodeURIComponent(
-        contactId,
-      )}`;
-      const resp = await fetch(url, { headers, credentials: 'include' });
-      if (!resp.ok) {
-        // Don't toast spam on poll errors; surface only when not 404/501 etc.
-        return;
-      }
-      const json = await resp.json().catch(() => ({}));
-      const list = Array.isArray(json) ? json : json?.data || json?.submissions || [];
-      setSubmissions(Array.isArray(list) ? list : []);
-    } catch (err) {
-      console.error('Error loading DocuSeal submissions:', err);
-    }
-  }, [contactId]);
-
-  useEffect(() => {
-    if (!open || !contactId) return undefined;
-    let cancelled = false;
-    setSubmissionsLoading(true);
-    (async () => {
-      await loadSubmissions();
-      if (!cancelled) setSubmissionsLoading(false);
-    })();
-    const interval = setInterval(loadSubmissions, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [open, contactId, loadSubmissions]);
 
   if (!contact) {
     return null;
@@ -259,84 +180,12 @@ export default function ContactDetailPanel({
   }
 
   customActions.push({
-    label: 'Send Document',
-    icon: <FileSignature className="w-4 h-4" />,
-    onClick: () => setShowSendDocDialog(true),
-  });
-
-  customActions.push({
     label: 'Convert to Lead',
     icon: <Star className="w-4 h-4" />,
     onClick: (contact) => {
       console.log('Convert to lead:', contact);
     },
   });
-
-  const documentSignaturesSection = (
-    <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
-      {submissionsLoading && submissions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Loading documents...</p>
-      ) : submissions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No documents sent yet.</p>
-      ) : (
-        <ul className="space-y-3">
-          {submissions.map((s) => {
-            const status = String(s.status || 'pending').toLowerCase();
-            const templateName =
-              s.template_name || s.template_title || s.template_id || 'Document';
-            const recipient = s.recipient_email || s.recipient_name || '';
-            const sentAt = s.sent_at || s.created_at || s.created_date;
-            // Prefer the durable Supabase Storage mirror (`mirror_url`,
-            // populated by the webhook step 8b mirror) over DocuSeal's hosted
-            // URL (`signed_document_url`). The mirror survives a DocuSeal
-            // volume loss; the DocuSeal URL does not. Falls back to the
-            // DocuSeal URL if the mirror hasn't run yet (e.g., right after
-            // completion before the storage upload finishes).
-            const signedHref = s.mirror_url || s.signed_document_url;
-            const showSigned = (status === 'completed' || status === 'signed') && signedHref;
-            return (
-              <li
-                key={s.id || `${s.template_id}-${sentAt}`}
-                className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-                      {templateName}
-                    </span>
-                  </div>
-                  {recipient && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 ml-6 truncate">
-                      {recipient}
-                    </p>
-                  )}
-                  {sentAt && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 ml-6">
-                      Sent {formatDocuSealDate(sentAt)}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-6 sm:ml-0 mt-1 sm:mt-0">
-                  <Badge className={getDocuSealStatusClass(status)}>{status}</Badge>
-                  {showSigned && (
-                    <a
-                      href={signedHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-500 hover:text-blue-400 hover:underline"
-                    >
-                      View signed PDF
-                    </a>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
 
   return (
     <>
@@ -395,11 +244,6 @@ export default function ContactDetailPanel({
                   fallbackUserEmail={user?.email}
                 />
               ),
-            },
-            {
-              title: 'Document signatures',
-              icon: <FileSignature className="w-4 h-4" />,
-              content: documentSignaturesSection,
             },
           ]}
         />
@@ -518,21 +362,6 @@ export default function ContactDetailPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <SendDocumentDialog
-        open={showSendDocDialog}
-        onOpenChange={setShowSendDocDialog}
-        relatedTo="contact"
-        relatedId={contact.id}
-        defaultRecipientName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
-        defaultRecipientEmail={contact.email || ''}
-        onSent={(submission) => {
-          if (submission && typeof submission === 'object') {
-            setSubmissions((prev) => [submission, ...prev]);
-          }
-          loadSubmissions();
-        }}
-      />
     </>
   );
 }

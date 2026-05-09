@@ -1,0 +1,6 @@
+docs(prod): record DocuSeal migrations 159/160/161 applied to prod (4VD-40)
+
+Migrations are already live on prod (ehjlenywplgyiahgxkfj). This commit
+records the change in DATABASE_REFERENCE.md and CHANGELOG.
+
+Closes 4VD-40.

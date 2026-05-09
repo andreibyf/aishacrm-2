@@ -1,0 +1,14 @@
+test(braid): pin .braid @policy <-> TOOL_REGISTRY parity (4VD-38)
+
+Follow-up audit + hardening for PR #565 / 4VD-10 (registry generator
+bug that silently downgraded 10 WRITE_OPERATIONS tools to READ_ONLY).
+
+- Adds backend/__tests__/braid/registry-policy-integration.test.js
+  (5 assertions, all passing) pinning .braid @policy to committed
+  TOOL_REGISTRY policy. Drift between any of the three layers
+  (.braid -> generate-registry.js -> registry.js) breaks CI.
+- Audit log review on prod + staging: zero executions of any of the
+  10 misclassified tools. Bullet dodged.
+- Folds in .gitignore patterns for per-PR scratch/probe scripts.
+
+Closes 4VD-38.
