@@ -24,6 +24,8 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import logger from '../lib/logger.js';
 import { sendTenantEmail } from '../lib/sendTenantEmail.js';
 import { buildSigningRequestEmail } from '../lib/buildSigningRequestEmail.js';
+import { createSendActivity } from '../lib/signingActivityTracker.js';
+import { requireAdminRole } from '../middleware/validateTenant.js';
 import { resolveRequestTenantId } from './templates.js';
 
 // ---------------------------------------------------------------------------
@@ -314,6 +316,19 @@ export default function createSubmissionsRoutes() {
       emailResult = { ok: false, reason: 'send_threw', error: err?.message };
     }
 
+    // 4VD-43 day 4: best-effort activity row so the entity timeline shows
+    // "Document sent — <template>" with a next-day Follow up by, recipient
+    // name, and lifecycle updates as the recipient acts. Non-fatal — a
+    // failure here does NOT undo the signing_session that was just
+    // created. Logged inside the tracker.
+    createSendActivity({
+      supabase,
+      tenantId,
+      session: row,
+      templateName: template.name,
+      assignedTo: req.user?.id || null,
+    }).catch(() => undefined);
+
     return res.status(201).json({
       data: row,
       email: {
@@ -353,7 +368,7 @@ export default function createSubmissionsRoutes() {
     let query = supabase
       .from('signing_sessions')
       .select(
-        'id, template_id, related_to, related_id, recipient_email, recipient_name, status, message, created_at, expires_at, viewed_at, signed_at, completed_at, declined_at, signed_pdf_storage_path',
+        'id, template_id, related_to, related_id, recipient_email, recipient_name, status, message, created_at, expires_at, viewed_at, signed_at, completed_at, declined_at, signed_pdf_storage_path, archived_at, archive_reason, archived_by',
       )
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false });
@@ -381,7 +396,7 @@ export default function createSubmissionsRoutes() {
     const { data, error } = await supabase
       .from('signing_sessions')
       .select(
-        'id, template_id, related_to, related_id, recipient_email, recipient_name, status, message, created_at, expires_at, viewed_at, signed_at, completed_at, declined_at, signed_pdf_storage_path',
+        'id, template_id, related_to, related_id, recipient_email, recipient_name, status, message, created_at, expires_at, viewed_at, signed_at, completed_at, declined_at, signed_pdf_storage_path, archived_at, archive_reason, archived_by',
       )
       .eq('tenant_id', tenantId)
       .eq('id', req.params.id)
@@ -397,6 +412,109 @@ export default function createSubmissionsRoutes() {
     if (!data) {
       return res.status(404).json({ error: 'not_found' });
     }
+    return res.json({ data });
+  });
+
+  // --- POST /api/submissions/:id/archive ----------------------------------
+  // Soft-delete with mandatory reason. Admin-only (per Q1 product
+  // decision). Allowed on any status, including signed/completed (per Q2)
+  // — the audit jsonb keeps the legal chain regardless and the UI line-
+  // throughs the row to signal "this was archived after signing." See
+  // migration 166_signing_sessions_archive_columns.sql for the schema.
+  router.post('/:id/archive', requireAdminRole, async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_context_missing' });
+    }
+
+    const reasonRaw = req.body?.reason;
+    if (typeof reasonRaw !== 'string') {
+      return res.status(400).json({
+        error: 'reason_required',
+        message: 'A reason is required when archiving a signing session.',
+      });
+    }
+    const reason = reasonRaw.trim();
+    if (reason.length === 0) {
+      return res.status(400).json({
+        error: 'reason_required',
+        message: 'A reason is required when archiving a signing session.',
+      });
+    }
+    if (reason.length > 1000) {
+      return res.status(400).json({
+        error: 'reason_too_long',
+        message: 'Reason must be ≤1000 characters.',
+      });
+    }
+
+    const supabase = getSupabaseClient();
+    // Look up the row to confirm it exists in the tenant + isn't already
+    // archived (idempotency — re-archiving a row should be a no-op, not
+    // an error).
+    const { data: existing, error: lookupErr } = await supabase
+      .from('signing_sessions')
+      .select('id, archived_at, audit')
+      .eq('tenant_id', tenantId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (lookupErr) {
+      logger.error('[Submissions] Archive lookup failed', {
+        tenantId,
+        id: req.params.id,
+        message: lookupErr.message,
+      });
+      return res.status(500).json({ error: 'lookup_failed', message: lookupErr.message });
+    }
+    if (!existing) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    if (existing.archived_at) {
+      // Idempotent: already archived. Return 200 with current row so the
+      // UI can refresh without surfacing a "you already deleted this" toast.
+      return res.json({ data: existing, already_archived: true });
+    }
+
+    // Append an audit entry so the legal chain reflects the archive event.
+    const auditEntry = {
+      at: new Date().toISOString(),
+      action: 'archived',
+      ip: req.ip || null,
+      ua: (req.headers?.['user-agent'] || '').slice(0, 1024) || null,
+      reason,
+      by: req.user?.id || null,
+    };
+    const newAudit = Array.isArray(existing.audit) ? [...existing.audit, auditEntry] : [auditEntry];
+
+    const { data, error } = await supabase
+      .from('signing_sessions')
+      .update({
+        archived_at: new Date().toISOString(),
+        archive_reason: reason,
+        archived_by: req.user?.id || null,
+        audit: newAudit,
+      })
+      .eq('tenant_id', tenantId)
+      .eq('id', req.params.id)
+      .is('archived_at', null) // belt-and-suspenders against race
+      .select(
+        'id, status, archived_at, archive_reason, archived_by',
+      )
+      .maybeSingle();
+    if (error) {
+      logger.error('[Submissions] Archive update failed', {
+        tenantId,
+        id: req.params.id,
+        message: error.message,
+      });
+      return res.status(500).json({ error: 'archive_failed', message: error.message });
+    }
+    if (!data) {
+      // Race: another writer archived it between our lookup and update.
+      // Treat as already-archived (idempotent).
+      return res.json({ data: { id: req.params.id }, already_archived: true });
+    }
+
     return res.json({ data });
   });
 

@@ -272,3 +272,118 @@ describe('Role gate — POST/GET open to all roles', () => {
     assert.equal(body.error, 'invalid_related_id');
   });
 });
+
+// ---------------------------------------------------------------------------
+// POST /api/submissions/:id/archive — admin-only soft-delete with reason
+// ---------------------------------------------------------------------------
+
+describe('POST /api/submissions/:id/archive — role + reason validation', () => {
+  function buildApp(user) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = user;
+      req.tenant = { id: TENANT_A };
+      next();
+    });
+    app.use('/api/submissions', createSubmissionsRoutes());
+    return app;
+  }
+
+  async function send(app, method, path, body) {
+    const { default: http } = await import('node:http');
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(app).listen(0, async () => {
+        try {
+          const port = server.address().port;
+          const init = { method, headers: { 'Content-Type': 'application/json' } };
+          if (body !== undefined) init.body = JSON.stringify(body);
+          const resp = await fetch(`http://127.0.0.1:${port}${path}`, init);
+          const json = await resp.json().catch(() => ({}));
+          server.close();
+          resolve({ status: resp.status, body: json });
+        } catch (err) {
+          server.close();
+          reject(err);
+        }
+      });
+    });
+  }
+
+  const ARCHIVE_TARGET_ID = '11111111-2222-3333-4444-555555555555';
+
+  test('archive as employee -> 403', async () => {
+    const app = buildApp({ id: 'u1', role: 'employee' });
+    const { status } = await send(app, 'POST', `/api/submissions/${ARCHIVE_TARGET_ID}/archive`, {
+      reason: 'wrong template',
+    });
+    assert.equal(status, 403);
+  });
+
+  test('archive as manager -> 403', async () => {
+    const app = buildApp({ id: 'u2', role: 'manager' });
+    const { status } = await send(app, 'POST', `/api/submissions/${ARCHIVE_TARGET_ID}/archive`, {
+      reason: 'wrong template',
+    });
+    assert.equal(status, 403);
+  });
+
+  test('archive as admin missing reason -> 400 reason_required', async () => {
+    const app = buildApp({ id: 'u3', role: 'admin' });
+    const { status, body } = await send(
+      app,
+      'POST',
+      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
+      {},
+    );
+    assert.equal(status, 400);
+    assert.equal(body.error, 'reason_required');
+  });
+
+  test('archive as admin with empty/whitespace reason -> 400', async () => {
+    const app = buildApp({ id: 'u4', role: 'admin' });
+    const { status, body } = await send(
+      app,
+      'POST',
+      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
+      { reason: '   ' },
+    );
+    assert.equal(status, 400);
+    assert.equal(body.error, 'reason_required');
+  });
+
+  test('archive as admin with reason >1000 chars -> 400', async () => {
+    const app = buildApp({ id: 'u5', role: 'admin' });
+    const { status, body } = await send(
+      app,
+      'POST',
+      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
+      { reason: 'x'.repeat(1001) },
+    );
+    assert.equal(status, 400);
+    assert.equal(body.error, 'reason_too_long');
+  });
+
+  test('archive as admin with valid reason -> NOT 403 (passes role gate; DB error from no-supabase env is fine)', async () => {
+    const app = buildApp({ id: 'u6', role: 'admin' });
+    const { status } = await send(
+      app,
+      'POST',
+      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
+      { reason: 'wrong template attached' },
+    );
+    assert.notEqual(status, 403);
+    assert.notEqual(status, 400); // body validation passes
+  });
+
+  test('archive as superadmin passes role gate', async () => {
+    const app = buildApp({ id: 'u7', role: 'superadmin' });
+    const { status } = await send(
+      app,
+      'POST',
+      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
+      { reason: 'cleanup' },
+    );
+    assert.notEqual(status, 403);
+  });
+});

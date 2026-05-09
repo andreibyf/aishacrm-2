@@ -44,6 +44,11 @@
 import express from 'express';
 import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import logger from '../lib/logger.js';
+import {
+  updateActivityForView,
+  updateActivityForSign,
+  updateActivityForDecline,
+} from '../lib/signingActivityTracker.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -54,6 +59,7 @@ const TERMINAL_STATUSES = new Set(['signed', 'completed', 'declined', 'expired']
 const MAX_DECLINE_REASON_LENGTH = 1000;
 const MAX_FIELD_VALUE_STRING_LENGTH = 5000;
 const MAX_SIGNATURE_DATA_URL_BYTES = 1_500_000; // ~1.5MB worth of base64 PNG
+const MAX_SIGNER_NAME_LENGTH = 200;
 const SIGNATURE_DATA_URL_RE = /^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/;
 
 // ---------------------------------------------------------------------------
@@ -183,11 +189,27 @@ export function validateSubmitInput(body, templateFields) {
       ? /** @type {Record<string, unknown>} */ (obj.field_values)
       : {};
 
-  // Pass 0 — parse + validate the top-level signature_data_url FIRST so
-  // signature fields in the loop below can consider it as already-supplied
-  // when checking the required flag. (Fixed order: previous version threw
-  // 'required field missing' on signature fields before this branch ran,
-  // even when the recipient had supplied a top-level signature.)
+  // Pass 0 — parse + validate the top-level signer_name and signature_data_url
+  // FIRST so signature fields in the loop below can consider them as
+  // already-supplied when checking the required flag. (Fixed order:
+  // earlier draft threw 'required field missing' on signature fields
+  // before these branches ran.)
+  let signerName = null;
+  if (obj.signer_name !== undefined && obj.signer_name !== null) {
+    if (typeof obj.signer_name !== 'string') {
+      const err = new TypeError('signer_name must be a string when provided');
+      err.code = 'invalid_signer_name';
+      throw err;
+    }
+    const trimmed = obj.signer_name.trim();
+    if (trimmed.length > MAX_SIGNER_NAME_LENGTH) {
+      const err = new RangeError(`signer_name must be ≤${MAX_SIGNER_NAME_LENGTH} chars`);
+      err.code = 'signer_name_too_long';
+      throw err;
+    }
+    signerName = trimmed.length > 0 ? trimmed : null;
+  }
+
   let signatureDataUrl = null;
   if (obj.signature_data_url !== undefined && obj.signature_data_url !== null) {
     if (typeof obj.signature_data_url !== 'string') {
@@ -276,22 +298,34 @@ export function validateSubmitInput(body, templateFields) {
 
   // Cross-check: a template with at least one required signature field
   // must see a signature value somewhere — either the top-level URL or
-  // any per-field value captured above.
+  // any per-field value captured above. Same template ALSO requires a
+  // signer_name so day 5's pdf-lib stamp can attribute the signature.
   const hasRequiredSignature = templateFields.some(
     (f) => f && f.type === 'signature' && f.required,
   );
-  if (hasRequiredSignature && !signatureDataUrl) {
-    const anyPerField = templateFields
-      .filter((f) => f.type === 'signature')
-      .some((f) => typeof out[f.name] === 'string' && out[f.name].length > 0);
-    if (!anyPerField) {
+  if (hasRequiredSignature) {
+    const hasAnySig =
+      !!signatureDataUrl ||
+      templateFields
+        .filter((f) => f.type === 'signature')
+        .some((f) => typeof out[f.name] === 'string' && out[f.name].length > 0);
+    if (!hasAnySig) {
       const err = new RangeError('a signature is required to submit this document');
       err.code = 'signature_required';
       throw err;
     }
+    if (!signerName) {
+      const err = new RangeError('a signer name is required to submit this document');
+      err.code = 'signer_name_required';
+      throw err;
+    }
   }
 
-  return { field_values: out, signature_data_url: signatureDataUrl };
+  return {
+    field_values: out,
+    signature_data_url: signatureDataUrl,
+    signer_name: signerName,
+  };
 }
 
 /**
@@ -426,6 +460,13 @@ export default function createPublicSignRoutes() {
       })
       .eq('id', session.id);
 
+    // Best-effort timeline activity update — non-fatal.
+    updateActivityForView({
+      supabase,
+      tenantId: session.tenant_id,
+      signingSessionId: session.id,
+    }).catch(() => undefined);
+
     // Branding payload — frontend renders the public sign page in tenant
     // colors with the tenant logo.
     const branding = {
@@ -512,13 +553,17 @@ export default function createPublicSignRoutes() {
       });
     }
 
-    // Stash signature on the field_values map under a reserved key so day
-    // 5's pdf-lib stamper has a single place to read it from. The schema
-    // already accepts arbitrary jsonb on field_values; using a key with a
-    // leading underscore avoids collisions with template-defined names.
+    // Stash signature + signer name on field_values under reserved keys
+    // so day 5's pdf-lib stamper has a single place to read them. The
+    // schema already accepts arbitrary jsonb on field_values; the
+    // leading-underscore prefix avoids collisions with template-defined
+    // names.
     const persistedValues = { ...parsed.field_values };
     if (parsed.signature_data_url) {
       persistedValues._signature_data_url = parsed.signature_data_url;
+    }
+    if (parsed.signer_name) {
+      persistedValues._signer_name = parsed.signer_name;
     }
 
     const auditEntry = makeAuditEntry({
@@ -526,6 +571,7 @@ export default function createPublicSignRoutes() {
       ip: extractClientIp(req),
       ua: extractClientUa(req),
     });
+    if (parsed.signer_name) auditEntry.signer_name = parsed.signer_name;
     const newAudit = appendAudit(session.audit, auditEntry);
     const nowIso = new Date().toISOString();
 
@@ -548,6 +594,14 @@ export default function createPublicSignRoutes() {
       });
       return res.status(500).json({ error: 'update_failed' });
     }
+
+    // Best-effort timeline activity transition — non-fatal.
+    updateActivityForSign({
+      supabase,
+      tenantId: session.tenant_id,
+      signingSessionId: session.id,
+      signerName: parsed.signer_name || undefined,
+    }).catch(() => undefined);
 
     return res.json({ data });
   });
@@ -612,6 +666,14 @@ export default function createPublicSignRoutes() {
       });
       return res.status(500).json({ error: 'update_failed' });
     }
+
+    // Best-effort timeline activity transition — non-fatal.
+    updateActivityForDecline({
+      supabase,
+      tenantId: session.tenant_id,
+      signingSessionId: session.id,
+      reason: reason || undefined,
+    }).catch(() => undefined);
 
     return res.json({ data });
   });

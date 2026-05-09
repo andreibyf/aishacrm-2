@@ -194,16 +194,22 @@ describe('validateSubmitInput — happy path', () => {
       {
         field_values: { name: 'Jane Doe' },
         signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane Doe',
       },
       [SIG_FIELD, REQUIRED_TEXT_FIELD],
     );
     assert.equal(out.field_values.name, 'Jane Doe');
     assert.equal(out.signature_data_url, TINY_PNG_DATA_URL);
+    assert.equal(out.signer_name, 'Jane Doe');
   });
 
   test('coerces checkbox to boolean', () => {
     const out = validateSubmitInput(
-      { field_values: { agree: 'yes-truthy-string' }, signature_data_url: TINY_PNG_DATA_URL },
+      {
+        field_values: { agree: 'yes-truthy-string' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
       [SIG_FIELD, CHECKBOX_FIELD],
     );
     assert.equal(out.field_values.agree, true);
@@ -214,6 +220,7 @@ describe('validateSubmitInput — happy path', () => {
       {
         field_values: { name: 'Jane', evil_extra: 'should be dropped' },
         signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
       },
       [SIG_FIELD, REQUIRED_TEXT_FIELD],
     );
@@ -222,11 +229,27 @@ describe('validateSubmitInput — happy path', () => {
 
   test('omits optional fields when not provided', () => {
     const out = validateSubmitInput(
-      { field_values: { name: 'Jane' }, signature_data_url: TINY_PNG_DATA_URL },
+      {
+        field_values: { name: 'Jane' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
       [SIG_FIELD, REQUIRED_TEXT_FIELD, TEXT_FIELD],
     );
     assert.equal(out.field_values.company, undefined);
     assert.equal(out.field_values.name, 'Jane');
+  });
+
+  test('signer_name is trimmed', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: '  Jane Doe  ',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.signer_name, 'Jane Doe');
   });
 });
 
@@ -238,7 +261,7 @@ describe('validateSubmitInput — rejects bad input', () => {
     assert.throws(
       () =>
         validateSubmitInput(
-          { signature_data_url: TINY_PNG_DATA_URL },
+          { signature_data_url: TINY_PNG_DATA_URL, signer_name: 'Jane' },
           [SIG_FIELD, REQUIRED_TEXT_FIELD],
         ),
       /required field "name" is missing/,
@@ -248,7 +271,11 @@ describe('validateSubmitInput — rejects bad input', () => {
     assert.throws(
       () =>
         validateSubmitInput(
-          { field_values: { name: '' }, signature_data_url: TINY_PNG_DATA_URL },
+          {
+            field_values: { name: '' },
+            signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: 'Jane',
+          },
           [SIG_FIELD, REQUIRED_TEXT_FIELD],
         ),
       /required field "name" is missing/,
@@ -261,6 +288,7 @@ describe('validateSubmitInput — rejects bad input', () => {
           {
             field_values: { name: 'Jane', company: 'x'.repeat(5001) },
             signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: 'Jane',
           },
           [SIG_FIELD, REQUIRED_TEXT_FIELD, TEXT_FIELD],
         ),
@@ -271,7 +299,11 @@ describe('validateSubmitInput — rejects bad input', () => {
     assert.throws(
       () =>
         validateSubmitInput(
-          { field_values: { name: { evil: 'object' } }, signature_data_url: TINY_PNG_DATA_URL },
+          {
+            field_values: { name: { evil: 'object' } },
+            signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: 'Jane',
+          },
           [SIG_FIELD, REQUIRED_TEXT_FIELD],
         ),
       /must be a string or number/,
@@ -284,6 +316,7 @@ describe('validateSubmitInput — rejects bad input', () => {
           {
             field_values: { name: 'Jane' },
             signature_data_url: 'data:application/pdf;base64,JVBERi0xLjQK',
+            signer_name: 'Jane',
           },
           [SIG_FIELD, REQUIRED_TEXT_FIELD],
         ),
@@ -293,7 +326,10 @@ describe('validateSubmitInput — rejects bad input', () => {
   test('signature missing entirely when template has required signature', () => {
     assert.throws(
       () =>
-        validateSubmitInput({ field_values: { name: 'Jane' } }, [SIG_FIELD, REQUIRED_TEXT_FIELD]),
+        validateSubmitInput({ field_values: { name: 'Jane' }, signer_name: 'Jane' }, [
+          SIG_FIELD,
+          REQUIRED_TEXT_FIELD,
+        ]),
       /a signature is required/,
     );
   });
@@ -302,10 +338,62 @@ describe('validateSubmitInput — rejects bad input', () => {
     assert.throws(
       () =>
         validateSubmitInput(
-          { field_values: { name: 'Jane' }, signature_data_url: huge },
+          { field_values: { name: 'Jane' }, signature_data_url: huge, signer_name: 'Jane' },
           [SIG_FIELD, REQUIRED_TEXT_FIELD],
         ),
       /exceeds size limit/,
+    );
+  });
+  test('signer_name missing when template has required signature', () => {
+    assert.throws(
+      () =>
+        validateSubmitInput(
+          { field_values: { name: 'Jane' }, signature_data_url: TINY_PNG_DATA_URL },
+          [SIG_FIELD, REQUIRED_TEXT_FIELD],
+        ),
+      /a signer name is required/,
+    );
+  });
+  test('signer_name empty/whitespace when required', () => {
+    assert.throws(
+      () =>
+        validateSubmitInput(
+          {
+            field_values: { name: 'Jane' },
+            signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: '   ',
+          },
+          [SIG_FIELD, REQUIRED_TEXT_FIELD],
+        ),
+      /a signer name is required/,
+    );
+  });
+  test('signer_name >200 chars rejected', () => {
+    assert.throws(
+      () =>
+        validateSubmitInput(
+          {
+            field_values: { name: 'Jane' },
+            signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: 'x'.repeat(201),
+          },
+          [SIG_FIELD, REQUIRED_TEXT_FIELD],
+        ),
+      /signer_name must be ≤200 chars/,
+    );
+  });
+  test('signer_name non-string rejected', () => {
+    assert.throws(
+      () =>
+        validateSubmitInput(
+          {
+            field_values: { name: 'Jane' },
+            signature_data_url: TINY_PNG_DATA_URL,
+            signer_name: 123,
+          },
+          [SIG_FIELD, REQUIRED_TEXT_FIELD],
+        ),
+      /signer_name must be a string/,
     );
   });
 });
