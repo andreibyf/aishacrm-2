@@ -1,11 +1,11 @@
+import { useState } from 'react';
 import UniversalDetailPanel from '../shared/UniversalDetailPanel';
-import { Building2, UserCheck, CalendarCheck } from 'lucide-react';
+import { Building2, UserCheck, CalendarCheck, FileSignature } from 'lucide-react';
 import AssignmentHistory from './AssignmentHistory';
 import BookingWidget from '../scheduling/BookingWidget';
-// 4VD-43: Send Document + Document signatures sections were removed when
-// DocuSeal was decommissioned (2026-05-09). They will be re-introduced in
-// 4VD-43 day 2+ on top of the new signing_sessions / signing_templates
-// schema.
+import SendDocumentDialog from '../signing/SendDocumentDialog';
+import DocumentSignaturesSection from '../signing/DocumentSignaturesSection';
+import { useSigningSessions } from '../signing/useSigningSessions';
 import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
 import ErrorBoundary from '../shared/ErrorBoundary';
 
@@ -20,6 +20,18 @@ export default function LeadDetailPanel({
   user,
   associatedAccountName,
 }) {
+  const [showSendDocDialog, setShowSendDocDialog] = useState(false);
+  const {
+    sessions,
+    loading: sessionsLoading,
+    error: sessionsError,
+    refresh: refreshSessions,
+  } = useSigningSessions({
+    enabled: !!open && !!lead?.id,
+    relatedTo: 'lead',
+    relatedId: lead?.id,
+  });
+
   if (!lead) {
     return null;
   }
@@ -47,6 +59,14 @@ export default function LeadDetailPanel({
     });
   }
 
+  // Send Document is available regardless of lead status — sales workflows
+  // routinely require an NDA or contract before conversion is possible.
+  customActions.push({
+    label: 'Send Document',
+    icon: <FileSignature className="w-4 h-4" />,
+    onClick: () => setShowSendDocDialog(true),
+  });
+
   const detailDisplayData = {
     'Associated Account': associatedAccountName ? (
       <div className="text-slate-200 font-medium mt-1 flex items-center gap-2">
@@ -65,39 +85,62 @@ export default function LeadDetailPanel({
   };
 
   return (
-    <ErrorBoundary variant="inline" label={`LeadDetailPanel[id=${lead?.id}]`}>
-      <UniversalDetailPanel
-        entity={lead}
-        entityType="lead"
-        open={open}
-        onOpenChange={onOpenChange}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        user={user}
-        displayData={detailDisplayData}
-        customActions={customActions}
-        showNotes={true}
-        customSections={[
-          {
-            content: <CustomFieldsDisplay entityType="Lead" metadata={lead.metadata} showHeader />,
-          },
-          {
-            title: 'Session Booking',
-            icon: <CalendarCheck className="w-4 h-4" />,
-            content: (
-              <BookingWidget
-                contactName={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
-                contactEmail={lead.email}
-                leadId={lead.id}
-                tenantId={lead.tenant_id || user?.tenant_id}
-                assignedTo={lead.assigned_to}
-                fallbackLinkedUserId={user?.id || user?.user_id}
-                fallbackUserEmail={user?.email}
-              />
-            ),
-          },
-        ]}
+    <>
+      <ErrorBoundary variant="inline" label={`LeadDetailPanel[id=${lead?.id}]`}>
+        <UniversalDetailPanel
+          entity={lead}
+          entityType="lead"
+          open={open}
+          onOpenChange={onOpenChange}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          user={user}
+          displayData={detailDisplayData}
+          customActions={customActions}
+          showNotes={true}
+          customSections={[
+            {
+              content: <CustomFieldsDisplay entityType="Lead" metadata={lead.metadata} showHeader />,
+            },
+            {
+              title: 'Session Booking',
+              icon: <CalendarCheck className="w-4 h-4" />,
+              content: (
+                <BookingWidget
+                  contactName={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
+                  contactEmail={lead.email}
+                  leadId={lead.id}
+                  tenantId={lead.tenant_id || user?.tenant_id}
+                  assignedTo={lead.assigned_to}
+                  fallbackLinkedUserId={user?.id || user?.user_id}
+                  fallbackUserEmail={user?.email}
+                />
+              ),
+            },
+            {
+              title: 'Document signatures',
+              icon: <FileSignature className="w-4 h-4" />,
+              content: (
+                <DocumentSignaturesSection
+                  sessions={sessions}
+                  loading={sessionsLoading}
+                  error={sessionsError}
+                />
+              ),
+            },
+          ]}
+        />
+      </ErrorBoundary>
+
+      <SendDocumentDialog
+        open={showSendDocDialog}
+        onOpenChange={setShowSendDocDialog}
+        relatedTo="lead"
+        relatedId={lead.id}
+        defaultRecipientEmail={lead.email || ''}
+        defaultRecipientName={`${lead.first_name || ''} ${lead.last_name || ''}`.trim()}
+        onSent={refreshSessions}
       />
-    </ErrorBoundary>
+    </>
   );
 }

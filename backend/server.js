@@ -186,6 +186,7 @@ import createBillingAdminRoutes from './routes/billing-admin.js';
 import { stripePlatformWebhookRouter } from './routes/stripe-platform-webhook.js';
 import createStorageRoutes from './routes/storage.js';
 import createTemplatesRoutes from './routes/templates.js'; // 4VD-43 in-house eSign engine
+import createSubmissionsRoutes from './routes/submissions.js'; // 4VD-43 day 2 send-for-signing
 import createWebhookRoutes from './routes/webhooks.js';
 import createSystemRoutes from './routes/system.js';
 import createSystemSettingsRoutes from './routes/system-settings.js';
@@ -349,6 +350,18 @@ app.use(
   authenticateRequest,
   validateTenantAccess,
   createTemplatesRoutes(measuredPgPool),
+);
+// 4VD-43 day 2: /api/submissions creates signing_sessions + sends the
+// branded email. Same middleware chain as /api/templates so req.tenant.id
+// is populated. POST is open to all roles (no requireAdminRole) — sales
+// reps + AEs send templates routinely; only template authoring is
+// admin-gated.
+app.use(
+  '/api/submissions',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createSubmissionsRoutes(),
 );
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));

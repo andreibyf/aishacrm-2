@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import UniversalDetailPanel from '../shared/UniversalDetailPanel';
 import BookingWidget from '../scheduling/BookingWidget';
-// 4VD-43: Send Document + Document signatures sections were removed when
-// DocuSeal was decommissioned (2026-05-09). They will be re-introduced in
-// 4VD-43 day 2+ on top of the new signing_sessions / signing_templates
-// schema. Nothing currently consumes these surfaces in the UI.
-import { Star, Phone, Mail, CalendarCheck } from 'lucide-react';
+import SendDocumentDialog from '../signing/SendDocumentDialog';
+import DocumentSignaturesSection from '../signing/DocumentSignaturesSection';
+import { useSigningSessions } from '../signing/useSigningSessions';
+import { Star, Phone, Mail, CalendarCheck, FileSignature } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
 import ErrorBoundary from '../shared/ErrorBoundary';
@@ -42,6 +41,17 @@ export default function ContactDetailPanel({
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
+  const [showSendDocDialog, setShowSendDocDialog] = useState(false);
+  const {
+    sessions,
+    loading: sessionsLoading,
+    error: sessionsError,
+    refresh: refreshSessions,
+  } = useSigningSessions({
+    enabled: !!open && !!contact?.id,
+    relatedTo: 'contact',
+    relatedId: contact?.id,
+  });
 
   if (!contact) {
     return null;
@@ -180,6 +190,12 @@ export default function ContactDetailPanel({
   }
 
   customActions.push({
+    label: 'Send Document',
+    icon: <FileSignature className="w-4 h-4" />,
+    onClick: () => setShowSendDocDialog(true),
+  });
+
+  customActions.push({
     label: 'Convert to Lead',
     icon: <Star className="w-4 h-4" />,
     onClick: (contact) => {
@@ -242,6 +258,17 @@ export default function ContactDetailPanel({
                   assignedTo={contact.assigned_to}
                   fallbackLinkedUserId={user?.id || user?.user_id}
                   fallbackUserEmail={user?.email}
+                />
+              ),
+            },
+            {
+              title: 'Document signatures',
+              icon: <FileSignature className="w-4 h-4" />,
+              content: (
+                <DocumentSignaturesSection
+                  sessions={sessions}
+                  loading={sessionsLoading}
+                  error={sessionsError}
                 />
               ),
             },
@@ -362,6 +389,16 @@ export default function ContactDetailPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SendDocumentDialog
+        open={showSendDocDialog}
+        onOpenChange={setShowSendDocDialog}
+        relatedTo="contact"
+        relatedId={contact.id}
+        defaultRecipientEmail={contact.email || ''}
+        defaultRecipientName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+        onSent={refreshSessions}
+      />
     </>
   );
 }

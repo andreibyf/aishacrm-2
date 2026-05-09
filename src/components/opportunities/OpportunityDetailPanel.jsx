@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CustomFieldsDisplay } from '../shared/CustomFieldsDisplay';
 import ErrorBoundary from '../shared/ErrorBoundary';
-// 4VD-43: Send Document + Document Signatures sections were removed when
-// DocuSeal was decommissioned (2026-05-09). They will be re-introduced in
-// 4VD-43 day 2+ on top of the new signing_sessions / signing_templates
-// schema.
+import SendDocumentDialog from '../signing/SendDocumentDialog';
+import DocumentSignaturesSection from '../signing/DocumentSignaturesSection';
+import { useSigningSessions } from '../signing/useSigningSessions';
 
 import {
   DropdownMenu,
@@ -29,6 +28,7 @@ import {
   Mail,
   CheckCircle,
   FileText,
+  FileSignature,
   Presentation,
   ExternalLink,
   ChevronDown,
@@ -57,7 +57,18 @@ export default function OpportunityDetailPanel({
   const [relatedActivities, setRelatedActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [creatingActivity, setCreatingActivity] = useState(false);
+  const [showSendDocDialog, setShowSendDocDialog] = useState(false);
   const { getCardLabel } = useStatusCardPreferences();
+  const {
+    sessions: signingSessions,
+    loading: signingLoading,
+    error: signingError,
+    refresh: refreshSigning,
+  } = useSigningSessions({
+    enabled: !!localOpportunity?.id,
+    relatedTo: 'opportunity',
+    relatedId: localOpportunity?.id,
+  });
 
   const stageToCardId = {
     closed_won: 'opportunity_won',
@@ -354,6 +365,16 @@ export default function OpportunityDetailPanel({
               Edit
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSendDocDialog(true)}
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              <FileSignature className="w-4 h-4 mr-2" />
+              Send Document
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -570,6 +591,25 @@ export default function OpportunityDetailPanel({
             </CardContent>
           </Card>
 
+          {/* Document Signatures (4VD-43 day 2) — signing_sessions tied to
+              this opportunity. Tenant-isolated via the API; rows refresh
+              every 30s while the panel is open + on demand after sending. */}
+          <Card className="bg-slate-700/50 border-slate-600">
+            <CardHeader>
+              <CardTitle className="text-slate-200 flex items-center gap-2">
+                <FileSignature className="w-5 h-5 text-blue-400" />
+                Document Signatures ({signingSessions.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DocumentSignaturesSection
+                sessions={signingSessions}
+                loading={signingLoading}
+                error={signingError}
+              />
+            </CardContent>
+          </Card>
+
           {/* Description */}
           {localOpportunity.description && (
             <Card className="bg-slate-700/50 border-slate-600">
@@ -672,6 +712,16 @@ export default function OpportunityDetailPanel({
           </Card>
         </div>
       </div>
+
+      <SendDocumentDialog
+        open={showSendDocDialog}
+        onOpenChange={setShowSendDocDialog}
+        relatedTo="opportunity"
+        relatedId={localOpportunity?.id}
+        defaultRecipientEmail=""
+        defaultRecipientName={localOpportunity?.name || ''}
+        onSent={refreshSigning}
+      />
     </ErrorBoundary>
   );
 }
