@@ -1,18 +1,40 @@
 // @ts-check
 /**
- * DocumentSignaturesSection (4VD-43 day 2).
+ * DocumentSignaturesSection (4VD-43 day 4b).
  *
  * Shared section rendering signing_sessions for a single CRM entity.
  * Used by Contact / Lead / Account / Opportunity detail panels so the
- * status badge palette + layout are consistent everywhere.
+ * status-badge palette + layout are consistent everywhere.
  *
- * Status palette mirrors the previous DocuSeal-era look so the UI feels
- * unchanged from the operator's perspective; the underlying source is
- * now signing_sessions, not docuseal_submissions.
+ * Day 4b additions over day 2:
+ *   - Archived rows (`archived_at != null`) render with strike-through
+ *     + a muted subtitle showing the archive reason.
+ *   - Per-row Delete (Trash2) button, visible only to admin/superadmin,
+ *     opens a modal that requires a non-empty reason. POSTs to
+ *     /api/submissions/:id/archive then calls onArchived() so the
+ *     parent panel re-fetches the list.
  */
 
+import { useCallback, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { FileText, Trash2, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useUser } from '@/components/shared/useUser.js';
+import { getBackendUrl } from '@/api/backendUrl';
+import { getAuthorizationHeader } from '@/api/functions';
 
 const STATUS_BADGE_CLASS = {
   pending: 'bg-blue-100 text-blue-800 border border-blue-200',
@@ -39,13 +61,84 @@ function formatDate(value) {
   }
 }
 
+function userCanArchive(user) {
+  if (!user) return false;
+  if (user.is_superadmin === true) return true;
+  const role = String(user.role || '').trim().toLowerCase();
+  return role === 'superadmin' || role === 'super_admin' || role === 'admin';
+}
+
+async function authHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  const auth = await getAuthorizationHeader();
+  if (auth) headers['Authorization'] = auth;
+  if (typeof localStorage !== 'undefined') {
+    const t =
+      localStorage.getItem('selected_tenant_id') ||
+      localStorage.getItem('tenant_id') ||
+      '';
+    if (t) headers['x-tenant-id'] = t;
+  }
+  return headers;
+}
+
+async function postArchive(id, reason) {
+  const url = `${getBackendUrl()}/api/submissions/${encodeURIComponent(id)}/archive`;
+  const headers = await authHeaders();
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ reason }),
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(json?.message || json?.error || `Archive failed (${resp.status})`);
+    err.status = resp.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
 /**
  * @param {Object} props
- * @param {Array} props.sessions  — rows from GET /api/submissions
+ * @param {Array} props.sessions
  * @param {boolean} props.loading
  * @param {string|null} [props.error]
+ * @param {() => void} [props.onArchived] — caller refresh hook
  */
-export default function DocumentSignaturesSection({ sessions, loading, error = null }) {
+export default function DocumentSignaturesSection({
+  sessions,
+  loading,
+  error = null,
+  onArchived,
+}) {
+  const { user } = useUser();
+  const canArchive = userCanArchive(user);
+  const [pendingArchive, setPendingArchive] = useState(null); // { id, label }
+  const [archiveReason, setArchiveReason] = useState('');
+  const [archiving, setArchiving] = useState(false);
+
+  const handleConfirmArchive = useCallback(async () => {
+    if (!pendingArchive || archiveReason.trim().length === 0) return;
+    setArchiving(true);
+    try {
+      await postArchive(pendingArchive.id, archiveReason.trim());
+      toast.success(`Archived "${pendingArchive.label}"`);
+      setPendingArchive(null);
+      setArchiveReason('');
+      onArchived?.();
+    } catch (err) {
+      const msg = err.body?.message
+        ? `${err.message}: ${err.body.message}`.slice(0, 400)
+        : err.message;
+      toast.error(msg);
+    } finally {
+      setArchiving(false);
+    }
+  }, [pendingArchive, archiveReason, onArchived]);
+
   if (error) {
     return (
       <div className="rounded-md border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3">
@@ -55,67 +148,157 @@ export default function DocumentSignaturesSection({ sessions, loading, error = n
   }
 
   return (
-    <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
-      {loading && sessions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Loading documents…</p>
-      ) : sessions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No documents sent yet.</p>
-      ) : (
-        <ul className="space-y-3">
-          {sessions.map((s) => {
-            const status = String(s.status || 'pending').toLowerCase();
-            // Template name isn't denormalized onto signing_sessions yet; show
-            // the template_id-shortened or a "Document" fallback. Day 6 can
-            // join template name into the API response if needed.
-            const label = s.template_name || `Document ${(s.template_id || '').slice(0, 8)}`;
-            const recipient = s.recipient_name
-              ? `${s.recipient_name} <${s.recipient_email}>`
-              : s.recipient_email;
-            const sentAt = s.created_at;
-            const completedAt = s.completed_at || s.signed_at;
-            const signedHref = s.signed_pdf_storage_path || null; // day 5 will mint a signed URL helper
-            const showSigned =
-              (status === 'completed' || status === 'signed') && signedHref;
-            return (
-              <li
-                key={s.id}
-                className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-                      {label}
-                    </span>
+    <>
+      <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+        {loading && sessions.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading documents…</p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">No documents sent yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {sessions.map((s) => {
+              const status = String(s.status || 'pending').toLowerCase();
+              const isArchived = !!s.archived_at;
+              const label =
+                s.template_name ||
+                `Document ${(s.template_id || '').slice(0, 8)}`;
+              const recipient = s.recipient_name
+                ? `${s.recipient_name} <${s.recipient_email}>`
+                : s.recipient_email;
+              const sentAt = s.created_at;
+              const completedAt = s.completed_at || s.signed_at;
+              return (
+                <li
+                  key={s.id}
+                  className={
+                    'flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between' +
+                    (isArchived ? ' opacity-70' : '')
+                  }
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span
+                        className={
+                          'text-sm font-medium truncate ' +
+                          (isArchived
+                            ? 'line-through text-slate-500 dark:text-slate-400'
+                            : 'text-slate-800 dark:text-slate-200')
+                        }
+                      >
+                        {label}
+                      </span>
+                    </div>
+                    {recipient && (
+                      <p
+                        className={
+                          'text-xs ml-6 truncate ' +
+                          (isArchived
+                            ? 'line-through text-slate-400'
+                            : 'text-slate-500 dark:text-slate-400')
+                        }
+                      >
+                        {recipient}
+                      </p>
+                    )}
+                    {sentAt && (
+                      <p
+                        className={
+                          'text-xs ml-6 ' +
+                          (isArchived
+                            ? 'line-through text-slate-400'
+                            : 'text-slate-500 dark:text-slate-400')
+                        }
+                      >
+                        Sent {formatDate(sentAt)}
+                        {completedAt ? ` · Completed ${formatDate(completedAt)}` : ''}
+                      </p>
+                    )}
+                    {isArchived ? (
+                      <p className="text-xs ml-6 mt-1 italic text-amber-700 dark:text-amber-400">
+                        Archived {formatDate(s.archived_at)} —{' '}
+                        {s.archive_reason || '(no reason recorded)'}
+                      </p>
+                    ) : null}
                   </div>
-                  {recipient && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 ml-6 truncate">
-                      {recipient}
-                    </p>
-                  )}
-                  {sentAt && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 ml-6">
-                      Sent {formatDate(sentAt)}
-                      {completedAt ? ` · Completed ${formatDate(completedAt)}` : ''}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-6 sm:ml-0 mt-1 sm:mt-0">
-                  <Badge className={getStatusClass(status)}>{status}</Badge>
-                  {showSigned && (
-                    <span
-                      className="text-xs text-slate-500 dark:text-slate-400 italic"
-                      title="Signed PDF available — public URL helper ships with 4VD-43 day 5"
-                    >
-                      signed PDF stamping ships day 5
-                    </span>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+                  <div className="flex items-center gap-2 ml-6 sm:ml-0 mt-1 sm:mt-0">
+                    {isArchived ? (
+                      <Badge variant="outline">archived</Badge>
+                    ) : (
+                      <Badge className={getStatusClass(status)}>{status}</Badge>
+                    )}
+                    {canArchive && !isArchived ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Delete"
+                        onClick={() =>
+                          setPendingArchive({ id: s.id, label })
+                        }
+                        className="text-destructive hover:text-destructive h-7 px-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <AlertDialog
+        open={!!pendingArchive}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPendingArchive(null);
+            setArchiveReason('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this signing session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingArchive?.label
+                ? `"${pendingArchive.label}" will be soft-deleted and rendered with a line through it. The audit trail (legal record) is preserved.`
+                : 'This signing session will be soft-deleted.'}{' '}
+              A reason is required and visible to anyone reviewing the timeline.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="archive-reason">Reason (required)</Label>
+            <Textarea
+              id="archive-reason"
+              rows={3}
+              maxLength={1000}
+              value={archiveReason}
+              onChange={(e) => setArchiveReason(e.target.value)}
+              placeholder="e.g. wrong template attached, recipient asked to redo, etc."
+            />
+            <p className="text-xs text-muted-foreground">
+              {archiveReason.length} / 1000
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmArchive}
+              disabled={archiving || archiveReason.trim().length === 0}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {archiving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Deleting…
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

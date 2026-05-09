@@ -81,6 +81,7 @@ export default function AccountDetailPanel({
                   sessions={sessions}
                   loading={sessionsLoading}
                   error={sessionsError}
+                  onArchived={refreshSessions}
                 />
               ),
             },

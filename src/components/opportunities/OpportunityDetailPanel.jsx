@@ -606,6 +606,7 @@ export default function OpportunityDetailPanel({
                 sessions={signingSessions}
                 loading={signingLoading}
                 error={signingError}
+                onArchived={refreshSigning}
               />
             </CardContent>
           </Card>

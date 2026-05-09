@@ -125,6 +125,7 @@ export default function LeadDetailPanel({
                   sessions={sessions}
                   loading={sessionsLoading}
                   error={sessionsError}
+                  onArchived={refreshSessions}
                 />
               ),
             },
