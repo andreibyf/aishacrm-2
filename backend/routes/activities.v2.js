@@ -18,6 +18,7 @@ import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/te
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { setCorsHeaders, isAllowedOrigin } from '../lib/cors.js';
+import { resolveAssignedTo as resolveAssignedToShared } from '../lib/resolveAssignedTo.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -423,57 +424,13 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
     };
   };
 
-  /**
-   * Resolve assigned_to to a valid UUID.
-   * Accepts either a UUID directly, or an email address to look up.
-   * Returns null if not resolvable.
-   */
+  // Thin local wrapper preserving the existing call-site signature
+  // `(assignedTo, tenantId, supabase)`. The actual lookup logic lives in
+  // backend/lib/resolveAssignedTo.js so it can be unit-tested in
+  // isolation and reused by signingActivityTracker.js. See that module's
+  // docblock for the 4VD-44 history (users-table fallback bug).
   async function resolveAssignedTo(assignedTo, tenantId, supabase) {
-    if (!assignedTo) return null;
-
-    // Type safety: ensure assignedTo is a string to prevent type confusion
-    if (typeof assignedTo !== 'string') {
-      logger.warn('[Activities] assignedTo must be a string, received:', typeof assignedTo);
-      return null;
-    }
-
-    // If it's already a valid UUID, return it directly
-    if (UUID_REGEX.test(assignedTo)) return assignedTo;
-
-    // If it looks like an email, try to look up the user/employee
-    if (assignedTo.includes('@')) {
-      const normalizedEmail = assignedTo.toLowerCase().trim();
-      try {
-        // Try employees table first (for CRM-specific employee records)
-        const { data: employee } = await supabase
-          .from('employees')
-          .select('id')
-          .eq('tenant_id', tenantId)
-          .eq('email', normalizedEmail)
-          .limit(1)
-          .maybeSingle();
-
-        if (employee?.id) return employee.id;
-
-        // Fallback: try users table
-        const { data: user } = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', normalizedEmail)
-          .limit(1)
-          .maybeSingle();
-
-        if (user?.id) return user.id;
-      } catch (err) {
-        logger.warn('[Activities] resolveAssignedTo lookup failed:', {
-          assignedTo,
-          error: err.message,
-        });
-        return null;
-      }
-    }
-
-    return null; // Not resolvable
+    return resolveAssignedToShared(supabase, tenantId, assignedTo);
   }
 
   /**

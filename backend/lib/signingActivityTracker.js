@@ -25,49 +25,13 @@
 import logger from './logger.js';
 import { computeDocumentDueFields } from './computeDocumentDueFields.js';
 import { resolveRelatedEntityFields } from './resolveRelatedEntityFields.js';
+import { resolveAssignedTo } from './resolveAssignedTo.js';
 
-/**
- * Resolve a user's email (req.user.email) to a tenant-scoped employees.id.
- *
- * activities.assigned_to has a FK to employees(id) — passing a users.id
- * UUID directly causes a silent FK violation that fails the entire row
- * insert. The day-4a v1 of this tracker did exactly that (passed
- * req.user.id) and the `.catch(() => undefined)` swallowed every error,
- * leaving 10 sessions with zero activity rows in dev.
- *
- * @param {object} supabase service-role client
- * @param {string} tenantId
- * @param {string|null} userEmail
- * @returns {Promise<string|null>} employees.id or null when no match
- */
-async function resolveAssignedEmployee(supabase, tenantId, userEmail) {
-  if (!userEmail || typeof userEmail !== 'string') return null;
-  try {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .ilike('email', userEmail)
-      .limit(1)
-      .maybeSingle();
-    if (error) {
-      logger.warn('[signingActivityTracker] employee lookup failed', {
-        tenantId,
-        userEmail,
-        message: error.message,
-      });
-      return null;
-    }
-    return data?.id || null;
-  } catch (err) {
-    logger.warn('[signingActivityTracker] employee lookup threw', {
-      tenantId,
-      userEmail,
-      message: err?.message || String(err),
-    });
-    return null;
-  }
-}
+// 4VD-44: previously this file had its own `resolveAssignedEmployee`
+// helper. Consolidated into the shared `resolveAssignedTo` in
+// backend/lib/resolveAssignedTo.js so route handlers + the activity
+// tracker share one implementation. See that module's docblock for the
+// users-table fallback bug history.
 
 /**
  * Find the activity row for a given signing_session, if any.
@@ -151,9 +115,9 @@ export async function createSendActivity({
       session.related_id,
     );
     // activities.assigned_to FKs to employees(id), so we MUST resolve the
-    // auth user's email → matching employees row for this tenant.
+    // auth user's email -> matching employees row for this tenant.
     // Inserting a users.id directly violates the FK and silently fails.
-    const assignedToEmployeeId = await resolveAssignedEmployee(
+    const assignedToEmployeeId = await resolveAssignedTo(
       supabase,
       tenantId,
       sentByUserEmail || null,
