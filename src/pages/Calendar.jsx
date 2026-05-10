@@ -42,13 +42,21 @@ export default function CalendarPage() {
       return;
     }
 
-    const isAdminLike = currentUser.role === "admin" || currentUser.role === "superadmin";
-    const isManager = currentUser.employee_role === "manager";
-    const seeAll = isAdminLike || isManager;
-
-    if (!seeAll) {
-      filter = { ...filter, assigned_to: currentUser.email };
-    }
+    // 4VD-44: previously this block computed `seeAll` from
+    // `currentUser.role` + `currentUser.employee_role` and, when false,
+    // added `assigned_to: currentUser.email` to the filter. That duplicated
+    // logic the backend's `getVisibilityScope` already enforces correctly,
+    // and broke for any user whose `employee_role` didn't propagate to the
+    // frontend user object as the literal string "manager" — confirmed live
+    // on staging (Network tab GET URL had `&assigned_to=...&email`, backend
+    // resolved the email to the user's employee_id, and the unassigned
+    // activities never matched). Drop the frontend filter — the backend
+    // returns:
+    //   - admin/superadmin → all tenant activities (bypass)
+    //   - manager/member with team membership → team scope + unassigned
+    //   - no team membership → own activities + unassigned
+    // Calendar's job is to render whatever the backend returns; visibility
+    // belongs at one layer, not two.
 
     const result = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
 
