@@ -185,6 +185,9 @@ import createBillingRoutes from './routes/billing.js';
 import createBillingAdminRoutes from './routes/billing-admin.js';
 import { stripePlatformWebhookRouter } from './routes/stripe-platform-webhook.js';
 import createStorageRoutes from './routes/storage.js';
+import createTemplatesRoutes from './routes/templates.js'; // 4VD-43 in-house eSign engine
+import createSubmissionsRoutes from './routes/submissions.js'; // 4VD-43 day 2 send-for-signing
+import createPublicSignRoutes from './routes/public-sign.js'; // 4VD-43 day 3 public recipient routes
 import createWebhookRoutes from './routes/webhooks.js';
 import createSystemRoutes from './routes/system.js';
 import createSystemSettingsRoutes from './routes/system-settings.js';
@@ -254,9 +257,9 @@ import createCarePlaybookRoutes from './routes/carePlaybooks.js';
 import createSessionPackageRoutes from './routes/session-packages.js';
 import createSessionCreditsRoutes from './routes/session-credits.js';
 import calcomWebhookRouter from './routes/calcom-webhook.js';
-import docusealRouter from './routes/docuseal.js';
-import docusealWebhookRouter from './routes/docuseal-webhook.js';
-import publicDocusealRouter from './routes/public-docuseal.js';
+// 4VD-43: in-house eSign engine. POST/GET /api/templates lives in
+// backend/routes/templates.js (mounted below); /api/submissions and the
+// /sign/<token> public route ship on day 2 + day 4.
 import createBookingAnalyticsRoutes from './routes/booking-analytics.js';
 import createCalcomSyncRoutes from './routes/calcom-sync.js';
 import { shortlinkCreateRouter, shortlinkRedirectRouter } from './routes/booking-shortlink.js';
@@ -273,7 +276,7 @@ import createBundleRoutes from './routes/bundles.js';
 import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
 import { validateTenantAccess } from './middleware/validateTenant.js';
-import { defaultLimiter } from './middleware/rateLimiter.js';
+import { defaultLimiter, publicLimiter } from './middleware/rateLimiter.js';
 import { trafficMonitor } from './middleware/trafficMonitor.js';
 import { startMetricsCollection } from './lib/systemMetrics.js';
 
@@ -339,6 +342,35 @@ app.use(
   createBillingAdminRoutes(measuredPgPool),
 );
 app.use('/api/storage', defaultLimiter, authenticateRequest, createStorageRoutes(measuredPgPool));
+// 4VD-43: in-house eSign engine. /api/templates owns CRUD on signing_templates.
+// validateTenantAccess populates req.tenant from JWT/headers — the route
+// reads req.tenant.id to enforce tenant isolation on all writes.
+app.use(
+  '/api/templates',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createTemplatesRoutes(measuredPgPool),
+);
+// 4VD-43 day 2: /api/submissions creates signing_sessions + sends the
+// branded email. Same middleware chain as /api/templates so req.tenant.id
+// is populated. POST is open to all roles (no requireAdminRole) — sales
+// reps + AEs send templates routinely; only template authoring is
+// admin-gated.
+app.use(
+  '/api/submissions',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createSubmissionsRoutes(),
+);
+// 4VD-43 day 3: public sign routes for recipients. NO auth, NO tenant
+// validation — recipient is anonymous. Capability-token-gated; the route
+// handlers enforce token format + status + expiry themselves and use
+// service_role to read/update across tenants. publicLimiter (60 req/min
+// per IP) is tighter than defaultLimiter to bound abuse on the public
+// surface.
+app.use('/api/sign', publicLimiter, createPublicSignRoutes());
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
 app.use('/api/system-settings', defaultLimiter, createSystemSettingsRoutes(measuredPgPool));
@@ -625,16 +657,6 @@ app.use('/api/calcom-sync', defaultLimiter, authenticateRequest, createCalcomSyn
 // Cal.com webhook — no auth middleware; HMAC signature verified inside handler
 logger.debug('Mounting /api/webhooks/calcom route');
 app.use('/api/webhooks', defaultLimiter, calcomWebhookRouter);
-// DocuSeal CRM-side routes (auth + tenant scoping inside)
-logger.debug('Mounting /api/docuseal routes');
-app.use('/api/docuseal', defaultLimiter, authenticateRequest, docusealRouter);
-// DocuSeal webhook — no auth middleware; HMAC signature verified inside handler
-logger.debug('Mounting /api/webhooks/docuseal route');
-app.use('/api/webhooks', defaultLimiter, docusealWebhookRouter);
-// DocuSeal PUBLIC route — no auth; recipients are not CRM users.
-// Authorization is the slug+token pair. See public-docuseal.js for details.
-logger.debug('Mounting /api/public/docuseal route');
-app.use('/api/public/docuseal', defaultLimiter, publicDocusealRouter);
 // Stripe webhook — no auth middleware; raw body + Stripe-Signature HMAC verification inside handler
 logger.debug('Mounting /api/webhooks/stripe route');
 app.use('/api/webhooks', defaultLimiter, stripeWebhookRouter);

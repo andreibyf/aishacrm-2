@@ -116,6 +116,24 @@ export const readLimiter = rateLimit({
   handler: createRateLimitHandler('read'),
 });
 
+// Public-route limiter — used by unauthenticated capability-token-gated
+// endpoints (4VD-43 public /api/sign/:token routes). 60 requests/minute
+// per IP balances legitimate recipient reload/redraft against abuse.
+// Tighter than defaultLimiter, looser than writeLimiter (which would
+// reject normal "click sign → undo → re-sign → submit" flows).
+export const publicLimiter = rateLimit({
+  skip: skipForTests,
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Too many requests from this IP, please try again after a minute.',
+  },
+  handler: createRateLimitHandler('public'),
+});
+
 // Token refresh limiter - 60 requests/minute per IP
 export const refreshLimiter = rateLimit({
   skip: skipForTests,

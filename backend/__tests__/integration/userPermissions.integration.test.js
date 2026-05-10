@@ -14,7 +14,8 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'node:crypto';
+
+import { TENANT_ID as SEEDED_TENANT_ID } from '../testConstants.js';
 
 // Test configuration - use env vars or defaults
 const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321';
@@ -23,8 +24,16 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.en
 // Skip if no Supabase config
 const SKIP_INTEGRATION = !SUPABASE_URL || !SUPABASE_SERVICE_KEY;
 
-// Test data IDs (will be created/cleaned up) - must be valid UUIDs
-const TEST_TENANT_ID = randomUUID();
+// Use the seeded dev-branch tenant (759a83e8-...) instead of synthesising one
+// per run. The seed lives at .warp/notebooks/supabase-dev-branch-reset.md §7
+// and is re-applied whenever the dev preview branch is rotated. Trying to
+// INSERT a fresh tenant here previously failed under the slug NOT NULL
+// constraint added in a recent migration — and even when it worked, deleting
+// the tenant in the after() hook tore down RLS-bound rows the next test run
+// expected. Reusing the seeded tenant exercises the real schema (which is
+// the whole point of these integration tests) without pretending we own the
+// row's lifecycle.
+const TEST_TENANT_ID = SEEDED_TENANT_ID;
 const TEST_USER_IDS = [];
 const TEST_TEAM_IDS = [];
 const TEST_EMPLOYEE_IDS = [];
@@ -38,24 +47,22 @@ describe('User Permissions Integration Tests', { skip: SKIP_INTEGRATION }, () =>
       auth: { persistSession: false },
     });
 
-    // Create test tenant
+    // Verify the seeded tenant is reachable. If this fails, the dev preview
+    // branch has drifted from the seed in supabase-dev-branch-reset.md — fix
+    // the seed, don't paper over it here.
     const { data: tenant, error: tenantErr } = await supabase
       .from('tenant')
-      .insert({
-        id: TEST_TENANT_ID,
-        tenant_id: TEST_TENANT_ID,
-        name: 'Permission Test Tenant',
-        status: 'active',
-      })
-      .select()
-      .single();
+      .select('id, slug')
+      .eq('id', TEST_TENANT_ID)
+      .maybeSingle();
 
-    if (tenantErr) {
-      console.error('Failed to create test tenant:', tenantErr);
-      throw tenantErr;
+    if (tenantErr || !tenant) {
+      console.error('Seeded tenant not found in dev branch:', { TEST_TENANT_ID, tenantErr });
+      throw tenantErr || new Error(`Seeded tenant ${TEST_TENANT_ID} missing — re-run seed`);
     }
 
-    // Create test teams
+    // Create test teams scoped to the seeded tenant. Teams are short-lived
+    // fixtures (deleted in after()), so they don't pollute the dev branch.
     const teams = [
       { name: 'Sales Team', description: 'Sales department', tenant_id: TEST_TENANT_ID },
       { name: 'Marketing Team', description: 'Marketing department', tenant_id: TEST_TENANT_ID },
@@ -76,7 +83,9 @@ describe('User Permissions Integration Tests', { skip: SKIP_INTEGRATION }, () =>
   });
 
   after(async () => {
-    // Cleanup test data
+    // Cleanup ONLY the rows this test created. The seeded tenant + admin user
+    // (214086c9-...) are owned by the dev-branch seed, not this suite, so
+    // deleting them would break every other integration test that follows.
     if (TEST_TEAM_IDS.length > 0) {
       await supabase.from('team_members').delete().in('team_id', TEST_TEAM_IDS);
       await supabase.from('teams').delete().in('id', TEST_TEAM_IDS);
@@ -87,7 +96,6 @@ describe('User Permissions Integration Tests', { skip: SKIP_INTEGRATION }, () =>
     if (TEST_USER_IDS.length > 0) {
       await supabase.from('users').delete().in('id', TEST_USER_IDS);
     }
-    await supabase.from('tenant').delete().eq('id', TEST_TENANT_ID);
     console.log('Cleaned up test data');
   });
 

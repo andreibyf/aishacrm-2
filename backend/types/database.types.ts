@@ -3919,99 +3919,118 @@ export type Database = {
           },
         ]
       }
-      docuseal_submissions: {
+      signing_templates: {
         Row: {
-          audit_log_url: string | null
+          archived_at: string | null
+          created_at: string
+          fields: Json
+          id: string
+          name: string
+          pdf_storage_path: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          fields?: Json
+          id?: string
+          name: string
+          pdf_storage_path: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          fields?: Json
+          id?: string
+          name?: string
+          pdf_storage_path?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signing_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signing_sessions: {
+        Row: {
+          audit: Json
           completed_at: string | null
           created_at: string
-          created_by: string | null
-          docuseal_submission_id: string
-          docuseal_template_id: string
-          error_message: string | null
+          declined_at: string | null
+          expires_at: string
+          field_values: Json
           id: string
-          last_event_at: string | null
-          last_event_id: string | null
-          metadata: Json
           recipient_email: string
-          recipient_name: string | null
           related_id: string
           related_to: string
-          sent_at: string | null
-          signed_document_url: string | null
+          signed_at: string | null
+          signed_pdf_storage_path: string | null
+          signing_token: string
           status: string
-          supabase_storage_path: string | null
-          template_name: string | null
+          template_id: string
           tenant_id: string
           updated_at: string
           viewed_at: string | null
         }
         Insert: {
-          audit_log_url?: string | null
+          audit?: Json
           completed_at?: string | null
           created_at?: string
-          created_by?: string | null
-          docuseal_submission_id: string
-          docuseal_template_id: string
-          error_message?: string | null
+          declined_at?: string | null
+          expires_at?: string
+          field_values?: Json
           id?: string
-          last_event_at?: string | null
-          last_event_id?: string | null
-          metadata?: Json
           recipient_email: string
-          recipient_name?: string | null
           related_id: string
           related_to: string
-          sent_at?: string | null
-          signed_document_url?: string | null
+          signed_at?: string | null
+          signed_pdf_storage_path?: string | null
+          signing_token: string
           status?: string
-          supabase_storage_path?: string | null
-          template_name?: string | null
+          template_id: string
           tenant_id: string
           updated_at?: string
           viewed_at?: string | null
         }
         Update: {
-          audit_log_url?: string | null
+          audit?: Json
           completed_at?: string | null
           created_at?: string
-          created_by?: string | null
-          docuseal_submission_id?: string
-          docuseal_template_id?: string
-          error_message?: string | null
+          declined_at?: string | null
+          expires_at?: string
+          field_values?: Json
           id?: string
-          last_event_at?: string | null
-          last_event_id?: string | null
-          metadata?: Json
           recipient_email?: string
-          recipient_name?: string | null
           related_id?: string
           related_to?: string
-          sent_at?: string | null
-          signed_document_url?: string | null
+          signed_at?: string | null
+          signed_pdf_storage_path?: string | null
+          signing_token?: string
           status?: string
-          supabase_storage_path?: string | null
-          template_name?: string | null
+          template_id?: string
           tenant_id?: string
           updated_at?: string
           viewed_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "docuseal_submissions_tenant_id_fkey"
-            columns: ["tenant_id"]
+            foreignKeyName: "signing_sessions_template_id_fkey"
+            columns: ["template_id"]
             isOneToOne: false
-            referencedRelation: "dashboard_funnel_counts"
-            referencedColumns: ["tenant_id"]
+            referencedRelation: "signing_templates"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "docuseal_submissions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "dashboard_opps_funnel_mv"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "docuseal_submissions_tenant_id_fkey"
+            foreignKeyName: "signing_sessions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenant"

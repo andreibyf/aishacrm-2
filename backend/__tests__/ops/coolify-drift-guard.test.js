@@ -11,7 +11,7 @@
  *
  * If the .ps1's heredoc is edited and the contract drifts, this test fails.
  */
-import { test } from 'node:test';
+import { test as _test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +19,22 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INSTALLER_PATH = path.resolve(__dirname, '../../../scripts/install-coolify-drift-guard.ps1');
+
+// 4VD-32 follow-up: this file asserts on the contents of
+// scripts/install-coolify-drift-guard.ps1, but `backend/.dockerignore` lines
+// 22–26 (`scripts`, `*.ps1`, `*.sh`) exclude that directory from the backend
+// Docker image. Inside the container the installer is unreachable and every
+// assertion fails. The drift guard is an ops-deploy concern (its target is
+// /usr/local/bin on VPS-2, not the runtime backend), so the test belongs on
+// the host runner only. Skip the suite when the installer isn't reachable;
+// host runs (where scripts/ is present) execute the suite normally.
+const INSTALLER_AVAILABLE = fs.existsSync(INSTALLER_PATH);
+const SKIP_REASON = INSTALLER_AVAILABLE
+  ? null
+  : `scripts/install-coolify-drift-guard.ps1 not reachable (excluded from Docker image via .dockerignore — run this suite on the host)`;
+const test = SKIP_REASON
+  ? (name, fn) => _test(name, { skip: SKIP_REASON }, fn)
+  : _test;
 
 function loadInstaller() {
   return fs.readFileSync(INSTALLER_PATH, 'utf8');

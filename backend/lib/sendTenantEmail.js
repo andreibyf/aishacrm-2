@@ -6,9 +6,9 @@
  * The existing `resolveCommunicationsProviderConnection` helper requires a
  * mailboxId or mailboxAddress because it's designed for inbox-style flows
  * (paired imap+smtp with replies threading into a specific mailbox).
- * Transactional sends (DocuSeal signing requests, future invitation
- * emails, etc.) don't need that pairing — any active outbound-capable
- * provider on the tenant will do.
+ * Transactional sends (in-house signing-request emails, invitations, etc.)
+ * don't need that pairing — any active outbound-capable provider on the
+ * tenant will do.
  *
  * Two integration types are accepted, in this precedence order:
  *   1. `gmail_smtp` — organization-wide Gmail/Google Workspace app-password

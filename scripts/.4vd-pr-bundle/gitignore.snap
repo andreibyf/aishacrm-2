@@ -1,0 +1,296 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+# Thunder Client test data (may contain sensitive info)
+.vscode/thunder-tests/
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Git worktrees (isolated workspaces)
+.worktrees/
+
+# RAG experiments / local data (not for version control)
+rag-v1/
+
+# Environment variables (security)
+.env
+.env.local
+.env.production
+.env.*.local
+.env.docker
+.doppler-token
+*.backup
+backend/.env
+
+# Test artifacts (Playwright reports, coverage, etc.)
+playwright-report/
+coverage/
+test-results/
+test-regression.log
+
+# Temporary diagnostic/troubleshooting scripts
+check-*-settings.js
+check-*-settings.sh
+check-*-database.sh
+fix-*-duplicates.sh
+fix-*-settings.js
+test-*-settings.js
+*_SETTINGS_FIX.md
+
+# Lock files (should be committed but listed here for reference)
+# package-lock.json should be committed for security audits
+
+# Git merge conflict artifacts
+*.orig
+*.rej
+*_BACKUP_*
+*_BASE_*
+*_LOCAL_*
+*_REMOTE_*
+*-merge
+
+# Test artifacts
+playwright-report/
+coverage/
+test-results/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+cal-backup-codes*.txt
+
+# API test files with actual credentials
+*.local.http
+
+# Local knowledge-base/editor backups
+logseq/
+
+# Local development scripts (one-off migrations, testing, etc.)
+add-tenant-columns.js
+add-tenant-columns.sql
+copy-auth-direct.js
+copy-auth-mapped.js
+copy-auth-tables.js
+copy-prod-to-dev*.js
+copy-prod-to-dev*.sh
+copy-prod-to-dev*.ps1
+copy-tenant-minimal.js
+test-dev-setup.js
+setup-dev-db.sh
+test-dashboard-endpoints.ps1
+dashboard-endpoint-test-results.json
+tmp-check-user.mjs
+
+# Production database dumps (NEVER COMMIT)
+prod_data.sql
+prod_dump*.sql
+
+# Deployment helper scripts (version-specific)
+deploy-v*.ps1
+deploy-v*.sh
+
+# Temporary documentation (one-off notes)
+DEPLOY_V1.*.md
+ENVIRONMENT_INDICATORS.md
+ENVIRONMENT_QUICK_REFERENCE.md
+ENVIRONMENT_VARIABLES_AUDIT.md
+
+# Incomplete/WIP test files
+backend/__tests__/routes/aiRealtime.route.test.js
+backend/__tests__/routes/aiSettings.route.test.js
+
+# E2E test files
+tests/e2e/*.spec.js
+RATE_LIMIT_MANAGEMENT.md
+GITIGNORE_UPDATES.md
+THUNDER_CLIENT_GUIDE.md
+
+# Debugging/investigation scripts (temporary)
+check-*.js
+backend/check-*.js
+backend/scripts/checks/check-*.js
+query-*.sql
+.copilotignore
+.vs/
+
+# MCP Development Tools
+braid-mcp-wrapper/
+!braid-mcp-wrapper/README.md
+nul
+
+# Local Playwright auth state
+playwright/.auth/
+
+# Local Developer AI/OpenAI scratch tests
+test-developer-ai*.js
+backend/test-openai-direct.js
+backend/test-parameter-descriptions.js
+backend/scripts/debug/test-openai-direct.js
+backend/scripts/debug/test-parameter-descriptions.js
+
+# Claude Code local config
+.claude/
+
+# Continue.dev local config
+.continue/
+
+# Cursor local config
+.cursorrules
+
+# Generated reports
+playwright-report/
+
+# VSCode user-specific settings (contains machine-local paths)
+.vscode/settings.json
+
+# Scratch files
+FIX_CRON_TIMEOUTS.md
+Supabase.txt
+fix-cron-jobs.sql
+backend/pause-cron-jobs.js
+backend/scripts/debug/pause-cron-jobs.js
+
+# Temporary working docs and artifacts
+ESLINT_FIXES.md
+FINAL_FIX_PLAN.md
+PRE_PUSH_ANALYSIS_COMPLETE.md
+SEVEN_FILES_FIXED.md
+TEN_FILES_COMPLETE.md
+backend/fix-all-tests.js
+backend/scripts/debug/fix-all-tests.js
+vitest-results.json
+
+# Claude Code temp files
+tmpclaude-*
+
+# Trello API temp files
+backlog.json
+sprint_backlog.json
+sprint_complete.json
+in_progress.json
+story.json
+story_checklists.json
+
+# Local AI agent runtime state and machine-local tooling
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+ai-autonomous-agent/
+setup-aisha-agent.sh
+AGENTS.md
+
+# Local planning notes
+Instructions.txt
+Aider-Codex Orchestration.md
+
+.aider*
+
+# Session fix scripts and temp files
+fix_*.py
+tmp/
+_settings_head.txt
+test_output.txt
+backend-test-output.txt
+
+# Operational scratchpads - debug scripts, env captures, cloudflared/coolify probes from sessions
+scripts/inventory-out/
+scripts/inventory-vps.ps1
+scripts/ai-review.js
+scripts/aishacrm.slice
+scripts/ufw-vps2.sh
+scripts/pre-push.hook
+
+# VPS-2 SSH bridge for Claude Cowork sessions - contain VPS-2 root password,
+# transient command/output files. Never commit.
+scripts/vps2-askpass.cmd
+scripts/vps2-askpass.sh
+scripts/vps2-ssh.cmd
+scripts/vps2-run.sh
+scripts/vps2-cmd.txt
+scripts/vps2-last.out
+scripts/vps2-last.err
+scripts/vps2-commit-msg.txt
+
+# Probe / install script stdout captures - transient, not source of truth.
+scripts/*-out.txt
+scripts/drift-guard-test.txt
+scripts/*test*.txt
+scripts/braid-*.txt
+scripts/dueat-*.txt
+scripts/all-docuseal.txt
+scripts/full-docuseal*.txt
+scripts/docuseal-regress.txt
+scripts/pr-list.txt
+scripts/push-*.txt
+
+# Per-PR scratch files - commit messages, PR bodies, gh API request/response
+# bodies, review-comment dumps. All one-shot, regenerated each PR.
+scripts/*-commit-msg.txt
+scripts/*-amend-msg.txt
+scripts/*-fix-msg.txt
+scripts/pr*-body.md
+scripts/pr*-comment*.md
+scripts/pr*-comment*.json
+scripts/pr*-comments.txt
+scripts/pr*-out.txt
+scripts/reply-*.json
+
+# PR-opening / commenting wrappers - one-shot Desktop Commander launchers
+# that exist only because cmd.exe quoting breaks `gh pr create` directly.
+# Regenerated for each PR; no value committed.
+scripts/open-pr-*.cmd
+scripts/open-pr-*.ps1
+scripts/open-and-merge-pr-*.ps1
+scripts/comment-pr-*.cmd
+scripts/reply-pr*.cmd
+scripts/merge-pr-*.ps1
+
+# Microsoft Office lock files - created while a doc is open, never commit
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# VPS-1 SSH bridge for Claude Cowork sessions - same pattern as VPS-2 above.
+scripts/vps1-askpass.cmd
+scripts/vps1-askpass.sh
+scripts/vps1-ssh.cmd
+scripts/vps1-run.sh
+scripts/vps1-cmd.txt
+scripts/vps1-last.out
+scripts/vps1-last.err
+
+# Per-VPS env captures (contain secrets - never commit)
+.env.vps2
+.env.vps2.*
+.env.staging
+.env.hetzner
+
+# Doppler config dumps and MCP test outputs (often contain raw secrets)
+doppler-prd.json
+doppler-mcp/test_set_secrets.py
+
+# Local cloudflared / hetzner-tunnel deploy artifacts (per-host, not portable)
+cloudflared-config-vps1.yml
+docker-compose.hetzner-cloudflared.yml
+docker-compose.staging.yml

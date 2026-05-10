@@ -1,20 +1,45 @@
 /**
- * Test constants — valid UUIDs from Dev Playground (tenant b62b764d-4f27-4e20-a8ad-8eb9b2e1055c).
- * Use these in tests instead of fake IDs like 'tenant-123' so DB/RLS and FK checks behave correctly.
+ * Test constants — valid UUIDs that exist in the seeded dev preview branch
+ * (project_ref nrtrjsatmsosslxwlmoj, parent staging bjedfowimuwbcnruwcdj).
+ * Use these in tests instead of fake IDs like 'tenant-123' or per-run
+ * randomUUID() so DB/RLS, FK, and schema-drift checks behave correctly.
  *
- * Override tenant via: TEST_TENANT_ID or STAGING_TENANT_ID
+ * Source of truth for the seed: .warp/notebooks/supabase-dev-branch-reset.md §7.
+ * Override via env: TEST_TENANT_ID, TEST_USER_ID, STAGING_TENANT_ID.
+ *
+ * If the dev branch is rotated/recreated and the seed UUIDs change, update
+ * both .env (root) and Doppler aishacrm/dev{,_personal}.
  */
 
 // ─── Tenant ─────────────────────────────────────────────────────────────────
 
-/** Dev Playground tenant; override with process.env.TEST_TENANT_ID */
-const DEV_PLAYGROUND_TENANT_ID = 'b62b764d-4f27-4e20-a8ad-8eb9b2e1055c';
+/** "Dev Local Tenant" seeded on the dev preview branch (slug=dev-local-tenant). */
+const DEV_LOCAL_TENANT_ID = '759a83e8-7340-4482-a586-cd2d049fb0b5';
+
+/**
+ * Back-compat alias — old name for the seeded dev tenant. New code should use
+ * `TENANT_ID` directly. Kept so callers that imported `DEV_PLAYGROUND_TENANT_ID`
+ * continue to compile.
+ */
+const DEV_PLAYGROUND_TENANT_ID = DEV_LOCAL_TENANT_ID;
 
 export const TENANT_ID =
-  process.env.TEST_TENANT_ID || process.env.STAGING_TENANT_ID || DEV_PLAYGROUND_TENANT_ID;
+  process.env.TEST_TENANT_ID || process.env.STAGING_TENANT_ID || DEV_LOCAL_TENANT_ID;
 
-/** Valid UUID for a different tenant (for cross-tenant / wrong-tenant tests). */
+/** "System Tenant" seeded on the dev preview branch (cross-tenant tests). */
 export const OTHER_TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+// ─── Admin user (seeded on the dev preview branch) ──────────────────────────
+
+/**
+ * `abyfield@4vdataconsulting.com` superadmin tied to TENANT_ID. Tests that
+ * need a real auth.users + public.users row should reuse this rather than
+ * minting fresh users per run (which trips the slug NOT NULL constraint
+ * cascading from required FK relationships).
+ */
+const DEV_LOCAL_ADMIN_USER_ID = '214086c9-a8a9-4cde-87cc-f64152cf209c';
+
+export const TEST_USER_ID = process.env.TEST_USER_ID || DEV_LOCAL_ADMIN_USER_ID;
 
 // ─── Users / Employees (Dev Playground) ─────────────────────────────────────
 
@@ -96,7 +121,9 @@ export function resetTestUUIDCounter() {
 
 export default {
   TENANT_ID,
-  DEV_PLAYGROUND_TENANT_ID: DEV_PLAYGROUND_TENANT_ID,
+  DEV_LOCAL_TENANT_ID,
+  DEV_PLAYGROUND_TENANT_ID,
+  TEST_USER_ID,
   OTHER_TENANT_ID,
   ADMIN_USER_ANDRE,
   EMP_SARAH,

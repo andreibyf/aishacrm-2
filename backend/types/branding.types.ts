@@ -20,14 +20,3 @@ export interface TenantBranding {
   primary_color?: string | null;
   accent_color?: string | null;
 }
-
-/**
- * Typed shape for docuseal_submissions.metadata (jsonb).
- *
- * Tracks fields the docuseal route writes during 4VD-7's white-label flow:
- * the per-submitter embed token and the optional user-typed message.
- */
-export interface DocusealSubmissionMetadata {
-  embed_src?: string | null;
-  send_message?: string | null;
-}

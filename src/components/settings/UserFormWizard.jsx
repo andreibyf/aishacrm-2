@@ -160,6 +160,12 @@ const NAV_MODULES = [
     description: 'File storage and management',
   },
   {
+    key: 'DocumentTemplates',
+    label: 'Document Templates',
+    icon: FileText,
+    description: 'eSign templates: PDF + draggable fields (admin-only writes; preview open to all)',
+  },
+  {
     key: 'AICampaigns',
     label: 'AI Campaigns',
     icon: Target,
@@ -260,6 +266,11 @@ const DEFAULT_NAV_PERMISSIONS = {
   CashFlow: true,
   DocumentProcessing: true,
   DocumentManagement: true,
+  // Document Templates (eSign) — preview is open to all roles with the
+  // page enabled, but creation/edit/delete are admin-only at the route
+  // layer. Default OFF so admins explicitly grant per-user, mirroring
+  // the Employees/Reports admin-pattern.
+  DocumentTemplates: false,
   AICampaigns: true,
   AISuggestions: true,
   PaymentPortal: true,

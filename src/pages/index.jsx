@@ -35,6 +35,7 @@ const PAGES = {
   CashFlow: lazy(() => import('./CashFlow')),
   PaymentPortal: lazy(() => import('./PaymentPortal')),
   DocumentManagement: lazy(() => import('./DocumentManagement')),
+  DocumentTemplates: lazy(() => import('./DocumentTemplates')),
   Agent: lazy(() => import('./Agent')),
   DeveloperAI: lazy(() => import('./DeveloperAI')),
   Calendar: lazy(() => import('./Calendar')),
@@ -91,9 +92,10 @@ function PagesContent() {
         {/* Public route - accept invitation (no Layout wrapper) */}
         <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
-        {/* Public route - white-label DocuSeal signing page (4VD-7).
-            Recipients are not CRM users; the slug+token pair gates access.
-            No Layout wrapper, no auth, no app shell. */}
+        {/* Public route - in-house signing page (4VD-43). Recipients are not
+            CRM users; the signing_token gates access. No Layout wrapper, no
+            auth, no app shell. The :slug param is preserved on the route until
+            4VD-43 day 4 lands the new /sign/:token shape. */}
         <Route path="/sign/:slug/:token" element={<SignPage />} />
 
         {/* Profile webpages — standalone (no Layout sidebar) but wrapped in TenantProvider
@@ -165,6 +167,7 @@ function PagesContent() {
                 <Route path="/CashFlow" element={<PAGES.CashFlow />} />
                 <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
                 <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
+                <Route path="/DocumentTemplates" element={<PAGES.DocumentTemplates />} />
                 <Route path="/Agent" element={<PAGES.Agent />} />
                 <Route path="/DeveloperAI" element={<PAGES.DeveloperAI />} />
                 <Route path="/Calendar" element={<PAGES.Calendar />} />

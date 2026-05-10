@@ -145,11 +145,6 @@ export const TOOL_REGISTRY = {
   analyze_document: { file: 'documents.braid', function: 'analyzeDocument', policy: 'WRITE_OPERATIONS' },
   search_documents: { file: 'documents.braid', function: 'searchDocuments', policy: 'READ_ONLY' },
 
-  // Docuseal
-  list_docuseal_templates: { file: 'docuseal.braid', function: 'listDocusealTemplates', policy: 'READ_ONLY' },
-  list_docuseal_submissions: { file: 'docuseal.braid', function: 'listDocusealSubmissions', policy: 'READ_ONLY' },
-  send_document_for_signing: { file: 'docuseal.braid', function: 'sendDocumentForSigning', policy: 'WRITE_OPERATIONS' },
-
   // Email Drafting
   draft_email: { file: 'email-drafting.braid', function: 'draftEmail', policy: 'WRITE_OPERATIONS' },
 
