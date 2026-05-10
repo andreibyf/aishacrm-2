@@ -51,9 +51,24 @@ export default function CalendarPage() {
     }
 
     const result = await cachedRequest("Activity", "filter", { filter }, () => Activity.filter(filter));
-    
-    // Handle both array and { activities: [...] } response formats
-    const list = Array.isArray(result) ? result : (result?.activities || []);
+
+    // Handle every response shape the v2 API has used:
+    //   - bare array (legacy)                                → [...]
+    //   - { activities: [...] }                              → result.activities
+    //   - { status: 'success', data: { activities: [...] } } → result.data.activities  (CURRENT v2 wire format)
+    //   - { data: [...] }                                    → result.data
+    // Confirmed via DevTools probe on staging 2026-05-10: live response is
+    // {status: 'success', data: {activities: [...]}}. The previous parser only
+    // looked at result.activities (one level shallow), silently fell back to
+    // [], leaving Calendar empty for non-admin users while the Activities list
+    // page worked because it drills correctly into data.activities. Tracked
+    // as part of 4VD-44.
+    const list = Array.isArray(result)
+      ? result
+      : (result?.activities
+        || result?.data?.activities
+        || (Array.isArray(result?.data) ? result.data : null)
+        || []);
     
     // Normalize dates: use due_date if available, otherwise default to today
     const todayStr = format(new Date(), "yyyy-MM-dd");
