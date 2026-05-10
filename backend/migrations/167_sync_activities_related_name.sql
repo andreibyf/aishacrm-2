@@ -104,42 +104,90 @@ COMMENT ON FUNCTION public.sync_activities_related_name() IS
 -- ─── Per-entity triggers ──────────────────────────────────────────────────
 -- WHEN clauses ensure we only fire on actual rename / email change. Other
 -- column updates (status, dates, scoring, etc.) are no-ops for this sync.
+--
+-- Each trigger is guarded by an `EXECUTE format(...)` inside a DO block
+-- that checks whether the target table exists. The CI ephemeral test DB
+-- (api-schema-tests.yml workflow) runs migrations against a fresh
+-- Postgres without the baseline Supabase schema, so leads/contacts/
+-- accounts/opportunities may not exist there. In dev/staging/prod
+-- Supabase those tables exist; the guard short-circuits gracefully in
+-- CI without erroring out and breaking the entire migration chain.
 
-DROP TRIGGER IF EXISTS sync_lead_name_to_activities ON public.leads;
-CREATE TRIGGER sync_lead_name_to_activities
-  AFTER UPDATE ON public.leads
-  FOR EACH ROW
-  WHEN (
-    OLD.first_name IS DISTINCT FROM NEW.first_name
-    OR OLD.last_name IS DISTINCT FROM NEW.last_name
-    OR OLD.email     IS DISTINCT FROM NEW.email
-  )
-  EXECUTE FUNCTION public.sync_activities_related_name('lead');
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'leads'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS sync_lead_name_to_activities ON public.leads';
+    EXECUTE $TRG$
+      CREATE TRIGGER sync_lead_name_to_activities
+        AFTER UPDATE ON public.leads
+        FOR EACH ROW
+        WHEN (
+          OLD.first_name IS DISTINCT FROM NEW.first_name
+          OR OLD.last_name IS DISTINCT FROM NEW.last_name
+          OR OLD.email     IS DISTINCT FROM NEW.email
+        )
+        EXECUTE FUNCTION public.sync_activities_related_name('lead')
+    $TRG$;
+  END IF;
+END $$;
 
-DROP TRIGGER IF EXISTS sync_contact_name_to_activities ON public.contacts;
-CREATE TRIGGER sync_contact_name_to_activities
-  AFTER UPDATE ON public.contacts
-  FOR EACH ROW
-  WHEN (
-    OLD.first_name IS DISTINCT FROM NEW.first_name
-    OR OLD.last_name IS DISTINCT FROM NEW.last_name
-    OR OLD.email     IS DISTINCT FROM NEW.email
-  )
-  EXECUTE FUNCTION public.sync_activities_related_name('contact');
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'contacts'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS sync_contact_name_to_activities ON public.contacts';
+    EXECUTE $TRG$
+      CREATE TRIGGER sync_contact_name_to_activities
+        AFTER UPDATE ON public.contacts
+        FOR EACH ROW
+        WHEN (
+          OLD.first_name IS DISTINCT FROM NEW.first_name
+          OR OLD.last_name IS DISTINCT FROM NEW.last_name
+          OR OLD.email     IS DISTINCT FROM NEW.email
+        )
+        EXECUTE FUNCTION public.sync_activities_related_name('contact')
+    $TRG$;
+  END IF;
+END $$;
 
-DROP TRIGGER IF EXISTS sync_account_name_to_activities ON public.accounts;
-CREATE TRIGGER sync_account_name_to_activities
-  AFTER UPDATE ON public.accounts
-  FOR EACH ROW
-  WHEN (
-    OLD.name  IS DISTINCT FROM NEW.name
-    OR OLD.email IS DISTINCT FROM NEW.email
-  )
-  EXECUTE FUNCTION public.sync_activities_related_name('account');
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'accounts'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS sync_account_name_to_activities ON public.accounts';
+    EXECUTE $TRG$
+      CREATE TRIGGER sync_account_name_to_activities
+        AFTER UPDATE ON public.accounts
+        FOR EACH ROW
+        WHEN (
+          OLD.name  IS DISTINCT FROM NEW.name
+          OR OLD.email IS DISTINCT FROM NEW.email
+        )
+        EXECUTE FUNCTION public.sync_activities_related_name('account')
+    $TRG$;
+  END IF;
+END $$;
 
-DROP TRIGGER IF EXISTS sync_opportunity_name_to_activities ON public.opportunities;
-CREATE TRIGGER sync_opportunity_name_to_activities
-  AFTER UPDATE ON public.opportunities
-  FOR EACH ROW
-  WHEN (OLD.name IS DISTINCT FROM NEW.name)
-  EXECUTE FUNCTION public.sync_activities_related_name('opportunity');
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'opportunities'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS sync_opportunity_name_to_activities ON public.opportunities';
+    EXECUTE $TRG$
+      CREATE TRIGGER sync_opportunity_name_to_activities
+        AFTER UPDATE ON public.opportunities
+        FOR EACH ROW
+        WHEN (OLD.name IS DISTINCT FROM NEW.name)
+        EXECUTE FUNCTION public.sync_activities_related_name('opportunity')
+    $TRG$;
+  END IF;
+END $$;
