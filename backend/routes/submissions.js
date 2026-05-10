@@ -87,9 +87,7 @@ export function validateSubmissionInput(input) {
     throw err;
   }
   if (typeof obj.related_to !== 'string' || !RELATED_TO_VALUES.has(obj.related_to.trim())) {
-    const err = new RangeError(
-      `related_to must be one of: ${[...RELATED_TO_VALUES].join(', ')}`,
-    );
+    const err = new RangeError(`related_to must be one of: ${[...RELATED_TO_VALUES].join(', ')}`);
     err.code = 'invalid_related_to';
     throw err;
   }
@@ -326,7 +324,8 @@ export default function createSubmissionsRoutes() {
       tenantId,
       session: row,
       templateName: template.name,
-      assignedTo: req.user?.id || null,
+      sentByUserId: req.user?.id || null,
+      sentByUserEmail: req.user?.email || null,
     }).catch(() => undefined);
 
     return res.status(201).json({
@@ -497,9 +496,7 @@ export default function createSubmissionsRoutes() {
       .eq('tenant_id', tenantId)
       .eq('id', req.params.id)
       .is('archived_at', null) // belt-and-suspenders against race
-      .select(
-        'id, status, archived_at, archive_reason, archived_by',
-      )
+      .select('id, status, archived_at, archive_reason, archived_by')
       .maybeSingle();
     if (error) {
       logger.error('[Submissions] Archive update failed', {

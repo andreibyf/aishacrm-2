@@ -27,6 +27,49 @@ import { computeDocumentDueFields } from './computeDocumentDueFields.js';
 import { resolveRelatedEntityFields } from './resolveRelatedEntityFields.js';
 
 /**
+ * Resolve a user's email (req.user.email) to a tenant-scoped employees.id.
+ *
+ * activities.assigned_to has a FK to employees(id) — passing a users.id
+ * UUID directly causes a silent FK violation that fails the entire row
+ * insert. The day-4a v1 of this tracker did exactly that (passed
+ * req.user.id) and the `.catch(() => undefined)` swallowed every error,
+ * leaving 10 sessions with zero activity rows in dev.
+ *
+ * @param {object} supabase service-role client
+ * @param {string} tenantId
+ * @param {string|null} userEmail
+ * @returns {Promise<string|null>} employees.id or null when no match
+ */
+async function resolveAssignedEmployee(supabase, tenantId, userEmail) {
+  if (!userEmail || typeof userEmail !== 'string') return null;
+  try {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('email', userEmail)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      logger.warn('[signingActivityTracker] employee lookup failed', {
+        tenantId,
+        userEmail,
+        message: error.message,
+      });
+      return null;
+    }
+    return data?.id || null;
+  } catch (err) {
+    logger.warn('[signingActivityTracker] employee lookup threw', {
+      tenantId,
+      userEmail,
+      message: err?.message || String(err),
+    });
+    return null;
+  }
+}
+
+/**
  * Find the activity row for a given signing_session, if any.
  *
  * @param {object} supabase service-role client
@@ -74,7 +117,12 @@ async function findActivityForSession(supabase, tenantId, signingSessionId) {
  *                                    recipient_name, message, expires_at,
  *                                    created_at)
  * @param {string} params.templateName
- * @param {string} [params.assignedTo] uuid — the operator who clicked Send
+ * @param {string} [params.sentByUserId]  the auth user uuid who clicked Send
+ *                                         (stored in metadata for audit)
+ * @param {string} [params.sentByUserEmail] the auth user's email — looked up
+ *                                          against employees.email to populate
+ *                                          activities.assigned_to (FK to
+ *                                          employees.id, NOT users.id)
  * @returns {Promise<{ ok: boolean, activityId?: string, reason?: string }>}
  */
 export async function createSendActivity({
@@ -82,19 +130,34 @@ export async function createSendActivity({
   tenantId,
   session,
   templateName,
-  assignedTo,
+  sentByUserId,
+  sentByUserEmail,
 }) {
   if (!supabase || !tenantId || !session?.id) {
     return { ok: false, reason: 'missing_args' };
   }
   try {
     const dueFields = await computeDocumentDueFields(supabase, tenantId);
-    const related = await resolveRelatedEntityFields({
+    // resolveRelatedEntityFields takes POSITIONAL args
+    // (supabase, tenantId, relatedTo, relatedId), not an object —
+    // calling it with an object passed `tenantId === undefined` and
+    // tripped the early-return, making related_name silently null on
+    // every signing activity row. Confirmed by SQL audit on dev:
+    // 12/12 backfilled + 1/1 live row all had related_name=null.
+    const related = await resolveRelatedEntityFields(
       supabase,
       tenantId,
-      relatedTo: session.related_to,
-      relatedId: session.related_id,
-    });
+      session.related_to,
+      session.related_id,
+    );
+    // activities.assigned_to FKs to employees(id), so we MUST resolve the
+    // auth user's email → matching employees row for this tenant.
+    // Inserting a users.id directly violates the FK and silently fails.
+    const assignedToEmployeeId = await resolveAssignedEmployee(
+      supabase,
+      tenantId,
+      sentByUserEmail || null,
+    );
     const recipientLabel = session.recipient_name
       ? `${session.recipient_name} <${session.recipient_email}>`
       : session.recipient_email;
@@ -118,7 +181,7 @@ export async function createSendActivity({
         related_email: related?.related_email || null,
         due_date: dueFields.due_date,
         due_time: dueFields.due_time,
-        assigned_to: assignedTo || null,
+        assigned_to: assignedToEmployeeId,
         is_test_data: false,
         metadata: {
           signing_session_id: session.id,
@@ -130,6 +193,10 @@ export async function createSendActivity({
           signed_at: null,
           declined_at: null,
           expires_at: session.expires_at,
+          // Stash the actual user identifier for audit even if no
+          // matching employee row exists (assigned_to stays null).
+          sent_by_user_id: sentByUserId || null,
+          sent_by_user_email: sentByUserEmail || null,
           source: '4vd-43-signing',
         },
       })
@@ -210,12 +277,7 @@ export async function updateActivityForView({ supabase, tenantId, signingSession
  * @param {string} [params.signerName]
  * @returns {Promise<{ ok: boolean, reason?: string }>}
  */
-export async function updateActivityForSign({
-  supabase,
-  tenantId,
-  signingSessionId,
-  signerName,
-}) {
+export async function updateActivityForSign({ supabase, tenantId, signingSessionId, signerName }) {
   const existing = await findActivityForSession(supabase, tenantId, signingSessionId);
   if (!existing) return { ok: false, reason: 'no_activity_row' };
   try {
@@ -258,12 +320,7 @@ export async function updateActivityForSign({
  * @param {string} [params.reason]
  * @returns {Promise<{ ok: boolean, reason?: string }>}
  */
-export async function updateActivityForDecline({
-  supabase,
-  tenantId,
-  signingSessionId,
-  reason,
-}) {
+export async function updateActivityForDecline({ supabase, tenantId, signingSessionId, reason }) {
   const existing = await findActivityForSession(supabase, tenantId, signingSessionId);
   if (!existing) return { ok: false, reason: 'no_activity_row' };
   try {
