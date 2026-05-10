@@ -44,6 +44,7 @@
 import express from 'express';
 import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import logger from '../lib/logger.js';
+import { finalizeSigningSession } from '../lib/finalizeSigningSession.js';
 import {
   updateActivityForView,
   updateActivityForSign,
@@ -602,6 +603,39 @@ export default function createPublicSignRoutes() {
       signingSessionId: session.id,
       signerName: parsed.signer_name || undefined,
     }).catch(() => undefined);
+
+    // Day 5: finalize the signing session — load original PDF, stamp
+    // recipient's responses, append Certificate of Completion, hash,
+    // upload to Supabase Storage, transition status to 'completed'.
+    // Best-effort write-behind: we've already returned status='signed'
+    // to the recipient (legal intent-to-sign is preserved in the row),
+    // so a finalize failure doesn't break the recipient's UX. The
+    // operator-side "View signed PDF" link will simply 404 until a
+    // re-run succeeds.
+    //
+    // We DON'T await here — the recipient already got their success
+    // page. pdf-lib + storage upload can run for a couple of seconds
+    // and we don't want to extend the recipient's submit latency.
+    finalizeSigningSession({
+      supabase,
+      bucket: getBucketName(),
+      sessionId: session.id,
+      signerName: parsed.signer_name || undefined,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          logger.warn('[PublicSign] finalize step did not complete', {
+            sessionId: session.id,
+            reason: result.reason,
+          });
+        }
+      })
+      .catch((err) => {
+        logger.error('[PublicSign] finalize threw', {
+          sessionId: session.id,
+          message: err?.message,
+        });
+      });
 
     return res.json({ data });
   });
