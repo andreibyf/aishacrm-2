@@ -21,6 +21,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { getSupabaseClient } from '../lib/supabase-db.js';
+import { getSupabaseAdmin, getBucketName } from '../lib/supabaseFactory.js';
 import logger from '../lib/logger.js';
 import { sendTenantEmail } from '../lib/sendTenantEmail.js';
 import { buildSigningRequestEmail } from '../lib/buildSigningRequestEmail.js';
@@ -173,7 +174,17 @@ export function buildSigningUrl(frontendUrl, tenantSlug, signingToken) {
 // Routes
 // ---------------------------------------------------------------------------
 
-export default function createSubmissionsRoutes() {
+/**
+ * Factory for the /api/submissions express router.
+ *
+ * @param {object} [deps] - Optional DI overrides (test seam). Production code
+ *   leaves this empty so the real Supabase factories are used.
+ * @param {() => any} [deps.getSupabaseClient]  override of getSupabaseClient
+ * @param {() => any} [deps.getSupabaseAdmin]   override of getSupabaseAdmin
+ */
+export default function createSubmissionsRoutes(deps = {}) {
+  const supabaseClientFn = deps.getSupabaseClient || getSupabaseClient;
+  const supabaseAdminFn = deps.getSupabaseAdmin || getSupabaseAdmin;
   const router = express.Router();
 
   // --- POST /api/submissions ----------------------------------------------
@@ -196,7 +207,7 @@ export default function createSubmissionsRoutes() {
       });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = supabaseClientFn();
 
     // Verify the template belongs to this tenant + is active. Defends
     // against a client who guessed a UUID from another tenant.
@@ -363,7 +374,7 @@ export default function createSubmissionsRoutes() {
       return res.status(400).json({ error: 'invalid_related_id' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = supabaseClientFn();
     let query = supabase
       .from('signing_sessions')
       .select(
@@ -391,7 +402,7 @@ export default function createSubmissionsRoutes() {
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
     }
-    const supabase = getSupabaseClient();
+    const supabase = supabaseClientFn();
     const { data, error } = await supabase
       .from('signing_sessions')
       .select(
@@ -412,6 +423,70 @@ export default function createSubmissionsRoutes() {
       return res.status(404).json({ error: 'not_found' });
     }
     return res.json({ data });
+  });
+
+  // --- GET /api/submissions/:id/signed-pdf-url ----------------------------
+  // Returns a 5-minute Supabase Storage signed URL for the signed PDF
+  // (stamped + Certificate of Completion). Frontend opens the URL directly
+  // — backend doesn't proxy the bytes. Tenant-scoped: the row lookup is
+  // gated by tenant_id, and the storage path itself is `<tenant_id>/signed/...`
+  // so even a leaked URL only exposes one specific signed object.
+  //
+  // Returns 404 when the session row exists but signed_pdf_storage_path is
+  // still null (i.e. finalize hasn't run yet — session is at status
+  // pending/viewed/signed but not completed). The UI should hide the link
+  // for those rows; this is a belt-and-suspenders guard.
+  router.get('/:id/signed-pdf-url', async (req, res) => {
+    const tenantId = resolveRequestTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenant_context_missing' });
+    }
+    const supabase = supabaseClientFn();
+    const { data: row, error: lookupErr } = await supabase
+      .from('signing_sessions')
+      .select('id, signed_pdf_storage_path, status, archived_at')
+      .eq('tenant_id', tenantId)
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (lookupErr) {
+      logger.error('[Submissions] signed-pdf-url lookup failed', {
+        tenantId,
+        id: req.params.id,
+        message: lookupErr.message,
+      });
+      return res.status(500).json({ error: 'lookup_failed', message: lookupErr.message });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    if (!row.signed_pdf_storage_path) {
+      // Signing not finalized — no stored PDF to hand out yet.
+      return res.status(404).json({
+        error: 'signed_pdf_not_available',
+        message: 'Signed PDF is not yet available for this submission.',
+      });
+    }
+
+    const storageAdmin = supabaseAdminFn();
+    const bucket = getBucketName();
+    const ttlSeconds = 300; // 5 minutes
+    const { data: signed, error: signErr } = await storageAdmin.storage
+      .from(bucket)
+      .createSignedUrl(row.signed_pdf_storage_path, ttlSeconds);
+    if (signErr || !signed?.signedUrl) {
+      logger.error('[Submissions] signed-pdf-url sign failed', {
+        tenantId,
+        id: row.id,
+        path: row.signed_pdf_storage_path,
+        message: signErr?.message,
+      });
+      return res.status(503).json({
+        error: 'sign_failed',
+        message: signErr?.message || 'unable to mint signed url',
+      });
+    }
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    return res.json({ data: { url: signed.signedUrl, expires_at: expiresAt } });
   });
 
   // --- POST /api/submissions/:id/archive ----------------------------------
@@ -447,7 +522,7 @@ export default function createSubmissionsRoutes() {
       });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = supabaseClientFn();
     // Look up the row to confirm it exists in the tenant + isn't already
     // archived (idempotency — re-archiving a row should be a no-op, not
     // an error).

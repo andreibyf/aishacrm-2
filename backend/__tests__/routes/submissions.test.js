@@ -366,24 +366,241 @@ describe('POST /api/submissions/:id/archive — role + reason validation', () =>
 
   test('archive as admin with valid reason -> NOT 403 (passes role gate; DB error from no-supabase env is fine)', async () => {
     const app = buildApp({ id: 'u6', role: 'admin' });
-    const { status } = await send(
-      app,
-      'POST',
-      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
-      { reason: 'wrong template attached' },
-    );
+    const { status } = await send(app, 'POST', `/api/submissions/${ARCHIVE_TARGET_ID}/archive`, {
+      reason: 'wrong template attached',
+    });
     assert.notEqual(status, 403);
     assert.notEqual(status, 400); // body validation passes
   });
 
   test('archive as superadmin passes role gate', async () => {
     const app = buildApp({ id: 'u7', role: 'superadmin' });
-    const { status } = await send(
-      app,
-      'POST',
-      `/api/submissions/${ARCHIVE_TARGET_ID}/archive`,
-      { reason: 'cleanup' },
-    );
+    const { status } = await send(app, 'POST', `/api/submissions/${ARCHIVE_TARGET_ID}/archive`, {
+      reason: 'cleanup',
+    });
     assert.notEqual(status, 403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/submissions/:id/signed-pdf-url — admin signed-PDF download link
+//
+// Returns a 5-min Supabase signed URL for the stored signed PDF
+// (stamped + Certificate of Completion). Open to all roles with detail-panel
+// access (sales reps need to forward completed contracts to ops).
+// ---------------------------------------------------------------------------
+
+describe('GET /api/submissions/:id/signed-pdf-url — input/role validation', () => {
+  function buildApp(user, opts = {}) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = user;
+      if (opts.tenant !== false) req.tenant = { id: TENANT_A };
+      next();
+    });
+    app.use('/api/submissions', createSubmissionsRoutes());
+    return app;
+  }
+
+  async function send(app, method, path) {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(app).listen(0, async () => {
+        try {
+          const port = server.address().port;
+          const resp = await fetch(`http://127.0.0.1:${port}${path}`, { method });
+          const json = await resp.json().catch(() => ({}));
+          server.close();
+          resolve({ status: resp.status, body: json });
+        } catch (err) {
+          server.close();
+          reject(err);
+        }
+      });
+    });
+  }
+
+  const TARGET_ID = '11111111-2222-3333-4444-555555555555';
+
+  test('missing tenant context -> 400 tenant_context_missing', async () => {
+    const app = buildApp({ id: 'u1', role: 'employee' }, { tenant: false });
+    const { status, body } = await send(app, 'GET', `/api/submissions/${TARGET_ID}/signed-pdf-url`);
+    assert.equal(status, 400);
+    assert.equal(body.error, 'tenant_context_missing');
+  });
+
+  test('as employee -> NOT 403 (open to all roles)', async () => {
+    const app = buildApp({ id: 'u2', role: 'employee' });
+    const { status } = await send(app, 'GET', `/api/submissions/${TARGET_ID}/signed-pdf-url`);
+    assert.notEqual(status, 403);
+  });
+
+  test('as manager -> NOT 403', async () => {
+    const app = buildApp({ id: 'u3', role: 'manager' });
+    const { status } = await send(app, 'GET', `/api/submissions/${TARGET_ID}/signed-pdf-url`);
+    assert.notEqual(status, 403);
+  });
+
+  test('as admin -> NOT 403', async () => {
+    const app = buildApp({ id: 'u4', role: 'admin' });
+    const { status } = await send(app, 'GET', `/api/submissions/${TARGET_ID}/signed-pdf-url`);
+    assert.notEqual(status, 403);
+  });
+
+  test('as superadmin -> NOT 403', async () => {
+    const app = buildApp({ id: 'u5', role: 'superadmin' });
+    const { status } = await send(app, 'GET', `/api/submissions/${TARGET_ID}/signed-pdf-url`);
+    assert.notEqual(status, 403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/submissions/:id/signed-pdf-url — DB-mocked behaviour
+//
+// Uses createSubmissionsRoutes()'s DI seam to inject fake supabase factories,
+// so we can pin all branches (404 not_found, 404 signed_pdf_not_available,
+// 503 sign_failed, 200 happy path, 500 lookup_failed) without spinning up
+// Postgres + Storage in the unit-test run.
+// ---------------------------------------------------------------------------
+
+describe('GET /:id/signed-pdf-url — DB-mocked behaviour', () => {
+  const TARGET_ID = '11111111-2222-3333-4444-555555555555';
+
+  function buildDbStub({ rowResult, eqCalls }) {
+    return {
+      from() {
+        return {
+          select() {
+            const chain = {
+              eq(col, val) {
+                eqCalls.push([col, val]);
+                return chain;
+              },
+              maybeSingle: async () => rowResult,
+            };
+            return chain;
+          },
+        };
+      },
+    };
+  }
+
+  function buildStorageStub({ signResult }) {
+    return {
+      storage: {
+        from() {
+          return {
+            createSignedUrl: async () => signResult,
+          };
+        },
+      },
+    };
+  }
+
+  async function runRoute({ rowResult, signResult }) {
+    const eqCalls = [];
+    const dbStub = buildDbStub({ rowResult, eqCalls });
+    const storageStub = buildStorageStub({ signResult });
+
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { id: 'u-test', role: 'admin' };
+      req.tenant = { id: TENANT_A };
+      next();
+    });
+    app.use(
+      '/api/submissions',
+      createSubmissionsRoutes({
+        getSupabaseClient: () => dbStub,
+        getSupabaseAdmin: () => storageStub,
+      }),
+    );
+
+    return await new Promise((resolve, reject) => {
+      const server = http.createServer(app).listen(0, async () => {
+        try {
+          const port = server.address().port;
+          const resp = await fetch(
+            `http://127.0.0.1:${port}/api/submissions/${TARGET_ID}/signed-pdf-url`,
+          );
+          const body = await resp.json().catch(() => ({}));
+          server.close();
+          resolve({ status: resp.status, body, eqCalls });
+        } catch (err) {
+          server.close();
+          reject(err);
+        }
+      });
+    });
+  }
+
+  test('row not found -> 404 not_found', async () => {
+    const { status, body } = await runRoute({
+      rowResult: { data: null, error: null },
+      signResult: null,
+    });
+    assert.equal(status, 404);
+    assert.equal(body.error, 'not_found');
+  });
+
+  test('row found but signed_pdf_storage_path is null -> 404 signed_pdf_not_available', async () => {
+    const { status, body } = await runRoute({
+      rowResult: {
+        data: { id: TARGET_ID, signed_pdf_storage_path: null, status: 'pending' },
+        error: null,
+      },
+      signResult: null,
+    });
+    assert.equal(status, 404);
+    assert.equal(body.error, 'signed_pdf_not_available');
+  });
+
+  test('storage sign fails -> 503 sign_failed', async () => {
+    const { status, body } = await runRoute({
+      rowResult: {
+        data: {
+          id: TARGET_ID,
+          signed_pdf_storage_path: `${TENANT_A}/signed/${TARGET_ID}.pdf`,
+          status: 'completed',
+        },
+        error: null,
+      },
+      signResult: { data: null, error: { message: 'Invalid key' } },
+    });
+    assert.equal(status, 503);
+    assert.equal(body.error, 'sign_failed');
+    assert.equal(body.message, 'Invalid key');
+  });
+
+  test('happy path -> 200 with url + expires_at + tenant_id filter applied', async () => {
+    const { status, body, eqCalls } = await runRoute({
+      rowResult: {
+        data: {
+          id: TARGET_ID,
+          signed_pdf_storage_path: `${TENANT_A}/signed/${TARGET_ID}.pdf`,
+          status: 'completed',
+        },
+        error: null,
+      },
+      signResult: { data: { signedUrl: 'https://supabase/x/signed' }, error: null },
+    });
+    assert.equal(status, 200);
+    assert.equal(body?.data?.url, 'https://supabase/x/signed');
+    assert.ok(body?.data?.expires_at);
+    assert.ok(new Date(body.data.expires_at).getTime() > Date.now());
+    // Tenant + id filter must be applied (defense in depth even though the
+    // service-role client bypasses RLS).
+    assert.ok(eqCalls.some(([c, v]) => c === 'tenant_id' && v === TENANT_A));
+    assert.ok(eqCalls.some(([c, v]) => c === 'id' && v === TARGET_ID));
+  });
+
+  test('lookup error -> 500 lookup_failed', async () => {
+    const { status, body } = await runRoute({
+      rowResult: { data: null, error: { message: 'connection refused' } },
+      signResult: null,
+    });
+    assert.equal(status, 500);
+    assert.equal(body.error, 'lookup_failed');
   });
 });

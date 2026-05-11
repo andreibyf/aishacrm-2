@@ -14,9 +14,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Eraser, Check } from 'lucide-react';
+import { trimSignatureCanvas } from '@/lib/trimSignature';
 
-const CANVAS_W = 480;
-const CANVAS_H = 160;
+// Canvas is wider/shorter than a typical drawing area — 6:1 aspect ratio
+// matches how a contract signature line is shaped (thin and wide). Without
+// this, recipients sign in a square-ish area and produce ~3:1 signatures
+// that aspect-fit into a 10:1-shaped field box, filling only ~30% of the
+// underline width. With a 6:1 pad they naturally produce wider signatures
+// that fill ~60% of typical underlines.
+const CANVAS_W = 600;
+const CANVAS_H = 100;
 const STROKE_COLOR = '#0f172a';
 const STROKE_WIDTH = 2;
 
@@ -100,7 +107,15 @@ export default function SignaturePad({ onChange, initialDataUrl }) {
   const handleSave = () => {
     const c = canvasRef.current;
     if (!c) return;
-    onChange?.(c.toDataURL('image/png'));
+    // Crop the 480x160 canvas down to just the inked region (with a
+    // small padding) and convert the white background to alpha 0.
+    // Without this, pdf-lib's aspect-fit in signPdf.js shrinks the
+    // entire 480x160 image into the field box and the recipient's
+    // actual stroke ends up tiny inside a lot of empty whitespace.
+    // The transparent background also means the stamped signature
+    // doesn't paint a white rectangle over the form's underline.
+    const trimmed = trimSignatureCanvas(c);
+    onChange?.(trimmed.toDataURL('image/png'));
   };
 
   return (

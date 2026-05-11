@@ -23,7 +23,11 @@
  *   signature → embed PNG of the recipient's signature; falls back to the
  *               session-level signatureDataUrl if no per-field value.
  *   text / name / email → drawText with Helvetica sized to fit the area
- *               height (clamped 6-14pt). Top-aligned within the area.
+ *               height (clamped 6-14pt). Baseline aligned to the bottom
+ *               of the area (+2px lift to clear descenders), because the
+ *               visual underline on a typical signing-form line sits at
+ *               the box's bottom edge — the recipient expects their typed
+ *               value to rest on that line, not float above it.
  *   checkbox  → drawText 'X' centered in the area when value is truthy.
  *   date      → ALWAYS stamps the server-side signed_at, NEVER the
  *               recipient-typed value. ESIGN/eIDAS admissibility: the
@@ -47,7 +51,31 @@
  *   - Custom font embedding (we use the 14 standard PDF fonts only)
  */
 
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, StandardFonts, rgb } from 'pdf-lib';
+
+/**
+ * Signatures may render up to this multiple of the field box's height,
+ * extending UPWARD past the box's top edge if the natural aspect ratio
+ * needs more room than the box provides. 1.3 means a 25px-tall signature
+ * box can render up to 32.5px tall (7.5px above the box top).
+ *
+ * Why: signatures are inherently wider-than-tall (the SignaturePad canvas
+ * is now 6:1 to encourage this), but operators draw signature underlines
+ * as thin strips — say 10:1 — so the natural signature aspect is still
+ * narrower than the box aspect. Strict aspect-fit shrinks the signature
+ * horizontally to fit, producing a small signature in a wide-short box.
+ * Allowing modest upward overflow (anchored to the box's BOTTOM edge so
+ * the signature still rests on the underline) lets the renderer scale
+ * by width while letting the height spill into the white space above.
+ *
+ * Safe because trimSignature.js converted the canvas's white background
+ * to alpha 0 — only the ink strokes render, not a white rectangle that
+ * would obscure the line above. 1.3x is conservative: even on single-
+ * line-spaced documents there's typically more than 30% of a line of
+ * vertical white space above the underline (the descender-to-baseline
+ * gap of the line above plus the underline's own padding).
+ */
+const SIGNATURE_HEIGHT_MULTIPLIER = 1.3;
 
 /**
  * @typedef {Object} TemplateField
@@ -103,16 +131,33 @@ export function decodeDataUrlPng(dataUrl) {
 
 /**
  * Compute font size that fits a box of `heightPx` pixels at the standard
- * pdf-lib font metrics for Helvetica. We aim for ~70% of box height as
- * the cap-height; clamp to a sane min/max so a tiny box doesn't get
- * unreadable 2pt text and a giant box doesn't get a 60pt heading.
+ * pdf-lib font metrics for Helvetica.
+ *
+ * Sizing model: target = heightPx * 0.85, clamped to [8, 14]. The 0.85
+ * factor (was 0.7) lets a moderately-thin box hold a comfortably-sized
+ * font — important for inline fill-in-the-blank fields ("I, ____, the
+ * ____ of ___") drawn against single-line-spaced sentences. The
+ * operator wants to draw the field box as a thin strip along the
+ * underline so the box doesn't visually crash into the line of text
+ * above; the renderer compensates by sizing the font generously
+ * relative to that thin strip.
+ *
+ * 8pt floor (was 6pt) keeps text legible even when the box is small —
+ * 6pt was a "don't crash" floor for misuse; 8pt is the smallest size
+ * comfortable to read on a printed contract. 14pt ceiling unchanged.
+ *
+ * If a recipient's typed value exceeds the box width at this font size,
+ * pdf-lib's drawText `maxWidth` parameter wraps it onto a second line
+ * (or truncates depending on pdf-lib version). For inline blanks the
+ * value should almost always fit; for the rare overflow case the
+ * operator can widen the box in the builder.
  *
  * @param {number} heightPx
  * @returns {number}
  */
 export function fitFontSize(heightPx) {
-  const target = heightPx * 0.7;
-  return Math.max(6, Math.min(14, target));
+  const target = heightPx * 0.85;
+  return Math.max(8, Math.min(14, target));
 }
 
 /**
@@ -145,6 +190,53 @@ function areaToPdfPixels(area, widthPx, heightPx) {
   // bottom-of-box in PDF coords = page height - (area.y + area.h) * heightPx
   const y = heightPx - (area.y + area.h) * heightPx;
   return { x, y, w, h };
+}
+
+/**
+ * Strip every interactive element from the loaded PDF:
+ *   - /Annots on every page (link annotations, form widgets, sticky
+ *     notes, anything clickable)
+ *   - /AcroForm dictionary at the document root (any leftover form
+ *     hierarchy after the page-level widgets are gone)
+ *
+ * Why this is mandatory, not optional
+ * ===================================
+ * Template PDFs uploaded by operators are often pre-processed in
+ * third-party signing tools (free online "fill any PDF" services,
+ * desktop apps that embed an AcroForm layer, etc.). Those tools embed
+ * link annotations that point back to their own websites. When we
+ * stamp signatures and ship the final PDF, the recipient clicks the
+ * signature area expecting nothing to happen — and is silently
+ * redirected to a third-party domain. Concrete case: a contract
+ * template was prepared in a free eSign service that embeds widgets
+ * with link actions to its homepage; the signed PDF retained those
+ * widgets, and clicking the signature opened the third party's site.
+ *
+ * Beyond the obvious phishing risk (a malicious template author
+ * embedding a credential-harvest URL), this also undermines the
+ * legal integrity claim — a contract's content should be inert,
+ * not a launchpad for arbitrary navigation. Standalone form fields
+ * also break our stamping contract: the recipient never filled them
+ * (they filled OUR Areas overlay), so they'd appear blank in PDF
+ * readers that render AcroForm widgets on top of the page content.
+ *
+ * Implementation note: pdf-lib's PDFDict.delete is a no-op if the
+ * key isn't present, so this is safe on PDFs that never had any
+ * annotations to begin with.
+ *
+ * @param {import('pdf-lib').PDFDocument} pdfDoc
+ * @returns {void}
+ */
+export function stripPdfAnnotations(pdfDoc) {
+  if (!pdfDoc) return;
+  const pages = pdfDoc.getPages();
+  for (const page of pages) {
+    page.node.delete(PDFName.of('Annots'));
+  }
+  // Document-level AcroForm — Fields[] entries point to widgets we
+  // just removed, but the dictionary itself is independent of those.
+  // Strip it so PDF readers don't render any leftover form chrome.
+  pdfDoc.catalog.delete(PDFName.of('AcroForm'));
 }
 
 /**
@@ -198,11 +290,7 @@ async function stampFields({
       continue;
     }
     for (const area of field.areas) {
-      if (
-        typeof area.page !== 'number' ||
-        area.page < 0 ||
-        area.page >= pages.length
-      ) {
+      if (typeof area.page !== 'number' || area.page < 0 || area.page >= pages.length) {
         continue;
       }
       const page = pages[area.page];
@@ -212,18 +300,28 @@ async function stampFields({
       switch (field.type) {
         case 'signature': {
           const perFieldVal = lookupValue(field.name, fieldValues);
-          const img = await getSignatureImage(
-            typeof perFieldVal === 'string' ? perFieldVal : null,
-          );
+          const img = await getSignatureImage(typeof perFieldVal === 'string' ? perFieldVal : null);
           if (!img) break;
-          // Preserve aspect ratio: scale image to fit inside the box.
+          // Preserve aspect ratio. Width is bounded by box.w; height is
+          // bounded by box.h * SIGNATURE_HEIGHT_MULTIPLIER, allowing
+          // modest upward overflow on thin signature underlines so the
+          // ink fills more of the underline width without horizontal
+          // shrinkage. See the constant's docblock for the full
+          // rationale and safety analysis.
           const imgW = img.width;
           const imgH = img.height;
-          const scale = Math.min(box.w / imgW, box.h / imgH);
+          const maxH = box.h * SIGNATURE_HEIGHT_MULTIPLIER;
+          const scale = Math.min(box.w / imgW, maxH / imgH);
           const drawW = imgW * scale;
           const drawH = imgH * scale;
+          // Anchor the bottom of the signature image to the bottom of
+          // the box (the underline). If drawH > box.h, the top of the
+          // image overflows upward into the white space above. The
+          // transparent background (per trimSignature.js) keeps the
+          // overflow visually clean — only ink renders, not a white
+          // rectangle.
           const drawX = box.x + (box.w - drawW) / 2;
-          const drawY = box.y + (box.h - drawH) / 2;
+          const drawY = box.y;
           page.drawImage(img, {
             x: drawX,
             y: drawY,
@@ -239,11 +337,14 @@ async function stampFields({
           const v = lookupValue(field.name, fieldValues);
           if (typeof v !== 'string' || v.length === 0) break;
           const fontSize = fitFontSize(box.h);
-          // Position text near top of box (pdf-lib y is the BASELINE).
-          // Place baseline at y + h - fontSize so cap-height sits inside.
+          // Baseline-align to the bottom of the box. pdf-lib's y is the
+          // glyph BASELINE, not the top. Templates draw the underline at
+          // the bottom of the area, so the recipient's typed value should
+          // rest there. +2px lift keeps descenders (g/j/p/q/y) just clear
+          // of the line — same metric most browsers use for type=text.
           page.drawText(v, {
             x: box.x + 2,
-            y: box.y + box.h - fontSize,
+            y: box.y + 2,
             size: fontSize,
             font: helv,
             color: rgb(0, 0, 0),
@@ -269,10 +370,12 @@ async function stampFields({
         case 'date': {
           // Always server-stamped. Recipient-typed value is intentionally
           // discarded — see file-level docblock for the legal rationale.
+          // Baseline-aligned to bottom of box, same rationale as
+          // text/name/email above.
           const fontSize = fitFontSize(box.h);
           page.drawText(dateStamp, {
             x: box.x + 2,
-            y: box.y + box.h - fontSize,
+            y: box.y + 2,
             size: fontSize,
             font: helv,
             color: rgb(0, 0, 0),
@@ -317,8 +420,7 @@ export async function signPdf({
   title = 'Signed document',
 }) {
   if (!originalPdf) throw new TypeError('originalPdf is required');
-  const signedAtDate =
-    signedAt instanceof Date ? signedAt : new Date(signedAt || Date.now());
+  const signedAtDate = signedAt instanceof Date ? signedAt : new Date(signedAt || Date.now());
 
   const pdfDoc = await PDFDocument.load(originalPdf, {
     // Some templates have weird XRef tables; ignoreEncryption is for
@@ -326,6 +428,14 @@ export async function signPdf({
     // here costs nothing).
     ignoreEncryption: true,
   });
+
+  // Defensive sanitization: strip interactive annotations + AcroForm
+  // BEFORE stamping. See stripPdfAnnotations docblock for the full
+  // rationale — short version: third-party signing tools embed link
+  // annotations in templates that survive into our signed output and
+  // redirect recipients to external sites when they click on the
+  // signature area.
+  stripPdfAnnotations(pdfDoc);
 
   await stampFields({
     pdfDoc,
