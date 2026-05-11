@@ -260,10 +260,10 @@ describe('validateSubmitInput — rejects bad input', () => {
   test('missing required field', () => {
     assert.throws(
       () =>
-        validateSubmitInput(
-          { signature_data_url: TINY_PNG_DATA_URL, signer_name: 'Jane' },
-          [SIG_FIELD, REQUIRED_TEXT_FIELD],
-        ),
+        validateSubmitInput({ signature_data_url: TINY_PNG_DATA_URL, signer_name: 'Jane' }, [
+          SIG_FIELD,
+          REQUIRED_TEXT_FIELD,
+        ]),
       /required field "name" is missing/,
     );
   });
@@ -485,5 +485,22 @@ describe('Public sign routes — no auth required', () => {
     const app = buildApp();
     const { status } = await send(app, 'POST', '/api/sign/short/decline', { reason: 'no' });
     assert.equal(status, 404);
+  });
+
+  test('GET /:token/signed-pdf-url with malformed token returns 404', async () => {
+    // Same token-shape gate as the other public endpoints — fires
+    // before any DB call, so a leaked endpoint can't be probed for
+    // valid tokens via timing attack.
+    const app = buildApp();
+    const { status, body } = await send(app, 'GET', '/api/sign/not-a-token/signed-pdf-url');
+    assert.equal(status, 404);
+    assert.equal(body.error, 'not_found');
+  });
+
+  test('GET /:token/signed-pdf-url never returns 401/403', async () => {
+    const app = buildApp();
+    const { status } = await send(app, 'GET', `/api/sign/${VALID_TOKEN}/signed-pdf-url`);
+    assert.notEqual(status, 401);
+    assert.notEqual(status, 403);
   });
 });

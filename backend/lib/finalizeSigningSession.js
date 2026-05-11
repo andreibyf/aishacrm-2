@@ -39,6 +39,8 @@ import crypto from 'node:crypto';
 import logger from './logger.js';
 import { signPdf } from './signPdf.js';
 import { appendCertificateOfCompletion } from './buildCertificateOfCompletion.js';
+import { sendTenantEmail } from './sendTenantEmail.js';
+import { buildSigningReceiptEmail } from './buildSigningReceiptEmail.js';
 
 /**
  * Storage object key for a signed PDF. Mirrors `buildTemplateStorageKey`
@@ -181,8 +183,7 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       originalPdf: originalBuffer,
       fields: Array.isArray(template.fields) ? template.fields : [],
       fieldValues: session.field_values || {},
-      signatureDataUrl:
-        (session.field_values && session.field_values._signature_data_url) || null,
+      signatureDataUrl: (session.field_values && session.field_values._signature_data_url) || null,
       signerName: signerName || session.field_values?._signer_name || session.recipient_name || '',
       signedAt: session.signed_at || new Date(),
       title: template.name || 'Signed document',
@@ -206,8 +207,7 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       tenantName: undefined, // tenant join would be a separate query; keep CoC self-contained
       recipientEmail: session.recipient_email,
       recipientName: session.recipient_name || undefined,
-      signerTypedName:
-        signerName || session.field_values?._signer_name || undefined,
+      signerTypedName: signerName || session.field_values?._signer_name || undefined,
       signerIp: signedAuditEntry?.ip,
       signerUserAgent: signedAuditEntry?.ua,
       signedAt: session.signed_at || undefined,
@@ -226,14 +226,12 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
     tenantId: session.tenant_id,
     sessionId: session.id,
   });
-  const { error: upErr } = await supabase.storage.from(bucket).upload(
-    signedPdfStoragePath,
-    Buffer.from(mergedBytes),
-    {
+  const { error: upErr } = await supabase.storage
+    .from(bucket)
+    .upload(signedPdfStoragePath, Buffer.from(mergedBytes), {
       contentType: 'application/pdf',
       upsert: true,
-    },
-  );
+    });
   if (upErr) {
     logger.error('[finalize] storage upload failed', {
       sessionId,
@@ -265,9 +263,89 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
     return { ok: false, reason: 'session_update_failed', signedPdfStoragePath };
   }
 
+  // 8. Best-effort: email the recipient their signed copy with the PDF
+  //    attached. Failure here does NOT roll back the signing_session —
+  //    the row is at status='completed' and the operator can re-trigger
+  //    the email manually if needed. We log and continue.
+  //
+  //    The receipt email is intentionally separate from the request
+  //    email path (buildSigningRequestEmail / sendTenantEmail at submit
+  //    time) so a failed receipt doesn't undo the legal recording of
+  //    the signature.
+  try {
+    // Load tenant branding for the email's logo + primary color. Same
+    // payload shape buildSigningRequestEmail consumes during the send.
+    const { data: tenantRow } = await supabase
+      .from('tenant')
+      .select('id, tenant_id, name, branding_settings, metadata')
+      .eq('id', session.tenant_id)
+      .maybeSingle();
+
+    const built = buildSigningReceiptEmail({
+      tenant: tenantRow || { name: 'Your team' },
+      templateName: template.name || 'Signed document',
+      recipientName: session.recipient_name || undefined,
+      signedAtIso: completedAtIso,
+      // viewUrl intentionally omitted here — the public sign URL only
+      // works while signed_pdf_storage_path is set, which it now is,
+      // but exposing a token-bearing URL via email duplicates the
+      // attachment + adds a phishing-look-alike surface. The attached
+      // PDF is the recipient's canonical copy. We can revisit this if
+      // operators specifically want a "view online" link.
+    });
+
+    const emailResult = await sendTenantEmail({
+      tenantId: session.tenant_id,
+      to: session.recipient_email,
+      recipientName: session.recipient_name || undefined,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+      attachments: [
+        {
+          filename: buildAttachmentFilename(template.name || 'signed-document'),
+          content: Buffer.from(mergedBytes),
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    if (!emailResult.ok) {
+      logger.warn('[finalize] recipient receipt email failed', {
+        sessionId,
+        reason: emailResult.reason,
+      });
+    }
+  } catch (err) {
+    logger.warn('[finalize] recipient receipt email threw', {
+      sessionId,
+      message: err?.message || String(err),
+    });
+  }
+
   return {
     ok: true,
     signedPdfStoragePath,
     originalSha256,
   };
+}
+
+/**
+ * Build a safe filename for the email attachment. Template names can
+ * contain anything; we collapse non-alphanumeric runs to '-' and cap
+ * length so we don't ship a filename like "Service Agreement / NDA
+ * (FINAL).pdf" that some mail clients refuse to display.
+ *
+ * Exported for unit-testing.
+ *
+ * @param {string} templateName
+ * @returns {string}
+ */
+export function buildAttachmentFilename(templateName) {
+  const base =
+    String(templateName || 'signed-document')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'signed-document';
+  return `${base}.pdf`;
 }

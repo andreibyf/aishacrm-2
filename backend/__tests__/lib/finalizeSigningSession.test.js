@@ -28,6 +28,7 @@ import {
   finalizeSigningSession,
   buildSignedPdfStorageKey,
   sha256Hex,
+  buildAttachmentFilename,
 } from '../../lib/finalizeSigningSession.js';
 
 const TENANT = 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a0a0a0';
@@ -168,6 +169,41 @@ const BASE_TEMPLATE = {
 
 // ---------------------------------------------------------------------------
 
+describe('buildAttachmentFilename', () => {
+  it('appends .pdf and keeps clean names intact', () => {
+    assert.equal(buildAttachmentFilename('Service Agreement'), 'Service-Agreement.pdf');
+  });
+
+  it('collapses runs of non-alphanumeric chars to a single dash', () => {
+    assert.equal(
+      buildAttachmentFilename('Service Agreement / NDA (FINAL)'),
+      'Service-Agreement-NDA-FINAL.pdf',
+    );
+  });
+
+  it('strips leading and trailing dashes after sanitization', () => {
+    assert.equal(buildAttachmentFilename('!!!Contract!!!'), 'Contract.pdf');
+  });
+
+  it('caps base length at 80 chars + ".pdf"', () => {
+    const long = 'a'.repeat(200);
+    const out = buildAttachmentFilename(long);
+    assert.equal(out.length, 84); // 80 + '.pdf'
+    assert.ok(out.endsWith('.pdf'));
+  });
+
+  it('falls back to "signed-document.pdf" for empty / falsy / non-string input', () => {
+    assert.equal(buildAttachmentFilename(''), 'signed-document.pdf');
+    assert.equal(buildAttachmentFilename(null), 'signed-document.pdf');
+    assert.equal(buildAttachmentFilename(undefined), 'signed-document.pdf');
+    assert.equal(buildAttachmentFilename('!!!'), 'signed-document.pdf');
+  });
+
+  it('preserves underscores and dots in the source name', () => {
+    assert.equal(buildAttachmentFilename('contract_v2.draft'), 'contract_v2.draft.pdf');
+  });
+});
+
 describe('sha256Hex helper', () => {
   it('matches Node crypto for a Buffer input', () => {
     const buf = Buffer.from('hello world');
@@ -214,24 +250,15 @@ describe('finalizeSigningSession — happy path', () => {
       signerName: 'Jane Recipient',
     });
     assert.equal(out.ok, true);
-    assert.equal(
-      out.signedPdfStoragePath,
-      `${TENANT}/signed/${SESSION_ID}.pdf`,
-    );
+    assert.equal(out.signedPdfStoragePath, `${TENANT}/signed/${SESSION_ID}.pdf`);
     // SHA-256 of the original
-    assert.equal(
-      out.originalSha256,
-      crypto.createHash('sha256').update(original).digest('hex'),
-    );
+    assert.equal(out.originalSha256, crypto.createHash('sha256').update(original).digest('hex'));
 
     // Storage download was called against the template path
     assert.deepEqual(fake._calls.storage.downloads, [BASE_TEMPLATE.pdf_storage_path]);
     // Storage upload was called against the signed path
     assert.equal(fake._calls.storage.uploads.length, 1);
-    assert.equal(
-      fake._calls.storage.uploads[0].path,
-      `${TENANT}/signed/${SESSION_ID}.pdf`,
-    );
+    assert.equal(fake._calls.storage.uploads[0].path, `${TENANT}/signed/${SESSION_ID}.pdf`);
     // Uploaded bytes are a valid PDF with original page count + CoC page
     const uploadedBuf = fake._calls.storage.uploads[0].bytes;
     const reloaded = await PDFDocument.load(
@@ -240,15 +267,10 @@ describe('finalizeSigningSession — happy path', () => {
     assert.equal(reloaded.getPageCount(), 2, 'expected original 1 page + CoC 1 page');
 
     // DB update transitions to completed + appends 'completed' audit
-    const dbUpdate = fake._calls.dbUpdates.find(
-      (c) => c.table === 'signing_sessions',
-    );
+    const dbUpdate = fake._calls.dbUpdates.find((c) => c.table === 'signing_sessions');
     assert.ok(dbUpdate);
     assert.equal(dbUpdate.values.status, 'completed');
-    assert.equal(
-      dbUpdate.values.signed_pdf_storage_path,
-      `${TENANT}/signed/${SESSION_ID}.pdf`,
-    );
+    assert.equal(dbUpdate.values.signed_pdf_storage_path, `${TENANT}/signed/${SESSION_ID}.pdf`);
     assert.ok(dbUpdate.values.completed_at, 'completed_at must be set');
     assert.ok(
       dbUpdate.values.audit.some((e) => e.action === 'completed'),
@@ -372,9 +394,6 @@ describe('finalizeSigningSession — failure modes', () => {
     assert.equal(out.reason, 'session_update_failed');
     // The PDF IS in storage even though the row update failed — surface the
     // path so the operator can investigate / re-run.
-    assert.equal(
-      out.signedPdfStoragePath,
-      `${TENANT}/signed/${SESSION_ID}.pdf`,
-    );
+    assert.equal(out.signedPdfStoragePath, `${TENANT}/signed/${SESSION_ID}.pdf`);
   });
 });
