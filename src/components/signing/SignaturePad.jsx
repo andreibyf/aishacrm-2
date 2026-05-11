@@ -166,7 +166,13 @@ export default function SignaturePad({ onChange, initialDataUrl, suggestedName }
     }
     if (!source) return;
     const trimmed = trimSignatureCanvas(source);
-    onChange?.(trimmed.toDataURL('image/png'));
+    // Emit dataUrl + which mode produced it. Mode propagates into
+    // field_values._signature_mode at the SignPage level so the
+    // digital-signature metadata block in the final PDF can record
+    // whether the signer drew or typed. Callers that pre-date the
+    // mode argument (single-arg onChange) keep working — JS just
+    // ignores the extra parameter.
+    onChange?.(trimmed.toDataURL('image/png'), mode);
   };
 
   // Enable Save when:

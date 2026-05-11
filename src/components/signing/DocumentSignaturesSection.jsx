@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { FileText, Trash2, Loader2, ExternalLink } from 'lucide-react';
+import { FileText, Trash2, Loader2, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -137,9 +137,18 @@ async function fetchSignedPdfUrl(id) {
  * @param {Array} props.sessions
  * @param {boolean} props.loading
  * @param {string|null} [props.error]
- * @param {() => void} [props.onArchived] — caller refresh hook
+ * @param {() => void} [props.onArchived] — caller refresh hook (fires
+ *   after a successful archive so the parent re-fetches the list)
+ * @param {() => void} [props.onRefresh] — manual refresh hook (fires
+ *   when the user clicks the refresh button in the section header)
  */
-export default function DocumentSignaturesSection({ sessions, loading, error = null, onArchived }) {
+export default function DocumentSignaturesSection({
+  sessions,
+  loading,
+  error = null,
+  onArchived,
+  onRefresh,
+}) {
   const { user } = useUser();
   const canArchive = userCanArchive(user);
   const [pendingArchive, setPendingArchive] = useState(null); // { id, label }
@@ -205,6 +214,32 @@ export default function DocumentSignaturesSection({ sessions, loading, error = n
   return (
     <>
       <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+        {/* Section header: status count + manual refresh button.
+            The hook still polls every 5s on the parent — the refresh
+            button is for impatient users who just submitted and want
+            the panel to flip from 'viewed' → 'completed' immediately
+            instead of waiting for the next poll cycle. */}
+        {onRefresh ? (
+          <div className="flex items-center justify-between mb-2 -mt-0.5">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {sessions.length === 0
+                ? 'No documents'
+                : `${sessions.length} document${sessions.length === 1 ? '' : 's'}`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="h-7 px-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+              title="Refresh"
+              aria-label="Refresh document signatures list"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        ) : null}
         {loading && sessions.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">Loading documents…</p>
         ) : sessions.length === 0 ? (

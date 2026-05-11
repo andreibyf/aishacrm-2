@@ -36,11 +36,13 @@
  */
 
 import crypto from 'node:crypto';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import logger from './logger.js';
 import { signPdf } from './signPdf.js';
 import { appendCertificateOfCompletion } from './buildCertificateOfCompletion.js';
 import { sendTenantEmail } from './sendTenantEmail.js';
 import { buildSigningReceiptEmail } from './buildSigningReceiptEmail.js';
+import { buildDigitalSignatureMetadata } from './buildDigitalSignatureMetadata.js';
 
 /**
  * Storage object key for a signed PDF. Mirrors `buildTemplateStorageKey`
@@ -221,6 +223,68 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
     return { ok: false, reason: 'coc_failed' };
   }
 
+  // 5b. Embed digital-signature metadata into the merged PDF's Info
+  //     dictionary. This is a forensic record (signer, audit, hashes)
+  //     that anyone with the PDF can extract and validate. NOT a PKI
+  //     digital signature — see buildDigitalSignatureMetadata.js
+  //     docblock for the distinction.
+  //
+  //     Chicken-and-egg: we want `final_pdf_sha256` to represent the
+  //     PDF content as shipped. We hash the merged bytes BEFORE the
+  //     metadata is added, then embed that hash. Verifiers can re-
+  //     hash the file MINUS the AiSHASignature Info-dict entry to
+  //     reproduce the original hash.
+  //
+  //     Best-effort: if metadata embedding fails (pdf-lib re-parse
+  //     error or unexpected schema), log + continue with mergedBytes
+  //     unchanged. The CoC page already carries human-readable audit
+  //     info, so a failed metadata embed doesn't compromise the
+  //     legal record.
+  let finalBytes = mergedBytes;
+  try {
+    const finalPdfSha256BeforeEmbed = sha256Hex(Buffer.from(mergedBytes));
+    const signatureImageDataUrl =
+      typeof session.field_values?._signature_data_url === 'string'
+        ? session.field_values._signature_data_url
+        : null;
+    const signatureImageSha256 = signatureImageDataUrl
+      ? sha256Hex(Buffer.from(signatureImageDataUrl, 'utf8'))
+      : null;
+    const producerVersion = process.env.npm_package_version || process.env.AISHA_VERSION || '0.0.0';
+
+    const metadata = buildDigitalSignatureMetadata({
+      session,
+      template,
+      originalPdfSha256: originalSha256,
+      finalPdfSha256: finalPdfSha256BeforeEmbed,
+      signatureImageSha256,
+      producerVersion,
+    });
+
+    const doc = await PDFDocument.load(mergedBytes, { ignoreEncryption: true });
+    const info = doc.context.lookup(doc.context.trailerInfo.Info);
+    if (info && typeof info.set === 'function') {
+      info.set(PDFName.of('AiSHASignature'), PDFString.of(JSON.stringify(metadata)));
+      // Also append a compact summary into Keywords so PDF viewers
+      // that don't display custom Info-dict keys (most consumer
+      // readers) still surface a human-readable signature record.
+      // Keywords is the standard place for this kind of taxonomy.
+      const keywords =
+        `AiSHASignature schema=${metadata.schema_version}; ` +
+        `envelope=${metadata.envelope_id}; ` +
+        `signed_at=${metadata.signed_at}; ` +
+        `signer=${metadata.signer.email}`;
+      info.set(PDFName.of('Keywords'), PDFString.of(keywords));
+    }
+    finalBytes = await doc.save({ useObjectStreams: false });
+  } catch (err) {
+    logger.warn('[finalize] digital-signature metadata embed failed', {
+      sessionId,
+      message: err?.message || String(err),
+    });
+    // finalBytes stays as mergedBytes — CoC page is still present.
+  }
+
   // 6. Upload to storage
   const signedPdfStoragePath = buildSignedPdfStorageKey({
     tenantId: session.tenant_id,
@@ -228,7 +292,7 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
   });
   const { error: upErr } = await supabase.storage
     .from(bucket)
-    .upload(signedPdfStoragePath, Buffer.from(mergedBytes), {
+    .upload(signedPdfStoragePath, Buffer.from(finalBytes), {
       contentType: 'application/pdf',
       upsert: true,
     });
@@ -304,7 +368,12 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       attachments: [
         {
           filename: buildAttachmentFilename(template.name || 'signed-document'),
-          content: Buffer.from(mergedBytes),
+          // Attach the metadata-embedded version (finalBytes), not
+          // the pre-embed mergedBytes — recipients should get the
+          // identical bytes that landed in Supabase Storage, so the
+          // attached PDF's digital-signature metadata matches the
+          // server's stored copy.
+          content: Buffer.from(finalBytes),
           contentType: 'application/pdf',
         },
       ],
