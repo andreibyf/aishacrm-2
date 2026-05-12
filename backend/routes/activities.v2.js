@@ -887,20 +887,57 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
               return new Date(a.due_date);
             }
           };
+          // Buckets are mutually exclusive AND exhaustive so the named
+          // buckets + `other` always sum to total. Mirrors the pattern
+          // commit a4c29fa5 applied to opportunities/accounts/leads —
+          // this route was missed. See v2-inline-stats.test.js
+          // "Activities stats ignore status filter".
+          //
+          // Mutual exclusivity rule: an activity is `overdue` if its
+          // status would otherwise be 'scheduled' / 'in_progress' /
+          // 'overdue' AND its due_date is past. That row is then NOT
+          // counted in `scheduled`/`in_progress` again. Matches the LIST
+          // query semantics (which uses `due_date.gte.{today}` to
+          // exclude past-due rows from the scheduled filter).
+          // An activity is "overdue" if it's in one of the three active
+          // statuses (scheduled / in_progress / literal 'overdue') AND
+          // past its due_date. Limited to those statuses so that null /
+          // unknown / legacy 'planned' rows don't fall into BOTH
+          // `overdue` and `other`.
+          const OVERDUE_CANDIDATE_STATUSES = new Set([
+            'scheduled',
+            'in_progress',
+            'in-progress',
+            'overdue',
+          ]);
+          const isOverdue = (a) => {
+            if (!OVERDUE_CANDIDATE_STATUSES.has(a.status)) return false;
+            // status='overdue' is a literal DB value set by the
+            // mark-overdue cron; unambiguously overdue regardless of date.
+            if (a.status === 'overdue') return true;
+            const due = buildDueDateTime(a);
+            if (!due) return false;
+            return due < now;
+          };
+          const knownStatuses = new Set([
+            'scheduled',
+            'in_progress',
+            'in-progress',
+            'overdue',
+            'completed',
+            'cancelled',
+          ]);
           stats = {
             total: allData.length,
-            scheduled: allData.filter((a) => a.status === 'scheduled').length,
+            scheduled: allData.filter((a) => a.status === 'scheduled' && !isOverdue(a)).length,
             in_progress: allData.filter(
-              (a) => a.status === 'in_progress' || a.status === 'in-progress',
+              (a) => (a.status === 'in_progress' || a.status === 'in-progress') && !isOverdue(a),
             ).length,
-            overdue: allData.filter((a) => {
-              if (a.status === 'completed' || a.status === 'cancelled') return false;
-              const due = buildDueDateTime(a);
-              if (!due) return false;
-              return due < now;
-            }).length,
+            overdue: allData.filter(isOverdue).length,
             completed: allData.filter((a) => a.status === 'completed').length,
             cancelled: allData.filter((a) => a.status === 'cancelled').length,
+            // null / empty / legacy 'planned' / unknown statuses
+            other: allData.filter((a) => !knownStatuses.has(a.status)).length,
           };
         }
       } catch (statsErr) {

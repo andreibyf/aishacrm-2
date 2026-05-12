@@ -168,12 +168,17 @@ describe('Activities V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
 
     assert.ok(json.data?.stats, 'Stats should be present');
     const { stats } = json.data;
+    // `other` catches null/empty/unknown statuses; without it activities
+    // with legacy/null status would be in `total` but no bucket.
+    // Buckets are mutually exclusive (overdue takes precedence over
+    // scheduled/in_progress when past-due) so the sum equals total.
     const statusSum =
       (stats.scheduled || 0) +
       (stats.in_progress || 0) +
       (stats.overdue || 0) +
       (stats.completed || 0) +
-      (stats.cancelled || 0);
+      (stats.cancelled || 0) +
+      (stats.other || 0);
     assert.equal(statusSum, stats.total, 'Sum of status counts should equal total');
   });
 });
