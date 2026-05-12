@@ -7,6 +7,7 @@ import ErrorBoundary from '../shared/ErrorBoundary';
 import SendDocumentDialog from '../signing/SendDocumentDialog';
 import DocumentSignaturesSection from '../signing/DocumentSignaturesSection';
 import { useSigningSessions } from '../signing/useSigningSessions';
+import { useUser } from '../shared/useUser';
 
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ export default function OpportunityDetailPanel({
   onDelete,
   onStageChange,
 }) {
+  const { user } = useUser();
   const [localOpportunity, setLocalOpportunity] = useState(opportunity);
   const [relatedActivities, setRelatedActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -365,15 +367,21 @@ export default function OpportunityDetailPanel({
               Edit
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSendDocDialog(true)}
-              className="border-slate-600 text-slate-300 hover:bg-slate-700"
-            >
-              <FileSignature className="w-4 h-4 mr-2" />
-              Send Document
-            </Button>
+            {/* Send Document gated to employees only (4VD-54). Backend
+                enforces via requireEmployee on POST /api/submissions; this
+                is the matching UI gate. See
+                docs/architecture/IDENTITY_MODEL.md rule #6. */}
+            {user?.is_employee && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSendDocDialog(true)}
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              >
+                <FileSignature className="w-4 h-4 mr-2" />
+                Send Document
+              </Button>
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

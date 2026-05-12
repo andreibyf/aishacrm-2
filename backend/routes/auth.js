@@ -800,13 +800,59 @@ export default function createAuthRoutes(_pgPool) {
   });
 
   // GET /api/auth/me - simple whoami via cookie (for UI probing)
-  router.get('/me', refreshLimiter, (req, res) => {
+  //
+  // Augments the JWT payload with `is_employee` (boolean) and
+  // `employee_id` (UUID or null) — looked up live from the employees
+  // table so the frontend can gate employee-only UI (Send Document,
+  // etc.) without baking the flag into the access cookie.
+  //
+  // Live lookup is acceptable here because /me is called on session
+  // start, not per page-nav. Trade-off: an admin adding a user to
+  // employees mid-session won't see the flip until the next /me call
+  // (page reload or explicit refetch). Worth it to avoid 15-min cookie
+  // staleness.
+  //
+  // See docs/architecture/IDENTITY_MODEL.md rule #6 + 4VD-54.
+  router.get('/me', refreshLimiter, async (req, res) => {
     try {
       const token = req.cookies?.aisha_access;
       if (!token) return res.status(401).json({ status: 'error', message: 'Unauthorized' });
       const secret = getAccessSecret();
       const payload = jwt.verify(token, secret);
-      return res.json({ status: 'success', data: { user: payload } });
+
+      // Live-lookup the employees row to expose is_employee.
+      // Best-effort: if the lookup fails, return the JWT payload
+      // without the augmentation rather than 500ing /me (which would
+      // log the user out of every page load).
+      let isEmployee = false;
+      let employeeId = null;
+      try {
+        const tenantId = payload?.tenant_id;
+        const email = payload?.email;
+        if (tenantId && typeof email === 'string' && email.length > 0) {
+          const supabase = getSupabaseClient();
+          const { data: empRow } = await supabase
+            .from('employees')
+            .select('id')
+            .eq('tenant_id', tenantId)
+            .ilike('email', email)
+            .limit(1)
+            .maybeSingle();
+          if (empRow?.id) {
+            isEmployee = true;
+            employeeId = empRow.id;
+          }
+        }
+      } catch (lookupErr) {
+        logger.warn('[Auth.me] employees lookup failed (continuing without is_employee)', {
+          message: lookupErr?.message,
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        data: { user: { ...payload, is_employee: isEmployee, employee_id: employeeId } },
+      });
     } catch {
       return res.status(401).json({ status: 'error', message: 'Unauthorized' });
     }

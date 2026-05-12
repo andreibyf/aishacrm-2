@@ -38,13 +38,18 @@ export default function AccountDetailPanel({
   const accountEmail = account.email || account.primary_email || account.billing_email || '';
   const accountDisplayName = account.name || 'Account';
 
-  const customActions = [
-    {
-      label: 'Send Document',
-      icon: <FileSignature className="w-4 h-4" />,
-      onClick: () => setShowSendDocDialog(true),
-    },
-  ];
+  // Send Document gated to employees only (4VD-54). Backend enforces the
+  // same restriction via requireEmployee on POST /api/submissions; this is
+  // the matching UI gate. See docs/architecture/IDENTITY_MODEL.md rule #6.
+  const customActions = user?.is_employee
+    ? [
+        {
+          label: 'Send Document',
+          icon: <FileSignature className="w-4 h-4" />,
+          onClick: () => setShowSendDocDialog(true),
+        },
+      ]
+    : [];
 
   return (
     <>

@@ -61,11 +61,18 @@ export default function LeadDetailPanel({
 
   // Send Document is available regardless of lead status — sales workflows
   // routinely require an NDA or contract before conversion is possible.
-  customActions.push({
-    label: 'Send Document',
-    icon: <FileSignature className="w-4 h-4" />,
-    onClick: () => setShowSendDocDialog(true),
-  });
+  // Gated to employees only (4VD-54): non-employee users (clients,
+  // external collaborators) shouldn't send docs on behalf of the
+  // tenant. Backend enforces the same gate via requireEmployee
+  // middleware on POST /api/submissions; this is the matching UI gate.
+  // See docs/architecture/IDENTITY_MODEL.md rule #6.
+  if (user?.is_employee) {
+    customActions.push({
+      label: 'Send Document',
+      icon: <FileSignature className="w-4 h-4" />,
+      onClick: () => setShowSendDocDialog(true),
+    });
+  }
 
   const detailDisplayData = {
     'Associated Account': associatedAccountName ? (
