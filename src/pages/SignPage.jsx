@@ -24,7 +24,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useParams } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import { Loader2, FileSignature, Check, X, ShieldAlert } from 'lucide-react';
+import { Loader2, FileSignature, Check, X, ShieldAlert, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -88,6 +88,30 @@ async function postSubmit(token, body) {
     throw err;
   }
   return json?.data;
+}
+
+/**
+ * Fetch a 5-minute Supabase signed URL for the recipient's stamped PDF.
+ * Token-gated public endpoint mirroring the admin one but using the
+ * recipient's signing_token as the authorization. Returns null with
+ * `reason='not_yet_available'` when the finalize pipeline hasn't
+ * uploaded the PDF yet — caller polls.
+ */
+async function fetchRecipientSignedPdfUrl(token) {
+  const resp = await fetch(`${backendBase()}/api/sign/${encodeURIComponent(token)}/signed-pdf-url`);
+  if (resp.status === 404) {
+    const j = await resp.json().catch(() => ({}));
+    return { url: null, reason: j?.error || 'not_found' };
+  }
+  if (!resp.ok) {
+    const j = await resp.json().catch(() => ({}));
+    const err = new Error(j?.message || j?.error || `Download failed (${resp.status})`);
+    err.status = resp.status;
+    err.body = j;
+    throw err;
+  }
+  const json = await resp.json().catch(() => ({}));
+  return { url: json?.data?.url || null };
 }
 
 async function postDecline(token, reason) {
@@ -648,6 +672,15 @@ export default function SignPage() {
   const [declineReason, setDeclineReason] = useState('');
   const [declining, setDeclining] = useState(false);
   const [declined, setDeclined] = useState(false);
+  // Recipient signed-PDF download state. The finalize pipeline runs
+  // asynchronously after POST /sign/:token/submit returns 201, so the
+  // success page initially has no PDF to hand out. We poll
+  // /api/sign/:token/signed-pdf-url for up to ~30s, surfacing a
+  // "Preparing your copy…" message until the URL is ready, then a
+  // Download button.
+  const [downloadUrl, setDownloadUrl] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Disable browser scroll restoration on this page so a fresh navigation
   // always starts at the top regardless of the tab's prior scroll memory.
@@ -727,6 +760,65 @@ export default function SignPage() {
       cancelled = true;
     };
   }, [token]);
+
+  // Once the recipient successfully submits, poll the public download URL
+  // until the finalize pipeline has uploaded the stamped PDF. Empirically
+  // finalize completes in 2-5 seconds on dev; we poll every 1.5s for up
+  // to 40 seconds (27 attempts) before giving up and surfacing a "your
+  // copy will be emailed" fallback. The signed URL is 5 minutes long, so
+  // we don't need to re-fetch after we have it.
+  useEffect(() => {
+    if (!submitted || !token || downloadUrl) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 27;
+    const INTERVAL_MS = 1500;
+
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const { url, reason } = await fetchRecipientSignedPdfUrl(token);
+        if (cancelled) return;
+        if (url) {
+          setDownloadUrl(url);
+          return;
+        }
+        if (reason === 'not_yet_available') {
+          if (attempts < MAX_ATTEMPTS) {
+            setTimeout(tick, INTERVAL_MS);
+          } else {
+            setDownloadError('preparing'); // surfaces fallback copy in UI
+          }
+        } else if (reason === 'archived') {
+          setDownloadError('archived');
+        } else {
+          setDownloadError(reason || 'unavailable');
+        }
+      } catch (err) {
+        if (!cancelled) setDownloadError(err.body?.error || err.message || 'fetch_failed');
+      }
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+    };
+  }, [submitted, token, downloadUrl]);
+
+  const handleDownload = useCallback(() => {
+    if (!downloadUrl || downloading) return;
+    setDownloading(true);
+    // Same pop-up-blocker-safe pattern as the admin DocumentSignaturesSection:
+    // we already have the URL in hand (no fetch round-trip), so open
+    // directly. window.open inside a synchronous click handler is treated
+    // as user-initiated even with noopener.
+    try {
+      window.open(downloadUrl, '_blank', 'noopener');
+    } finally {
+      setDownloading(false);
+    }
+  }, [downloadUrl, downloading]);
 
   // ALL fields the recipient can fill, sorted by visual reading order
   // (page → y → x). The NEXT pointer walks this list, not just the
@@ -848,15 +940,26 @@ export default function SignPage() {
   }, []);
 
   const handleSignatureSaved = useCallback(
-    (dataUrl) => {
+    (dataUrl, mode) => {
       if (!dataUrl) return;
       // Save into the right slot — top-level for the single-signer case,
       // per-field if the recipient explicitly clicked a specific field.
-      if (pendingSignatureField) {
-        setFieldValues((prev) => ({ ...prev, [pendingSignatureField.name]: dataUrl }));
-      }
-      // Always also stash top-level so a single-signer template works
-      // regardless of which field the recipient clicked.
+      // Always also stash _signature_mode at the field_values root so
+      // the backend's buildDigitalSignatureMetadata can record whether
+      // the signer drew or typed (lands in the final PDF's
+      // AiSHASignature Info-dict entry).
+      setFieldValues((prev) => {
+        const next = { ...prev };
+        if (pendingSignatureField) {
+          next[pendingSignatureField.name] = dataUrl;
+        }
+        if (mode === 'draw' || mode === 'drawn' || mode === 'type' || mode === 'typed') {
+          next._signature_mode = mode;
+        }
+        return next;
+      });
+      // Top-level signatureDataUrl mirrors the canonical signature for
+      // single-signer templates regardless of which field was clicked.
       setSignatureDataUrl(dataUrl);
       setSignatureModalOpen(false);
       setPendingSignatureField(null);
@@ -940,9 +1043,45 @@ export default function SignPage() {
           <p className="text-sm text-slate-600">
             Recorded {submittedAt ? new Date(submittedAt).toLocaleString() : 'just now'}.
           </p>
-          <p className="text-xs text-slate-500">
-            A copy will be available to the sender shortly. You can close this tab.
-          </p>
+          <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800 p-3">
+            {downloadUrl ? (
+              <>
+                <p className="text-sm text-slate-700 dark:text-slate-200 mb-2">
+                  Your signed copy is ready.
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {downloading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Opening…
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-2" /> Download signed PDF
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-slate-500 mt-2">
+                  We&apos;ve also emailed a copy to your address for safekeeping.
+                </p>
+              </>
+            ) : downloadError ? (
+              <p className="text-sm text-slate-600">
+                {downloadError === 'archived'
+                  ? 'This document was removed by the sender after signing.'
+                  : 'Your signed copy is being prepared and will arrive in your inbox shortly.'}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-600 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Preparing your signed copy…
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mt-3">You can close this tab.</p>
         </CenterCard>
       </PageShell>
     );
@@ -1185,6 +1324,7 @@ export default function SignPage() {
           <SignaturePad
             onChange={handleSignatureSaved}
             initialDataUrl={signatureDataUrl || undefined}
+            suggestedName={signerName || session?.recipient_name || undefined}
           />
           <DialogFooter>
             <Button

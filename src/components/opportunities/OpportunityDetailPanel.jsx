@@ -607,6 +607,7 @@ export default function OpportunityDetailPanel({
                 loading={signingLoading}
                 error={signingError}
                 onArchived={refreshSigning}
+                onRefresh={refreshSigning}
               />
             </CardContent>
           </Card>
@@ -690,17 +691,23 @@ export default function OpportunityDetailPanel({
               <div className="flex justify-between">
                 <span>Created:</span>
                 <span>
-                  {localOpportunity.created_date
-                    ? format(new Date(localOpportunity.created_date), 'MMM d, yyyy h:mm a')
-                    : 'N/A'}
+                  {(() => {
+                    // opportunities table has both created_at + created_date.
+                    // Prefer created_date for display continuity; fall back to created_at.
+                    const created = localOpportunity.created_date || localOpportunity.created_at;
+                    return created ? format(new Date(created), 'MMM d, yyyy h:mm a') : 'N/A';
+                  })()}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Last Updated:</span>
                 <span>
-                  {localOpportunity.updated_date
-                    ? format(new Date(localOpportunity.updated_date), 'MMM d, yyyy h:mm a')
-                    : 'N/A'}
+                  {(() => {
+                    // opportunities table only has updated_at; updated_date is
+                    // legacy metadata-only. Prefer the canonical column.
+                    const updated = localOpportunity.updated_at || localOpportunity.updated_date;
+                    return updated ? format(new Date(updated), 'MMM d, yyyy h:mm a') : 'N/A';
+                  })()}
                 </span>
               </div>
               {localOpportunity.created_by && (

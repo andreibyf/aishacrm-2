@@ -107,6 +107,13 @@ function normalizeIntegrationRecord(record = {}) {
  * @param {string} [params.text]           — plain-text body (falls back to subject if absent)
  * @param {string} [params.recipientName]  — used to compose `Name <email>` if provided
  * @param {string} [params.replyTo]
+ * @param {Array<{ filename: string, content: Buffer|Uint8Array|string, contentType?: string }>} [params.attachments]
+ *   Optional nodemailer-shaped attachment array. Each entry must have a
+ *   filename + content (Buffer/Uint8Array/string). Used by the eSign
+ *   recipient-receipt path to ship the stamped PDF alongside the email
+ *   body. Forwarded verbatim to nodemailer's sendMail for the
+ *   gmail_smtp path; mapped to the imap+smtp adapter's expected shape
+ *   for the communications_provider path.
  * @returns {Promise<{ok: boolean, reason?: string, error?: Error, info?: any}>}
  */
 export async function sendTenantEmail({
@@ -117,6 +124,7 @@ export async function sendTenantEmail({
   text,
   recipientName,
   replyTo,
+  attachments,
 }) {
   if (!tenantId || !to || !subject) {
     return { ok: false, reason: 'missing_required_args' };
@@ -155,6 +163,7 @@ export async function sendTenantEmail({
         html: html || undefined,
         text: text || subject,
         replyTo: replyTo || undefined,
+        attachments: Array.isArray(attachments) && attachments.length > 0 ? attachments : undefined,
       });
       return { ok: true, info, provider: 'gmail_smtp' };
     } catch (sendErr) {
@@ -193,6 +202,10 @@ export async function sendTenantEmail({
       html_body: html || undefined,
       text_body: text || subject,
       reply_to: replyTo || undefined,
+      // imap+smtp adapter accepts the same nodemailer-shaped attachments
+      // (it wraps nodemailer internally). Omit when empty so adapters
+      // that don't recognize the key just ignore it cleanly.
+      attachments: Array.isArray(attachments) && attachments.length > 0 ? attachments : undefined,
     });
     return { ok: true, info, provider: 'communications_provider' };
   } catch (sendErr) {

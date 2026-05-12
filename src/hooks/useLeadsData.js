@@ -492,7 +492,9 @@ export function useLeadsData({
           const now = new Date();
           const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           allFilteredLeads = allFilteredLeads.filter((lead) => {
-            const updatedAt = lead.updated_date ? new Date(lead.updated_date) : null;
+            // leads table uses `updated_at`. Fall back to legacy metadata `updated_date`.
+            const updatedRaw = lead.updated_at || lead.updated_date;
+            const updatedAt = updatedRaw ? new Date(updatedRaw) : null;
             if (!updatedAt) return updatedFilter === 'stale';
             const diffDays = (now - updatedAt) / (1000 * 60 * 60 * 24);
             if (updatedFilter === 'today') return updatedAt >= startOfToday;

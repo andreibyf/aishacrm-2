@@ -220,7 +220,6 @@ export async function authenticateRequest(req, _res, next) {
     // Priority order:
     // a) Internal service tokens (signed with JWT_SECRET, have 'internal: true')
     // b) Supabase tokens (verified via JWKS)
-    // c) Legacy decode fallback + DB lookup
     const bearer = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
 
     if (bearer) {
@@ -300,24 +299,6 @@ export async function authenticateRequest(req, _res, next) {
                 code: jwksErr?.code,
               });
             }
-            // Fall through to decode-only as last resort
-          }
-        }
-      }
-
-      // 2c) If JWKS verification failed, try decode-only as fallback (legacy support)
-      if (!payload) {
-        try {
-          payload = jwt.decode(bearer) || {};
-          if (process.env.AUTH_DEBUG === 'true') {
-            logger.debug('[Auth Debug] Bearer decoded (unverified fallback):', {
-              path: req.path,
-              hasEmail: !!payload?.email,
-            });
-          }
-        } catch (decodeErr) {
-          if (process.env.AUTH_DEBUG === 'true') {
-            logger.debug('[Auth Debug] Bearer decode failed:', { error: decodeErr?.message });
           }
         }
       }

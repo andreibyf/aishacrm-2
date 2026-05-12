@@ -33,6 +33,20 @@ on:
           - 'false'
           - 'true'
 
+# Serialize concurrent runs of this workflow at the workflow level.
+# Multiple pushes within a few seconds of each other (or a manual
+# workflow_dispatch fired during an active push) would otherwise
+# stack on VPS-1 and trip Zap's 5.5-core hypervisor cap, locking the
+# host (see memory note feedback_no_parallel_coolify_deploys).
+#
+# cancel-in-progress: false — we DON'T cancel an in-flight deploy
+# when a new push arrives, because Coolify keeps the previous
+# container alive until the new one is healthy. Cancelling mid-build
+# would leave the in-progress deploy half-finished. Queue instead.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -110,21 +124,23 @@ jobs:
           cat "$GITHUB_OUTPUT"
           echo "::endgroup::"
 
-  deploy-app-fast:
-    name: Deploy staging-app-fast
-    needs: changes
-    if: needs.changes.outputs.app-fast == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/coolify-deploy
-        with:
-          base_url: ${{ env.COOLIFY_BASE_URL }}
-          application_uuid: di7ko49ikfd2mz8yh0q7id8q
-          application_name: staging-app-fast
-          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
-          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+  # Deploy jobs are CHAINED via `needs:` so they run sequentially on
+  # VPS-1, not in parallel. Two concurrent Vite/Node builds cascade
+  # past Zap's 5.5-core hypervisor cap and lock the host (HTTP 530,
+  # manual reboot only). See feedback_no_parallel_coolify_deploys
+  # memory note. Order: backend-heavy → app-fast → braid → litellm.
+  #
+  # backend-heavy first because backend deploys may include database
+  # migrations that the frontend assumes have already run. If both
+  # are changing, FE talking to a backend whose schema hasn't migrated
+  # yet would 5xx until BE finishes anyway, so we may as well order
+  # them so BE finishes first.
+  #
+  # When a needs-target is skipped (its `if:` was false because no
+  # files in that path-filter changed), GitHub Actions treats the
+  # dependency as "succeeded" by default. So a backend-only push
+  # runs backend-heavy alone; a frontend-only push runs app-fast
+  # alone with no wait, etc.
 
   deploy-backend-heavy:
     name: Deploy staging-backend-heavy
@@ -142,10 +158,38 @@ jobs:
           token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
           force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
 
+  deploy-app-fast:
+    name: Deploy staging-app-fast
+    needs: [changes, deploy-backend-heavy]
+    # Run even if deploy-backend-heavy was skipped (because no backend
+    # paths changed). `always()` + explicit success check on the gate
+    # is the GitHub-recommended pattern for "depend on completion,
+    # tolerate skip."
+    if: |
+      always() &&
+      needs.changes.outputs.app-fast == 'true' &&
+      (needs.deploy-backend-heavy.result == 'success' ||
+       needs.deploy-backend-heavy.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: di7ko49ikfd2mz8yh0q7id8q
+          application_name: staging-app-fast
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+
   deploy-braid:
     name: Deploy staging-braid
-    needs: changes
-    if: needs.changes.outputs.braid == 'true'
+    needs: [changes, deploy-app-fast]
+    if: |
+      always() &&
+      needs.changes.outputs.braid == 'true' &&
+      (needs.deploy-app-fast.result == 'success' ||
+       needs.deploy-app-fast.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -160,8 +204,12 @@ jobs:
 
   deploy-litellm:
     name: Deploy staging-litellm
-    needs: changes
-    if: needs.changes.outputs.litellm == 'true'
+    needs: [changes, deploy-braid]
+    if: |
+      always() &&
+      needs.changes.outputs.litellm == 'true' &&
+      (needs.deploy-braid.result == 'success' ||
+       needs.deploy-braid.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

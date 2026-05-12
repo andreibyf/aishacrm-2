@@ -45,6 +45,7 @@ function writeWorkerHeartbeat(extra = {}) {
   };
 
   try {
+    // codeql[js/insecure-temporary-file] — fixed, well-known path for non-sensitive process heartbeat metadata
     fs.writeFileSync(HEARTBEAT_PATH, JSON.stringify(heartbeat));
   } catch (error) {
     logger.warn(

@@ -831,21 +831,24 @@ export default function UniversalDetailPanel({
       { key: 'duration', label: 'Duration' },
 
       // Common metadata
-      { key: 'created_date', label: 'Created', isDate: true },
-      { key: 'updated_date', label: 'Last Updated', isDate: true },
+      // Note: leads/contacts/accounts/opportunities/bizdev_sources/employees only
+      // have `updated_at` — `updated_date` is metadata-only. Activities table has
+      // both. Same divergence for `created_date`/`created_at` on a few tables.
+      // `altKey` is the fallback column name when `key` isn't present on `entity`.
+      { key: 'created_date', altKey: 'created_at', label: 'Created', isDate: true },
+      { key: 'updated_date', altKey: 'updated_at', label: 'Last Updated', isDate: true },
       { key: 'unique_id', label: 'Reference ID' },
     ];
 
-    standardFields.forEach(({ key, label, isLink, isCurrency, isPercent, isDate }) => {
+    standardFields.forEach(({ key, altKey, label, isLink, isCurrency, isPercent, isDate }) => {
+      // Resolve the actual key on the entity: prefer `key`, fall back to `altKey`.
+      const isPresent = (k) =>
+        k && entity[k] !== undefined && entity[k] !== null && entity[k] !== '';
+      const resolvedKey = isPresent(key) ? key : isPresent(altKey) ? altKey : null;
       // Check if the entity has the key and its value is not null/undefined
       // Also, ensure displayData doesn't already provide a custom field for this label
-      if (
-        entity[key] !== undefined &&
-        entity[key] !== null &&
-        entity[key] !== '' &&
-        !Object.keys(displayData).includes(label)
-      ) {
-        let value = entity[key];
+      if (resolvedKey !== null && !Object.keys(displayData).includes(label)) {
+        let value = entity[resolvedKey];
 
         // Format specific fields based on metadata
         if (isCurrency && (typeof value === 'number' || !isNaN(parseFloat(value)))) {
@@ -899,7 +902,7 @@ export default function UniversalDetailPanel({
         }
 
         detailFields.push(
-          <div key={`entity-${key}`} className="grid grid-cols-2 gap-4 items-center">
+          <div key={`entity-${resolvedKey}`} className="grid grid-cols-2 gap-4 items-center">
             <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
               {label}
             </Label>

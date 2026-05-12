@@ -372,6 +372,7 @@ async function ensureCalcomApiKey(db, { tenantId, userId, providedApiKey }) {
       throw err;
     }
 
+    // codeql[js/insufficient-password-hash] — SHA-256 acceptable for high-entropy machine-generated API keys (not user passwords)
     const hashedKey = createHash('sha256').update(apiKey).digest('hex');
     await db.query(
       `INSERT INTO "ApiKey" (id, "userId", note, "hashedKey")

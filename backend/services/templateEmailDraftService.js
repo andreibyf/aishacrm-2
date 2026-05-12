@@ -120,6 +120,8 @@ function resolveVariables(templateVariables, userValues, autoValues) {
   // User-provided values override everything
   if (userValues && typeof userValues === 'object') {
     for (const [key, value] of Object.entries(userValues)) {
+      // Block prototype pollution — skip dangerous property names
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
       if (value !== undefined && value !== null && value !== '') {
         resolved[key] = String(value);
       }

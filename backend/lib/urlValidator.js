@@ -27,8 +27,7 @@ const PRIVATE_IP_RANGES = [
  */
 function isPrivateIP(hostname) {
   // Check if hostname looks like an IP address
-  const ipv4Pattern =
-    /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
   const ipv6Pattern = /^([0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}$/i;
 
   if (!ipv4Pattern.test(hostname) && !ipv6Pattern.test(hostname)) {
@@ -132,7 +131,9 @@ export function validateUrlAgainstWhitelist(urlString, allowedDomains = []) {
 
   // Check against whitelist
   const isAllowed = allowedDomains.some((domain) => {
-    const pattern = domain.toLowerCase().replace(/\*/g, '.*');
+    // Escape all regex metacharacters first (including *), then restore * as .*
+    const escaped = domain.toLowerCase().replace(/[.+*?^${}()|[\]\\]/g, '\\$&');
+    const pattern = escaped.replace(/\\\*/g, '.*');
     const regex = new RegExp(`^${pattern}$`);
     return regex.test(hostname);
   });

@@ -35,8 +35,7 @@ export default function AccountDetailPanel({
   // Accounts don't always carry a single canonical email — fall back through
   // the common shapes; the SendDocumentDialog input is editable so the
   // operator can override.
-  const accountEmail =
-    account.email || account.primary_email || account.billing_email || '';
+  const accountEmail = account.email || account.primary_email || account.billing_email || '';
   const accountDisplayName = account.name || 'Account';
 
   const customActions = [
@@ -82,6 +81,7 @@ export default function AccountDetailPanel({
                   loading={sessionsLoading}
                   error={sessionsError}
                   onArchived={refreshSessions}
+                  onRefresh={refreshSessions}
                 />
               ),
             },

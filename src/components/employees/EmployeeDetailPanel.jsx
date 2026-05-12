@@ -57,7 +57,7 @@ export default function EmployeeDetailPanel({
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [reportsToEmployee, setReportsToEmployee] = useState(null);
   const [loadingReportsTo, setLoadingReportsTo] = useState(false);
-  
+
   // User link state
   const [linkedUserId, setLinkedUserId] = useState('');
   const [isValidating, setIsValidating] = useState(false);
@@ -85,7 +85,10 @@ export default function EmployeeDetailPanel({
       setLinkedUserId(employee.metadata.linked_user_id);
       // Check if needs revalidation
       if (employee.metadata.link_needs_revalidation) {
-        setValidationResult({ valid: false, errors: ['Link needs revalidation - a key field may have changed'] });
+        setValidationResult({
+          valid: false,
+          errors: ['Link needs revalidation - a key field may have changed'],
+        });
       } else if (employee.metadata.link_validated_at) {
         setValidationResult({ valid: true });
       }
@@ -108,15 +111,12 @@ export default function EmployeeDetailPanel({
       try {
         // Try to fetch via user_id first (if employee has linked CRM user)
         // Otherwise fall back to employee_id
-        const res = await fetch(
-          `${BACKEND_URL}/api/v2/teams/employee-memberships`,
-          {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employee_id: employee.id, tenant_id: employee.tenant_id }),
-          },
-        );
+        const res = await fetch(`${BACKEND_URL}/api/v2/teams/employee-memberships`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employee_id: employee.id, tenant_id: employee.tenant_id }),
+        });
         if (res.ok) {
           const json = await res.json();
           if (mounted) setTeamMemberships(json.data || []);
@@ -187,15 +187,12 @@ export default function EmployeeDetailPanel({
     setValidationResult(null);
 
     try {
-      const res = await fetch(
-        `${BACKEND_URL}/api/employees/${employee.id}/validate-user-link`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: linkedUserId.trim() }),
-        },
-      );
+      const res = await fetch(`${BACKEND_URL}/api/employees/${employee.id}/validate-user-link`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: linkedUserId.trim() }),
+      });
 
       const data = await res.json();
 
@@ -204,7 +201,10 @@ export default function EmployeeDetailPanel({
         toast.success('User link validated and established');
         // Optionally refresh the employee data to show updated metadata
       } else {
-        setValidationResult({ valid: false, errors: data.errors || [data.message || 'Validation failed'] });
+        setValidationResult({
+          valid: false,
+          errors: data.errors || [data.message || 'Validation failed'],
+        });
         toast.error(data.errors?.[0] || data.message || 'Validation failed');
       }
     } catch (error) {
@@ -658,7 +658,9 @@ export default function EmployeeDetailPanel({
                     {validationResult.valid ? (
                       <>
                         <Check className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>Link validated successfully. Employee ID has been written to User record.</span>
+                        <span>
+                          Link validated successfully. Employee ID has been written to User record.
+                        </span>
                       </>
                     ) : (
                       <>
@@ -675,7 +677,8 @@ export default function EmployeeDetailPanel({
 
                 {/* Help text */}
                 <p className="text-xs text-slate-500">
-                  Copy the User ID from User Management and paste here. Click Validate to link the records.
+                  Copy the User ID from User Management and paste here. Click Validate to link the
+                  records.
                   {validationResult?.valid && (
                     <span className="block mt-1">
                       <button
@@ -731,7 +734,8 @@ export default function EmployeeDetailPanel({
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Role Level:</span>
                   <span className="col-span-2">
-                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership' ? (
+                    {employee.crm_user_employee_role === 'director' ||
+                    employee.crm_user_employee_role === 'leadership' ? (
                       <Badge className="bg-indigo-900/30 text-indigo-300 border-indigo-700">
                         Director
                       </Badge>
@@ -740,9 +744,7 @@ export default function EmployeeDetailPanel({
                         Manager
                       </Badge>
                     ) : employee.crm_user_employee_role === 'employee' ? (
-                      <Badge className="bg-slate-700 text-slate-300 border-slate-600">
-                        User
-                      </Badge>
+                      <Badge className="bg-slate-700 text-slate-300 border-slate-600">User</Badge>
                     ) : (
                       <span className="text-sm text-slate-500 italic">Not Set</span>
                     )}
@@ -767,7 +769,8 @@ export default function EmployeeDetailPanel({
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <span className="text-sm text-slate-400">Description:</span>
                   <span className="col-span-2 text-xs text-slate-400">
-                    {employee.crm_user_employee_role === 'director' || employee.crm_user_employee_role === 'leadership'
+                    {employee.crm_user_employee_role === 'director' ||
+                    employee.crm_user_employee_role === 'leadership'
                       ? 'Can view and manage all tenant records'
                       : employee.crm_user_employee_role === 'manager'
                         ? 'Can view and manage team records'
@@ -888,13 +891,15 @@ export default function EmployeeDetailPanel({
               <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Created:</span>
                 <span className="col-span-2 text-sm text-slate-200">
-                  {formatDate(employee.created_date)}
+                  {/* employees table has both created_at + created_date */}
+                  {formatDate(employee.created_date || employee.created_at)}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 items-center">
                 <span className="text-sm text-slate-400">Updated:</span>
                 <span className="col-span-2 text-sm text-slate-200">
-                  {formatDate(employee.updated_date)}
+                  {/* employees table only has updated_at; updated_date is legacy metadata */}
+                  {formatDate(employee.updated_at || employee.updated_date)}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 items-center">

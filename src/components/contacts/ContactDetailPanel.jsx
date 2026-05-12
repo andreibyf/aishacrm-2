@@ -270,6 +270,7 @@ export default function ContactDetailPanel({
                   loading={sessionsLoading}
                   error={sessionsError}
                   onArchived={refreshSessions}
+                  onRefresh={refreshSessions}
                 />
               ),
             },

@@ -343,10 +343,7 @@ export default function createWhatsAppRoutes(_pgPool) {
       // 2. Validate Twilio signature
       const twilioSignature = req.headers['x-twilio-signature'];
       const webhookUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-      const isDev =
-        process.env.NODE_ENV === 'development' ||
-        process.env.NODE_ENV === 'test' ||
-        !process.env.NODE_ENV;
+      const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 
       if (!tenant.twilioCreds?.auth_token) {
         // Fail closed in production — cannot validate without auth_token

@@ -70,6 +70,7 @@ export async function executeBraidTool(
   // SECURITY: Verify the access token before any tool execution
   // This is the "key to the toolshed" - without it, no tools can be accessed
   if (!validateToolAccessToken(accessToken)) {
+    // codeql[js/clear-text-logging] — only boolean/string metadata logged, no secret values
     logger.error(
       {
         toolName,

@@ -341,9 +341,9 @@ export function getLLMActivityStats() {
   const windowEntries = recentEntries.length > 0 ? recentEntries : activityLog;
   const windowLabel = recentEntries.length > 0 ? 'last5min' : 'buffer';
 
-  const byProvider = {};
-  const byCapability = {};
-  const byStatus = {};
+  const byProvider = Object.create(null);
+  const byCapability = Object.create(null);
+  const byStatus = Object.create(null);
 
   for (const entry of windowEntries) {
     byProvider[entry.provider] = (byProvider[entry.provider] || 0) + 1;
@@ -352,9 +352,9 @@ export function getLLMActivityStats() {
   }
 
   // allTime breakdowns always from full buffer (for cards that always show buffer totals)
-  const allTimeByProvider = {};
-  const allTimeByStatus = {};
-  const allTimeByCapability = {};
+  const allTimeByProvider = Object.create(null);
+  const allTimeByStatus = Object.create(null);
+  const allTimeByCapability = Object.create(null);
   for (const entry of activityLog) {
     allTimeByProvider[entry.provider] = (allTimeByProvider[entry.provider] || 0) + 1;
     allTimeByStatus[entry.status] = (allTimeByStatus[entry.status] || 0) + 1;

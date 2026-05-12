@@ -12,6 +12,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { redactSecretsFromObject, isFileExportable } from '../lib/devaiSecurity.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { tmpdir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createReadStream } from 'fs';
@@ -613,8 +614,7 @@ async function applyPatch(args) {
   }
 
   // Create temp patch file
-  const tempDir = '/tmp/devai-' + Date.now();
-  await fs.mkdir(tempDir, { recursive: true });
+  const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'devai-'));
   const patchFile = path.join(tempDir, 'changes.patch');
   await fs.writeFile(patchFile, patch);
 
@@ -710,8 +710,7 @@ async function runCommand(args) {
  * Create a tar.gz export bundle with manifest and changed files
  */
 async function createExportBundle(approval) {
-  const tempDir = `/tmp/devai-export-${approval.id}-${Date.now()}`;
-  await fs.mkdir(tempDir, { recursive: true });
+  const tempDir = await fs.mkdtemp(path.join(tmpdir(), `devai-export-${approval.id}-`));
 
   try {
     // Create manifest

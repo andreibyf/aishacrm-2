@@ -100,7 +100,9 @@ export default function LeadDetailPanel({
           showNotes={true}
           customSections={[
             {
-              content: <CustomFieldsDisplay entityType="Lead" metadata={lead.metadata} showHeader />,
+              content: (
+                <CustomFieldsDisplay entityType="Lead" metadata={lead.metadata} showHeader />
+              ),
             },
             {
               title: 'Session Booking',
@@ -126,6 +128,7 @@ export default function LeadDetailPanel({
                   loading={sessionsLoading}
                   error={sessionsError}
                   onArchived={refreshSessions}
+                  onRefresh={refreshSessions}
                 />
               ),
             },

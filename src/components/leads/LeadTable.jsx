@@ -211,11 +211,16 @@ export default function LeadTable({
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap">
-                      {lead.updated_date ? (
-                        formatDate(lead.updated_date)
-                      ) : (
-                        <span className="text-slate-600">—</span>
-                      )}
+                      {(() => {
+                        // leads table column is `updated_at`. Some legacy rows expose
+                        // `updated_date` via metadata expansion — accept either.
+                        const lastUpdated = lead.updated_at || lead.updated_date;
+                        return lastUpdated ? (
+                          formatDate(lastUpdated)
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       {deletingId === lead.id || updatingId === lead.id ? (
