@@ -53,6 +53,18 @@ const sharedResolve = {
 };
 
 
+// ─── Shared test env ──────────────────────────────────────────────────────────
+// NODE_ENV='test' is required so React loads the development build (act() only
+// works there). VITE_AISHACRM_BACKEND_URL needs an explicit value because
+// getBackendUrl() only falls back to localhost in MODE=development (import.meta
+// .env.DEV); MODE='test' would throw "VITE_AISHACRM_BACKEND_URL not configured"
+// without this seed. Both must be set on EVERY project for consistent results
+// — historical regressions (PR ?-…) added NODE_ENV to one project at a time.
+const sharedTestEnv = {
+  NODE_ENV: 'test',
+  VITE_AISHACRM_BACKEND_URL: 'http://localhost:4001',
+};
+
 const sharedConfig = {
   globals: true,
   environment: 'jsdom' as const,
@@ -64,6 +76,7 @@ const sharedConfig = {
   passWithNoTests: true,
   pool: testPool,
   poolOptions,
+  env: sharedTestEnv,
   onConsoleLog: () => true,
   // @reduxjs/toolkit ships ESM (.modern.mjs) inside a CJS-style package;
   // recharts requires it and the vmForks SSR module runner picks up the
@@ -123,7 +136,6 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
-          env: { NODE_ENV: 'test' },
           include: [
             'src/components/leads/**/*.test.{js,jsx,ts,tsx}',
             'src/components/leads/**/__tests__/**/*.{js,jsx,ts,tsx}',
@@ -151,6 +163,7 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
+          env: { NODE_ENV: 'test' },
           // recharts (CJS) requires @reduxjs/toolkit which exposes only an ESM
           // export condition; mock recharts at setup time to avoid loading it.
           setupFiles: ['./src/test/setup.js', './src/test/setup-reports.js'],
@@ -168,7 +181,6 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
-          env: { NODE_ENV: 'test' },
           include: [
             'src/components/workflows/**/*.test.{js,jsx,ts,tsx}',
             'src/components/workflows/**/__tests__/**/*.{js,jsx,ts,tsx}',
@@ -200,7 +212,6 @@ export default defineConfig({
         plugins: [react()],
         test: {
           ...sharedConfig,
-          env: { NODE_ENV: 'test' },
           include: [
             'src/components/shared/**/*.test.{js,jsx,ts,tsx}',
             'src/components/shared/**/__tests__/**/*.{js,jsx,ts,tsx}',

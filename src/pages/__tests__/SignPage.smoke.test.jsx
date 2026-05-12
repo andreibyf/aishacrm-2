@@ -1,4 +1,7 @@
 // @ts-check
+// @vitest-environment node
+// (jsdom env can't resolve `node:` import schemes through vitest's vmForks SSR
+// runner; this test only reads source from disk via fs/url/path — no DOM.)
 /**
  * SignPage layout regression test (4VD-43 day 4b post-mortem).
  *
