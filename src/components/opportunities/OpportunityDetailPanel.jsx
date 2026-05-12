@@ -60,6 +60,8 @@ export default function OpportunityDetailPanel({
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [creatingActivity, setCreatingActivity] = useState(false);
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
+  const [recentlySubmittedDoc, setRecentlySubmittedDoc] = useState(false);
+
   const { getCardLabel } = useStatusCardPreferences();
   const {
     sessions: signingSessions,
@@ -70,7 +72,12 @@ export default function OpportunityDetailPanel({
     enabled: !!localOpportunity?.id,
     relatedTo: 'opportunity',
     relatedId: localOpportunity?.id,
+    recentlySubmitted: recentlySubmittedDoc,
   });
+
+  const handleDocumentSent = () => {
+    setRecentlySubmittedDoc(true);
+  };
 
   const stageToCardId = {
     closed_won: 'opportunity_won',
@@ -736,7 +743,7 @@ export default function OpportunityDetailPanel({
         relatedId={localOpportunity?.id}
         defaultRecipientEmail=""
         defaultRecipientName={localOpportunity?.name || ''}
-        onSent={refreshSigning}
+        onSent={handleDocumentSent}
       />
     </ErrorBoundary>
   );
