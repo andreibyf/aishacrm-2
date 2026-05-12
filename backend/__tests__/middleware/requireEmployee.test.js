@@ -21,9 +21,12 @@ const USER_EMPLOYEE_ID = 'eb85fb7c-2545-4d91-a20d-77f4b6af75e7';
  * @param {Error|null}  [opts.error] error to return
  */
 function makeFakeSupabase({ row, error = null }) {
-  const calls = { eq: [], ilike: [] };
+  const calls = { eq: [], ilike: [], select: [] };
   const chain = {
-    select: () => chain,
+    select: (cols) => {
+      calls.select.push(cols);
+      return chain;
+    },
     eq: (col, val) => {
       calls.eq.push({ col, val });
       return chain;
@@ -62,7 +65,7 @@ function makeRes() {
 
 describe('requireEmployee — happy path', () => {
   it('calls next() and sets req.user.employee_id when employees row exists', async () => {
-    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID } });
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'active' } });
     const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
 
     const req = {
@@ -80,8 +83,23 @@ describe('requireEmployee — happy path', () => {
     assert.equal(res._status, 200, 'status was not changed');
   });
 
+  it('selects status column so the inactive filter can apply', async () => {
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'active' } });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+    const req = {
+      user: { id: 'u-1', email: 'andrei.byfield@gmail.com', tenant_id: TENANT_ID },
+      tenant: { id: TENANT_ID },
+    };
+    await mw(req, makeRes(), () => {});
+    const selectCall = fake._calls.select[0] || '';
+    assert.ok(
+      String(selectCall).includes('status'),
+      'select() must include status column for the active-check',
+    );
+  });
+
   it('uses req.user.tenant_id when req.tenant.id is absent', async () => {
-    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID } });
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'active' } });
     const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
 
     const req = {
@@ -101,7 +119,7 @@ describe('requireEmployee — happy path', () => {
   });
 
   it('uses ilike for email match (RFC 5321 case-insensitivity)', async () => {
-    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID } });
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'active' } });
     const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
 
     const req = {
@@ -111,6 +129,72 @@ describe('requireEmployee — happy path', () => {
 
     const emailIlike = fake._calls.ilike.find((c) => c.col === 'email');
     assert.equal(emailIlike?.val, 'Andrei.Byfield@gmail.com');
+  });
+});
+
+describe('requireEmployee — superadmin bypass', () => {
+  it('lets superadmin through without an employees lookup', async () => {
+    const fake = makeFakeSupabase({ row: null });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: {
+        id: 'u-super',
+        email: 'admin@platform.com',
+        role: 'superadmin',
+        tenant_id: TENANT_ID,
+      },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true);
+    assert.equal(res._status, 200);
+    // Critical: didn't query employees because bypass fires before the lookup
+    assert.equal(fake._calls.ilike.length, 0, 'employees lookup must be skipped for superadmin');
+  });
+
+  it('lets is_superadmin=true through even when role is not literally "superadmin"', async () => {
+    const fake = makeFakeSupabase({ row: null });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: {
+        id: 'u-super',
+        email: 'admin@platform.com',
+        role: 'user',
+        is_superadmin: true,
+        tenant_id: TENANT_ID,
+      },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true);
+  });
+
+  it('does NOT bypass tenant admins (they must be employees on their tenant)', async () => {
+    const fake = makeFakeSupabase({ row: null });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: { id: 'u-admin', email: 'admin@tenant.com', role: 'admin', tenant_id: TENANT_ID },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    await mw(req, res, () => {});
+
+    // Admin without employees row → 403, same as any other user
+    assert.equal(res._status, 403);
+    assert.equal(res._body.code, 'employee_required');
   });
 });
 
@@ -134,6 +218,62 @@ describe('requireEmployee — rejects non-employees', () => {
     assert.equal(res._body.code, 'employee_required');
     assert.equal(res._body.status, 'error');
     assert.match(res._body.message, /employees/i);
+  });
+
+  it('returns 403 employee_inactive when employees.status != "active"', async () => {
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'inactive' } });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: { id: 'u-1', email: 'offboarded@org.com', tenant_id: TENANT_ID },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, false);
+    assert.equal(res._status, 403);
+    assert.equal(res._body.code, 'employee_inactive');
+    assert.notEqual(
+      res._body.code,
+      'employee_required',
+      'inactive must use its own code so UX can distinguish "never was" from "deactivated"',
+    );
+  });
+
+  it('returns 403 employee_inactive when status is "suspended" too', async () => {
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: 'suspended' } });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: { id: 'u-1', email: 'suspended@org.com', tenant_id: TENANT_ID },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    await mw(req, res, () => {});
+
+    assert.equal(res._status, 403);
+    assert.equal(res._body.code, 'employee_inactive');
+  });
+
+  it('allows when status column is null/undefined (legacy rows pre-status)', async () => {
+    const fake = makeFakeSupabase({ row: { id: USER_EMPLOYEE_ID, status: null } });
+    const mw = createRequireEmployee({ getSupabaseAdmin: () => fake });
+
+    const req = {
+      user: { id: 'u-1', email: 'legacy@org.com', tenant_id: TENANT_ID },
+      tenant: { id: TENANT_ID },
+    };
+    const res = makeRes();
+    let nextCalled = false;
+    await mw(req, res, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true, 'null status should not block — back-compat for older rows');
   });
 
   it('returns 403 employee_required when user has no email', async () => {

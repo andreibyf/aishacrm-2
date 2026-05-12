@@ -36,6 +36,12 @@ export const User = {
         const payload = meJson?.data?.user || {};
         const email = (payload.email || '').toLowerCase();
         const table = payload.table === 'employees' ? 'employees' : 'users';
+        // /api/auth/me populates is_employee + employee_id from a live
+        // employees lookup. Carry both through to the frontend user
+        // object so normalizeUser can expose them on the context. See
+        // docs/architecture/IDENTITY_MODEL.md rule #6 and 4VD-54.
+        const isEmployeeFromMe = payload.is_employee === true;
+        const employeeIdFromMe = payload.employee_id || null;
 
         // Fetch user/employee record from backend to enrich profile
         let userData = null;
@@ -83,8 +89,12 @@ export const User = {
             userData?.tenant_id !== undefined && userData?.tenant_id !== null
               ? userData.tenant_id
               : (payload.tenant_id ?? null),
+          // is_employee + employee_id from /api/auth/me are authoritative
+          // (server-side employees lookup). userData (from /api/users or
+          // /api/employees) supplies the rest of the profile.
+          is_employee: isEmployeeFromMe,
           ...(userData && {
-            employee_id: userData.employee_id || userData.id,
+            employee_id: employeeIdFromMe || userData.employee_id || userData.id,
             employee_role: userData.employee_role,
             first_name: userData.first_name,
             last_name: userData.last_name,
@@ -106,7 +116,8 @@ export const User = {
             can_manage_settings: userData.metadata?.can_manage_settings || false,
             crm_access: true,
             // nav_permissions is the actual DB column; navigation_permissions was the old metadata key
-            navigation_permissions: userData.nav_permissions || userData.navigation_permissions || {},
+            navigation_permissions:
+              userData.nav_permissions || userData.navigation_permissions || {},
           }),
         };
       }
@@ -303,6 +314,42 @@ export const User = {
           console.error('[Supabase Auth] Error fetching user data:', err.message);
         }
 
+        // Explicit employees-table check so is_employee + the authoritative
+        // employees.id are correct regardless of whether the main userData
+        // lookup hit /api/users or /api/employees. Without this, employee_id
+        // can end up holding a users.id (because we fall back to
+        // `userData.id` when employee_id isn't on the row) — same class of
+        // bug as 4VD-44. See docs/architecture/IDENTITY_MODEL.md rule #6
+        // and PR #581 Codex review.
+        let isEmployee = false;
+        let resolvedEmployeeId = null;
+        try {
+          const empResp = await fetch(
+            `${BACKEND_URL}/api/employees?email=${encodeURIComponent(user.email)}`,
+          );
+          if (empResp.ok) {
+            const empJson = await empResp.json();
+            const empRaw = empJson.data || empJson;
+            const empList = Array.isArray(empRaw)
+              ? empRaw.filter((e) => (e.email || '').toLowerCase() === user.email.toLowerCase())
+              : [];
+            // Status filter mirrors requireEmployee middleware: a row with
+            // status=inactive/suspended is not gate-passing material.
+            const activeEmp = empList.find(
+              (e) => !e.status || String(e.status).toLowerCase() === 'active',
+            );
+            if (activeEmp) {
+              isEmployee = true;
+              resolvedEmployeeId = activeEmp.id;
+            }
+          }
+        } catch (empErr) {
+          // Best-effort: a failed lookup leaves is_employee=false, which
+          // hides the gated UI. Backend still enforces the gate
+          // independently via requireEmployee middleware.
+          console.warn('[Supabase Auth] is_employee check failed:', empErr?.message);
+        }
+
         // Map Supabase user to our User format with database data
         // IMPORTANT: Merge order ensures DATABASE values override Supabase user_metadata
         return {
@@ -318,9 +365,24 @@ export const User = {
             userData?.tenant_id !== undefined && userData?.tenant_id !== null
               ? userData.tenant_id
               : (user.user_metadata?.tenant_id ?? null),
+          // is_employee comes from the explicit employees-table lookup above,
+          // independent of which table userData was hydrated from. This is
+          // what frontend gates (Send Document) check. See PR #581 Codex
+          // review + docs/architecture/IDENTITY_MODEL.md rule #6.
+          is_employee: isEmployee,
+          // Surface the resolved employee_id even if userData is null
+          // (rare: auth user with no users/employees profile but a
+          // matching employees row). The spread below would otherwise
+          // skip and leave employee_id undefined.
+          ...(resolvedEmployeeId && !userData && { employee_id: resolvedEmployeeId }),
           // Finally, include database user data LAST so it overrides metadata
           ...(userData && {
-            employee_id: userData.employee_id || userData.id,
+            // Prefer the resolved employees.id over userData.id when the
+            // explicit lookup found one — otherwise fall back to the
+            // legacy behavior. Without this, employee_id ends up holding a
+            // users.id row when userData was hydrated from /api/users
+            // (same class of bug as 4VD-44).
+            employee_id: resolvedEmployeeId || userData.employee_id || userData.id,
             employee_role: userData.employee_role,
             first_name: userData.first_name,
             last_name: userData.last_name,
@@ -344,7 +406,8 @@ export const User = {
             crm_access: true, // Grant CRM access to authenticated users with records
             // nav_permissions is the actual DB column; navigation_permissions was the old metadata key
             // Support both for backwards compatibility, preferring nav_permissions
-            navigation_permissions: userData.nav_permissions || userData.navigation_permissions || {},
+            navigation_permissions:
+              userData.nav_permissions || userData.navigation_permissions || {},
           }),
         };
       } catch (err) {

@@ -47,6 +47,48 @@ import { getSupabaseAdmin as defaultGetSupabaseAdmin } from '../lib/supabaseFact
 import logger from '../lib/logger.js';
 
 /**
+ * Normalize a role string the same way validateTenant.js does. Inlined
+ * here to avoid a circular import and keep requireEmployee self-contained.
+ *
+ * @param {unknown} role
+ * @returns {string}
+ */
+function normalizeRole(role) {
+  const normalized = String(role || '')
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === 'super_admin' ||
+    normalized === 'super admin' ||
+    normalized === 'super-admin'
+  ) {
+    return 'superadmin';
+  }
+  return normalized;
+}
+
+/**
+ * Hash an email for log output so we have correlation IDs across log
+ * lines without leaking PII into log aggregators. SHA-256 is overkill
+ * for this purpose but consistent with the rest of the codebase's hash
+ * usage and zero-config.
+ *
+ * @param {string} email
+ * @returns {string}
+ */
+function redactEmail(email) {
+  if (typeof email !== 'string' || email.length === 0) return '(empty)';
+  // Cheap deterministic redaction: keep the domain (operator-useful)
+  // and obscure the local-part.
+  const at = email.indexOf('@');
+  if (at < 1) return '(invalid)';
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}***@${domain}`;
+}
+
+/**
  * @typedef {Object} RequireEmployeeDeps
  * @property {() => any} [getSupabaseAdmin]  override (for tests)
  */
@@ -103,6 +145,16 @@ export function createRequireEmployee(deps = {}) {
       });
     }
 
+    // Superadmin bypass: system-level admins managing tenants don't
+    // necessarily have an employees row on every tenant they operate
+    // on. Mirrors the bypass in getVisibilityScope (teamVisibility.js).
+    // Admin role (per-tenant) does NOT bypass — admins still act on
+    // behalf of their tenant and should be employees there.
+    const role = normalizeRole(req.user.role);
+    if (role === 'superadmin' || req.user.is_superadmin === true) {
+      return next();
+    }
+
     const tenantId = resolveTenantId(req);
     if (!tenantId) {
       return res.status(400).json({
@@ -138,9 +190,15 @@ export function createRequireEmployee(deps = {}) {
       // Case-insensitive email match per RFC 5321 (email local-part
       // case-sensitivity is theoretically RFC-allowed but no real-world
       // mail system enforces it). Same pattern as resolveAssignedTo.
+      //
+      // Filter on status='active' so deactivated employees can't bypass
+      // the gate by simply existing in the table — matches the
+      // accountStatus check in auth.js /refresh. The status column has
+      // historically held 'active' | 'inactive' | 'suspended'; treat
+      // anything other than 'active' as not-an-employee for gate purposes.
       const { data, error } = await supabase
         .from('employees')
-        .select('id')
+        .select('id, status')
         .eq('tenant_id', tenantId)
         .ilike('email', email)
         .limit(1)
@@ -149,7 +207,7 @@ export function createRequireEmployee(deps = {}) {
       if (error) {
         logger.error('[requireEmployee] employees lookup failed', {
           tenantId,
-          email,
+          emailHash: redactEmail(email),
           message: error.message,
         });
         return res.status(500).json({
@@ -168,6 +226,19 @@ export function createRequireEmployee(deps = {}) {
         });
       }
 
+      // Reject deactivated employees explicitly so the operator sees a
+      // dedicated error code instead of the generic employee_required.
+      const status = String(data.status || '').toLowerCase();
+      if (status && status !== 'active') {
+        return res.status(403).json({
+          status: 'error',
+          message:
+            'Your employee record on this tenant is not active. ' +
+            'Contact an admin to reactivate it.',
+          code: 'employee_inactive',
+        });
+      }
+
       // Pass the resolved employees.id downstream so handlers don't
       // have to re-query.
       req.user.employee_id = data.id;
@@ -175,7 +246,7 @@ export function createRequireEmployee(deps = {}) {
     } catch (err) {
       logger.error('[requireEmployee] threw', {
         tenantId,
-        email,
+        emailHash: redactEmail(email),
         message: err?.message,
       });
       return res.status(500).json({

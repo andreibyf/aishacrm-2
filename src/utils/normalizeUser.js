@@ -137,6 +137,12 @@ export function normalizeUser(raw) {
 
   // Employee ID precedence
   const employeeId = raw.employee_id || raw.id_if_employee || undefined;
+  // is_employee is the gate for tenant-acting UI (Send Document, etc).
+  // Prefer the explicit flag from the backend's /api/auth/me; fall back
+  // to "has an employee_id" for upstream paths (User.me() Supabase
+  // fallback) that already set employee_id but don't set is_employee.
+  // See docs/architecture/IDENTITY_MODEL.md rule #6 and 4VD-54.
+  const isEmployee = raw.is_employee !== undefined ? !!raw.is_employee : !!employeeId;
 
   // Warn once about duplicate top-level vs metadata usage (heuristic)
   if (!WARN_ONCE_FLAGS.duplicateMetadata && import.meta?.env?.DEV) {
@@ -156,6 +162,7 @@ export function normalizeUser(raw) {
     is_superadmin: isSuperadmin,
     tenant_id: tenantId,
     employee_id: employeeId,
+    is_employee: isEmployee,
     employee_role: raw.employee_role || undefined,
     first_name: firstName,
     last_name: lastName,
