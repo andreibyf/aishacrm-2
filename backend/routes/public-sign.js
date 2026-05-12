@@ -297,6 +297,25 @@ export function validateSubmitInput(body, templateFields) {
     out[name] = str;
   }
 
+  // Pass-through: _signature_mode is a frontend-supplied hint
+  // ('draw'|'drawn'|'type'|'typed') that buildDigitalSignatureMetadata
+  // reads to record signing method in the embedded AiSHASignature block.
+  // Not a template-declared field, so it'd otherwise be stripped by the
+  // loop above. Explicitly allowlist + normalize here to keep arbitrary
+  // strings out of the DB while still letting the legitimate value
+  // through. (Without this, detectSignatureMethod always returns
+  // 'unknown' even when the recipient picks Draw or Type explicitly.)
+  if (typeof incoming._signature_mode === 'string') {
+    const mode = incoming._signature_mode;
+    if (mode === 'draw' || mode === 'drawn') {
+      out._signature_mode = 'drawn';
+    } else if (mode === 'type' || mode === 'typed') {
+      out._signature_mode = 'typed';
+    }
+    // any other value: silently dropped (defends against arbitrary string
+    // injection into field_values._signature_mode).
+  }
+
   // Cross-check: a template with at least one required signature field
   // must see a signature value somewhere — either the top-level URL or
   // any per-field value captured above. Same template ALSO requires a

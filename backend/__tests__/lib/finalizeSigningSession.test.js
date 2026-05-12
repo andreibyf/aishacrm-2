@@ -28,6 +28,7 @@ import {
   finalizeSigningSession,
   buildSignedPdfStorageKey,
   sha256Hex,
+  hashSignatureImage,
   buildAttachmentFilename,
 } from '../../lib/finalizeSigningSession.js';
 
@@ -219,6 +220,52 @@ describe('sha256Hex helper', () => {
 
   it('rejects an unsupported input type', () => {
     assert.throws(() => sha256Hex({ not: 'bytes' }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+//
+// hashSignatureImage — the AiSHASignature metadata block's
+// `signature_image_sha256` MUST match what a verifier gets by running
+// `sha256sum` on the extracted PNG file. Previous regression: the hash
+// was computed over the data URL string (header + base64 chars) instead
+// of the decoded PNG bytes — silently misleading any later verification.
+//
+// ---------------------------------------------------------------------------
+
+describe('hashSignatureImage helper', () => {
+  // A minimal valid 1x1 transparent PNG, base64-encoded.
+  const PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const PNG_BYTES = Buffer.from(PNG_BASE64, 'base64');
+  const DATA_URL = `data:image/png;base64,${PNG_BASE64}`;
+
+  it('hashes the decoded PNG bytes, not the data URL string', () => {
+    const expectedHash = crypto.createHash('sha256').update(PNG_BYTES).digest('hex');
+    const wrongHash = crypto
+      .createHash('sha256')
+      .update(Buffer.from(DATA_URL, 'utf8'))
+      .digest('hex');
+    const actual = hashSignatureImage(DATA_URL);
+    assert.equal(actual, expectedHash, 'must match sha256 of decoded PNG bytes');
+    assert.notEqual(actual, wrongHash, 'must NOT match sha256 of the data URL string');
+  });
+
+  it('returns null for null/undefined/empty input', () => {
+    assert.equal(hashSignatureImage(null), null);
+    assert.equal(hashSignatureImage(undefined), null);
+    assert.equal(hashSignatureImage(''), null);
+  });
+
+  it('returns null for non-string input', () => {
+    assert.equal(hashSignatureImage(123), null);
+    assert.equal(hashSignatureImage({}), null);
+  });
+
+  it('returns null for malformed data URL (no decode crash)', () => {
+    assert.equal(hashSignatureImage('not-a-data-url'), null);
+    assert.equal(hashSignatureImage('data:image/png;NOTBASE64'), null);
+    assert.equal(hashSignatureImage('data:no-comma-here'), null);
   });
 });
 

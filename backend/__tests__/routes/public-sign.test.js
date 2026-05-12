@@ -251,6 +251,58 @@ describe('validateSubmitInput — happy path', () => {
     );
     assert.equal(out.signer_name, 'Jane Doe');
   });
+
+  // Regression: _signature_mode used to be stripped along with other
+  // underscore-prefixed keys, leaving buildDigitalSignatureMetadata's
+  // detectSignatureMethod() always returning 'unknown'. Frontend writes
+  // it into field_values; validator must pass it through, normalized.
+  test('preserves _signature_mode = "drawn" through validation', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'drawn' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'drawn');
+  });
+
+  test('normalizes _signature_mode = "draw" to "drawn"', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'draw' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'drawn');
+  });
+
+  test('normalizes _signature_mode = "type" to "typed"', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'type' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'typed');
+  });
+
+  test('drops _signature_mode when value is not draw/type/drawn/typed', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: '<script>evil</script>' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, undefined);
+  });
 });
 
 describe('validateSubmitInput — rejects bad input', () => {

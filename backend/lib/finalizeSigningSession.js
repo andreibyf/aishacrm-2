@@ -38,7 +38,7 @@
 import crypto from 'node:crypto';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import logger from './logger.js';
-import { signPdf } from './signPdf.js';
+import { signPdf, decodeDataUrlPng } from './signPdf.js';
 import { appendCertificateOfCompletion } from './buildCertificateOfCompletion.js';
 import { sendTenantEmail } from './sendTenantEmail.js';
 import { buildSigningReceiptEmail } from './buildSigningReceiptEmail.js';
@@ -77,6 +77,36 @@ export function sha256Hex(bytes) {
     throw new TypeError('sha256Hex: unsupported input type');
   }
   return hash.digest('hex');
+}
+
+/**
+ * SHA-256 hex digest of the recipient's signature PNG, decoded from a
+ * `data:image/png;base64,...` URL. Pure helper exposed for unit testing
+ * + reuse by verification tooling.
+ *
+ * Important: hashes the DECODED PNG bytes, not the data URL string. The
+ * AiSHASignature metadata block's `signature_image_sha256` field must
+ * match what a verifier gets by running `sha256sum signature.png` on the
+ * extracted PNG. Hashing the data URL string (header + base64 chars)
+ * would produce a different, non-reproducible hash and silently mislead
+ * anyone trying to verify the embedded signature image later.
+ *
+ * Returns null on malformed input rather than throwing — the metadata
+ * block treats `signature_image_sha256: null` as a valid state, so a
+ * decode failure shouldn't crash the finalize pipeline. Caller passes
+ * null when no signature data URL is available on the session.
+ *
+ * @param {string|null|undefined} dataUrl
+ * @returns {string|null}
+ */
+export function hashSignatureImage(dataUrl) {
+  if (typeof dataUrl !== 'string' || dataUrl.length === 0) return null;
+  try {
+    const pngBytes = decodeDataUrlPng(dataUrl);
+    return sha256Hex(pngBytes);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -247,9 +277,11 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       typeof session.field_values?._signature_data_url === 'string'
         ? session.field_values._signature_data_url
         : null;
-    const signatureImageSha256 = signatureImageDataUrl
-      ? sha256Hex(Buffer.from(signatureImageDataUrl, 'utf8'))
-      : null;
+    // Use the testable helper so the AiSHASignature metadata block's
+    // signature_image_sha256 matches what `sha256sum signature.png`
+    // would return for a verifier — hashing the decoded PNG bytes, not
+    // the data URL string. See hashSignatureImage() docblock above.
+    const signatureImageSha256 = hashSignatureImage(signatureImageDataUrl);
     const producerVersion = process.env.npm_package_version || process.env.AISHA_VERSION || '0.0.0';
 
     const metadata = buildDigitalSignatureMetadata({
