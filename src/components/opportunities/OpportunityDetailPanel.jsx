@@ -60,7 +60,7 @@ export default function OpportunityDetailPanel({
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [creatingActivity, setCreatingActivity] = useState(false);
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
-  const [recentlySubmittedDoc, setRecentlySubmittedDoc] = useState(false);
+  const [submissionSeq, setSubmissionSeq] = useState(0);
 
   const { getCardLabel } = useStatusCardPreferences();
   const {
@@ -72,12 +72,10 @@ export default function OpportunityDetailPanel({
     enabled: !!localOpportunity?.id,
     relatedTo: 'opportunity',
     relatedId: localOpportunity?.id,
-    recentlySubmitted: recentlySubmittedDoc,
+    submissionSeq,
   });
 
-  const handleDocumentSent = () => {
-    setRecentlySubmittedDoc(true);
-  };
+  const handleDocumentSent = () => setSubmissionSeq((s) => s + 1);
 
   const stageToCardId = {
     closed_won: 'opportunity_won',

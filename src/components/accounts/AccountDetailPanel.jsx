@@ -17,7 +17,7 @@ export default function AccountDetailPanel({
   user,
 }) {
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
-  const [recentlySubmittedDoc, setRecentlySubmittedDoc] = useState(false);
+  const [submissionSeq, setSubmissionSeq] = useState(0);
 
   const {
     sessions,
@@ -28,12 +28,10 @@ export default function AccountDetailPanel({
     enabled: !!open && !!account?.id,
     relatedTo: 'account',
     relatedId: account?.id,
-    recentlySubmitted: recentlySubmittedDoc,
+    submissionSeq,
   });
 
-  const handleDocumentSent = () => {
-    setRecentlySubmittedDoc(true);
-  };
+  const handleDocumentSent = () => setSubmissionSeq((s) => s + 1);
 
   if (!account) {
     return null;

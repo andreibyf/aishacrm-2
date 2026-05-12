@@ -42,7 +42,7 @@ export default function ContactDetailPanel({
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
-  const [recentlySubmittedDoc, setRecentlySubmittedDoc] = useState(false);
+  const [submissionSeq, setSubmissionSeq] = useState(0);
 
   const {
     sessions,
@@ -53,16 +53,13 @@ export default function ContactDetailPanel({
     enabled: !!open && !!contact?.id,
     relatedTo: 'contact',
     relatedId: contact?.id,
-    recentlySubmitted: recentlySubmittedDoc,
+    submissionSeq,
   });
 
-  const handleDocumentSent = () => {
-    setRecentlySubmittedDoc(true);
-    // The useAdaptivePoll hook will handle the 30s countdown automatically.
-    // After 30s, the poll cadence reverts to steady-state (15s).
-    // To manually clear sooner, you could call setRecentlySubmittedDoc(false)
-    // from a success handler, but the auto-timeout is sufficient here.
-  };
+  // Increment on every send so useAdaptivePoll always sees a new dep value
+  // and restarts its 30s short-poll window — even if the user sends a second
+  // document in the same panel session (boolean true→true is invisible to React).
+  const handleDocumentSent = () => setSubmissionSeq((s) => s + 1);
 
   if (!contact) {
     return null;

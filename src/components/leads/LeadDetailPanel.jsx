@@ -21,7 +21,7 @@ export default function LeadDetailPanel({
   associatedAccountName,
 }) {
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
-  const [recentlySubmittedDoc, setRecentlySubmittedDoc] = useState(false);
+  const [submissionSeq, setSubmissionSeq] = useState(0);
 
   const {
     sessions,
@@ -32,12 +32,10 @@ export default function LeadDetailPanel({
     enabled: !!open && !!lead?.id,
     relatedTo: 'lead',
     relatedId: lead?.id,
-    recentlySubmitted: recentlySubmittedDoc,
+    submissionSeq,
   });
 
-  const handleDocumentSent = () => {
-    setRecentlySubmittedDoc(true);
-  };
+  const handleDocumentSent = () => setSubmissionSeq((s) => s + 1);
 
   if (!lead) {
     return null;

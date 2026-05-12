@@ -38,9 +38,12 @@ async function authHeaders() {
  * @param {number} [params.shortPollMs] — default 5000ms; poll interval immediately
  *                                         after document send (for ~30s).
  * @param {number} [params.longPollMs] — default 15000ms; steady-state poll interval.
- * @param {boolean} [params.recentlySubmitted] — signal that a document was just sent.
- *                                               Parent panel sets this to trigger
- *                                               the short-poll window.
+ * @param {number} [params.submissionSeq] — monotonically increasing counter; increment
+ *                                          on every send. Using a counter (not a boolean)
+ *                                          ensures useAdaptivePoll restarts its 30s window
+ *                                          even when the user sends a second document in
+ *                                          the same session (boolean true→true is invisible
+ *                                          to React's effect dep comparison).
  *
  * Adaptive polling (4VD-48):
  *
@@ -68,7 +71,7 @@ export function useSigningSessions({
   pollMs,
   shortPollMs = 5000,
   longPollMs = 15000,
-  recentlySubmitted = false,
+  submissionSeq = 0,
 }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -79,9 +82,9 @@ export function useSigningSessions({
   const effectiveShortPollMs = pollMs ?? shortPollMs;
   const effectiveLongPollMs = pollMs ?? longPollMs;
 
-  // Calculate the current poll interval based on recentlySubmitted flag.
+  // Calculate the current poll interval based on submissionSeq counter.
   const currentInterval = useAdaptivePoll({
-    recentlySubmitted,
+    submissionSeq,
     shortPollMs: effectiveShortPollMs,
     longPollMs: effectiveLongPollMs,
     shortWindowDurationMs: 30000,
