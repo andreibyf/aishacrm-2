@@ -297,6 +297,25 @@ export function validateSubmitInput(body, templateFields) {
     out[name] = str;
   }
 
+  // Pass-through: _signature_mode is a frontend-supplied hint
+  // ('draw'|'drawn'|'type'|'typed') that buildDigitalSignatureMetadata
+  // reads to record signing method in the embedded AiSHASignature block.
+  // Not a template-declared field, so it'd otherwise be stripped by the
+  // loop above. Explicitly allowlist + normalize here to keep arbitrary
+  // strings out of the DB while still letting the legitimate value
+  // through. (Without this, detectSignatureMethod always returns
+  // 'unknown' even when the recipient picks Draw or Type explicitly.)
+  if (typeof incoming._signature_mode === 'string') {
+    const mode = incoming._signature_mode;
+    if (mode === 'draw' || mode === 'drawn') {
+      out._signature_mode = 'drawn';
+    } else if (mode === 'type' || mode === 'typed') {
+      out._signature_mode = 'typed';
+    }
+    // any other value: silently dropped (defends against arbitrary string
+    // injection into field_values._signature_mode).
+  }
+
   // Cross-check: a template with at least one required signature field
   // must see a signature value somewhere — either the top-level URL or
   // any per-field value captured above. Same template ALSO requires a
@@ -385,7 +404,10 @@ export default function createPublicSignRoutes() {
           .from('signing_sessions')
           .update({ status: 'expired' })
           .eq('id', session.id)
-          .then(() => undefined, () => undefined);
+          .then(
+            () => undefined,
+            () => undefined,
+          );
       }
       return res.status(410).json({ error: 'expired', status: 'expired' });
     }
@@ -473,9 +495,7 @@ export default function createPublicSignRoutes() {
     const branding = {
       tenant_name: tenantRes.data.name || tenantRes.data.tenant_id || null,
       logo_url:
-        tenantRes.data.branding_settings?.logo_url ??
-        tenantRes.data.metadata?.logo_url ??
-        null,
+        tenantRes.data.branding_settings?.logo_url ?? tenantRes.data.metadata?.logo_url ?? null,
       primary_color: tenantRes.data.branding_settings?.primary_color || null,
     };
 
@@ -514,9 +534,7 @@ export default function createPublicSignRoutes() {
     const supabase = getSupabaseAdmin();
     const { data: session, error: lookupErr } = await supabase
       .from('signing_sessions')
-      .select(
-        'id, tenant_id, template_id, status, audit, expires_at',
-      )
+      .select('id, tenant_id, template_id, status, audit, expires_at')
       .eq('signing_token', token)
       .maybeSingle();
     if (lookupErr) {
@@ -710,6 +728,73 @@ export default function createPublicSignRoutes() {
     }).catch(() => undefined);
 
     return res.json({ data });
+  });
+
+  // --- GET /api/sign/:token/signed-pdf-url --------------------------------
+  // Public mirror of GET /api/submissions/:id/signed-pdf-url. Token-gated
+  // — the 256-bit signing_token is the authorization. Returns a 5-minute
+  // Supabase Storage signed URL on signed_pdf_storage_path when the
+  // session is at status='completed'. Used by the SignPage success state
+  // ("Thanks — your signature has been recorded") to let the recipient
+  // download their own copy, and by the recipient receipt email's
+  // "View signed document" button.
+  //
+  // Failure modes (kept narrow to avoid leaking tenant data through error
+  // shapes — token is the ONLY discriminator, every error returns the
+  // same response shape so a bad-token guess can't fingerprint internal
+  // state):
+  //   - invalid token format          → 404 not_found
+  //   - no row for token              → 404 not_found
+  //   - row exists, not completed     → 404 not_yet_available
+  //   - row archived                  → 410 archived
+  //   - storage sign fails            → 503 sign_failed
+  router.get('/:token/signed-pdf-url', async (req, res) => {
+    const { token } = req.params;
+    if (!isValidSigningToken(token)) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data: session, error: lookupErr } = await supabase
+      .from('signing_sessions')
+      .select('id, signed_pdf_storage_path, status, archived_at')
+      .eq('signing_token', token)
+      .maybeSingle();
+    if (lookupErr) {
+      logger.error('[PublicSign] signed-pdf-url lookup failed', {
+        message: lookupErr.message,
+      });
+      return res.status(500).json({ error: 'lookup_failed' });
+    }
+    if (!session) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    if (session.archived_at) {
+      return res.status(410).json({ error: 'archived' });
+    }
+    if (session.status !== 'completed' || !session.signed_pdf_storage_path) {
+      // Finalize pipeline runs async after recipient submit; on dev
+      // empirically takes 2-5 seconds. The frontend Download button polls
+      // this endpoint on a brief loop so the recipient sees their copy
+      // as soon as it's ready.
+      return res.status(404).json({ error: 'not_yet_available' });
+    }
+
+    const bucket = getBucketName();
+    const ttlSeconds = 300;
+    const { data: signed, error: signErr } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(session.signed_pdf_storage_path, ttlSeconds);
+    if (signErr || !signed?.signedUrl) {
+      logger.error('[PublicSign] signed-pdf-url sign failed', {
+        sessionId: session.id,
+        path: session.signed_pdf_storage_path,
+        message: signErr?.message,
+      });
+      return res.status(503).json({ error: 'sign_failed' });
+    }
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    return res.json({ data: { url: signed.signedUrl, expires_at: expiresAt } });
   });
 
   return router;

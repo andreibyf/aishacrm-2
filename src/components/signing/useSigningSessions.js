@@ -20,10 +20,7 @@ async function authHeaders() {
   const auth = await getAuthorizationHeader();
   if (auth) headers['Authorization'] = auth;
   if (typeof localStorage !== 'undefined') {
-    const t =
-      localStorage.getItem('selected_tenant_id') ||
-      localStorage.getItem('tenant_id') ||
-      '';
+    const t = localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
     if (t) headers['x-tenant-id'] = t;
   }
   return headers;
@@ -35,9 +32,16 @@ async function authHeaders() {
  *                                    when the panel is open).
  * @param {'contact'|'lead'|'account'|'opportunity'} params.relatedTo
  * @param {string} params.relatedId
- * @param {number} [params.pollMs] — default 30000ms; pass 0 to disable polling.
+ * @param {number} [params.pollMs] — default 5000ms; pass 0 to disable polling.
+ *
+ * Default poll was 30s historically — visible UI staleness when the
+ * finalize pipeline (which runs async ~2-5s after submit) completes
+ * but the panel still showed 'viewed'/'signed' until the next poll.
+ * 5s is a reasonable balance: catches the typical finalize race
+ * within one poll cycle, doesn't hammer the API for entities that
+ * rarely change (the GET is cheap — a single supabase row read).
  */
-export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 30000 }) {
+export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 5000 }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -53,7 +57,9 @@ export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 300
       });
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        const err = new Error(json?.message || json?.error || `Failed to load signatures (${resp.status})`);
+        const err = new Error(
+          json?.message || json?.error || `Failed to load signatures (${resp.status})`,
+        );
         err.status = resp.status;
         throw err;
       }

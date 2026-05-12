@@ -36,9 +36,13 @@
  */
 
 import crypto from 'node:crypto';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import logger from './logger.js';
-import { signPdf } from './signPdf.js';
+import { signPdf, decodeDataUrlPng } from './signPdf.js';
 import { appendCertificateOfCompletion } from './buildCertificateOfCompletion.js';
+import { sendTenantEmail } from './sendTenantEmail.js';
+import { buildSigningReceiptEmail } from './buildSigningReceiptEmail.js';
+import { buildDigitalSignatureMetadata } from './buildDigitalSignatureMetadata.js';
 
 /**
  * Storage object key for a signed PDF. Mirrors `buildTemplateStorageKey`
@@ -73,6 +77,36 @@ export function sha256Hex(bytes) {
     throw new TypeError('sha256Hex: unsupported input type');
   }
   return hash.digest('hex');
+}
+
+/**
+ * SHA-256 hex digest of the recipient's signature PNG, decoded from a
+ * `data:image/png;base64,...` URL. Pure helper exposed for unit testing
+ * + reuse by verification tooling.
+ *
+ * Important: hashes the DECODED PNG bytes, not the data URL string. The
+ * AiSHASignature metadata block's `signature_image_sha256` field must
+ * match what a verifier gets by running `sha256sum signature.png` on the
+ * extracted PNG. Hashing the data URL string (header + base64 chars)
+ * would produce a different, non-reproducible hash and silently mislead
+ * anyone trying to verify the embedded signature image later.
+ *
+ * Returns null on malformed input rather than throwing — the metadata
+ * block treats `signature_image_sha256: null` as a valid state, so a
+ * decode failure shouldn't crash the finalize pipeline. Caller passes
+ * null when no signature data URL is available on the session.
+ *
+ * @param {string|null|undefined} dataUrl
+ * @returns {string|null}
+ */
+export function hashSignatureImage(dataUrl) {
+  if (typeof dataUrl !== 'string' || dataUrl.length === 0) return null;
+  try {
+    const pngBytes = decodeDataUrlPng(dataUrl);
+    return sha256Hex(pngBytes);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -181,8 +215,7 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       originalPdf: originalBuffer,
       fields: Array.isArray(template.fields) ? template.fields : [],
       fieldValues: session.field_values || {},
-      signatureDataUrl:
-        (session.field_values && session.field_values._signature_data_url) || null,
+      signatureDataUrl: (session.field_values && session.field_values._signature_data_url) || null,
       signerName: signerName || session.field_values?._signer_name || session.recipient_name || '',
       signedAt: session.signed_at || new Date(),
       title: template.name || 'Signed document',
@@ -206,8 +239,7 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
       tenantName: undefined, // tenant join would be a separate query; keep CoC self-contained
       recipientEmail: session.recipient_email,
       recipientName: session.recipient_name || undefined,
-      signerTypedName:
-        signerName || session.field_values?._signer_name || undefined,
+      signerTypedName: signerName || session.field_values?._signer_name || undefined,
       signerIp: signedAuditEntry?.ip,
       signerUserAgent: signedAuditEntry?.ua,
       signedAt: session.signed_at || undefined,
@@ -221,19 +253,81 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
     return { ok: false, reason: 'coc_failed' };
   }
 
+  // 5b. Embed digital-signature metadata into the merged PDF's Info
+  //     dictionary. This is a forensic record (signer, audit, hashes)
+  //     that anyone with the PDF can extract and validate. NOT a PKI
+  //     digital signature — see buildDigitalSignatureMetadata.js
+  //     docblock for the distinction.
+  //
+  //     Chicken-and-egg: we want `final_pdf_sha256` to represent the
+  //     PDF content as shipped. We hash the merged bytes BEFORE the
+  //     metadata is added, then embed that hash. Verifiers can re-
+  //     hash the file MINUS the AiSHASignature Info-dict entry to
+  //     reproduce the original hash.
+  //
+  //     Best-effort: if metadata embedding fails (pdf-lib re-parse
+  //     error or unexpected schema), log + continue with mergedBytes
+  //     unchanged. The CoC page already carries human-readable audit
+  //     info, so a failed metadata embed doesn't compromise the
+  //     legal record.
+  let finalBytes = mergedBytes;
+  try {
+    const finalPdfSha256BeforeEmbed = sha256Hex(Buffer.from(mergedBytes));
+    const signatureImageDataUrl =
+      typeof session.field_values?._signature_data_url === 'string'
+        ? session.field_values._signature_data_url
+        : null;
+    // Use the testable helper so the AiSHASignature metadata block's
+    // signature_image_sha256 matches what `sha256sum signature.png`
+    // would return for a verifier — hashing the decoded PNG bytes, not
+    // the data URL string. See hashSignatureImage() docblock above.
+    const signatureImageSha256 = hashSignatureImage(signatureImageDataUrl);
+    const producerVersion = process.env.npm_package_version || process.env.AISHA_VERSION || '0.0.0';
+
+    const metadata = buildDigitalSignatureMetadata({
+      session,
+      template,
+      originalPdfSha256: originalSha256,
+      finalPdfSha256: finalPdfSha256BeforeEmbed,
+      signatureImageSha256,
+      producerVersion,
+    });
+
+    const doc = await PDFDocument.load(mergedBytes, { ignoreEncryption: true });
+    const info = doc.context.lookup(doc.context.trailerInfo.Info);
+    if (info && typeof info.set === 'function') {
+      info.set(PDFName.of('AiSHASignature'), PDFString.of(JSON.stringify(metadata)));
+      // Also append a compact summary into Keywords so PDF viewers
+      // that don't display custom Info-dict keys (most consumer
+      // readers) still surface a human-readable signature record.
+      // Keywords is the standard place for this kind of taxonomy.
+      const keywords =
+        `AiSHASignature schema=${metadata.schema_version}; ` +
+        `envelope=${metadata.envelope_id}; ` +
+        `signed_at=${metadata.signed_at}; ` +
+        `signer=${metadata.signer.email}`;
+      info.set(PDFName.of('Keywords'), PDFString.of(keywords));
+    }
+    finalBytes = await doc.save({ useObjectStreams: false });
+  } catch (err) {
+    logger.warn('[finalize] digital-signature metadata embed failed', {
+      sessionId,
+      message: err?.message || String(err),
+    });
+    // finalBytes stays as mergedBytes — CoC page is still present.
+  }
+
   // 6. Upload to storage
   const signedPdfStoragePath = buildSignedPdfStorageKey({
     tenantId: session.tenant_id,
     sessionId: session.id,
   });
-  const { error: upErr } = await supabase.storage.from(bucket).upload(
-    signedPdfStoragePath,
-    Buffer.from(mergedBytes),
-    {
+  const { error: upErr } = await supabase.storage
+    .from(bucket)
+    .upload(signedPdfStoragePath, Buffer.from(finalBytes), {
       contentType: 'application/pdf',
       upsert: true,
-    },
-  );
+    });
   if (upErr) {
     logger.error('[finalize] storage upload failed', {
       sessionId,
@@ -265,9 +359,94 @@ export async function finalizeSigningSession({ supabase, bucket, sessionId, sign
     return { ok: false, reason: 'session_update_failed', signedPdfStoragePath };
   }
 
+  // 8. Best-effort: email the recipient their signed copy with the PDF
+  //    attached. Failure here does NOT roll back the signing_session —
+  //    the row is at status='completed' and the operator can re-trigger
+  //    the email manually if needed. We log and continue.
+  //
+  //    The receipt email is intentionally separate from the request
+  //    email path (buildSigningRequestEmail / sendTenantEmail at submit
+  //    time) so a failed receipt doesn't undo the legal recording of
+  //    the signature.
+  try {
+    // Load tenant branding for the email's logo + primary color. Same
+    // payload shape buildSigningRequestEmail consumes during the send.
+    const { data: tenantRow } = await supabase
+      .from('tenant')
+      .select('id, tenant_id, name, branding_settings, metadata')
+      .eq('id', session.tenant_id)
+      .maybeSingle();
+
+    const built = buildSigningReceiptEmail({
+      tenant: tenantRow || { name: 'Your team' },
+      templateName: template.name || 'Signed document',
+      recipientName: session.recipient_name || undefined,
+      signedAtIso: completedAtIso,
+      // viewUrl intentionally omitted here — the public sign URL only
+      // works while signed_pdf_storage_path is set, which it now is,
+      // but exposing a token-bearing URL via email duplicates the
+      // attachment + adds a phishing-look-alike surface. The attached
+      // PDF is the recipient's canonical copy. We can revisit this if
+      // operators specifically want a "view online" link.
+    });
+
+    const emailResult = await sendTenantEmail({
+      tenantId: session.tenant_id,
+      to: session.recipient_email,
+      recipientName: session.recipient_name || undefined,
+      subject: built.subject,
+      html: built.html,
+      text: built.text,
+      attachments: [
+        {
+          filename: buildAttachmentFilename(template.name || 'signed-document'),
+          // Attach the metadata-embedded version (finalBytes), not
+          // the pre-embed mergedBytes — recipients should get the
+          // identical bytes that landed in Supabase Storage, so the
+          // attached PDF's digital-signature metadata matches the
+          // server's stored copy.
+          content: Buffer.from(finalBytes),
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+
+    if (!emailResult.ok) {
+      logger.warn('[finalize] recipient receipt email failed', {
+        sessionId,
+        reason: emailResult.reason,
+      });
+    }
+  } catch (err) {
+    logger.warn('[finalize] recipient receipt email threw', {
+      sessionId,
+      message: err?.message || String(err),
+    });
+  }
+
   return {
     ok: true,
     signedPdfStoragePath,
     originalSha256,
   };
+}
+
+/**
+ * Build a safe filename for the email attachment. Template names can
+ * contain anything; we collapse non-alphanumeric runs to '-' and cap
+ * length so we don't ship a filename like "Service Agreement / NDA
+ * (FINAL).pdf" that some mail clients refuse to display.
+ *
+ * Exported for unit-testing.
+ *
+ * @param {string} templateName
+ * @returns {string}
+ */
+export function buildAttachmentFilename(templateName) {
+  const base =
+    String(templateName || 'signed-document')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80) || 'signed-document';
+  return `${base}.pdf`;
 }

@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { FileText, Trash2, Loader2 } from 'lucide-react';
+import { FileText, Trash2, Loader2, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUser } from '@/components/shared/useUser.js';
 import { getBackendUrl } from '@/api/backendUrl';
@@ -64,7 +64,9 @@ function formatDate(value) {
 function userCanArchive(user) {
   if (!user) return false;
   if (user.is_superadmin === true) return true;
-  const role = String(user.role || '').trim().toLowerCase();
+  const role = String(user.role || '')
+    .trim()
+    .toLowerCase();
   return role === 'superadmin' || role === 'super_admin' || role === 'admin';
 }
 
@@ -73,10 +75,7 @@ async function authHeaders() {
   const auth = await getAuthorizationHeader();
   if (auth) headers['Authorization'] = auth;
   if (typeof localStorage !== 'undefined') {
-    const t =
-      localStorage.getItem('selected_tenant_id') ||
-      localStorage.getItem('tenant_id') ||
-      '';
+    const t = localStorage.getItem('selected_tenant_id') || localStorage.getItem('tenant_id') || '';
     if (t) headers['x-tenant-id'] = t;
   }
   return headers;
@@ -102,23 +101,88 @@ async function postArchive(id, reason) {
 }
 
 /**
+ * Fetch a short-lived (5 min) signed URL for the stamped + Certificate-of-
+ * Completion PDF, then open it in a new tab. Backend route is
+ * GET /api/submissions/:id/signed-pdf-url, returning { data: { url, expires_at } }.
+ *
+ * @param {string} id   signing_sessions.id
+ * @returns {Promise<string>} the signed URL (also opened in a new tab)
+ */
+async function fetchSignedPdfUrl(id) {
+  const url = `${getBackendUrl()}/api/submissions/${encodeURIComponent(id)}/signed-pdf-url`;
+  const headers = await authHeaders();
+  const resp = await fetch(url, {
+    method: 'GET',
+    headers,
+    credentials: 'include',
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(
+      json?.message || json?.error || `Could not load signed PDF (${resp.status})`,
+    );
+    err.status = resp.status;
+    err.body = json;
+    throw err;
+  }
+  const signedUrl = json?.data?.url;
+  if (!signedUrl) {
+    throw new Error('Backend returned no signed URL.');
+  }
+  return signedUrl;
+}
+
+/**
  * @param {Object} props
  * @param {Array} props.sessions
  * @param {boolean} props.loading
  * @param {string|null} [props.error]
- * @param {() => void} [props.onArchived] — caller refresh hook
+ * @param {() => void} [props.onArchived] — caller refresh hook (fires
+ *   after a successful archive so the parent re-fetches the list)
+ * @param {() => void} [props.onRefresh] — manual refresh hook (fires
+ *   when the user clicks the refresh button in the section header)
  */
 export default function DocumentSignaturesSection({
   sessions,
   loading,
   error = null,
   onArchived,
+  onRefresh,
 }) {
   const { user } = useUser();
   const canArchive = userCanArchive(user);
   const [pendingArchive, setPendingArchive] = useState(null); // { id, label }
   const [archiveReason, setArchiveReason] = useState('');
   const [archiving, setArchiving] = useState(false);
+  // Per-row "View signed PDF" loading state — keyed by signing_sessions.id
+  // so multiple completed rows don't share a spinner.
+  const [viewingId, setViewingId] = useState(null);
+
+  const handleViewSignedPdf = useCallback(async (id) => {
+    setViewingId(id);
+    // Open the tab BEFORE the await so this stays a direct response to
+    // the user's click — Safari/Chrome pop-up blockers will gate a
+    // post-await window.open(). We navigate the opened tab once the
+    // signed URL is in hand.
+    const popup = typeof window !== 'undefined' ? window.open('', '_blank', 'noopener') : null;
+    try {
+      const url = await fetchSignedPdfUrl(id);
+      if (popup && !popup.closed) {
+        popup.location = url;
+      } else if (typeof window !== 'undefined') {
+        // Fallback if the browser stripped/blocked the pre-opened tab.
+        window.open(url, '_blank', 'noopener');
+      }
+    } catch (err) {
+      if (popup && !popup.closed) popup.close();
+      const msg = err.body?.message
+        ? `${err.message}: ${err.body.message}`.slice(0, 400)
+        : err.message;
+      toast.error(msg);
+    } finally {
+      setViewingId(null);
+    }
+  }, []);
 
   const handleConfirmArchive = useCallback(async () => {
     if (!pendingArchive || archiveReason.trim().length === 0) return;
@@ -150,6 +214,32 @@ export default function DocumentSignaturesSection({
   return (
     <>
       <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3">
+        {/* Section header: status count + manual refresh button.
+            The hook still polls every 5s on the parent — the refresh
+            button is for impatient users who just submitted and want
+            the panel to flip from 'viewed' → 'completed' immediately
+            instead of waiting for the next poll cycle. */}
+        {onRefresh ? (
+          <div className="flex items-center justify-between mb-2 -mt-0.5">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {sessions.length === 0
+                ? 'No documents'
+                : `${sessions.length} document${sessions.length === 1 ? '' : 's'}`}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="h-7 px-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+              title="Refresh"
+              aria-label="Refresh document signatures list"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        ) : null}
         {loading && sessions.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">Loading documents…</p>
         ) : sessions.length === 0 ? (
@@ -159,14 +249,18 @@ export default function DocumentSignaturesSection({
             {sessions.map((s) => {
               const status = String(s.status || 'pending').toLowerCase();
               const isArchived = !!s.archived_at;
-              const label =
-                s.template_name ||
-                `Document ${(s.template_id || '').slice(0, 8)}`;
+              const label = s.template_name || `Document ${(s.template_id || '').slice(0, 8)}`;
               const recipient = s.recipient_name
                 ? `${s.recipient_name} <${s.recipient_email}>`
                 : s.recipient_email;
               const sentAt = s.created_at;
               const completedAt = s.completed_at || s.signed_at;
+              // Only completed (finalized) submissions have a stamped PDF
+              // in storage. Hide the View link for everything else — for
+              // signed-but-not-finalized rows the backend would 404 on the
+              // signed-pdf-url endpoint anyway.
+              const hasSignedPdf = !!s.signed_pdf_storage_path && !isArchived;
+              const isViewing = viewingId === s.id;
               return (
                 <li
                   key={s.id}
@@ -227,14 +321,28 @@ export default function DocumentSignaturesSection({
                     ) : (
                       <Badge className={getStatusClass(status)}>{status}</Badge>
                     )}
+                    {hasSignedPdf ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="View signed PDF"
+                        disabled={isViewing}
+                        onClick={() => handleViewSignedPdf(s.id)}
+                        className="h-7 px-2 text-blue-700 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+                      >
+                        {isViewing ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="w-4 h-4" />
+                        )}
+                      </Button>
+                    ) : null}
                     {canArchive && !isArchived ? (
                       <Button
                         variant="ghost"
                         size="sm"
                         title="Delete"
-                        onClick={() =>
-                          setPendingArchive({ id: s.id, label })
-                        }
+                        onClick={() => setPendingArchive({ id: s.id, label })}
                         className="text-destructive hover:text-destructive h-7 px-2"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -277,9 +385,7 @@ export default function DocumentSignaturesSection({
               onChange={(e) => setArchiveReason(e.target.value)}
               placeholder="e.g. wrong template attached, recipient asked to redo, etc."
             />
-            <p className="text-xs text-muted-foreground">
-              {archiveReason.length} / 1000
-            </p>
+            <p className="text-xs text-muted-foreground">{archiveReason.length} / 1000</p>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={archiving}>Cancel</AlertDialogCancel>

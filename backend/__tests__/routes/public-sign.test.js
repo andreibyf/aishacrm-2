@@ -251,6 +251,58 @@ describe('validateSubmitInput — happy path', () => {
     );
     assert.equal(out.signer_name, 'Jane Doe');
   });
+
+  // Regression: _signature_mode used to be stripped along with other
+  // underscore-prefixed keys, leaving buildDigitalSignatureMetadata's
+  // detectSignatureMethod() always returning 'unknown'. Frontend writes
+  // it into field_values; validator must pass it through, normalized.
+  test('preserves _signature_mode = "drawn" through validation', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'drawn' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'drawn');
+  });
+
+  test('normalizes _signature_mode = "draw" to "drawn"', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'draw' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'drawn');
+  });
+
+  test('normalizes _signature_mode = "type" to "typed"', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: 'type' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, 'typed');
+  });
+
+  test('drops _signature_mode when value is not draw/type/drawn/typed', () => {
+    const out = validateSubmitInput(
+      {
+        field_values: { name: 'Jane', _signature_mode: '<script>evil</script>' },
+        signature_data_url: TINY_PNG_DATA_URL,
+        signer_name: 'Jane',
+      },
+      [SIG_FIELD, REQUIRED_TEXT_FIELD],
+    );
+    assert.equal(out.field_values._signature_mode, undefined);
+  });
 });
 
 describe('validateSubmitInput — rejects bad input', () => {
@@ -260,10 +312,10 @@ describe('validateSubmitInput — rejects bad input', () => {
   test('missing required field', () => {
     assert.throws(
       () =>
-        validateSubmitInput(
-          { signature_data_url: TINY_PNG_DATA_URL, signer_name: 'Jane' },
-          [SIG_FIELD, REQUIRED_TEXT_FIELD],
-        ),
+        validateSubmitInput({ signature_data_url: TINY_PNG_DATA_URL, signer_name: 'Jane' }, [
+          SIG_FIELD,
+          REQUIRED_TEXT_FIELD,
+        ]),
       /required field "name" is missing/,
     );
   });
@@ -485,5 +537,22 @@ describe('Public sign routes — no auth required', () => {
     const app = buildApp();
     const { status } = await send(app, 'POST', '/api/sign/short/decline', { reason: 'no' });
     assert.equal(status, 404);
+  });
+
+  test('GET /:token/signed-pdf-url with malformed token returns 404', async () => {
+    // Same token-shape gate as the other public endpoints — fires
+    // before any DB call, so a leaked endpoint can't be probed for
+    // valid tokens via timing attack.
+    const app = buildApp();
+    const { status, body } = await send(app, 'GET', '/api/sign/not-a-token/signed-pdf-url');
+    assert.equal(status, 404);
+    assert.equal(body.error, 'not_found');
+  });
+
+  test('GET /:token/signed-pdf-url never returns 401/403', async () => {
+    const app = buildApp();
+    const { status } = await send(app, 'GET', `/api/sign/${VALID_TOKEN}/signed-pdf-url`);
+    assert.notEqual(status, 401);
+    assert.notEqual(status, 403);
   });
 });
