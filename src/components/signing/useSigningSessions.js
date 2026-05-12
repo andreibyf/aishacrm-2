@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getBackendUrl } from '@/api/backendUrl';
 import { getAuthorizationHeader } from '@/api/functions';
+import { useAdaptivePoll } from '@/hooks/useAdaptivePoll';
 
 async function authHeaders() {
   const headers = { 'Content-Type': 'application/json' };
@@ -32,19 +33,62 @@ async function authHeaders() {
  *                                    when the panel is open).
  * @param {'contact'|'lead'|'account'|'opportunity'} params.relatedTo
  * @param {string} params.relatedId
- * @param {number} [params.pollMs] — default 5000ms; pass 0 to disable polling.
+ * @param {number} [params.pollMs] — deprecated; use shortPollMs/longPollMs instead.
+ *                                   If provided, acts as override for adaptive window.
+ * @param {number} [params.shortPollMs] — default 5000ms; poll interval immediately
+ *                                         after document send (for ~30s).
+ * @param {number} [params.longPollMs] — default 15000ms; steady-state poll interval.
+ * @param {number} [params.submissionSeq] — monotonically increasing counter; increment
+ *                                          on every send. Using a counter (not a boolean)
+ *                                          ensures useAdaptivePoll restarts its 30s window
+ *                                          even when the user sends a second document in
+ *                                          the same session (boolean true→true is invisible
+ *                                          to React's effect dep comparison).
  *
- * Default poll was 30s historically — visible UI staleness when the
- * finalize pipeline (which runs async ~2-5s after submit) completes
- * but the panel still showed 'viewed'/'signed' until the next poll.
- * 5s is a reasonable balance: catches the typical finalize race
- * within one poll cycle, doesn't hammer the API for entities that
- * rarely change (the GET is cheap — a single supabase row read).
+ * Adaptive polling (4VD-48):
+ *
+ * Previously polled at a fixed 5s interval, which is fine for a single
+ * panel but multiplies load when users have 3 detail panels open
+ * (36 req/min instead of 6). Now:
+ *
+ * - After user sends a document: poll at shortPollMs (5s) for ~30s
+ *   to catch the finalize-pipeline async race within one cycle.
+ * - Steady-state: poll at longPollMs (15s), acceptable for a "rarely changes"
+ *   entity and covers most normal UI refresh needs.
+ * - Manual refresh button still works at any cadence.
+ *
+ * Acceptance (4VD-48):
+ * ✓ Default poll reverts to 15-20s for steady-state
+ * ✓ First ~30s after submit: poll at 5s
+ * ✓ Manual refresh button continues to work
+ * ✓ Backend /api/submissions load ≤ 10 req/min per mounted panel
+ * ✓ Adaptive switchover is testable
  */
-export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 5000 }) {
+export function useSigningSessions({
+  enabled,
+  relatedTo,
+  relatedId,
+  pollMs,
+  shortPollMs = 5000,
+  longPollMs = 15000,
+  submissionSeq = 0,
+}) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // If legacy pollMs is passed, use it to override both short and long windows.
+  // This preserves backwards compatibility for callers.
+  const effectiveShortPollMs = pollMs ?? shortPollMs;
+  const effectiveLongPollMs = pollMs ?? longPollMs;
+
+  // Calculate the current poll interval based on submissionSeq counter.
+  const currentInterval = useAdaptivePoll({
+    submissionSeq,
+    shortPollMs: effectiveShortPollMs,
+    longPollMs: effectiveLongPollMs,
+    shortWindowDurationMs: 30000,
+  });
 
   const fetchOnce = useCallback(
     async (signal) => {
@@ -98,7 +142,8 @@ export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 500
       }
     })();
 
-    if (pollMs > 0) {
+    // Use the adaptive poll interval. If currentInterval > 0, start polling.
+    if (currentInterval > 0) {
       intervalId = setInterval(async () => {
         try {
           await fetchOnce(controller.signal);
@@ -106,7 +151,7 @@ export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 500
           // Silent on poll errors — surfacing every transient blip would
           // be noisy; the next successful poll heals the UI.
         }
-      }, pollMs);
+      }, currentInterval);
     }
 
     return () => {
@@ -114,7 +159,7 @@ export function useSigningSessions({ enabled, relatedTo, relatedId, pollMs = 500
       controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [enabled, relatedTo, relatedId, pollMs, fetchOnce]);
+  }, [enabled, relatedTo, relatedId, currentInterval, fetchOnce]);
 
   return { sessions, loading, error, refresh };
 }

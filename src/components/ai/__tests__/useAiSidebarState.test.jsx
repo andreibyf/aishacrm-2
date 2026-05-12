@@ -38,8 +38,13 @@ vi.mock('@/api/conversations', () => ({
   submitFeedback: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@/components/shared/useUser.js', () => ({
+vi.mock('@/components/shared/useUser', () => ({
   useUser: vi.fn(() => ({ user: null, loading: false })),
+}));
+
+vi.mock('@/components/shared/tenantContext', () => ({
+  TenantProvider: ({ children }) => children,
+  useTenant: vi.fn(() => ({ selectedTenantId: null, setSelectedTenantId: vi.fn() })),
 }));
 
 import { AiSidebarProvider, useAiSidebarState, deriveRouteContext } from '../useAiSidebarState.jsx';

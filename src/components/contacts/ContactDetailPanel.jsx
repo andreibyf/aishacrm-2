@@ -42,6 +42,8 @@ export default function ContactDetailPanel({
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [showSendDocDialog, setShowSendDocDialog] = useState(false);
+  const [submissionSeq, setSubmissionSeq] = useState(0);
+
   const {
     sessions,
     loading: sessionsLoading,
@@ -51,7 +53,13 @@ export default function ContactDetailPanel({
     enabled: !!open && !!contact?.id,
     relatedTo: 'contact',
     relatedId: contact?.id,
+    submissionSeq,
   });
+
+  // Increment on every send so useAdaptivePoll always sees a new dep value
+  // and restarts its 30s short-poll window — even if the user sends a second
+  // document in the same panel session (boolean true→true is invisible to React).
+  const handleDocumentSent = () => setSubmissionSeq((s) => s + 1);
 
   if (!contact) {
     return null;
@@ -404,7 +412,7 @@ export default function ContactDetailPanel({
         relatedId={contact.id}
         defaultRecipientEmail={contact.email || ''}
         defaultRecipientName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
-        onSent={refreshSessions}
+        onSent={handleDocumentSent}
       />
     </>
   );

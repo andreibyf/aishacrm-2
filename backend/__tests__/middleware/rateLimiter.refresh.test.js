@@ -31,6 +31,11 @@ function makeApp(limiter, handler) {
   return app;
 }
 
+// Unique-per-run base to prevent MemoryStore counter bleed between repeated
+// invocations within the same Node process (middleware group runs all files
+// in one process; fixed IPs collide if the limiter's store isn't reset).
+const RUN_ID = Date.now() % 65536; // fits two octets
+
 describe('rateLimiter: refreshLimiter (for /api/auth/refresh + /api/auth/me)', () => {
   beforeEach(() => {
     // Ensure skipForTests returns FALSE during this test by clearing both env vars.
@@ -42,7 +47,7 @@ describe('rateLimiter: refreshLimiter (for /api/auth/refresh + /api/auth/me)', (
     // Simulate failed refresh attempts (400 = failure). Only failures count
     // because the limiter is configured with skipSuccessfulRequests: true.
     const app = makeApp(refreshLimiter, (_req, res) => res.status(400).json({ ok: false }));
-    const ip = '10.0.0.1'; // unique IP per test to isolate rate-limit store state
+    const ip = `10.${RUN_ID >> 8}.${RUN_ID & 0xff}.1`; // unique per test-run
 
     const statuses = [];
     for (let i = 0; i < 62; i++) {
@@ -59,7 +64,7 @@ describe('rateLimiter: refreshLimiter (for /api/auth/refresh + /api/auth/me)', (
 
   it('does NOT count successful requests against the limit (skipSuccessfulRequests)', async () => {
     const app = makeApp(refreshLimiter, (_req, res) => res.status(200).json({ ok: true }));
-    const ip = '10.0.0.2'; // unique IP per test
+    const ip = `10.${RUN_ID >> 8}.${RUN_ID & 0xff}.2`; // unique per test-run
 
     // Fire 100 successful requests — all should succeed because successes don't count.
     const statuses = [];
@@ -78,8 +83,8 @@ describe('rateLimiter: refreshLimiter (for /api/auth/refresh + /api/auth/me)', (
     // Two apps, same input, different limiters — prove authLimiter is the stricter one.
     const appAuth = makeApp(authLimiter, (_req, res) => res.status(400).json({ ok: false }));
     const appRefresh = makeApp(refreshLimiter, (_req, res) => res.status(400).json({ ok: false }));
-    const ipAuth = '10.0.0.3';
-    const ipRefresh = '10.0.0.4';
+    const ipAuth = `10.${RUN_ID >> 8}.${RUN_ID & 0xff}.3`;
+    const ipRefresh = `10.${RUN_ID >> 8}.${RUN_ID & 0xff}.4`;
 
     const authStatuses = [];
     for (let i = 0; i < 15; i++) {
