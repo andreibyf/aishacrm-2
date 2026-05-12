@@ -27,21 +27,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 📚 Documentation
 
-| Document                                                                                                   | Description                                                             |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md)                                           | **⭐ START HERE** - Operations guide, testing, migrations               |
-| [Intel-iGPU-Local-AI-Development-Guide.md](./docs/developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny with Intel GPU                              |
-| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                                                          | End-user guide for CRM operations                                       |
-| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                                       |
-| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                                             |
-| [CARE_SETUP_GUIDE.md](./docs/user-guides/CARE_SETUP_GUIDE.md)                                              | **C.A.R.E.** configuration (UI-driven via Workflow Builder)             |
-| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, architecture                                         |
-| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)                                               | Database schema, migrations, **trigger patterns**                       |
-| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)                                                 | Security, RLS, authentication                                           |
-| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                                    |
-| [DATABASE_REFERENCE.md](./docs/reference/DATABASE_REFERENCE.md)                                            | **⭐ LIVE REFERENCE** — All tables, columns, RLS policies (prod vs dev) |
+| Document                                                                                                   | Description                                                                                          |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md)                                           | **⭐ START HERE** - Operations guide, testing, migrations                                            |
+| [Intel-iGPU-Local-AI-Development-Guide.md](./docs/developer-docs/Intel-iGPU-Local-AI-Development-Guide.md) | **Local AI Setup** - Twinny with Intel GPU                                                           |
+| [USER_GUIDE.md](./docs/user-guides/USER_GUIDE.md)                                                          | End-user guide for CRM operations                                                                    |
+| [ADMIN_GUIDE.md](./docs/admin-guides/ADMIN_GUIDE.md)                                                       | System administration, deployment                                                                    |
+| [AI_ASSISTANT_GUIDE.md](./docs/user-guides/AI_ASSISTANT_GUIDE.md)                                          | AiSHA AI assistant features                                                                          |
+| [CARE_SETUP_GUIDE.md](./docs/user-guides/CARE_SETUP_GUIDE.md)                                              | **C.A.R.E.** configuration (UI-driven via Workflow Builder)                                          |
+| [DEVELOPER_MANUAL.md](./docs/developer-docs/DEVELOPER_MANUAL.md)                                           | Development setup, architecture                                                                      |
+| [DATABASE_GUIDE.md](./docs/developer-docs/DATABASE_GUIDE.md)                                               | Database schema, migrations, **trigger patterns**                                                    |
+| [SECURITY_GUIDE.md](./docs/admin-guides/SECURITY_GUIDE.md)                                                 | Security, RLS, authentication                                                                        |
+| [BRANDING_GUIDE.md](./docs/references/BRANDING_GUIDE.md)                                                   | Brand assets, colors                                                                                 |
+| [DATABASE_REFERENCE.md](./docs/reference/DATABASE_REFERENCE.md)                                            | **⭐ LIVE REFERENCE** — All tables, columns, RLS policies (prod vs dev)                              |
+| [IDENTITY_MODEL.md](./docs/architecture/IDENTITY_MODEL.md)                                                 | **Contract** — users vs employees vs team_members; rules that prevent 4VD-44/53/54-class bugs        |
+| [DEPLOY_TOPOLOGY.md](./docs/architecture/DEPLOY_TOPOLOGY.md)                                               | VPS-1/VPS-2/Hetzner roles, Coolify app↔FQDN map, VPS-1 cap, Coolify v4 mutation quirks               |
+| [PARALLEL_AGENTS.md](./docs/contributing/PARALLEL_AGENTS.md)                                               | **For AI agents** — fetch-before-claim, no force-push of main, Linear as cross-agent source of truth |
 
 **⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
+
+**🤖 AI agent sessions**: Also read [PARALLEL_AGENTS.md](./docs/contributing/PARALLEL_AGENTS.md) before pushing — Dre runs multiple agents in parallel and the coordination rules are not optional.
 
 Legacy documentation is archived in `docs/archive/`.
 
