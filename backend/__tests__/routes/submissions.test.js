@@ -194,7 +194,15 @@ describe('Role gate — POST/GET open to all roles', () => {
       req.tenant = { id: TENANT_A };
       next();
     });
-    app.use('/api/submissions', createSubmissionsRoutes());
+    // Bypass requireEmployee for these role-gate tests — they're
+    // exercising the role-permission tiers, not the employee gate
+    // (which has its own test block below).
+    app.use(
+      '/api/submissions',
+      createSubmissionsRoutes({
+        requireEmployee: (_req, _res, next) => next(),
+      }),
+    );
     return app;
   }
 
@@ -270,6 +278,74 @@ describe('Role gate — POST/GET open to all roles', () => {
     );
     assert.equal(status, 400);
     assert.equal(body.error, 'invalid_related_id');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Employee gate on POST /api/submissions (4VD-54)
+//
+// Non-employee users (clients, external collaborators with login but no
+// employees row) must NOT be able to send documents for signature.
+// Verified by injecting a real or stubbed requireEmployee middleware via
+// the DI seam.
+// ---------------------------------------------------------------------------
+
+describe('Employee gate — POST /api/submissions requires employees row', () => {
+  function buildApp(user, requireEmployeeImpl) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = user;
+      req.tenant = { id: TENANT_A };
+      next();
+    });
+    app.use('/api/submissions', createSubmissionsRoutes({ requireEmployee: requireEmployeeImpl }));
+    return app;
+  }
+
+  async function send(app, method, path, body) {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer(app).listen(0, async () => {
+        try {
+          const port = server.address().port;
+          const init = { method, headers: { 'Content-Type': 'application/json' } };
+          if (body !== undefined) init.body = JSON.stringify(body);
+          const resp = await fetch(`http://127.0.0.1:${port}${path}`, init);
+          const json = await resp.json().catch(() => ({}));
+          server.close();
+          resolve({ status: resp.status, body: json });
+        } catch (err) {
+          server.close();
+          reject(err);
+        }
+      });
+    });
+  }
+
+  test('POST blocked with 403 employee_required when middleware rejects', async () => {
+    const rejectMw = (_req, res, _next) =>
+      res.status(403).json({
+        status: 'error',
+        message: 'Only employees can perform this action on this tenant.',
+        code: 'employee_required',
+      });
+    const app = buildApp({ id: 'u1', role: 'user', email: 'client@x.com' }, rejectMw);
+    const { status, body } = await send(app, 'POST', '/api/submissions', VALID_BODY);
+    assert.equal(status, 403);
+    assert.equal(body.code, 'employee_required');
+  });
+
+  test('POST passes through to validator when middleware allows', async () => {
+    // Stub middleware that sets req.user.employee_id and calls next.
+    // The route will then hit input validation (VALID_BODY) and continue
+    // toward the supabase calls — we just need the status to NOT be 403.
+    const allowMw = (req, _res, next) => {
+      req.user.employee_id = 'emp-abc';
+      next();
+    };
+    const app = buildApp({ id: 'u2', role: 'employee', email: 'staff@org.com' }, allowMw);
+    const { status } = await send(app, 'POST', '/api/submissions', VALID_BODY);
+    assert.notEqual(status, 403);
   });
 });
 

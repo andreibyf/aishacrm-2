@@ -27,6 +27,7 @@ import { sendTenantEmail } from '../lib/sendTenantEmail.js';
 import { buildSigningRequestEmail } from '../lib/buildSigningRequestEmail.js';
 import { createSendActivity } from '../lib/signingActivityTracker.js';
 import { requireAdminRole } from '../middleware/validateTenant.js';
+import { createRequireEmployee } from '../middleware/requireEmployee.js';
 import { resolveRequestTenantId } from './templates.js';
 
 // ---------------------------------------------------------------------------
@@ -181,17 +182,28 @@ export function buildSigningUrl(frontendUrl, tenantSlug, signingToken) {
  *   leaves this empty so the real Supabase factories are used.
  * @param {() => any} [deps.getSupabaseClient]  override of getSupabaseClient
  * @param {() => any} [deps.getSupabaseAdmin]   override of getSupabaseAdmin
+ * @param {import('express').RequestHandler} [deps.requireEmployee]
+ *        override of the requireEmployee middleware (test seam — pass a
+ *        stub that calls next() to bypass the employees lookup in unit
+ *        tests, or pass a stub that returns 403 to test the gate)
  */
 export default function createSubmissionsRoutes(deps = {}) {
   const supabaseClientFn = deps.getSupabaseClient || getSupabaseClient;
   const supabaseAdminFn = deps.getSupabaseAdmin || getSupabaseAdmin;
+  // requireEmployee gates POST /api/submissions to users with a matching
+  // `employees` row on the active tenant. See 4VD-54 + docs/architecture/
+  // IDENTITY_MODEL.md rule #6.
+  const requireEmployee =
+    deps.requireEmployee || createRequireEmployee({ getSupabaseAdmin: supabaseAdminFn });
   const router = express.Router();
 
   // --- POST /api/submissions ----------------------------------------------
   // Body: { template_id, related_to, related_id, recipient_email,
   //         recipient_name?, message? }
-  // Open to all roles with DocumentTemplates page access (no requireAdminRole).
-  router.post('/', async (req, res) => {
+  // Gated by requireEmployee: only users who have an employees row on the
+  // active tenant can send documents for signature. Non-employees
+  // (clients, external collaborators) get 403 employee_required.
+  router.post('/', requireEmployee, async (req, res) => {
     const tenantId = resolveRequestTenantId(req);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenant_context_missing' });
