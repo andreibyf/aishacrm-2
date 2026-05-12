@@ -9,7 +9,7 @@
  * - Accepts custom poll intervals
  */
 
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAdaptivePoll } from './useAdaptivePoll';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -70,7 +70,9 @@ describe('useAdaptivePoll', () => {
     expect(result.current).toBe(5000);
 
     // Advance time past the 30s window
-    vi.advanceTimersByTime(31000);
+    act(() => {
+      vi.advanceTimersByTime(31000);
+    });
 
     expect(result.current).toBe(15000);
   });
@@ -111,13 +113,17 @@ describe('useAdaptivePoll', () => {
     expect(result.current).toBe(5000);
 
     // Advance time 15s (halfway through window)
-    vi.advanceTimersByTime(15000);
+    act(() => {
+      vi.advanceTimersByTime(15000);
+    });
 
     rerender({ recentlySubmitted: false });
     expect(result.current).toBe(15000);
 
     // Advance time to complete any pending timers
-    vi.advanceTimersByTime(20000);
+    act(() => {
+      vi.advanceTimersByTime(20000);
+    });
 
     expect(result.current).toBe(15000);
   });
@@ -142,7 +148,9 @@ describe('useAdaptivePoll', () => {
     expect(result.current).toBe(15000);
 
     // Advance past where the timer would have fired
-    vi.advanceTimersByTime(31000);
+    act(() => {
+      vi.advanceTimersByTime(31000);
+    });
 
     // Should still be in long poll, not reverted again
     expect(result.current).toBe(15000);

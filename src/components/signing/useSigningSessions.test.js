@@ -9,7 +9,7 @@
  * - Handles enable/disable transitions
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useSigningSessions } from './useSigningSessions';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -86,14 +86,18 @@ describe('useSigningSessions', () => {
     const initialCallCount = globalThis.fetch.mock.calls.length;
 
     // Advance 5 seconds - no new call yet in long poll (15s)
-    vi.advanceTimersByTime(5000);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(globalThis.fetch).toHaveBeenCalledTimes(initialCallCount);
 
     // Trigger short poll by setting recentlySubmitted
     rerender({ recentlySubmitted: true });
 
     // Advance 5 seconds - should trigger in short poll (5s)
-    vi.advanceTimersByTime(5000);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
 
     await waitFor(() => {
       expect(globalThis.fetch.mock.calls.length).toBeGreaterThan(initialCallCount);
@@ -101,7 +105,7 @@ describe('useSigningSessions', () => {
   });
 
   it('reverts to longPollMs after short window expires', async () => {
-    const { _rerender } = renderHook(
+    renderHook(
       ({ recentlySubmitted }) =>
         useSigningSessions({
           enabled: true,
@@ -120,18 +124,24 @@ describe('useSigningSessions', () => {
     });
 
     // Advance 35 seconds (past the 30s short window)
-    vi.advanceTimersByTime(35000);
+    act(() => {
+      vi.advanceTimersByTime(35000);
+    });
 
     // After the window expires, polling should revert to long interval
     // This is observable by the lack of frequent fetches
     const callCountBefore = globalThis.fetch.mock.calls.length;
 
     // Advance 5 seconds - should NOT trigger (in long poll now)
-    vi.advanceTimersByTime(5000);
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(globalThis.fetch.mock.calls.length).toBe(callCountBefore);
 
     // Advance another 10 seconds (total 15s) - should trigger in long poll
-    vi.advanceTimersByTime(10000);
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
 
     await waitFor(() => {
       expect(globalThis.fetch.mock.calls.length).toBeGreaterThan(callCountBefore);
