@@ -36,7 +36,7 @@
  *   const setSearchTerm = (v) => setFilter('searchTerm', v);
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 const KEY_READY_RE = /null|undefined/;
 
@@ -73,6 +73,23 @@ export function usePersistedFilters(storageKey, defaults) {
     if (!isKeyReady(storageKey)) return defaultsRef.current;
     return readFromStorage(storageKey, defaultsRef.current);
   });
+
+  // Track the key we last hydrated from. When storageKey changes after mount —
+  // e.g., tenant/user context resolves from null to a real value, or a
+  // superadmin switches tenant — we need to re-read sessionStorage under the
+  // new key. Without this, the initial useState snapshot (taken before the key
+  // was ready) sticks forever and per-tenant/user isolation breaks.
+  const hydratedKeyRef = useRef(storageKey);
+
+  useEffect(() => {
+    if (hydratedKeyRef.current === storageKey) return;
+    hydratedKeyRef.current = storageKey;
+    if (isKeyReady(storageKey)) {
+      setStateRaw(readFromStorage(storageKey, defaultsRef.current));
+    } else {
+      setStateRaw(defaultsRef.current);
+    }
+  }, [storageKey]);
 
   const setFilter = useCallback(
     (field, value) => {

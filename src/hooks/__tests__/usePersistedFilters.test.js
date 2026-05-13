@@ -156,4 +156,75 @@ describe('usePersistedFilters', () => {
     );
     expect(result2.current[0].statusFilter).toBe('qualified');
   });
+
+  // ── rehydration on storageKey change ─────────────────────────────────────
+  it('rehydrates from sessionStorage when storageKey transitions from null to a real key', () => {
+    // Pre-seed sessionStorage as if a previous session had saved filters
+    store[KEY] = JSON.stringify({
+      searchTerm: 'restored',
+      statusFilter: 'qualified',
+      selectedTags: ['vip'],
+    });
+
+    // First render: tenant/user not yet resolved → key is null
+    const { result, rerender } = renderHook(
+      ({ key }) => usePersistedFilters(key, DEFAULTS),
+      { initialProps: { key: null } },
+    );
+    expect(result.current[0]).toEqual(DEFAULTS);
+
+    // Tenant/user context resolves → key flips to a real value
+    rerender({ key: KEY });
+    expect(result.current[0]).toEqual({
+      searchTerm: 'restored',
+      statusFilter: 'qualified',
+      selectedTags: ['vip'],
+    });
+  });
+
+  it('rehydrates when storageKey changes between two real keys (tenant switch)', () => {
+    const keyA = 'aishacrm:filters:tenant-A:user-1:leads';
+    const keyB = 'aishacrm:filters:tenant-B:user-1:leads';
+    store[keyA] = JSON.stringify({ searchTerm: 'tenant-a', statusFilter: 'all', selectedTags: [] });
+    store[keyB] = JSON.stringify({ searchTerm: 'tenant-b', statusFilter: 'new', selectedTags: ['b'] });
+
+    const { result, rerender } = renderHook(
+      ({ key }) => usePersistedFilters(key, DEFAULTS),
+      { initialProps: { key: keyA } },
+    );
+    expect(result.current[0].searchTerm).toBe('tenant-a');
+
+    // Simulate superadmin switching tenant — key changes
+    rerender({ key: keyB });
+    expect(result.current[0]).toEqual({
+      searchTerm: 'tenant-b',
+      statusFilter: 'new',
+      selectedTags: ['b'],
+    });
+  });
+
+  it('resets to defaults when storageKey transitions from a real key back to null (logout)', () => {
+    store[KEY] = JSON.stringify({ searchTerm: 'sensitive', statusFilter: 'new', selectedTags: [] });
+
+    const { result, rerender } = renderHook(
+      ({ key }) => usePersistedFilters(key, DEFAULTS),
+      { initialProps: { key: KEY } },
+    );
+    expect(result.current[0].searchTerm).toBe('sensitive');
+
+    // Logout / tenant context cleared
+    rerender({ key: null });
+    expect(result.current[0]).toEqual(DEFAULTS);
+  });
+
+  it('uses defaults when storageKey transitions to a real key with no saved state', () => {
+    const { result, rerender } = renderHook(
+      ({ key }) => usePersistedFilters(key, DEFAULTS),
+      { initialProps: { key: null } },
+    );
+
+    const freshKey = 'aishacrm:filters:tenant-Z:user-9:leads';
+    rerender({ key: freshKey });
+    expect(result.current[0]).toEqual(DEFAULTS);
+  });
 });
