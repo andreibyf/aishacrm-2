@@ -29,6 +29,7 @@ import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useAccountsData } from '@/hooks/useAccountsData';
 import { useAccountsBulkOps } from '@/hooks/useAccountsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 export default function AccountsPage() {
   const VIEW_MODE_STORAGE_KEY = 'aisha:accounts:viewMode';
@@ -45,10 +46,6 @@ export default function AccountsPage() {
   const loadingToast = useLoadingToast();
 
   // Local UI state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
@@ -81,8 +78,25 @@ export default function AccountsPage() {
     if (!VALID_VIEW_MODES.includes(viewMode)) return;
     window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
-  const [selectedTags, setSelectedTags] = useState([]);
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:accounts`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    typeFilter: 'all',
+    assignedToFilter: 'all',
+    sortField: 'created_at',
+    sortDirection: 'desc',
+    selectedTags: [],
+  });
+  const { searchTerm, typeFilter, assignedToFilter, sortField, sortDirection, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setTypeFilter = (v) => setFilter('typeFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -288,10 +302,7 @@ export default function AccountsPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setTypeFilter('all');
-    setAssignedToFilter('all');
-    setSelectedTags([]);
+    resetFilters();
     handleClearSelection();
   };
 

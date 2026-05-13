@@ -39,6 +39,7 @@ import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 import { formatIndustry } from '@/utils/industryUtils';
 import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 // Helper to add delay between API calls
 const _delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,8 +53,6 @@ export default function CustomersPage() {
   const [employees, setEmployees] = useState([]);
   const [supportingDataReady, setSupportingDataReady] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [viewMode, setViewMode] = useState('list');
@@ -64,7 +63,19 @@ export default function CustomersPage() {
   const { selectedTenantId } = useTenant();
   const [detailAccount, setDetailAccount] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState([]);
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:customers`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    typeFilter: 'all',
+    selectedTags: [],
+  });
+  const { searchTerm, typeFilter, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setTypeFilter = (v) => setFilter('typeFilter', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [showTestData] = useState(true); // Default to showing all data
 
   // Stats for ALL accounts (not just current page)
@@ -854,9 +865,7 @@ export default function CustomersPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setTypeFilter('all');
-    setSelectedTags([]);
+    resetFilters();
     // currentPage reset handled by useEffect for filters
     handleClearSelection();
   };

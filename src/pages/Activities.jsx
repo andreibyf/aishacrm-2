@@ -38,6 +38,7 @@ import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useActivitiesData } from '@/hooks/useActivitiesData';
 import { useActivitiesBulkOps } from '@/hooks/useActivitiesBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 export default function ActivitiesPage() {
   const VIEW_MODE_STORAGE_KEY = 'aisha:activities:viewMode';
@@ -55,11 +56,6 @@ export default function ActivitiesPage() {
   const { startProgress, updateProgress, completeProgress } = useProgress();
 
   // Local UI state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [sortField, setSortField] = useState('due_date');
-  const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
@@ -94,10 +90,28 @@ export default function ActivitiesPage() {
   }, [viewMode]);
   const [detailActivity, setDetailActivity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState([]);
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
-  const [dateRange, setDateRange] = useState({ start: null, end: null });
-  const [showTestData, setShowTestData] = useState(true);
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:activities`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    statusFilter: 'all',
+    typeFilter: 'all',
+    assignedToFilter: 'all',
+    sortField: 'due_date',
+    sortDirection: 'desc',
+    selectedTags: [],
+    dateRange: { start: null, end: null },
+    showTestData: true,
+  });
+  const { searchTerm, statusFilter, typeFilter, assignedToFilter, sortField, sortDirection, selectedTags, dateRange, showTestData } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setStatusFilter = (v) => setFilter('statusFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -290,13 +304,7 @@ export default function ActivitiesPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('all');
-    setTypeFilter('all');
-    setSelectedTags([]);
-    setAssignedToFilter('all');
-    setDateRange({ start: null, end: null });
-    setShowTestData(false);
+    resetFilters();
     setCurrentPage(1);
     handleClearSelection();
   };

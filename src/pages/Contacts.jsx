@@ -32,6 +32,7 @@ import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useContactsData } from '@/hooks/useContactsData';
 import { useContactsBulkOps } from '@/hooks/useContactsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 export default function ContactsPage() {
   const VIEW_MODE_STORAGE_KEY = 'aisha:contacts:viewMode';
@@ -49,10 +50,6 @@ export default function ContactsPage() {
   const logger = useLogger();
 
   // Local UI state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
@@ -85,8 +82,25 @@ export default function ContactsPage() {
     if (!VALID_VIEW_MODES.includes(viewMode)) return;
     window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
-  const [selectedTags, setSelectedTags] = useState([]);
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:contacts`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    statusFilter: 'all',
+    assignedToFilter: 'all',
+    sortField: 'created_at',
+    sortDirection: 'desc',
+    selectedTags: [],
+  });
+  const { searchTerm, statusFilter, assignedToFilter, sortField, sortDirection, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setStatusFilter = (v) => setFilter('statusFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -346,9 +360,7 @@ export default function ContactsPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setSelectedTags([]);
-    setAssignedToFilter('all');
+    resetFilters();
     setCurrentPage(1);
   };
 
