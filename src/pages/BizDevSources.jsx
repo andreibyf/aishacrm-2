@@ -55,6 +55,7 @@ import { useEntityLabel } from '@/components/shared/entityLabelsHooks';
 import { useConfirmDialog } from '../components/shared/ConfirmDialog';
 import { useEmployeeScope } from '../components/shared/EmployeeScopeContext';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 /**
  * Shared helper — avoids duplicating the updatedFilter logic in both
@@ -99,19 +100,7 @@ export default function BizDevSourcesPage() {
   const [showArchiveIndex, setShowArchiveIndex] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null); // { type, source, title, description }
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
   const [, setEmployees] = useState([]);
-  const [batchFilter, setBatchFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [updatedFilter, setUpdatedFilter] = useState('all');
-  const [ageFilter, setAgeFilter] = useState('all');
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDirection, setSortDirection] = useState('desc');
-  const [selectedTags, setSelectedTags] = useState([]);
 
   // Aging buckets matching documentation (0-7 fresh, 7-14 moderate, 15-21 warning, 21-30 urgent, 30+ stale)
   const ageBuckets = useMemo(
@@ -187,6 +176,38 @@ export default function BizDevSourcesPage() {
 
   const { selectedTenantId } = useTenant();
   const { selectedEmployeeId, visibleEmployees } = useEmployeeScope();
+
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:bizdev`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    statusFilter: 'all',
+    licenseStatusFilter: 'all',
+    assignedToFilter: 'all',
+    batchFilter: 'all',
+    sourceFilter: 'all',
+    updatedFilter: 'all',
+    ageFilter: 'all',
+    sortField: 'created_at',
+    sortDirection: 'desc',
+    selectedTags: [],
+  });
+  const { searchTerm, statusFilter, licenseStatusFilter, assignedToFilter, batchFilter, sourceFilter, updatedFilter, ageFilter, sortField, sortDirection, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setStatusFilter = (v) => setFilter('statusFilter', v);
+  const setLicenseStatusFilter = (v) => setFilter('licenseStatusFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setBatchFilter = (v) => setFilter('batchFilter', v);
+  const setSourceFilter = (v) => setFilter('sourceFilter', v);
+  const setUpdatedFilter = (v) => setFilter('updatedFilter', v);
+  const setAgeFilter = (v) => setFilter('ageFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
+  // searchInput is the controlled input value (not persisted); initialized from restored searchTerm
+  const [searchInput, setSearchInput] = useState(searchTerm);
 
   // Load employees for assigned-to filter dropdown
   useEffect(() => {
@@ -1194,15 +1215,8 @@ export default function BizDevSourcesPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  setSearchTerm('');
+                  resetFilters();
                   setSearchInput('');
-                  setLicenseStatusFilter('all');
-                  setAssignedToFilter('all');
-                  setBatchFilter('all');
-                  setSourceFilter('all');
-                  setSelectedTags([]);
-                  setUpdatedFilter('all');
-                  setAgeFilter('all');
                   setCurrentPage(1);
                 }}
                 className="text-slate-400 hover:text-slate-200 whitespace-nowrap"

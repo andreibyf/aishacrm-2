@@ -40,6 +40,7 @@ import { useStatusCardPreferences } from '@/hooks/useStatusCardPreferences';
 import { useLeadsData } from '@/hooks/useLeadsData';
 import { useLeadsBulkOps } from '@/hooks/useLeadsBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 export default function LeadsPage() {
   const VIEW_MODE_STORAGE_KEY = 'aisha:leads:viewMode';
@@ -49,13 +50,6 @@ export default function LeadsPage() {
   const { plural: leadsLabel, singular: leadLabel } = useEntityLabel('leads');
   const { getCardLabel, isCardVisible } = useStatusCardPreferences();
   const loadingToast = useLoadingToast();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [ageFilter, setAgeFilter] = useState('all');
-  const [updatedFilter, setUpdatedFilter] = useState('all');
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
-  const [sortField, setSortField] = useState('created_date');
-  const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
@@ -69,7 +63,29 @@ export default function LeadsPage() {
   const { selectedTenantId } = useTenant();
   const [detailLead, setDetailLead] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState([]);
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:leads`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    statusFilter: 'all',
+    ageFilter: 'all',
+    updatedFilter: 'all',
+    assignedToFilter: 'all',
+    sortField: 'created_date',
+    sortDirection: 'desc',
+    selectedTags: [],
+  });
+  const { searchTerm, statusFilter, ageFilter, updatedFilter, assignedToFilter, sortField, sortDirection, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setStatusFilter = (v) => setFilter('statusFilter', v);
+  const setAgeFilter = (v) => setFilter('ageFilter', v);
+  const setUpdatedFilter = (v) => setFilter('updatedFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [convertingLead, setConvertingLead] = useState(null);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
 
@@ -447,14 +463,7 @@ export default function LeadsPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('all');
-    setAgeFilter('all');
-    setUpdatedFilter('all');
-    setAssignedToFilter('all');
-    setSelectedTags([]);
-    setSortField('created_date');
-    setSortDirection('desc');
+    resetFilters();
     setCurrentPage(1);
     clearSelection();
   };

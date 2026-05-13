@@ -32,6 +32,7 @@ import { useAiShaEvents } from '@/hooks/useAiShaEvents';
 import { useOpportunitiesData } from '@/hooks/useOpportunitiesData';
 import { useOpportunitiesBulkOps } from '@/hooks/useOpportunitiesBulkOps';
 import { runMutationRefresh } from '@/utils/mutationRefresh';
+import { usePersistedFilters } from '@/hooks/usePersistedFilters';
 
 export default function OpportunitiesPage() {
   const VIEW_MODE_STORAGE_KEY = 'aisha:opportunities:viewMode';
@@ -49,10 +50,6 @@ export default function OpportunitiesPage() {
   const { startProgress, updateProgress, completeProgress } = useProgress();
 
   // Local UI state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [stageFilter, setStageFilter] = useState('all');
-  const [sortField, setSortField] = useState('updated_at');
-  const [sortDirection, setSortDirection] = useState('desc');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOpportunity, setEditingOpportunity] = useState(null);
   const [viewMode, setViewMode] = useState(() => {
@@ -87,8 +84,25 @@ export default function OpportunitiesPage() {
   }, [viewMode]);
   const [detailOpportunity, setDetailOpportunity] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [selectedTags, setSelectedTags] = useState([]);
-  const [assignedToFilter, setAssignedToFilter] = useState('all');
+  const filtersStorageKey =
+    selectedTenantId && user?.id
+      ? `aishacrm:filters:${selectedTenantId}:${user.id}:opportunities`
+      : null;
+  const [filters, setFilter, resetFilters] = usePersistedFilters(filtersStorageKey, {
+    searchTerm: '',
+    stageFilter: 'all',
+    assignedToFilter: 'all',
+    sortField: 'updated_at',
+    sortDirection: 'desc',
+    selectedTags: [],
+  });
+  const { searchTerm, stageFilter, assignedToFilter, sortField, sortDirection, selectedTags } = filters;
+  const setSearchTerm = (v) => setFilter('searchTerm', v);
+  const setStageFilter = (v) => setFilter('stageFilter', v);
+  const setAssignedToFilter = (v) => setFilter('assignedToFilter', v);
+  const setSortField = (v) => setFilter('sortField', v);
+  const setSortDirection = (v) => setFilter('sortDirection', v);
+  const setSelectedTags = (v) => setFilter('selectedTags', v);
   const [showTestData] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -312,10 +326,7 @@ export default function OpportunitiesPage() {
   };
 
   const handleClearFilters = () => {
-    setSearchTerm('');
-    setStageFilter('all');
-    setAssignedToFilter('all');
-    setSelectedTags([]);
+    resetFilters();
     setCurrentPage(1);
     resetPaginationCursors();
     handleClearSelection();
