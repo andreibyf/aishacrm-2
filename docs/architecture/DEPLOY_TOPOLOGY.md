@@ -60,7 +60,7 @@ Coolify (on VPS-2)
 **Important:**
 
 - The GitHub URL is `github.com/andreibyf/aishacrm-2` (Dre's personal account), **not** `4vdataconsulting/aishacrm`. Push scripts and Linear comments often get this wrong.
-- Both remotes (`gitea.aishacrm.com` aliased as `origin`, `github.com` aliased as `github`) need to be kept in sync. Push to both after every PR-worthy commit.
+- **Push to `github` only.** The `mirror-to-gitea` GitHub Action keeps Gitea in sync automatically. Never push to `origin` directly — that bypasses GitHub's secret scanning and breaks the source-of-truth invariant.
 - Production on Hetzner uses GHCR images directly — see [Production deploy path](#production-deploy-path) below.
 
 ---

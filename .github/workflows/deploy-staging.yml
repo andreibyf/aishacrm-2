@@ -171,7 +171,7 @@ jobs:
       (needs.deploy-backend-heavy.result == 'success' ||
        needs.deploy-backend-heavy.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/coolify-deploy
@@ -181,6 +181,9 @@ jobs:
           application_name: staging-app-fast
           token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
           force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+          poll_max_attempts: '72'
+          # 72 × 15s = 18 min polling window — Vite build on CPU-capped VPS-1
+          # can exceed 10 min when it follows a backend-heavy deploy.
 
   deploy-braid:
     name: Deploy staging-braid

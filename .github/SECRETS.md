@@ -20,6 +20,7 @@ To verify all required Doppler secrets are configured, run:
 | Secret | Storage Location | Required For | Category |
 |--------|------------------|-------------|----------|
 | `DOPPLER_TOKEN` | GitHub Secrets | All workflows | Bootstrap |
+| `GITEA_TOKEN` | GitHub Secrets | mirror-to-gitea.yml | Git mirror |
 | `ADMIN_EMAILS` | **Doppler** | docker-release.yml | Build |
 | `VITE_AISHACRM_BACKEND_URL` | GitHub Variables | docker-release.yml | Frontend Build |
 | `VITE_SUPABASE_URL` | GitHub Variables | docker-release.yml | Frontend Build |
@@ -131,6 +132,16 @@ Used for CI/CD test runs:
 ---
 
 ## How to Configure
+
+### Git Mirror Secrets
+
+#### `GITEA_TOKEN`
+- **Used in:** `mirror-to-gitea.yml`
+- **Purpose:** Personal access token with `write:repository` scope on `aishacrm/aishacrm-2` in Gitea (`gitea.aishacrm.com`)
+- **Format:** Plain token string — no newlines. Token value is in `.env` as `GITEA_TOKEN`
+- **Effect:** Every push to GitHub `main` automatically force-pushes to Gitea, which fires the Coolify webhook for deploy
+
+---
 
 ### GitHub Secrets (Bootstrap Only)
 
