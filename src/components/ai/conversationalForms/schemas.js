@@ -421,11 +421,13 @@ export const conversationalSchemas = {
             name: 'company_name',
             label: 'Company name',
             placeholder: 'e.g. Acme Construction LLC',
+            required: true,
           },
           {
             name: 'dba_name',
             label: 'DBA / Trade name (optional)',
             placeholder: 'e.g. Acme Builders',
+            required: false,
           },
         ],
         validate: (answers) => ({
@@ -442,11 +444,13 @@ export const conversationalSchemas = {
             name: 'source_name',
             label: 'Source name',
             placeholder: 'e.g. Construction Directory Q4 2025',
+            required: true,
           },
           {
             name: 'source_type',
             label: 'Source type',
             type: 'select',
+            required: true,
             options: [
               { value: 'directory', label: 'Directory' },
               { value: 'referral', label: 'Referral' },
@@ -458,10 +462,13 @@ export const conversationalSchemas = {
             ],
           },
         ],
-        validate: (answers) => ({
-          valid: requiredField(answers.source_name),
-          error: 'Source name is required.',
-        }),
+        validate: (answers) => {
+          if (!requiredField(answers.source_name))
+            return { valid: false, error: 'Source name is required.' };
+          if (!requiredField(answers.source_type))
+            return { valid: false, error: 'Source type is required.' };
+          return { valid: true };
+        },
       },
       {
         id: 'bizdev-contact',
