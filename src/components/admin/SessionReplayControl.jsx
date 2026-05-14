@@ -15,13 +15,11 @@ import { getRuntimeEnv } from '@/utils/runtimeEnv';
 /**
  * SessionReplayControl
  *
- * Provider-aware replacement for the legacy OpenReplayControl. Lets a
- * superadmin (a) jump to the right session-replay dashboard filtered to
- * the target user, and (b) launch a live take-over room when the active
- * provider doesn't ship native co-browsing (Clarity).
+ * Lets a superadmin (a) jump to the Clarity dashboard filtered to the
+ * target user, and (b) launch a live take-over room via Jitsi.
  *
- * Provider detection mirrors useSessionReplay: env-driven, supports
- * `clarity`, `openreplay`, and `none` (renders null).
+ * Provider is driven by VITE_SESSION_REPLAY_PROVIDER (clarity | none).
+ * Renders null when no provider is configured.
  *
  * @param {Object} props
  * @param {Object} props.targetUser - User whose session to observe.
@@ -34,15 +32,8 @@ export function SessionReplayControl({ targetUser }) {
 
   const provider = useMemo(() => {
     const explicit = (getRuntimeEnv('VITE_SESSION_REPLAY_PROVIDER') || '').toLowerCase();
-    if (explicit === 'clarity' || explicit === 'openreplay' || explicit === 'none') {
-      return explicit;
-    }
-    if ((getRuntimeEnv('VITE_CLARITY_ENABLED') || '').toLowerCase() === 'true') {
-      return 'clarity';
-    }
-    if ((getRuntimeEnv('VITE_OPENREPLAY_ENABLED') || '').toLowerCase() === 'true') {
-      return 'openreplay';
-    }
+    if (explicit === 'clarity' || explicit === 'none') return explicit;
+    if ((getRuntimeEnv('VITE_CLARITY_ENABLED') || '').toLowerCase() === 'true') return 'clarity';
     return 'none';
   }, []);
 
@@ -51,9 +42,6 @@ export function SessionReplayControl({ targetUser }) {
       const base =
         getRuntimeEnv('VITE_CLARITY_DASHBOARD_URL') || 'https://clarity.microsoft.com';
       const projectId = getRuntimeEnv('VITE_CLARITY_PROJECT_ID');
-      // Clarity filters sessions by custom tags set in setUserInfo
-      // (email/userId). The dashboard supports ?filter=tag:userId:<value>
-      // syntax via the URL bar.
       const tag = targetUser?.email
         ? `email:${encodeURIComponent(targetUser.email)}`
         : targetUser?.id
@@ -61,9 +49,6 @@ export function SessionReplayControl({ targetUser }) {
           : null;
       const path = projectId ? `/projects/view/${projectId}/dashboard` : '';
       return tag ? `${base}${path}?customFilter=${tag}` : `${base}${path}`;
-    }
-    if (provider === 'openreplay') {
-      return getRuntimeEnv('VITE_OPENREPLAY_DASHBOARD_URL') || 'https://replay.aishacrm.com';
     }
     return null;
   }, [provider, targetUser]);
@@ -106,16 +91,12 @@ export function SessionReplayControl({ targetUser }) {
 
   if (provider === 'none') return null;
 
-  // Clarity-specific: also render nothing if no project ID configured.
   if (provider === 'clarity' && !getRuntimeEnv('VITE_CLARITY_PROJECT_ID')) {
     return null;
   }
-  if (provider === 'openreplay' && !getRuntimeEnv('VITE_OPENREPLAY_PROJECT_KEY')) {
-    return null;
-  }
 
-  const providerLabel = provider === 'clarity' ? 'Microsoft Clarity' : 'OpenReplay';
-  const supportsNativeAssist = provider === 'openreplay';
+  const providerLabel = 'Microsoft Clarity';
+  const supportsNativeAssist = false;
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -143,21 +124,12 @@ export function SessionReplayControl({ targetUser }) {
             <Info className="h-4 w-4" />
             <AlertDescription>
               <p className="font-medium mb-2">How to start live assist:</p>
-              {provider === 'clarity' ? (
-                <ol className="list-decimal list-inside space-y-1 text-sm">
-                  <li>Open the Clarity dashboard (button below) — sessions are filtered to this user</li>
-                  <li>Find their live or most recent session in the list</li>
-                  <li>For real-time control, click <strong>Start Live Take-Over</strong> below to open a Jitsi room</li>
-                  <li>Share the meeting link with the user (auto-copied) — they click → instant screenshare both ways</li>
-                </ol>
-              ) : (
-                <ol className="list-decimal list-inside space-y-1 text-sm">
-                  <li>Open the OpenReplay dashboard</li>
-                  <li>Search for user: <code>{targetUser?.email}</code></li>
-                  <li>Select their live or most recent session</li>
-                  <li>Click Assist and request control for real-time guidance</li>
-                </ol>
-              )}
+              <ol className="list-decimal list-inside space-y-1 text-sm">
+                <li>Open the Clarity dashboard (button below) — sessions are filtered to this user</li>
+                <li>Find their live or most recent session in the list</li>
+                <li>For real-time control, click <strong>Start Live Take-Over</strong> below to open a Jitsi room</li>
+                <li>Share the meeting link with the user (auto-copied) — they click → instant screenshare both ways</li>
+              </ol>
             </AlertDescription>
           </Alert>
 
@@ -165,9 +137,7 @@ export function SessionReplayControl({ targetUser }) {
             <div>
               <h4 className="font-medium">{providerLabel} Dashboard</h4>
               <p className="text-sm text-muted-foreground">
-                {provider === 'clarity'
-                  ? 'View sessions, heatmaps, recordings (live view has slight delay)'
-                  : 'View sessions, replay recordings, and use Assist mode'}
+                View sessions, heatmaps, recordings (live view has slight delay)
               </p>
             </div>
             <div className="flex items-center gap-2">

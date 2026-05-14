@@ -78,7 +78,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { OpenReplayControl } from '@/components/admin/OpenReplayControl';
+import { SessionReplayControl } from '@/components/admin/SessionReplayControl';
 import { SupportFrictionIndicator } from '@/components/admin/SupportFrictionIndicator';
 import { Lock } from 'lucide-react';
 
@@ -1862,8 +1862,8 @@ export default function EnhancedUserManagement() {
                             {/* Assist session access - superadmin only, not for other superadmins */}
                             {currentUser?.role === 'superadmin' && user.role !== 'superadmin' && (
                               <>
-                                {/* OpenReplay assist control - superadmin only */}
-                                <OpenReplayControl targetUser={user} />
+                                {/* Session replay assist control - superadmin only */}
+                                <SessionReplayControl targetUser={user} />
                               </>
                             )}
                           </div>

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **OpenReplay** removed entirely from the codebase (4VD-22). Deleted `useOpenReplay.js`, `useOpenReplayTracking.js`, `OpenReplayControl.jsx`, `useOpenReplay.test.js`, `Layout.cls-fix.smoke.test.jsx`, the GitHub Actions self-hosted deploy workflow, and three OpenReplay docs. Removed `@openreplay/tracker` and `@openreplay/tracker-assist` npm packages. Stripped `VITE_OPENREPLAY_*` env vars from all docker-compose files and `env-schema.json`. `useSessionReplay` and `SessionReplayControl` now support Clarity only; `EnhancedUserManagement` now renders `SessionReplayControl` in place of the deleted `OpenReplayControl`.
+
 ### Fixed
 
 - **AiSHA side panel width clamped to viewport on load + on viewport resize (4VD-26 follow-up, Codex review) (`src/components/ai/AiSidebar.jsx`, `src/components/ai/__tests__/AiSidebar.windowFeatures.test.jsx` (+2 cases))**: The persisted `aisha:sidebar:width` value was applied to `--sidebar-w` without re-clamping. A width saved on a wide monitor (e.g. 800px) could then render off-screen on a narrower viewport (e.g. 600px), pushing the left-edge resize handle outside the visible area — leaving no in-UI way to shrink the panel. Added a shared `clampPanelWidth` helper sharing bounds with the drag-resize logic (`320 .. min(900, vw - 60)`) and applied it in the `useState` initializer. Added a `window.resize` listener that re-clamps on shrink and persists the clamped value back to `sessionStorage` so subsequent reloads on the same viewport don't overshoot again.

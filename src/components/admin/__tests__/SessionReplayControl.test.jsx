@@ -81,18 +81,6 @@ describe('SessionReplayControl', () => {
     expect(code.textContent).toContain('goddominusassets%40gmail.com');
   });
 
-  it('renders OpenReplay-flavored UI when provider=openreplay', () => {
-    setEnv({
-      VITE_SESSION_REPLAY_PROVIDER: 'openreplay',
-      VITE_OPENREPLAY_PROJECT_KEY: 'asuEKaYlwEwTucD8njna',
-      VITE_OPENREPLAY_DASHBOARD_URL: 'https://replay.example.com',
-    });
-    render(<SessionReplayControl targetUser={targetUser} />);
-    expect(screen.getByText(/OpenReplay/i)).toBeTruthy();
-    // OpenReplay supports native Assist — the take-over block should NOT render
-    expect(screen.queryByText(/Live Take-Over/i)).toBeNull();
-  });
-
   it('Start Live Take-Over opens a Jitsi room and is user-correlated', () => {
     setEnv({
       VITE_SESSION_REPLAY_PROVIDER: 'clarity',
@@ -113,7 +101,7 @@ describe('SessionReplayControl', () => {
     expect(url).toContain('843b0151');
   });
 
-  it('back-compat: VITE_CLARITY_ENABLED=true selects clarity even without explicit provider', () => {
+  it('back-compat: VITE_CLARITY_ENABLED=true selects clarity without explicit provider', () => {
     setEnv({
       VITE_CLARITY_ENABLED: 'true',
       VITE_CLARITY_PROJECT_ID: 'wiijx4ahj6',

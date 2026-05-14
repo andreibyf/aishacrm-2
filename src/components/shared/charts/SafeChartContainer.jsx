@@ -15,10 +15,10 @@ import { ResponsiveContainer } from 'recharts';
  *    0×0 (lazy-mounted, intersection-observer reveals, flex parents whose
  *    `min-width: auto` collapses content, etc.).
  *  - Worse, during that frame Recharts emits an SVG with `width="-1"
- *    height="-1"`. rrweb-based session recorders (OpenReplay) snapshot
- *    that DOM verbatim. On replay, browsers treat the negative attrs as
- *    invalid, the foreignObject collapses, and only the top-left of the
- *    captured page renders → the bug Dre reported.
+ *    height="-1"`. rrweb-based session recorders snapshot that DOM verbatim.
+ *    On replay, browsers treat the negative attrs as invalid, the
+ *    foreignObject collapses, and only the top-left of the captured page
+ *    renders.
  *  - Cloudflare's request scanner treats repeated invalid SVG payloads
  *    as anomalous and starts flagging the response.
  *

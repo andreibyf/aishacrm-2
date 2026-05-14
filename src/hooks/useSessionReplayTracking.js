@@ -5,10 +5,10 @@ import { useUser } from '@/components/shared/useUser';
 /**
  * Provider-agnostic session tracking integration.
  *
- * Replaces useOpenReplayTracking. Mounts once at app root. Reads the
- * active provider from useSessionReplay() (Clarity / OpenReplay / none)
- * and binds user identity + emits navigation/click/mouse events through
- * the shared trackEvent interface.
+ * Provider-agnostic session tracking integration. Mounts once at app root.
+ * Reads the active provider from useSessionReplay() (Clarity / none) and
+ * binds user identity + emits navigation/click/mouse events through the
+ * shared trackEvent interface.
  */
 export function useSessionReplayTracking() {
   const { isInitialized, setUserInfo, trackEvent, error, provider } = useSessionReplay();

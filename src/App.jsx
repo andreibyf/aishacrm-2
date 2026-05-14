@@ -5,8 +5,8 @@ import { useSessionReplayTracking } from '@/hooks/useSessionReplayTracking';
 
 function App() {
   // Provider-agnostic session replay tracking. Provider chosen via
-  // VITE_SESSION_REPLAY_PROVIDER env (clarity | openreplay | none).
-  // Back-compat: respects existing VITE_OPENREPLAY_ENABLED / VITE_CLARITY_ENABLED.
+  // VITE_SESSION_REPLAY_PROVIDER env (clarity | none).
+  // Back-compat: respects existing VITE_CLARITY_ENABLED.
   useSessionReplayTracking();
 
   // Add debug logging
