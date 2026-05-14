@@ -4,10 +4,8 @@ import { getRuntimeEnv } from '@/utils/runtimeEnv';
 /**
  * Microsoft Clarity Session Replay Hook
  *
- * Drop-in replacement for `useOpenReplay`. Same return shape so callers
- * can switch via env var (`VITE_SESSION_REPLAY_PROVIDER`).
+ * Microsoft Clarity session replay hook. Same return shape as useSessionReplay.
  *
- * Microsoft Clarity differences vs OpenReplay:
  * - SaaS only (no self-hosting). Free tier is generous.
  * - Live View has slight delay; no remote take-over (use companion
  *   Jitsi/Whereby button via <RequestHelp /> for take-over).
@@ -18,8 +16,8 @@ import { getRuntimeEnv } from '@/utils/runtimeEnv';
  *   VITE_CLARITY_PROJECT_ID      Clarity project ID from clarity.microsoft.com
  *   VITE_CLARITY_DASHBOARD_URL   Optional, defaults to clarity.microsoft.com
  *
- * @returns {Object} same shape as useOpenReplay: isInitialized, sessionUrl,
- *   error, setUserInfo, enableAssist (no-op), trackEvent, getSessionUrl
+ * @returns {Object} isInitialized, sessionUrl, error, setUserInfo,
+ *   enableAssist (no-op), trackEvent, getSessionUrl
  */
 export function useClarity() {
   const [isInitialized, setIsInitialized] = useState(false);

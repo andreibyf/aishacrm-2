@@ -381,24 +381,6 @@
           "format": "uri",
           "required": false
         },
-        "VITE_OPENREPLAY_PROJECT_KEY": {
-          "type": "string",
-          "sensitive": false,
-          "required": false,
-          "description": "OpenReplay project key for session replay and co-browsing (optional)"
-        },
-        "VITE_OPENREPLAY_INGEST_POINT": {
-          "type": "string",
-          "format": "uri",
-          "required": false,
-          "description": "OpenReplay ingest point URL (optional, defaults to cloud if not specified)"
-        },
-        "VITE_OPENREPLAY_DASHBOARD_URL": {
-          "type": "string",
-          "format": "uri",
-          "required": false,
-          "description": "OpenReplay dashboard URL for viewing sessions (optional, defaults to https://app.openreplay.com)"
-        }
       }
     }
   },
