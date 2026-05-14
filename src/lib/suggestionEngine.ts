@@ -140,19 +140,21 @@ const uniqueByCommand = (suggestions: Suggestion[]): Suggestion[] => {
 };
 
 const formatHistoryLabel = (entry: ParsedCommandSummary) => {
-  if (entry.intent === 'query' && entry.entity) {
-    return `Show ${entry.entity} (${new Date(entry.timestamp).toLocaleDateString()})`;
+  // Always prefer the user's actual query text — entity type + date is not descriptive enough
+  const truncated = entry.rawText.length > 50 ? `${entry.rawText.slice(0, 47)}...` : entry.rawText;
+  if (entry.intent === 'query') {
+    return truncated;
   }
   if (entry.intent === 'create' && entry.entity) {
-    return `Create ${entry.entity.slice(0, -1)} record again`;
+    return `Create ${entry.entity.slice(0, -1)} again`;
   }
   if (entry.intent === 'update') {
-    return 'Repeat last update command';
+    return truncated || 'Repeat last update';
   }
   if (entry.intent === 'analyze') {
-    return 'Run that analysis again';
+    return truncated || 'Run that analysis again';
   }
-  return entry.rawText.length > 60 ? `${entry.rawText.slice(0, 57)}...` : entry.rawText;
+  return truncated;
 };
 
 const buildHistorySuggestions = (context: SuggestionContext, history: ParsedCommandSummary[]): Suggestion[] => {

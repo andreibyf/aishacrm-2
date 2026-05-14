@@ -27,7 +27,7 @@ const defaultValidation = (step, answers) => {
     .every((field) => Boolean(String(answers[field.name] ?? '').trim()));
   return {
     valid: allFilled,
-    error: allFilled ? undefined : 'Please complete the required information before continuing.'
+    error: allFilled ? undefined : 'Please complete the required information before continuing.',
   };
 };
 
@@ -38,14 +38,14 @@ export default function ConversationalForm({
   onComplete,
   onCancel,
   initialAnswers,
-  isSubmitting = false
+  isSubmitting = false,
 }) {
   const [answers, setAnswers] = useState(initialAnswers || {});
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [stepError, setStepError] = useState(null);
   const [submissionError, setSubmissionError] = useState(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
-  
+
   // Track the previous schema ID to detect when we switch to a different form type
   const previousSchemaIdRef = useRef(schema?.id);
 
@@ -136,31 +136,24 @@ export default function ConversationalForm({
     const value = answers[normalized.name] ?? '';
 
     // Enhanced input styling
-    const inputClasses = "w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:hover:border-slate-600 dark:focus:border-emerald-500";
+    const inputClasses =
+      'w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:hover:border-slate-600 dark:focus:border-emerald-500';
 
     const commonProps = {
       id: `conversational-${normalized.name}`,
       value,
       onChange: (event) => handleFieldChange(normalized.name, event.target.value),
-      placeholder: normalized.placeholder || `Enter ${(normalized.label || normalized.name).toLowerCase()}...`,
+      placeholder:
+        normalized.placeholder || `Enter ${(normalized.label || normalized.name).toLowerCase()}...`,
     };
 
     if (normalized.type === 'textarea') {
-      return (
-        <Textarea
-          {...commonProps}
-          rows={3}
-          className={inputClasses}
-        />
-      );
+      return <Textarea {...commonProps} rows={3} className={inputClasses} />;
     }
 
     if (normalized.type === 'select' && Array.isArray(normalized.options)) {
       return (
-        <select
-          {...commonProps}
-          className={inputClasses + " cursor-pointer"}
-        >
+        <select {...commonProps} className={inputClasses + ' cursor-pointer'}>
           <option value="">Select an option...</option>
           {normalized.options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -171,13 +164,7 @@ export default function ConversationalForm({
       );
     }
 
-    return (
-      <Input
-        type={normalized.type || 'text'}
-        {...commonProps}
-        className={inputClasses}
-      />
-    );
+    return <Input type={normalized.type || 'text'} {...commonProps} className={inputClasses} />;
   };
 
   const renderStepHistory = () => (
@@ -221,6 +208,14 @@ export default function ConversationalForm({
         <div className="ml-11 space-y-4">
           {currentStep.fields.map((field) => {
             const normalized = normalizeField(field);
+            // Fall back to step-level `required` when the field does not specify
+            // its own flag. Step-level required steps rely on either default or
+            // explicit validate functions that gate the whole step, so every
+            // field without an explicit `required: false` should still be marked.
+            const isRequired =
+              typeof normalized.required === 'boolean'
+                ? normalized.required
+                : Boolean(currentStep.required);
             return (
               <div key={normalized.name} className="space-y-2">
                 <label
@@ -229,7 +224,7 @@ export default function ConversationalForm({
                 >
                   <span className="h-1 w-1 rounded-full bg-emerald-500" />
                   {normalized.label || normalized.name.replace(/_/g, ' ')}
-                  {currentStep.required && <span className="text-rose-500">*</span>}
+                  {isRequired && <span className="text-rose-500">*</span>}
                 </label>
                 {renderFieldInput(field)}
               </div>

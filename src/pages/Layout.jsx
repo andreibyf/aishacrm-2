@@ -54,6 +54,8 @@ import {
   Users, // Changed Employees icon to Users
   Wrench,
   Zap, // NEW: Added for Workflows
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -251,6 +253,24 @@ function Layout({ children, currentPageName }) {
   //   onSessionExpired: handleSessionExpired
   // });
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [isNavCollapsed, setIsNavCollapsed] = React.useState(() => {
+    try {
+      return localStorage.getItem('nav:collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const toggleNavCollapsed = React.useCallback(() => {
+    setIsNavCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('nav:collapsed', String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [moduleSettings, setModuleSettings] = React.useState([]);
   const [currentTenantData, setCurrentTenantData] = React.useState(null);
@@ -2233,33 +2253,55 @@ function Layout({ children, currentPageName }) {
         <UserNav user={user} handleLogout={handleLogout} createPageUrl={createPageUrl} compact />
       </div>
 
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:overflow-y-auto lg:border-r lg:border-slate-800">
-        <SidebarContent
-          user={user}
-          selectedTenantId={selectedTenantId}
-          selectedTenant={selectedTenant}
-          logoUrl={logoUrl}
-          displayedLogoUrl={displayedLogoUrl}
-          companyName={companyName}
-          primaryColor={primaryColor}
-          accentColor={accentColor}
-          filteredNavItems={filteredNavItems}
-          filteredSecondaryNavItems={filteredSecondaryNavItems}
-          currentPageName={currentPageName}
-          isDragMode={isDragMode}
-          handleNavDragEnd={handleNavDragEnd}
-          handleSecondaryDragEnd={handleSecondaryDragEnd}
-          handleResetNavOrder={handleResetNavOrder}
-          setIsDragMode={setIsDragMode}
-          hasCustomNavOrder={hasCustomNavOrder}
-          hasCustomSecondaryOrder={hasCustomSecondaryOrder}
-          sensors={sensors}
-          createPageUrl={createPageUrl}
-          onNavClick={() => {}}
-        />
+      <aside
+        className={`hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:overflow-y-auto lg:border-r lg:border-slate-800 transition-[width] duration-300 ${
+          isNavCollapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0' : 'lg:w-64'
+        }`}
+      >
+        {!isNavCollapsed && (
+          <SidebarContent
+            user={user}
+            selectedTenantId={selectedTenantId}
+            selectedTenant={selectedTenant}
+            logoUrl={logoUrl}
+            displayedLogoUrl={displayedLogoUrl}
+            companyName={companyName}
+            primaryColor={primaryColor}
+            accentColor={accentColor}
+            filteredNavItems={filteredNavItems}
+            filteredSecondaryNavItems={filteredSecondaryNavItems}
+            currentPageName={currentPageName}
+            isDragMode={isDragMode}
+            handleNavDragEnd={handleNavDragEnd}
+            handleSecondaryDragEnd={handleSecondaryDragEnd}
+            handleResetNavOrder={handleResetNavOrder}
+            setIsDragMode={setIsDragMode}
+            hasCustomNavOrder={hasCustomNavOrder}
+            hasCustomSecondaryOrder={hasCustomSecondaryOrder}
+            sensors={sensors}
+            createPageUrl={createPageUrl}
+            onNavClick={() => {}}
+            onToggleCollapse={toggleNavCollapsed}
+            isCollapsed={isNavCollapsed}
+          />
+        )}
       </aside>
 
-      <div className="lg:pl-64 min-w-0 overflow-x-clip">
+      {/* Floating re-expand button when nav is collapsed (desktop only) */}
+      {isNavCollapsed && (
+        <button
+          type="button"
+          onClick={toggleNavCollapsed}
+          title="Expand navigation"
+          className="hidden lg:flex fixed left-2 top-1/2 -translate-y-1/2 z-50 items-center justify-center w-7 h-14 rounded-r-lg bg-slate-800 border border-l-0 border-slate-700 text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors shadow-md"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      )}
+
+      <div
+        className={`${isNavCollapsed ? '' : 'lg:pl-64'} min-w-0 overflow-x-clip transition-[padding] duration-300`}
+      >
         <header
           data-testid="app-header"
           className="sticky top-0 z-40 flex min-h-14 shrink-0 items-center border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-3 py-2 shadow-sm sm:px-6 lg:px-8"
