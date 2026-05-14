@@ -285,6 +285,67 @@ describe('Contacts V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
       'company-name search should include the linked contact',
     );
   });
+
+  test('GET /api/v2/contacts preserves $and semantics between sibling $or groups', async () => {
+    const token = `AndOrSearch-${Date.now()}`;
+
+    // Matching account by name (group B will match this).
+    const matchingAccount = await createAccount({ name: `${token}-Acme` });
+    assert.ok([200, 201].includes(matchingAccount.status));
+    assert.ok(matchingAccount.id);
+
+    // A second account that does NOT match the company search term.
+    const otherAccount = await createAccount({ name: `${token}-OtherCo` });
+    assert.ok([200, 201].includes(otherAccount.status));
+    assert.ok(otherAccount.id);
+
+    // Contact 1: unassigned + linked to matching company → should match (both groups satisfied).
+    const matchContact = await createContact({
+      first_name: `${token}-Match`,
+      last_name: 'Unassigned',
+      account_id: matchingAccount.id,
+      assigned_to: null,
+    });
+    assert.ok([200, 201].includes(matchContact.status));
+    assert.ok(matchContact.id);
+
+    // Contact 2: unassigned + linked to NON-matching company → satisfies group A only.
+    const nonCompanyContact = await createContact({
+      first_name: `${token}-NoCompany`,
+      last_name: 'Unassigned',
+      account_id: otherAccount.id,
+      assigned_to: null,
+    });
+    assert.ok([200, 201].includes(nonCompanyContact.status));
+    assert.ok(nonCompanyContact.id);
+
+    const filter = encodeURIComponent(
+      JSON.stringify({
+        $and: [
+          { $or: [{ assigned_to: null }] },
+          { $or: [{ company: { $icontains: `${token}-Acme` } }] },
+        ],
+      }),
+    );
+
+    const res = await fetch(`${BASE_URL}/api/v2/contacts?tenant_id=${TENANT_ID}&filter=${filter}`, {
+      headers: getAuthHeaders(),
+    });
+    assert.equal(res.status, 200, '$and-with-$or filter should not fail');
+
+    const json = await res.json();
+    const contacts = json.data?.contacts || [];
+    const ids = contacts.map((row) => row.id);
+
+    assert.ok(
+      ids.includes(matchContact.id),
+      'contact satisfying BOTH $or groups should appear in results',
+    );
+    assert.ok(
+      !ids.includes(nonCompanyContact.id),
+      'contact that only satisfies the assigned_to group should NOT appear (flattening regression)',
+    );
+  });
 });
 
 // ============================================

@@ -90,13 +90,15 @@ export default function createContactV2Routes(_pgPool) {
   const buildSearchFilterParts = async ({ parsedFilter, supabase, tenant_id }) => {
     const orGroups = extractOrGroups(parsedFilter);
     if (orGroups.length === 0) {
-      return { orParts: [], companySearchRequested: false };
+      return { orPartGroups: [] };
     }
 
-    const orParts = [];
-    const companyTerms = new Set();
+    const orPartGroups = [];
 
     for (const group of orGroups) {
+      const orParts = [];
+      const companyTerms = new Set();
+
       for (const condition of group) {
         const [field, opObj] = Object.entries(condition)[0] || [];
         if (!field) continue;
@@ -137,25 +139,35 @@ export default function createContactV2Routes(_pgPool) {
           }
         }
       }
-    }
 
-    if (companyTerms.size > 0) {
-      const accountSearches = [...companyTerms].map((term) => `name.ilike.%${term}%`);
-      const { data: matchingAccounts, error: accountError } = await supabase
-        .from('accounts')
-        .select('id')
-        .eq('tenant_id', tenant_id)
-        .or(accountSearches.join(','));
+      if (companyTerms.size > 0) {
+        const accountSearches = [...companyTerms].map((term) => `name.ilike.%${term}%`);
+        const { data: matchingAccounts, error: accountError } = await supabase
+          .from('accounts')
+          .select('id')
+          .eq('tenant_id', tenant_id)
+          .or(accountSearches.join(','));
 
-      if (accountError) throw new Error(accountError.message);
+        if (accountError) throw new Error(accountError.message);
 
-      const accountIds = [...new Set((matchingAccounts || []).map((row) => row.id).filter(Boolean))];
-      if (accountIds.length > 0) {
-        orParts.push(`account_id.in.(${accountIds.join(',')})`);
+        const accountIds = [
+          ...new Set((matchingAccounts || []).map((row) => row.id).filter(Boolean)),
+        ];
+        if (accountIds.length > 0) {
+          orParts.push(`account_id.in.(${accountIds.join(',')})`);
+        } else if (orParts.length === 0) {
+          // Group was company-only and matched no accounts — force the group to
+          // evaluate to false so a sibling $or group cannot widen the result.
+          orParts.push(`account_id.eq.${EMPTY_UUID}`);
+        }
+      }
+
+      if (orParts.length > 0) {
+        orPartGroups.push(orParts);
       }
     }
 
-    return { orParts, companySearchRequested: companyTerms.size > 0 };
+    return { orPartGroups };
   };
 
   /**
@@ -283,16 +295,17 @@ export default function createContactV2Routes(_pgPool) {
             }
           }
 
-          const { orParts, companySearchRequested } = await buildSearchFilterParts({
+          const { orPartGroups } = await buildSearchFilterParts({
             parsedFilter: parsed,
             supabase,
             tenant_id,
           });
 
-          if (orParts.length > 0) {
+          // Each $or group is applied as a separate .or() call so that
+          // sibling groups under $and stay ANDed together (chained .or()
+          // calls combine with AND in PostgREST).
+          for (const orParts of orPartGroups) {
             q = q.or(orParts.join(','));
-          } else if (companySearchRequested) {
-            q = q.eq('account_id', EMPTY_UUID);
           }
         }
       }
