@@ -47,4 +47,28 @@ describe('[AISHA_CHAT] suggestionEngine', () => {
     expect(suggestions.some((s) => s.source === 'context')).toBe(true);
     expect(suggestions.some((s) => s.command.toLowerCase().includes('potential') || s.command.toLowerCase().includes('lead') || s.command.toLowerCase().includes('source'))).toBe(true);
   });
+
+  it('history chip labels use the raw query text, not entity+date', () => {
+    const now = new Date().toISOString();
+    addHistoryEntry({ intent: 'query', entity: 'general', rawText: 'Show me all active leads', timestamp: now, origin: 'text' });
+    addHistoryEntry({ intent: 'query', entity: 'lead', rawText: 'List my hottest leads from last week', timestamp: now, origin: 'text' });
+
+    const context: SuggestionContext = { tenantId: 't1', entity: 'general' };
+    const history = getRecentHistory();
+    const suggestions = getSuggestions({ context, history });
+
+    const historySuggestions = suggestions.filter((s) => s.source === 'history');
+    expect(historySuggestions.length).toBeGreaterThan(0);
+
+    historySuggestions.forEach((s) => {
+      // Must NOT look like "Show general (M/D/YYYY)" or "Show lead (M/D/YYYY)"
+      expect(s.label).not.toMatch(/^Show \w+ \(\d+\/\d+\/\d+\)$/);
+      // Should be the actual query text (possibly truncated)
+      expect(s.label.length).toBeGreaterThan(5);
+    });
+
+    // Both entries should surface with their exact rawText as label
+    const labels = historySuggestions.map((s) => s.label);
+    expect(labels).toContain('Show me all active leads');
+  });
 });
