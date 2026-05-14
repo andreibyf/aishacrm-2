@@ -4,6 +4,7 @@
 
 ## Why this doc exists
 
+- 2026-05-14 — Coolify marked VPS-1 unreachable (`unreachable_count: 13`) because its server entry had `user: root` but VPS-1 only authorizes `andreibyf`. Fixed by PATCHing the Coolify server record. The Coolify key was already correctly in `andreibyf`'s `authorized_keys` — it was just being presented to the wrong user. **SSH user is now documented in the table above.**
 - 2026-05-12 — 30 minutes lost to "is the staging tunnel down?" because `staging-backend.aishacrm.com` doesn't resolve — it's a Coolify app name, not a hostname. The public FQDN is `staging-api.aishacrm.com`.
 - 2026-05-10 — A double Coolify deploy on `staging-app-fast` tipped VPS-1 past Zap's 5.5-core cap and locked the host. Manual reboot via Zap's panel was the only recovery.
 - Multiple sessions where "deploy to VPS-2" got misread as "deploy app services" — VPS-2 hosts the **control plane** (Coolify itself), never application services.
@@ -14,12 +15,12 @@ Each section below states the contract. If you're touching a deploy script, CI w
 
 ## The four hosts
 
-| Name          | Role        | Provider                | IP                | What runs there                                                     |
-| ------------- | ----------- | ----------------------- | ----------------- | ------------------------------------------------------------------- |
-| **VPS-1**     | Staging     | Zap-Hosting (lifetime)  | `147.189.173.237` | All staging app services (frontend, backend, braid-mcp, litellm)    |
-| **VPS-2**     | Services    | Zap-Hosting (lifetime)  | `147.189.168.164` | Coolify itself, Cal.com, Uptime Kuma, Gitea, OneDev — control plane |
-| **Hetzner**   | Production  | Hetzner Cloud (monthly) | `178.156.140.86`  | All prod app services                                               |
-| **Localhost** | Development | Dre's laptop            | (varies)          | Local dev via Docker Compose ports 4000/4001                        |
+| Name          | Role        | Provider                | IP                | SSH user    | What runs there                                                                               |
+| ------------- | ----------- | ----------------------- | ----------------- | ----------- | --------------------------------------------------------------------------------------------- |
+| **VPS-1**     | Staging     | Zap-Hosting (lifetime)  | `147.189.173.237` | `andreibyf` | Staging app services (frontend, backend, braid-mcp, litellm), coolify-proxy, coolify-sentinel |
+| **VPS-2**     | Services    | Zap-Hosting (lifetime)  | `147.189.168.164` | `root`      | Coolify app (control plane), Cal.com, Uptime Kuma, Gitea, OneDev                              |
+| **Hetzner**   | Production  | Hetzner Cloud (monthly) | `178.156.140.86`  | `root`      | All prod app services                                                                         |
+| **Localhost** | Development | Dre's laptop            | (varies)          | n/a         | Local dev via Docker Compose ports 4000/4001                                                  |
 
 **Rules:**
 
