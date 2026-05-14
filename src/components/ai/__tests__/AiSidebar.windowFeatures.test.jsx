@@ -334,6 +334,76 @@ describe('AiSidebar window features (4VD-26 / 4VD-45)', () => {
     expect(container.querySelector('.sidebar-backdrop')).toBeNull();
   });
 
+  it('clamps stored width to current viewport on initial load', () => {
+    // Persist an oversized width (e.g. saved on a wide monitor)
+    sessionStorage.setItem('aisha:sidebar:width', '1400');
+    // Shrink the viewport before render so the stored value exceeds it
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 800,
+    });
+
+    try {
+      renderSidebar();
+      const root = screen.getByTestId('ai-sidebar-root');
+      const cssVar = root.style.getPropertyValue('--sidebar-w');
+      const applied = parseInt(cssVar, 10);
+
+      // Must be clamped to <= min(900, vw - 60) = min(900, 740) = 740
+      expect(applied).toBeLessThanOrEqual(740);
+      // Must not be below the 320 floor
+      expect(applied).toBeGreaterThanOrEqual(320);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: originalWidth,
+      });
+    }
+  });
+
+  it('re-clamps panel width when the viewport shrinks below current width', () => {
+    sessionStorage.setItem('aisha:sidebar:width', '800');
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1200,
+    });
+
+    try {
+      renderSidebar();
+      const root = screen.getByTestId('ai-sidebar-root');
+      const initial = parseInt(root.style.getPropertyValue('--sidebar-w'), 10);
+      expect(initial).toBe(800);
+
+      // Now shrink viewport and dispatch resize
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: 600,
+      });
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+
+      const after = parseInt(root.style.getPropertyValue('--sidebar-w'), 10);
+      // After resize the panel must fit within viewport - 60 = 540
+      expect(after).toBeLessThanOrEqual(540);
+      expect(after).toBeGreaterThanOrEqual(320);
+      // sessionStorage is updated with the clamped value
+      expect(parseInt(sessionStorage.getItem('aisha:sidebar:width'), 10)).toBe(after);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: originalWidth,
+      });
+    }
+  });
+
   it('minimizing from popped-out state removes popped-out class and adds minimized class', () => {
     renderSidebar();
     const root = screen.getByTestId('ai-sidebar-root');

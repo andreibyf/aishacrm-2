@@ -566,11 +566,17 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   // ── Window features (4VD-26 / 4VD-45) ───────────────────────────────────
   const [isMinimized, setIsMinimized] = useState(false);
   const [isPoppedOut, setIsPoppedOut] = useState(false);
+  // Keep clamp bounds in sync with drag-resize logic above (320 .. min(900, vw-60)).
+  const clampPanelWidth = (w) => {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    return Math.min(Math.max(w, 320), Math.min(900, Math.max(320, vw - 60)));
+  };
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
-      return parseInt(sessionStorage.getItem('aisha:sidebar:width') || '540', 10) || 540;
+      const raw = parseInt(sessionStorage.getItem('aisha:sidebar:width') || '540', 10) || 540;
+      return clampPanelWidth(raw);
     } catch {
-      return 540;
+      return clampPanelWidth(540);
     }
   });
   const [popoutPos, setPopoutPos] = useState({ x: 0, y: 60 });
@@ -583,6 +589,26 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   useEffect(() => {
     panelWidthRef.current = panelWidth;
   }, [panelWidth]);
+
+  // Re-clamp panel width when the viewport shrinks so the panel and its
+  // left-edge resize handle stay on screen on smaller displays.
+  useEffect(() => {
+    const onViewportResize = () => {
+      setPanelWidth((prev) => {
+        const next = clampPanelWidth(prev);
+        if (next !== prev) {
+          try {
+            sessionStorage.setItem('aisha:sidebar:width', String(next));
+          } catch {
+            // quota exceeded — silent no-op
+          }
+        }
+        return next;
+      });
+    };
+    window.addEventListener('resize', onViewportResize);
+    return () => window.removeEventListener('resize', onViewportResize);
+  }, []);
 
   // Unified global mouse handler for resize + popout drag
   useEffect(() => {

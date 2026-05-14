@@ -208,6 +208,14 @@ export default function ConversationalForm({
         <div className="ml-11 space-y-4">
           {currentStep.fields.map((field) => {
             const normalized = normalizeField(field);
+            // Fall back to step-level `required` when the field does not specify
+            // its own flag. Step-level required steps rely on either default or
+            // explicit validate functions that gate the whole step, so every
+            // field without an explicit `required: false` should still be marked.
+            const isRequired =
+              typeof normalized.required === 'boolean'
+                ? normalized.required
+                : Boolean(currentStep.required);
             return (
               <div key={normalized.name} className="space-y-2">
                 <label
@@ -216,7 +224,7 @@ export default function ConversationalForm({
                 >
                   <span className="h-1 w-1 rounded-full bg-emerald-500" />
                   {normalized.label || normalized.name.replace(/_/g, ' ')}
-                  {normalized.required && <span className="text-rose-500">*</span>}
+                  {isRequired && <span className="text-rose-500">*</span>}
                 </label>
                 {renderFieldInput(field)}
               </div>

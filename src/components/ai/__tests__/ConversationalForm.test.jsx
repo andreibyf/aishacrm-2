@@ -141,4 +141,100 @@ describe('[AISHA_CHAT] ConversationalForm', () => {
     // Optional field label must NOT contain an asterisk element
     expect(optLabel.querySelector('.text-rose-500')).toBeNull();
   });
+
+  it('falls back to step-level required when a field omits its own required flag', () => {
+    // Step is required:true; fields don't carry per-field required metadata.
+    // Asterisk should still render — every field gates Next via the step's
+    // validate function, so users must see they're required.
+    const schema = {
+      id: 'step-required-form',
+      label: 'Step Required Form',
+      steps: [
+        {
+          id: 'lead-name',
+          prompt: "What's the lead's name?",
+          required: true,
+          fields: [
+            { name: 'first_name', label: 'First name' },
+            { name: 'last_name', label: 'Last name' },
+          ],
+          validate: (a) => ({
+            valid: Boolean(a.first_name && a.last_name),
+            error: 'First and last name are required.',
+          }),
+        },
+      ],
+      previewFields: ['first_name', 'last_name'],
+      buildPayload: vi.fn((a) => a),
+    };
+
+    const { container } = render(
+      <ConversationalForm schema={schema} tenantId="t" userId="u" />,
+    );
+
+    const labels = container.querySelectorAll('label');
+    const firstLabel = [...labels].find((l) => l.textContent.includes('First name'));
+    const lastLabel = [...labels].find((l) => l.textContent.includes('Last name'));
+
+    expect(firstLabel.querySelector('.text-rose-500')).not.toBeNull();
+    expect(lastLabel.querySelector('.text-rose-500')).not.toBeNull();
+  });
+
+  it('does not render * when step is not required and field omits its flag', () => {
+    const schema = {
+      id: 'optional-step-form',
+      label: 'Optional Step Form',
+      steps: [
+        {
+          id: 'extras',
+          prompt: 'Any extras?',
+          required: false,
+          fields: [{ name: 'notes', label: 'Notes' }],
+        },
+      ],
+      previewFields: ['notes'],
+      buildPayload: vi.fn((a) => a),
+    };
+
+    const { container } = render(
+      <ConversationalForm schema={schema} tenantId="t" userId="u" />,
+    );
+
+    const labels = container.querySelectorAll('label');
+    const notesLabel = [...labels].find((l) => l.textContent.includes('Notes'));
+    expect(notesLabel.querySelector('.text-rose-500')).toBeNull();
+  });
+
+  it('explicit field-level required:false overrides a required step', () => {
+    // DBA/Trade-name pattern: step is required:true, but this specific
+    // field is optional and must not display an asterisk.
+    const schema = {
+      id: 'override-required',
+      label: 'Override Required',
+      steps: [
+        {
+          id: 'company',
+          prompt: 'Company.',
+          required: true,
+          fields: [
+            { name: 'company_name', label: 'Company name', required: true },
+            { name: 'dba_name', label: 'DBA / Trade name', required: false },
+          ],
+        },
+      ],
+      previewFields: ['company_name'],
+      buildPayload: vi.fn((a) => a),
+    };
+
+    const { container } = render(
+      <ConversationalForm schema={schema} tenantId="t" userId="u" />,
+    );
+
+    const labels = container.querySelectorAll('label');
+    const dbaLabel = [...labels].find((l) => l.textContent.includes('DBA'));
+    const companyLabel = [...labels].find((l) => l.textContent.includes('Company name'));
+
+    expect(companyLabel.querySelector('.text-rose-500')).not.toBeNull();
+    expect(dbaLabel.querySelector('.text-rose-500')).toBeNull();
+  });
 });
