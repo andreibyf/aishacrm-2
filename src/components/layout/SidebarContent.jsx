@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableNavItem } from '@/components/shared/SortableNavItem';
-import { GripVertical, RotateCcw } from 'lucide-react';
+import { GripVertical, RotateCcw, ChevronLeft } from 'lucide-react';
 import Clock from '@/components/shared/Clock';
 
 /**
@@ -34,6 +34,8 @@ export default function SidebarContent({
   sensors,
   createPageUrl,
   onNavClick,
+  onToggleCollapse,
+  isCollapsed,
 }) {
   return (
     <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800">
@@ -139,6 +141,16 @@ export default function SidebarContent({
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+              title="Collapse navigation"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
       <nav className="flex-1 px-4 py-1 overflow-y-auto" data-testid="main-navigation">

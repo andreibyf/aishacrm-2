@@ -27,6 +27,9 @@ import {
   Code,
   ThumbsUp,
   ThumbsDown,
+  GripVertical,
+  Maximize2,
+  Minus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -559,6 +562,119 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   const [telemetryEntries, setTelemetryEntries] = useState(() => getRealtimeTelemetrySnapshot());
   const showTelemetryDebug = useMemo(() => isTelemetryDebugEnabled(), []);
   const { ConfirmDialog: ConfirmDialogPortal, confirm } = useConfirmDialog();
+
+  // ── Window features (4VD-26 / 4VD-45) ───────────────────────────────────
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      return parseInt(sessionStorage.getItem('aisha:sidebar:width') || '540', 10) || 540;
+    } catch {
+      return 540;
+    }
+  });
+  const [popoutPos, setPopoutPos] = useState({ x: 0, y: 60 });
+  const panelWidthRef = useRef(panelWidth);
+  const resizingRef = useRef(false);
+  const resizeStartRef = useRef({ x: 0, w: 0 });
+  const popoutDraggingRef = useRef(false);
+  const popoutDragStartRef = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  useEffect(() => {
+    panelWidthRef.current = panelWidth;
+  }, [panelWidth]);
+
+  // Unified global mouse handler for resize + popout drag
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      if (resizingRef.current) {
+        const delta = resizeStartRef.current.x - e.clientX;
+        const next = Math.min(
+          Math.max(resizeStartRef.current.w + delta, 320),
+          Math.min(900, window.innerWidth - 60),
+        );
+        setPanelWidth(next);
+      }
+      if (popoutDraggingRef.current) {
+        const dx = e.clientX - popoutDragStartRef.current.mx;
+        const dy = e.clientY - popoutDragStartRef.current.my;
+        setPopoutPos({
+          x: Math.max(
+            0,
+            Math.min(
+              window.innerWidth - panelWidthRef.current - 20,
+              popoutDragStartRef.current.px + dx,
+            ),
+          ),
+          y: Math.max(0, Math.min(window.innerHeight - 100, popoutDragStartRef.current.py + dy)),
+        });
+      }
+    };
+    const onMouseUp = () => {
+      if (resizingRef.current) {
+        resizingRef.current = false;
+        try {
+          sessionStorage.setItem('aisha:sidebar:width', String(panelWidthRef.current));
+        } catch {
+          // quota exceeded — silent no-op
+        }
+      }
+      popoutDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []); // runs once; panelWidthRef used inside for safe current-value access
+
+  const handleResizeMouseDown = useCallback(
+    (e) => {
+      e.preventDefault();
+      resizingRef.current = true;
+      resizeStartRef.current = { x: e.clientX, w: panelWidth };
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [panelWidth],
+  );
+
+  const handlePopoutDragStart = useCallback(
+    (e) => {
+      e.preventDefault();
+      popoutDraggingRef.current = true;
+      popoutDragStartRef.current = {
+        mx: e.clientX,
+        my: e.clientY,
+        px: popoutPos.x,
+        py: popoutPos.y,
+      };
+      document.body.style.cursor = 'move';
+      document.body.style.userSelect = 'none';
+    },
+    [popoutPos.x, popoutPos.y],
+  );
+
+  const handleToggleMinimize = useCallback(() => {
+    setIsMinimized((prev) => !prev);
+  }, []);
+
+  const handleTogglePopout = useCallback(() => {
+    setIsPoppedOut((prev) => {
+      if (!prev) {
+        setPopoutPos({
+          x: Math.max(0, window.innerWidth - panelWidthRef.current - 20),
+          y: 60,
+        });
+      }
+      return !prev;
+    });
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const isRealtimeFeatureAvailable = Boolean(realtimeVoiceEnabled);
   const tenantId = user?.tenant_id || telemetryContext.tenantId;
   const userId = user?.email || telemetryContext.userId;
@@ -1663,19 +1779,29 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
     <>
       <ConfirmDialogPortal />
       <div
-        className={`aisha-sidebar ai-sidebar-container ${isOpen ? 'open' : ''}`}
+        className={`aisha-sidebar ai-sidebar-container ${isOpen ? 'open' : ''} ${isMinimized ? 'minimized' : ''} ${isPoppedOut ? 'popped-out' : ''}`}
+        style={{ '--sidebar-w': `${panelWidth}px` }}
         aria-hidden={!isOpen}
         data-testid="ai-sidebar-root"
       >
         <style>{`
         .aisha-sidebar { position: fixed; top: 0; right: 0; height: 100dvh; width: 0; overflow: hidden; z-index: 2000; transition: width 0.25s ease; }
-        .aisha-sidebar.open { width: 540px; }
-        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: 540px; height: 100dvh; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); }
+        .aisha-sidebar.open { width: var(--sidebar-w, 540px); }
+        .aisha-sidebar.open.minimized { width: 52px !important; }
+        .aisha-sidebar.open.popped-out { width: 0 !important; overflow: visible; }
+        .aisha-sidebar .sidebar-panel { position: absolute; right: 0; top: 0; width: var(--sidebar-w, 540px); height: 100dvh; display: flex; flex-direction: column; background: #ffffff; color: #0f172a; border-left: 1px solid rgba(15,23,42,0.08); box-shadow: -12px 0 35px rgba(15,23,42,0.12); overflow: hidden; }
+        .aisha-sidebar.minimized .sidebar-panel { width: 52px !important; }
         .theme-dark .aisha-sidebar .sidebar-panel { background: #0b0f19; color: #f8fafc; border-left: 1px solid rgba(255,255,255,0.05); box-shadow: -12px 0 35px rgba(0,0,0,0.65); }
-        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - 540px); height: 100dvh; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); z-index: 1999; }
+        .aisha-sidebar .sidebar-backdrop { position: fixed; top: 0; left: 0; width: calc(100% - var(--sidebar-w, 540px)); height: 100dvh; background: rgba(15,23,42,0.2); backdrop-filter: blur(2px); z-index: 1999; }
         .theme-dark .aisha-sidebar .sidebar-backdrop { background: rgba(2,6,23,0.35); }
         .aisha-sidebar .sidebar-header { position: relative; z-index: 10; pointer-events: auto; }
         .aisha-sidebar .sidebar-close-btn { position: relative; z-index: 20; cursor: pointer; }
+        .aisha-sidebar .sidebar-resize-handle { position: absolute; left: 0; top: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 30; border-radius: 0 2px 2px 0; transition: background 0.15s; }
+        .aisha-sidebar .sidebar-resize-handle:hover { background: rgba(99,102,241,0.35); }
+        .aisha-sidebar .sidebar-minimized-strip { display: none; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; flex: 1; cursor: pointer; user-select: none; }
+        .aisha-sidebar.minimized .sidebar-minimized-strip { display: flex; }
+        .aisha-sidebar .sidebar-panel-content { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+        .aisha-sidebar.minimized .sidebar-panel-content { display: none; }
         .aisha-message.assistant .prose, .aisha-message.assistant .prose p, .aisha-message.assistant .prose li, .aisha-message.assistant .prose code, .aisha-message.assistant .prose strong, .aisha-message.assistant .prose em { color: #111827; }
         .theme-dark .aisha-message.assistant .prose, .theme-dark .aisha-message.assistant .prose p, .theme-dark .aisha-message.assistant .prose li, .theme-dark .aisha-message.assistant .prose code, .theme-dark .aisha-message.assistant .prose strong, .theme-dark .aisha-message.assistant .prose em { color: #f8fafc; }
         @media (max-width: 1023px) {
@@ -1696,600 +1822,636 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
           role="dialog"
           aria-modal="true"
           aria-label="AiSHA Assistant"
+          style={
+            isPoppedOut
+              ? {
+                  position: 'fixed',
+                  left: popoutPos.x,
+                  top: popoutPos.y,
+                  width: panelWidth,
+                  height: 'min(700px, 90dvh)',
+                  zIndex: 3000,
+                  borderRadius: '12px',
+                  border: '1px solid rgba(15,23,42,0.12)',
+                  boxShadow: '0 25px 60px rgba(15,23,42,0.3)',
+                  overflow: 'hidden',
+                }
+              : undefined
+          }
         >
-          <header className="sidebar-header flex items-center justify-between border-b border-slate-200 px-3 py-3 text-slate-900 dark:border-slate-800/70 dark:text-slate-100 sm:px-5 sm:py-4">
-            <div className="flex items-center gap-3">
-              {/* Close button moved to left side as text */}
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  // Use mousedown instead of click to prevent event from reaching Sheet overlay
-                  e.stopPropagation();
-                  e.preventDefault();
-                  e.nativeEvent.stopImmediatePropagation();
-                  closeSidebar();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                }}
-                className="sidebar-close-btn flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors mr-2"
-                aria-label="Close assistant"
-              >
-                <ChevronRight className="h-4 w-4" />
-                <span>Close</span>
-              </button>
-              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/90 shadow-md shadow-indigo-500/20">
-                <Sparkles className="h-4.5 w-4.5 text-white" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[15px] font-semibold leading-tight">
-                  {isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {isDeveloperMode ? 'Claude • Code analysis' : 'CRM operations & automation'}
-                </p>
-              </div>
+          {/* Resize handle — drag left edge to adjust panel width (docked mode only) */}
+          {!isPoppedOut && (
+            <div
+              className="sidebar-resize-handle"
+              onMouseDown={handleResizeMouseDown}
+              aria-hidden="true"
+            />
+          )}
+
+          {/* Minimized strip — visible only when panel is collapsed to icon rail */}
+          <div
+            className="sidebar-minimized-strip"
+            onClick={() => setIsMinimized(false)}
+            role="button"
+            aria-label="Restore AiSHA panel"
+            title="Click to restore AiSHA"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600/90 shadow-md shadow-indigo-500/20">
+              <Sparkles className="h-4 w-4 text-white" />
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={resetThread}
-                className="text-slate-500 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400"
-                title="Clear chat"
-                aria-label="Clear chat"
-                type="button"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              {/* Developer Mode Toggle - Superadmin Only */}
-              {user?.role === 'superadmin' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    setIsDeveloperMode(!isDeveloperMode);
-                    toast.success(isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)');
-                  }}
-                  className={`${isDeveloperMode ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300'}`}
-                  title={isDeveloperMode ? 'Developer Mode ON' : 'Enable Developer Mode'}
-                  aria-label="Toggle Developer Mode"
-                  type="button"
-                >
-                  <Code className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </header>
-
-          <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
-            <div className="flex flex-col gap-6 pb-2">
-              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-indigo-50/70 to-slate-50 px-6 py-6 shadow-lg dark:border-slate-700/60 dark:from-slate-900/70 dark:via-slate-900/40 dark:to-slate-950">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
-                  <div className="flex flex-1 flex-col gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
-                      AiSHA • Executive Assistant
-                    </p>
-                    <p className="text-xl font-semibold text-slate-900 dark:text-white">
-                      Precision briefings, revenue intelligence, and voice-ready coaching.
-                    </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-300">
-                      Human-level partner for scheduling, deal rooms, and decision prep across every
-                      customer you manage.
-                    </p>
-                    <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
-                      <span
-                        className={`h-2 w-2 rounded-full ${assistantStatusDotClass}`}
-                        aria-hidden="true"
-                      />
-                      Voice ready • Live support
-                    </div>
-                  </div>
-                  <div className="flex flex-shrink-0 justify-center lg:justify-end">
-                    <div className="relative">
-                      <div
-                        className="absolute inset-0 translate-y-6 blur-3xl opacity-70"
-                        style={{
-                          background:
-                            'radial-gradient(circle, rgba(99,102,241,0.35), transparent 60%)',
-                        }}
-                        aria-hidden="true"
-                      />
-                      <img
-                        src={AISHA_EXECUTIVE_PORTRAIT}
-                        alt="AiSHA Executive Assistant portrait"
-                        loading="lazy"
-                        className="relative z-10 h-40 w-40 rounded-[28px] object-cover shadow-[0_25px_55px_rgba(15,23,42,0.35)] ring-4 ring-white/80 dark:ring-slate-900/70"
-                      />
-                      <span
-                        className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-md dark:border-slate-900 dark:bg-slate-900/80 dark:text-slate-200`}
-                      >
-                        LIVE
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-5 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs dark:border-slate-700/70 dark:bg-slate-900/40 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Workspace
-                    </p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {tenantDisplayName}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {tenantBadgeSubtitle}
-                    </p>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                        hasTenantSelected
-                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                          : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
-                      }`}
-                    >
-                      {hasTenantSelected ? 'Active tenant' : 'Tenant required'}
-                    </span>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {tenantRoleLabel}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Assistant status
-                    </p>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {assistantStatusHeadline}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {assistantStatusSubcopy}
-                    </p>
-                  </div>
-                </div>
-                {!hasTenantSelected && (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Select a tenant from the global header to unlock guided forms, personalized data
-                    briefs, and secure actions.
-                  </p>
-                )}
-              </section>
-
-              <section className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70">
-                <div className="flex items-center justify-between gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                      Quick actions
-                    </p>
-                  </div>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Tap to run</span>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {QUICK_ACTIONS.map((action) => {
-                    const ActionIcon = action.icon;
-                    return (
-                      <button
-                        key={action.label}
-                        type="button"
-                        onClick={() => handleQuickAction(action.prompt)}
-                        className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-left text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-indigo-400 hover:from-indigo-50 hover:to-white hover:text-indigo-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/50 dark:to-slate-900/30 dark:text-slate-200 dark:hover:border-indigo-500/60 dark:hover:from-indigo-950/40 dark:hover:to-slate-900/40"
-                        disabled={isSending}
-                      >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-indigo-100 group-hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-indigo-900/50 dark:group-hover:text-indigo-300">
-                          <ActionIcon className="h-4 w-4" />
-                        </span>
-                        <span>{action.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section
-                className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
-                data-testid="conversational-form-launchers"
-              >
-                <div className="mb-4 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                      <Sparkles className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-                      Guided creations
-                    </div>
-                  </div>
-                  {!canUseConversationalForms && (
-                    <span className="text-[10px] text-amber-600 dark:text-amber-300">
-                      Select tenant
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-5 gap-3">
-                  {conversationalSchemaOptions.map((schema) => {
-                    const isActive = activeFormId === schema.id;
-                    const IconComponent = ENTITY_ICONS[schema.id] || Sparkles;
-                    const entityLabel =
-                      ENTITY_LABELS[schema.id] || schema.label.replace('New ', '');
-                    return (
-                      <button
-                        key={schema.id}
-                        type="button"
-                        onClick={() => handleFormChipClick(schema.id)}
-                        title={schema.label}
-                        className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 transition-all duration-200 ${
-                          isActive
-                            ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
-                            : 'border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-600 hover:border-emerald-400 hover:from-emerald-50 hover:to-white hover:text-emerald-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40 dark:text-slate-300 dark:hover:border-emerald-500/60 dark:hover:from-emerald-950/40 dark:hover:to-slate-900/40 dark:hover:text-emerald-300'
-                        } ${!canUseConversationalForms ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
-                      >
-                        <IconComponent
-                          className={`h-5 w-5 flex-shrink-0 ${isActive ? '' : 'text-emerald-500 dark:text-emerald-400'}`}
-                        />
-                        <span
-                          className={`text-[10px] font-semibold ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`}
-                        >
-                          {entityLabel}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {suggestions.length > 0 && (
-                <section
-                  className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
-                  data-testid="ai-suggestions"
-                >
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                      <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
-                      Suggestions for this page
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2.5">
-                    {suggestions.map((suggestion) => (
-                      <button
-                        key={suggestion.id}
-                        type="button"
-                        onClick={() => handleSuggestionClick(suggestion.id)}
-                        className="rounded-full border border-indigo-200 bg-indigo-50/80 px-4 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition hover:border-indigo-400 hover:bg-white hover:shadow dark:border-indigo-500/40 dark:bg-indigo-950/40 dark:text-indigo-100 dark:hover:bg-indigo-900/40"
-                        disabled={isSending}
-                        data-source={suggestion.source}
-                      >
-                        {suggestion.label}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {activeFormSchema && (
-                <section
-                  className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
-                  data-testid="conversational-form-panel"
-                >
-                  <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                    Guided {activeFormSchema.label}
-                  </div>
-                  {formSubmissionState.error && (
-                    <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
-                      {formSubmissionState.error}
-                    </div>
-                  )}
-                  <ConversationalForm
-                    schema={activeFormSchema}
-                    tenantId={tenantId}
-                    userId={userId}
-                    onComplete={handleConversationalComplete}
-                    onCancel={handleConversationalCancel}
-                    isSubmitting={formSubmissionState.isSubmitting}
-                  />
-                </section>
-              )}
-
-              {error && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-                  AiSHA is retrying after an error. You can keep trying or close the panel.
-                  <button type="button" className="ml-2 underline" onClick={clearError}>
-                    Dismiss
-                  </button>
-                </div>
-              )}
-
-              <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/40">
-                <div className="space-y-4">
-                  {messages.map((message, index) => (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      isWelcomeCard={index === 0 && message.role === 'assistant'}
-                      conversationId={conversationId}
-                    />
-                  ))}
-                  {isSending && (
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>AiSHA is thinking...</span>
-                    </div>
-                  )}
-                  <span ref={bottomMarkerRef} />
-                </div>
-              </section>
+            <div
+              className="text-[10px] font-semibold tracking-widest text-slate-400 dark:text-slate-500"
+              style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+            >
+              AiSHA
             </div>
           </div>
 
-          <div className="border-t border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-slate-800/60 dark:bg-slate-950/70 sm:px-5 sm:py-4">
-            {activeContext && (
-              <div className="mb-3 flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
-                <div className="flex items-center gap-2">
-                  <Target className="h-4 w-4" />
-                  <span>
-                    Working on: <strong>{activeContext.title || activeContext.entity_type}</strong>
-                  </span>
-                </div>
+          {/* Full panel content — hidden when minimized via CSS */}
+          <div className="sidebar-panel-content">
+            <header className="sidebar-header flex items-center justify-between border-b border-slate-200 px-3 py-3 text-slate-900 dark:border-slate-800/70 dark:text-slate-100 sm:px-5 sm:py-4">
+              <div className="flex items-center gap-3">
+                {/* Pop-out drag handle — only visible when panel is floating */}
+                {isPoppedOut && (
+                  <div
+                    onMouseDown={handlePopoutDragStart}
+                    className="flex cursor-move items-center p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    title="Drag to move"
+                    aria-hidden="true"
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </div>
+                )}
+                {/* Close button moved to left side as text */}
                 <button
                   type="button"
-                  onClick={() => setActiveContext(null)}
-                  className="hover:text-indigo-700 dark:hover:text-indigo-300"
+                  onMouseDown={(e) => {
+                    // Use mousedown instead of click to prevent event from reaching Sheet overlay
+                    e.stopPropagation();
+                    e.preventDefault();
+                    e.nativeEvent.stopImmediatePropagation();
+                    closeSidebar();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                  className="sidebar-close-btn flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors mr-2"
+                  aria-label="Close assistant"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-4 w-4" />
+                  <span>Close</span>
                 </button>
+                <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600/90 shadow-md shadow-indigo-500/20">
+                  <Sparkles className="h-4.5 w-4.5 text-white" />
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-[15px] font-semibold leading-tight">
+                    {isDeveloperMode ? 'Developer AI' : 'AiSHA Assistant'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {isDeveloperMode ? 'Claude • Code analysis' : 'CRM operations & automation'}
+                  </p>
+                </div>
               </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {voiceWarning && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
-                  {voiceWarning}
-                </div>
-              )}
-              {showTelemetryDebug && latestTelemetry && (
-                <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100">
-                  <span className="font-semibold">Realtime telemetry</span>
-                  <span className="ml-2">{latestTelemetry.event}</span>
-                  {latestTelemetry.timestamp && (
-                    <span className="ml-2">
-                      {new Date(latestTelemetry.timestamp).toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Voice status indicators - show contextually */}
-              {isRealtimeFeatureAvailable && isRealtimeActive && (
-                <div
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
-                    isRealtimeSpeaking
-                      ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
-                      : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                  }`}
+              <div className="flex items-center gap-2">
+                {/* Minimize — collapses panel to a narrow icon rail */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleToggleMinimize}
+                  className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  title={isMinimized ? 'Restore panel' : 'Minimize panel'}
+                  aria-label={isMinimized ? 'Restore panel' : 'Minimize panel'}
+                  type="button"
                 >
-                  {isRealtimeSpeaking ? (
-                    <>
-                      <Volume2 className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
-                      <span>
-                        <strong>AI Speaking</strong> — Mic muted to prevent feedback
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-0.5">
-                        <span
-                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '0ms' }}
-                        />
-                        <span
-                          className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '150ms' }}
-                        />
-                        <span
-                          className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '300ms' }}
-                        />
-                        <span
-                          className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '450ms' }}
-                        />
-                        <span
-                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '600ms' }}
-                        />
-                      </div>
-                      <span>
-                        <strong>Live Voice</strong> — Speak naturally
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Continuous listening status - only when NOT in realtime mode */}
-              {isListening && !isRealtimeActive && (
-                <div
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
-                    isRecording
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
-                      : isSending
-                        ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
-                        : isSpeechPlaying
-                          ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
-                          : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
-                  }`}
+                  <Minus className="h-4 w-4" />
+                </Button>
+                {/* Pop-out — detach panel as a floating draggable window */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleTogglePopout}
+                  className={
+                    isPoppedOut
+                      ? 'bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20'
+                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100'
+                  }
+                  title={isPoppedOut ? 'Dock panel' : 'Pop out panel'}
+                  aria-label={isPoppedOut ? 'Dock panel' : 'Pop out panel'}
+                  type="button"
                 >
-                  {isRecording ? (
-                    <>
-                      <div className="flex items-center gap-0.5">
-                        <span
-                          className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '0ms' }}
-                        />
-                        <span
-                          className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '150ms' }}
-                        />
-                        <span
-                          className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '300ms' }}
-                        />
-                        <span
-                          className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
-                          style={{ animationDelay: '600ms' }}
-                        />
-                      </div>
-                      <span>
-                        <strong>Listening...</strong>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="h-4 w-4" />
-                      <span>
-                        {isSending
-                          ? 'Sending...'
-                          : isSpeechPlaying
-                            ? 'AI Speaking...'
-                            : 'Processing...'}
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={resetThread}
+                  className="text-slate-500 hover:text-red-600 dark:text-slate-300 dark:hover:text-red-400"
+                  title="Clear chat"
+                  aria-label="Clear chat"
+                  type="button"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {/* Developer Mode Toggle - Superadmin Only */}
+                {user?.role === 'superadmin' && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setIsDeveloperMode(!isDeveloperMode);
+                      toast.success(
+                        isDeveloperMode ? '🤖 AiSHA Mode' : '💻 Developer Mode (Claude)',
+                      );
+                    }}
+                    className={`${isDeveloperMode ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300'}`}
+                    title={isDeveloperMode ? 'Developer Mode ON' : 'Enable Developer Mode'}
+                    aria-label="Toggle Developer Mode"
+                    type="button"
+                  >
+                    <Code className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </header>
 
-              {/* Error messages */}
-              {(realtimeError || realtimeErrorDetails) && (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-500" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold">
-                        {realtimeErrorDetails?.message || realtimeError}
+            <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
+              <div className="flex flex-col gap-6 pb-2">
+                <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-indigo-50/70 to-slate-50 px-6 py-6 shadow-lg dark:border-slate-700/60 dark:from-slate-900/70 dark:via-slate-900/40 dark:to-slate-950">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                    <div className="flex flex-1 flex-col gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">
+                        AiSHA • Executive Assistant
                       </p>
-                      {realtimeErrorDetails?.hint && (
-                        <p className="mt-1 text-[11px] opacity-80">{realtimeErrorDetails.hint}</p>
-                      )}
+                      <p className="text-xl font-semibold text-slate-900 dark:text-white">
+                        Precision briefings, revenue intelligence, and voice-ready coaching.
+                      </p>
+                      <p className="text-sm text-slate-500 dark:text-slate-300">
+                        Human-level partner for scheduling, deal rooms, and decision prep across
+                        every customer you manage.
+                      </p>
+                      <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+                        <span
+                          className={`h-2 w-2 rounded-full ${assistantStatusDotClass}`}
+                          aria-hidden="true"
+                        />
+                        Voice ready • Live support
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearRealtimeErrors();
-                        logUiTelemetry('ui.realtime.error.dismissed', {
-                          code: realtimeErrorDetails?.code,
-                        });
-                      }}
-                      className="text-[11px] font-semibold text-rose-700 hover:underline dark:text-rose-200"
-                    >
+                    <div className="flex flex-shrink-0 justify-center lg:justify-end">
+                      <div className="relative">
+                        <div
+                          className="absolute inset-0 translate-y-6 blur-3xl opacity-70"
+                          style={{
+                            background:
+                              'radial-gradient(circle, rgba(99,102,241,0.35), transparent 60%)',
+                          }}
+                          aria-hidden="true"
+                        />
+                        <img
+                          src={AISHA_EXECUTIVE_PORTRAIT}
+                          alt="AiSHA Executive Assistant portrait"
+                          loading="lazy"
+                          className="relative z-10 h-40 w-40 rounded-[28px] object-cover shadow-[0_25px_55px_rgba(15,23,42,0.35)] ring-4 ring-white/80 dark:ring-slate-900/70"
+                        />
+                        <span
+                          className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-white text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-md dark:border-slate-900 dark:bg-slate-900/80 dark:text-slate-200`}
+                        >
+                          LIVE
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs dark:border-slate-700/70 dark:bg-slate-900/40 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Workspace
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {tenantDisplayName}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {tenantBadgeSubtitle}
+                      </p>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          hasTenantSelected
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
+                        }`}
+                      >
+                        {hasTenantSelected ? 'Active tenant' : 'Tenant required'}
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {tenantRoleLabel}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Assistant status
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {assistantStatusHeadline}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {assistantStatusSubcopy}
+                      </p>
+                    </div>
+                  </div>
+                  {!hasTenantSelected && (
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      Select a tenant from the global header to unlock guided forms, personalized
+                      data briefs, and secure actions.
+                    </p>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        Quick actions
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Tap to run
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {QUICK_ACTIONS.map((action) => {
+                      const ActionIcon = action.icon;
+                      return (
+                        <button
+                          key={action.label}
+                          type="button"
+                          onClick={() => handleQuickAction(action.prompt)}
+                          className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-3 text-left text-sm font-medium text-slate-700 shadow-sm transition-all hover:border-indigo-400 hover:from-indigo-50 hover:to-white hover:text-indigo-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/50 dark:to-slate-900/30 dark:text-slate-200 dark:hover:border-indigo-500/60 dark:hover:from-indigo-950/40 dark:hover:to-slate-900/40"
+                          disabled={isSending}
+                        >
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover:bg-indigo-100 group-hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-indigo-900/50 dark:group-hover:text-indigo-300">
+                            <ActionIcon className="h-4 w-4" />
+                          </span>
+                          <span>{action.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section
+                  className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                  data-testid="conversational-form-launchers"
+                >
+                  <div className="mb-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-1 rounded-full bg-emerald-500" aria-hidden="true" />
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <Sparkles className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
+                        Guided creations
+                      </div>
+                    </div>
+                    {!canUseConversationalForms && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-300">
+                        Select tenant
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-5 gap-3">
+                    {conversationalSchemaOptions.map((schema) => {
+                      const isActive = activeFormId === schema.id;
+                      const IconComponent = ENTITY_ICONS[schema.id] || Sparkles;
+                      const entityLabel =
+                        ENTITY_LABELS[schema.id] || schema.label.replace('New ', '');
+                      return (
+                        <button
+                          key={schema.id}
+                          type="button"
+                          onClick={() => handleFormChipClick(schema.id)}
+                          title={schema.label}
+                          className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 transition-all duration-200 ${
+                            isActive
+                              ? 'border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                              : 'border-slate-200 bg-gradient-to-b from-white to-slate-50 text-slate-600 hover:border-emerald-400 hover:from-emerald-50 hover:to-white hover:text-emerald-600 hover:shadow-md dark:border-slate-700 dark:from-slate-900/60 dark:to-slate-900/40 dark:text-slate-300 dark:hover:border-emerald-500/60 dark:hover:from-emerald-950/40 dark:hover:to-slate-900/40 dark:hover:text-emerald-300'
+                          } ${!canUseConversationalForms ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={!canUseConversationalForms || formSubmissionState.isSubmitting}
+                        >
+                          <IconComponent
+                            className={`h-5 w-5 flex-shrink-0 ${isActive ? '' : 'text-emerald-500 dark:text-emerald-400'}`}
+                          />
+                          <span
+                            className={`text-[10px] font-semibold ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`}
+                          >
+                            {entityLabel}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {suggestions.length > 0 && (
+                  <section
+                    className="rounded-2xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                    data-testid="ai-suggestions"
+                  >
+                    <div className="mb-4 flex items-center gap-2">
+                      <div className="h-5 w-1 rounded-full bg-indigo-500" aria-hidden="true" />
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-300" />
+                        Suggestions for this page
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                      {suggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => handleSuggestionClick(suggestion.id)}
+                          className="rounded-full border border-indigo-200 bg-indigo-50/80 px-4 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition hover:border-indigo-400 hover:bg-white hover:shadow dark:border-indigo-500/40 dark:bg-indigo-950/40 dark:text-indigo-100 dark:hover:bg-indigo-900/40"
+                          disabled={isSending}
+                          data-source={suggestion.source}
+                        >
+                          {suggestion.label}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {activeFormSchema && (
+                  <section
+                    className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+                    data-testid="conversational-form-panel"
+                  >
+                    <div className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                      Guided {activeFormSchema.label}
+                    </div>
+                    {formSubmissionState.error && (
+                      <div className="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
+                        {formSubmissionState.error}
+                      </div>
+                    )}
+                    <ConversationalForm
+                      schema={activeFormSchema}
+                      tenantId={tenantId}
+                      userId={userId}
+                      onComplete={handleConversationalComplete}
+                      onCancel={handleConversationalCancel}
+                      isSubmitting={formSubmissionState.isSubmitting}
+                    />
+                  </section>
+                )}
+
+                {error && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+                    AiSHA is retrying after an error. You can keep trying or close the panel.
+                    <button type="button" className="ml-2 underline" onClick={clearError}>
                       Dismiss
                     </button>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Text input with inline send */}
-              <div className="relative">
-                <Textarea
-                  ref={draftInputRef}
-                  value={draft}
-                  onChange={handleDraftChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
-                  className="min-h-[80px] resize-none rounded-xl border-2 border-slate-200 bg-white py-2.5 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500"
-                  rows={3}
-                  disabled={isSending}
-                />
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/30"
-                  disabled={!draft.trim() || isSending}
-                  title="Send (Enter)"
-                >
-                  {isSending && !isRealtimeActive ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
+                <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/40">
+                  <div className="space-y-4">
+                    {messages.map((message, index) => (
+                      <MessageBubble
+                        key={message.id}
+                        message={message}
+                        isWelcomeCard={index === 0 && message.role === 'assistant'}
+                        conversationId={conversationId}
+                      />
+                    ))}
+                    {isSending && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>AiSHA is thinking...</span>
+                      </div>
+                    )}
+                    <span ref={bottomMarkerRef} />
+                  </div>
+                </section>
               </div>
+            </div>
 
-              {/* Compact control toolbar */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Voice mode controls */}
-                {isRealtimeActive && voiceModeActive ? (
-                  /* PTT Button - active voice mode */
+            <div className="border-t border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-slate-800/60 dark:bg-slate-950/70 sm:px-5 sm:py-4">
+              {activeContext && (
+                <div className="mb-3 flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    <span>
+                      Working on:{' '}
+                      <strong>{activeContext.title || activeContext.entity_type}</strong>
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-                      isPTTActive
-                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-                    }`}
-                    onMouseDown={handleRealtimePTTStart}
-                    onMouseUp={handleRealtimePTTEnd}
-                    onMouseLeave={handleRealtimePTTEnd}
-                    onTouchStart={handleRealtimePTTStart}
-                    onTouchEnd={handleRealtimePTTEnd}
-                    disabled={isRealtimeInitializing}
-                    title="Hold to talk, release to send"
-                    data-testid="ptt-button"
+                    onClick={() => setActiveContext(null)}
+                    className="hover:text-indigo-700 dark:hover:text-indigo-300"
                   >
-                    {isPTTActive ? (
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-3">
+                {voiceWarning && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+                    {voiceWarning}
+                  </div>
+                )}
+                {showTelemetryDebug && latestTelemetry && (
+                  <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100">
+                    <span className="font-semibold">Realtime telemetry</span>
+                    <span className="ml-2">{latestTelemetry.event}</span>
+                    {latestTelemetry.timestamp && (
+                      <span className="ml-2">
+                        {new Date(latestTelemetry.timestamp).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Voice status indicators - show contextually */}
+                {isRealtimeFeatureAvailable && isRealtimeActive && (
+                  <div
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                      isRealtimeSpeaking
+                        ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                        : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+                    }`}
+                  >
+                    {isRealtimeSpeaking ? (
+                      <>
+                        <Volume2 className="h-4 w-4 animate-pulse text-blue-600 dark:text-blue-400" />
+                        <span>
+                          <strong>AI Speaking</strong> — Mic muted to prevent feedback
+                        </span>
+                      </>
+                    ) : (
                       <>
                         <div className="flex items-center gap-0.5">
                           <span
-                            className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white"
+                            className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
                             style={{ animationDelay: '0ms' }}
                           />
                           <span
-                            className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white"
+                            className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
                             style={{ animationDelay: '150ms' }}
                           />
                           <span
-                            className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white"
+                            className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
                             style={{ animationDelay: '300ms' }}
                           />
                           <span
-                            className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-white"
+                            className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
                             style={{ animationDelay: '450ms' }}
                           />
+                          <span
+                            className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                            style={{ animationDelay: '600ms' }}
+                          />
                         </div>
-                        <span>Release to Send</span>
+                        <span>
+                          <strong>Live Voice</strong> — Speak naturally
+                        </span>
                       </>
-                    ) : isRealtimeSpeaking ? (
+                    )}
+                  </div>
+                )}
+
+                {/* Continuous listening status - only when NOT in realtime mode */}
+                {isListening && !isRealtimeActive && (
+                  <div
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                      isRecording
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-100'
+                        : isSending
+                          ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+                          : isSpeechPlaying
+                            ? 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-100'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
+                    }`}
+                  >
+                    {isRecording ? (
                       <>
-                        <Volume2 className="h-4 w-4 animate-pulse" />
-                        <span>AI Speaking</span>
+                        <div className="flex items-center gap-0.5">
+                          <span
+                            className="inline-block h-3 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                            style={{ animationDelay: '0ms' }}
+                          />
+                          <span
+                            className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                            style={{ animationDelay: '150ms' }}
+                          />
+                          <span
+                            className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                            style={{ animationDelay: '300ms' }}
+                          />
+                          <span
+                            className="inline-block h-5 w-0.5 animate-pulse rounded-full bg-emerald-500"
+                            style={{ animationDelay: '600ms' }}
+                          />
+                        </div>
+                        <span>
+                          <strong>Listening...</strong>
+                        </span>
                       </>
                     ) : (
                       <>
                         <Mic className="h-4 w-4" />
-                        <span>Hold to Talk</span>
+                        <span>
+                          {isSending
+                            ? 'Sending...'
+                            : isSpeechPlaying
+                              ? 'AI Speaking...'
+                              : 'Processing...'}
+                        </span>
                       </>
                     )}
-                  </button>
-                ) : (
-                  !isRealtimeActive && (
-                    /* PTT Mode Toggle - click to enable */
+                  </div>
+                )}
+
+                {/* Error messages */}
+                {(realtimeError || realtimeErrorDetails) && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-500" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">
+                          {realtimeErrorDetails?.message || realtimeError}
+                        </p>
+                        {realtimeErrorDetails?.hint && (
+                          <p className="mt-1 text-[11px] opacity-80">{realtimeErrorDetails.hint}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearRealtimeErrors();
+                          logUiTelemetry('ui.realtime.error.dismissed', {
+                            code: realtimeErrorDetails?.code,
+                          });
+                        }}
+                        className="text-[11px] font-semibold text-rose-700 hover:underline dark:text-rose-200"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Text input with inline send */}
+                <div className="relative">
+                  <Textarea
+                    ref={draftInputRef}
+                    value={draft}
+                    onChange={handleDraftChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    className="min-h-[80px] resize-none rounded-xl border-2 border-slate-200 bg-white py-2.5 pl-4 pr-12 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-indigo-500"
+                    rows={3}
+                    disabled={isSending}
+                  />
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/30"
+                    disabled={!draft.trim() || isSending}
+                    title="Send (Enter)"
+                  >
+                    {isSending && !isRealtimeActive ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+
+                {/* Compact control toolbar */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Voice mode controls */}
+                  {isRealtimeActive && voiceModeActive ? (
+                    /* PTT Button - active voice mode */
                     <button
                       type="button"
                       className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-                        voiceModeActive
-                          ? 'bg-emerald-500 text-white shadow-md'
+                        isPTTActive
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
                       }`}
-                      onClick={handleVoiceModeToggle}
-                      disabled={isRealtimeInitializing || !isRealtimeFeatureAvailable}
-                      title={voiceModeActive ? 'Click to stop PTT' : 'Enable Push-to-Talk'}
-                      data-testid="voice-mode-toggle"
+                      onMouseDown={handleRealtimePTTStart}
+                      onMouseUp={handleRealtimePTTEnd}
+                      onMouseLeave={handleRealtimePTTEnd}
+                      onTouchStart={handleRealtimePTTStart}
+                      onTouchEnd={handleRealtimePTTEnd}
+                      disabled={isRealtimeInitializing}
+                      title="Hold to talk, release to send"
+                      data-testid="ptt-button"
                     >
-                      {isRealtimeInitializing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Connecting</span>
-                        </>
-                      ) : voiceModeActive ? (
+                      {isPTTActive ? (
                         <>
                           <div className="flex items-center gap-0.5">
                             <span
@@ -2304,136 +2466,194 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
                               className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white"
                               style={{ animationDelay: '300ms' }}
                             />
+                            <span
+                              className="inline-block h-4 w-0.5 animate-pulse rounded-full bg-white"
+                              style={{ animationDelay: '450ms' }}
+                            />
                           </div>
-                          <span>Voice On</span>
+                          <span>Release to Send</span>
+                        </>
+                      ) : isRealtimeSpeaking ? (
+                        <>
+                          <Volume2 className="h-4 w-4 animate-pulse" />
+                          <span>AI Speaking</span>
                         </>
                       ) : (
                         <>
                           <Mic className="h-4 w-4" />
-                          <span>Voice</span>
+                          <span>Hold to Talk</span>
                         </>
                       )}
                     </button>
-                  )
-                )}
+                  ) : (
+                    !isRealtimeActive && (
+                      /* PTT Mode Toggle - click to enable */
+                      <button
+                        type="button"
+                        className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                          voiceModeActive
+                            ? 'bg-emerald-500 text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        }`}
+                        onClick={handleVoiceModeToggle}
+                        disabled={isRealtimeInitializing || !isRealtimeFeatureAvailable}
+                        title={voiceModeActive ? 'Click to stop PTT' : 'Enable Push-to-Talk'}
+                        data-testid="voice-mode-toggle"
+                      >
+                        {isRealtimeInitializing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Connecting</span>
+                          </>
+                        ) : voiceModeActive ? (
+                          <>
+                            <div className="flex items-center gap-0.5">
+                              <span
+                                className="inline-block h-2.5 w-0.5 animate-pulse rounded-full bg-white"
+                                style={{ animationDelay: '0ms' }}
+                              />
+                              <span
+                                className="inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-white"
+                                style={{ animationDelay: '150ms' }}
+                              />
+                              <span
+                                className="inline-block h-2 w-0.5 animate-pulse rounded-full bg-white"
+                                style={{ animationDelay: '300ms' }}
+                              />
+                            </div>
+                            <span>Voice On</span>
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="h-4 w-4" />
+                            <span>Voice</span>
+                          </>
+                        )}
+                      </button>
+                    )
+                  )}
 
-                {/* Realtime voice toggle */}
-                {isRealtimeFeatureAvailable && (
-                  <button
-                    type="button"
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
-                      isRealtimeActive
-                        ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50'
-                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50'
-                    }`}
-                    onClick={() => void handleRealtimeToggle()}
-                    disabled={!isRealtimeSupported || isRealtimeInitializing}
-                  >
-                    {isRealtimeActive ? (
-                      <>
-                        <X className="h-3.5 w-3.5" />
-                        <span>End Session</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-3.5 w-3.5" />
-                        <span>Realtime Voice</span>
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {/* Wake word mode toggle - "Hey Aisha" hands-free activation */}
-                {isRealtimeFeatureAvailable && !isRealtimeActive && (
-                  <button
-                    type="button"
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
-                      isWakeWordModeEnabled
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                    }`}
-                    onClick={handleWakeWordModeToggle}
-                    disabled={!isRealtimeSupported}
-                    title={
-                      isWakeWordModeEnabled
-                        ? 'Wake word listening active - say "Aisha" to activate'
-                        : 'Enable wake word detection - say "Aisha" to start'
-                    }
-                  >
-                    <Ear
-                      className={`h-3.5 w-3.5 ${isWakeWordModeEnabled && wakeWordStatus === 'listening' ? 'animate-pulse' : ''}`}
-                    />
-                    <span>
-                      {isWakeWordModeEnabled
-                        ? wakeWordStatus === 'listening'
-                          ? 'Listening...'
-                          : 'Wake Word On'
-                        : 'Wake Word'}
-                    </span>
-                  </button>
-                )}
-
-                {/* Stop button - only during active session */}
-                {isRealtimeActive && (
-                  <button
-                    type="button"
-                    className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20"
-                    onClick={handleMicToggle}
-                    title="End voice session"
-                    data-testid="mic-toggle-button"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-
-                {/* Spacer for errors */}
-                {(speechError || speechPlaybackError) && (
-                  <div className="ml-auto text-[10px] text-amber-600 dark:text-amber-300">
-                    {speechError && <span>Mic: {String(speechError.message || speechError)}</span>}
-                    {speechPlaybackError && (
-                      <span>
-                        Audio: {String(speechPlaybackError.message || speechPlaybackError)}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Status indicators */}
-                {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && (
-                  <div className="ml-auto">
-                    <RealtimeIndicator active />
-                  </div>
-                )}
-
-                {/* Wake word status indicator */}
-                {isWakeWordModeEnabled && !isRealtimeActive && (
-                  <div className="ml-auto flex items-center gap-1.5 text-xs">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        wakeWordStatus === 'listening'
-                          ? 'bg-emerald-500 animate-pulse'
-                          : wakeWordStatus === 'awake'
-                            ? 'bg-amber-500'
-                            : 'bg-slate-400'
+                  {/* Realtime voice toggle */}
+                  {isRealtimeFeatureAvailable && (
+                    <button
+                      type="button"
+                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                        isRealtimeActive
+                          ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/50'
+                          : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50'
                       }`}
-                    />
-                    <span className="text-slate-500 dark:text-slate-400">
-                      {wakeWordStatus === 'listening' && 'Say "Aisha"'}
-                      {wakeWordStatus === 'awake' && 'Listening...'}
-                      {wakeWordStatus === 'ending' && 'Goodbye!'}
-                    </span>
-                  </div>
-                )}
-              </div>
+                      onClick={() => void handleRealtimeToggle()}
+                      disabled={!isRealtimeSupported || isRealtimeInitializing}
+                    >
+                      {isRealtimeActive ? (
+                        <>
+                          <X className="h-3.5 w-3.5" />
+                          <span>End Session</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5" />
+                          <span>Realtime Voice</span>
+                        </>
+                      )}
+                    </button>
+                  )}
 
-              {/* Disabled voice message */}
-              {!isRealtimeFeatureAvailable && (
-                <p className="text-center text-[11px] text-slate-400 dark:text-slate-500">
-                  Voice features disabled by administrator
-                </p>
-              )}
-            </form>
+                  {/* Wake word mode toggle - "Hey Aisha" hands-free activation */}
+                  {isRealtimeFeatureAvailable && !isRealtimeActive && (
+                    <button
+                      type="button"
+                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                        isWakeWordModeEnabled
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                      }`}
+                      onClick={handleWakeWordModeToggle}
+                      disabled={!isRealtimeSupported}
+                      title={
+                        isWakeWordModeEnabled
+                          ? 'Wake word listening active - say "Aisha" to activate'
+                          : 'Enable wake word detection - say "Aisha" to start'
+                      }
+                    >
+                      <Ear
+                        className={`h-3.5 w-3.5 ${isWakeWordModeEnabled && wakeWordStatus === 'listening' ? 'animate-pulse' : ''}`}
+                      />
+                      <span>
+                        {isWakeWordModeEnabled
+                          ? wakeWordStatus === 'listening'
+                            ? 'Listening...'
+                            : 'Wake Word On'
+                          : 'Wake Word'}
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Stop button - only during active session */}
+                  {isRealtimeActive && (
+                    <button
+                      type="button"
+                      className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20"
+                      onClick={handleMicToggle}
+                      title="End voice session"
+                      data-testid="mic-toggle-button"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {/* Spacer for errors */}
+                  {(speechError || speechPlaybackError) && (
+                    <div className="ml-auto text-[10px] text-amber-600 dark:text-amber-300">
+                      {speechError && (
+                        <span>Mic: {String(speechError.message || speechError)}</span>
+                      )}
+                      {speechPlaybackError && (
+                        <span>
+                          Audio: {String(speechPlaybackError.message || speechPlaybackError)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Status indicators */}
+                  {isRealtimeFeatureAvailable && isRealtimeIndicatorActive && (
+                    <div className="ml-auto">
+                      <RealtimeIndicator active />
+                    </div>
+                  )}
+
+                  {/* Wake word status indicator */}
+                  {isWakeWordModeEnabled && !isRealtimeActive && (
+                    <div className="ml-auto flex items-center gap-1.5 text-xs">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          wakeWordStatus === 'listening'
+                            ? 'bg-emerald-500 animate-pulse'
+                            : wakeWordStatus === 'awake'
+                              ? 'bg-amber-500'
+                              : 'bg-slate-400'
+                        }`}
+                      />
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {wakeWordStatus === 'listening' && 'Say "Aisha"'}
+                        {wakeWordStatus === 'awake' && 'Listening...'}
+                        {wakeWordStatus === 'ending' && 'Goodbye!'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Disabled voice message */}
+                {!isRealtimeFeatureAvailable && (
+                  <p className="text-center text-[11px] text-slate-400 dark:text-slate-500">
+                    Voice features disabled by administrator
+                  </p>
+                )}
+              </form>
+            </div>
           </div>
+          {/* /sidebar-panel-content */}
         </aside>
         {isOpen && (
           <div
