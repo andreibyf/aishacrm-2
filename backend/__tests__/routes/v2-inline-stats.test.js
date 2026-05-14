@@ -24,6 +24,7 @@
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { getAuthHeaders } from '../helpers/auth.js';
+import { TestFactory } from '../helpers/test-entity-factory.js';
 import { TENANT_ID } from '../testConstants.js';
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:3001';
@@ -47,6 +48,40 @@ async function deleteEntity(entityType, id) {
   } catch {
     // Ignore cleanup errors
   }
+}
+
+async function createAccount(overrides = {}) {
+  const rawPayload = TestFactory.account({ tenant_id: TENANT_ID, ...overrides });
+  const { created_date: _createdDate, updated_date: _updatedDate, ...payload } = rawPayload;
+  const res = await fetch(`${BASE_URL}/api/v2/accounts`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  const id = json.data?.account?.id || json.data?.id;
+  if (id) cleanupIds.accounts.push(id);
+  return { status: res.status, id, json };
+}
+
+async function createContact(overrides = {}) {
+  const rawPayload = TestFactory.contact({ tenant_id: TENANT_ID, ...overrides });
+  const { created_date: _createdDate, updated_date: _updatedDate, ...payload } = rawPayload;
+  const res = await fetch(`${BASE_URL}/api/v2/contacts`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  const id = json.data?.contact?.id || json.data?.id;
+  if (id) cleanupIds.contacts.push(id);
+  return { status: res.status, id, json };
 }
 
 // ============================================
@@ -213,6 +248,42 @@ describe('Contacts V2 Inline Stats', { skip: !SHOULD_RUN }, () => {
 
     assert.ok(json.data?.stats, 'Stats should be present');
     assert.ok(typeof json.data.stats.total === 'number', 'Filtered stats should have total');
+  });
+
+  test('GET /api/v2/contacts supports customer company-name search without load failure', async () => {
+    const searchToken = `CustomerSearch-${Date.now()}`;
+    const account = await createAccount({ name: searchToken });
+    assert.ok([200, 201].includes(account.status), `account create failed: ${JSON.stringify(account.json)}`);
+    assert.ok(account.id, 'account should have an id');
+
+    const contact = await createContact({
+      first_name: 'Company',
+      last_name: 'Match',
+      account_id: account.id,
+      job_title: 'Owner',
+    });
+    assert.ok([200, 201].includes(contact.status), `contact create failed: ${JSON.stringify(contact.json)}`);
+    assert.ok(contact.id, 'contact should have an id');
+
+    const filter = encodeURIComponent(
+      JSON.stringify({
+        $or: [{ company: { $icontains: searchToken } }],
+      }),
+    );
+
+    const res = await fetch(`${BASE_URL}/api/v2/contacts?tenant_id=${TENANT_ID}&filter=${filter}`, {
+      headers: getAuthHeaders(),
+    });
+    assert.equal(res.status, 200, 'company-name search should not fail');
+
+    const json = await res.json();
+    assert.equal(json.status, 'success');
+    const contacts = json.data?.contacts || [];
+    assert.ok(Array.isArray(contacts), 'contacts should be an array');
+    assert.ok(
+      contacts.some((row) => row.id === contact.id),
+      'company-name search should include the linked contact',
+    );
   });
 });
 
