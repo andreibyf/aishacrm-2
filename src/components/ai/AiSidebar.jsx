@@ -2655,7 +2655,7 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
           </div>
           {/* /sidebar-panel-content */}
         </aside>
-        {isOpen && (
+        {isOpen && !isPoppedOut && !isMinimized && (
           <div
             className="sidebar-backdrop"
             onMouseDown={(e) => {

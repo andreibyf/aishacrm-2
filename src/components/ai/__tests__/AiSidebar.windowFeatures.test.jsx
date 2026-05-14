@@ -315,4 +315,22 @@ describe('AiSidebar window features (4VD-26 / 4VD-45)', () => {
     expect(stored).not.toBeNull();
     expect(parseInt(stored, 10)).toBeGreaterThan(0);
   });
+
+  it('backdrop is hidden when panel is minimized', () => {
+    const { container } = renderSidebar();
+    const minimizeBtn = screen.getByLabelText('Minimize panel');
+    act(() => {
+      fireEvent.click(minimizeBtn);
+    });
+    expect(container.querySelector('.sidebar-backdrop')).toBeNull();
+  });
+
+  it('backdrop is hidden when panel is popped out', () => {
+    const { container } = renderSidebar();
+    const popoutBtn = screen.getByRole('button', { name: /pop out panel/i });
+    act(() => {
+      fireEvent.click(popoutBtn);
+    });
+    expect(container.querySelector('.sidebar-backdrop')).toBeNull();
+  });
 });
