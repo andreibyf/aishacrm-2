@@ -659,7 +659,12 @@ export default function AiSidebar({ realtimeVoiceEnabled = true }) {
   );
 
   const handleToggleMinimize = useCallback(() => {
-    setIsMinimized((prev) => !prev);
+    setIsMinimized((prev) => {
+      const nextMinimized = !prev;
+      // When minimizing from popped-out, dock the strip to the right side rail
+      if (nextMinimized) setIsPoppedOut(false);
+      return nextMinimized;
+    });
   }, []);
 
   const handleTogglePopout = useCallback(() => {

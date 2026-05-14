@@ -333,4 +333,25 @@ describe('AiSidebar window features (4VD-26 / 4VD-45)', () => {
     });
     expect(container.querySelector('.sidebar-backdrop')).toBeNull();
   });
+
+  it('minimizing from popped-out state removes popped-out class and adds minimized class', () => {
+    renderSidebar();
+    const root = screen.getByTestId('ai-sidebar-root');
+
+    // Pop out first
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /pop out panel/i }));
+    });
+    expect(root.className).toContain('popped-out');
+    expect(root.className).not.toContain('minimized');
+
+    // Minimize from popped-out state
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /minimize panel/i }));
+    });
+
+    // Strip must be docked: popped-out gone, minimized present
+    expect(root.className).not.toContain('popped-out');
+    expect(root.className).toContain('minimized');
+  });
 });
