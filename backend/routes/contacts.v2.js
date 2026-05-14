@@ -20,6 +20,8 @@ import { bulkAssign } from '../lib/bulkAssign.js';
 
 export default function createContactV2Routes(_pgPool) {
   const router = express.Router();
+  const EMPTY_UUID = '00000000-0000-0000-0000-000000000000';
+  const CONTACT_SEARCH_FIELDS = new Set(['first_name', 'last_name', 'email', 'phone', 'job_title']);
 
   router.use(validateTenantAccess);
 
@@ -67,6 +69,93 @@ export default function createContactV2Routes(_pgPool) {
       tags,
       metadata: metadataObj,
     };
+  };
+
+  const extractOrGroups = (node) => {
+    if (!node || typeof node !== 'object') return [];
+    if (Array.isArray(node)) {
+      return node.flatMap((item) => extractOrGroups(item));
+    }
+
+    const groups = [];
+    if (Array.isArray(node.$or)) {
+      groups.push(node.$or.filter((item) => item && typeof item === 'object'));
+    }
+    if (Array.isArray(node.$and)) {
+      groups.push(...node.$and.flatMap((item) => extractOrGroups(item)));
+    }
+    return groups;
+  };
+
+  const buildSearchFilterParts = async ({ parsedFilter, supabase, tenant_id }) => {
+    const orGroups = extractOrGroups(parsedFilter);
+    if (orGroups.length === 0) {
+      return { orParts: [], companySearchRequested: false };
+    }
+
+    const orParts = [];
+    const companyTerms = new Set();
+
+    for (const group of orGroups) {
+      for (const condition of group) {
+        const [field, opObj] = Object.entries(condition)[0] || [];
+        if (!field) continue;
+
+        if (field === 'assigned_to') {
+          if (opObj === null) {
+            orParts.push('assigned_to.is.null');
+            continue;
+          }
+          if (typeof opObj === 'object' && opObj?.$in && Array.isArray(opObj.$in)) {
+            const ids = opObj.$in.filter((id) => typeof id === 'string' && id.trim());
+            if (ids.length > 0) {
+              orParts.push(`assigned_to.in.(${ids.join(',')})`);
+            }
+            continue;
+          }
+          if (
+            typeof opObj === 'string' ||
+            typeof opObj === 'number' ||
+            typeof opObj === 'boolean'
+          ) {
+            orParts.push(`assigned_to.eq.${opObj}`);
+          }
+          continue;
+        }
+
+        if (opObj && typeof opObj === 'object' && typeof opObj.$icontains === 'string') {
+          const term = opObj.$icontains.trim();
+          if (!term) continue;
+
+          if (field === 'company' || field === 'account_name') {
+            companyTerms.add(term);
+            continue;
+          }
+
+          if (CONTACT_SEARCH_FIELDS.has(field)) {
+            orParts.push(`${field}.ilike.%${term}%`);
+          }
+        }
+      }
+    }
+
+    if (companyTerms.size > 0) {
+      const accountSearches = [...companyTerms].map((term) => `name.ilike.%${term}%`);
+      const { data: matchingAccounts, error: accountError } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('tenant_id', tenant_id)
+        .or(accountSearches.join(','));
+
+      if (accountError) throw new Error(accountError.message);
+
+      const accountIds = [...new Set((matchingAccounts || []).map((row) => row.id).filter(Boolean))];
+      if (accountIds.length > 0) {
+        orParts.push(`account_id.in.(${accountIds.join(',')})`);
+      }
+    }
+
+    return { orParts, companySearchRequested: companyTerms.size > 0 };
   };
 
   /**
@@ -194,49 +283,16 @@ export default function createContactV2Routes(_pgPool) {
             }
           }
 
-          // Handle $or for assigned_to (including NULL and $in operator)
-          if (parsed.$or && Array.isArray(parsed.$or)) {
-            const normalizedOr = parsed.$or.filter((c) => c && typeof c === 'object');
-            const hasUnassigned = normalizedOr.some((c) => c.assigned_to === null);
+          const { orParts, companySearchRequested } = await buildSearchFilterParts({
+            parsedFilter: parsed,
+            supabase,
+            tenant_id,
+          });
 
-            // Collect assigned_to values: direct UUIDs and $in arrays
-            const orParts = [];
-            for (const condition of normalizedOr) {
-              const val = condition.assigned_to;
-              if (val === null || val === undefined) continue;
-              // Handle $in operator: { assigned_to: { $in: [...] } }
-              if (typeof val === 'object' && val.$in && Array.isArray(val.$in)) {
-                const ids = val.$in.filter((id) => typeof id === 'string' && id.trim());
-                if (ids.length > 0) {
-                  orParts.push(`assigned_to.in.(${ids.join(',')})`);
-                }
-              } else if (typeof val === 'string' && val.trim()) {
-                // Direct UUID value
-                orParts.push(`assigned_to.eq.${val}`);
-              }
-            }
-
-            if (hasUnassigned) {
-              orParts.push('assigned_to.is.null');
-            }
-
-            if (orParts.length > 0) {
-              q = q.or(orParts.join(','));
-            }
-
-            // Preserve any ilike search conditions alongside assigned_to
-            const searchOrs = normalizedOr
-              .map((condition) => {
-                const [field, opObj] = Object.entries(condition)[0] || [];
-                if (opObj && opObj.$icontains) {
-                  return `${field}.ilike.%${opObj.$icontains}%`;
-                }
-                return null;
-              })
-              .filter(Boolean);
-            if (searchOrs.length > 0) {
-              q = q.or(searchOrs.join(','));
-            }
+          if (orParts.length > 0) {
+            q = q.or(orParts.join(','));
+          } else if (companySearchRequested) {
+            q = q.eq('account_id', EMPTY_UUID);
           }
         }
       }
