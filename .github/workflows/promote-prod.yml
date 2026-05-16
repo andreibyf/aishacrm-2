@@ -1,0 +1,160 @@
+# Manual production promotion.
+#
+# This is the production counterpart to deploy-staging.yml, but it is
+# intentionally workflow_dispatch-only. Production must be promoted from a
+# verified staging/main commit, not deployed automatically on every push.
+#
+# Flow:
+#   GitHub PR -> main
+#   -> mirror-to-gitea.yml syncs main to Gitea
+#   -> deploy-staging.yml validates/deploys staging where applicable
+#   -> operator manually runs this workflow for one prod Coolify app
+#
+# The workflow uses the existing .github/actions/coolify-deploy composite
+# action so prod deployments use the same Coolify API/polling semantics as
+# staging. It does not SSH into servers and it does not git pull any server
+# checkout. Coolify remains the deployment authority.
+
+name: Promote Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Production service to promote'
+        required: true
+        type: choice
+        options:
+          - mcp
+          - litellm
+          - backend-heavy
+          - app-fast
+      application_uuid:
+        description: 'Coolify Application UUID. Required until the service is codified with a fixed UUID.'
+        required: true
+      force_rebuild:
+        description: 'Pass force=true to Coolify deploy'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      confirmed_staging_healthy:
+        description: 'I confirmed staging/main health for this service before prod promotion.'
+        required: true
+        type: boolean
+      confirmed_rollback_ready:
+        description: 'I confirmed rollback commands/legacy containers are ready.'
+        required: true
+        type: boolean
+      production_change_reason:
+        description: 'Short reason for this prod promotion.'
+        required: true
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  COOLIFY_BASE_URL: https://deploy.aishacrm.com
+
+jobs:
+  guardrails:
+    name: Promotion guardrails
+    runs-on: ubuntu-latest
+    outputs:
+      application_name: ${{ steps.resolve.outputs.application_name }}
+    steps:
+      - name: Require explicit confirmations
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.confirmed_staging_healthy }}" != "true" ]; then
+            echo "::error::Refusing prod promotion: staging/main health was not confirmed."
+            exit 1
+          fi
+          if [ "${{ github.event.inputs.confirmed_rollback_ready }}" != "true" ]; then
+            echo "::error::Refusing prod promotion: rollback readiness was not confirmed."
+            exit 1
+          fi
+          if [ -z "${{ github.event.inputs.production_change_reason }}" ]; then
+            echo "::error::Refusing prod promotion: production_change_reason is required."
+            exit 1
+          fi
+
+      - id: resolve
+        name: Resolve service name
+        run: |
+          set -euo pipefail
+          case "${{ github.event.inputs.service }}" in
+            mcp)
+              echo "application_name=prod-mcp" >> "$GITHUB_OUTPUT"
+              ;;
+            litellm)
+              echo "application_name=prod-litellm" >> "$GITHUB_OUTPUT"
+              ;;
+            backend-heavy)
+              echo "application_name=prod-backend-heavy" >> "$GITHUB_OUTPUT"
+              ;;
+            app-fast)
+              echo "application_name=prod-app-fast" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unknown service: ${{ github.event.inputs.service }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Promotion summary
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Production promotion request
+
+          | Field | Value |
+          | --- | --- |
+          | Service | `${{ github.event.inputs.service }}` |
+          | Coolify app | `${{ steps.resolve.outputs.application_name }}` |
+          | Application UUID | `${{ github.event.inputs.application_uuid }}` |
+          | Force rebuild | `${{ github.event.inputs.force_rebuild }}` |
+          | Commit | `${{ github.sha }}` |
+          | Reason | `${{ github.event.inputs.production_change_reason }}` |
+
+          Production promotion is manual only. The source commit should already be merged to `main`, mirrored to Gitea, and verified in staging before this job is run.
+          EOF
+
+  deploy:
+    name: Deploy production service
+    needs: guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/coolify-deploy
+        with:
+          base_url: ${{ env.COOLIFY_BASE_URL }}
+          application_uuid: ${{ github.event.inputs.application_uuid }}
+          application_name: ${{ needs.guardrails.outputs.application_name }}
+          token: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild }}
+          poll_max_attempts: '80'
+
+      - name: Post-deploy reminder
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+
+          ## Post-deploy checks
+
+          Run the service-specific verification from the prod runbook before considering this promotion complete.
+
+          For `prod-mcp`, verify from Hetzner:
+
+          ```bash
+          docker exec aishacrm-backend curl -fsS http://braid-mcp-server:8000/health
+          ```
+
+          If verification fails, use the service runbook rollback path immediately.
+          EOF
