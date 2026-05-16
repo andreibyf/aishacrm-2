@@ -1,0 +1,148 @@
+# Prod MCP / Braid — Coolify-native build target on Hetzner.
+#
+# Phase 2 controlled-promotion migration for the MCP/Braid service group.
+# Mirrors the proven prod/01-litellm pattern:
+#   - Coolify clones the repo from the Gitea mirror onto Hetzner
+#   - Docker Compose builds locally on Hetzner
+#   - the service joins the existing external aishanet network
+#   - stable Docker DNS aliases are used because Coolify changes container names
+#
+# Deploy model:
+#   - Coolify Application "prod-mcp" on the Prod / Hetzner server points at
+#     the Gitea mirror (https://gitea.aishacrm.com/aishacrm/aishacrm-2.git)
+#     with this compose file as the docker_compose_location.
+#   - Branch: main
+#   - Compose file: /prod/02-mcp/docker-compose.yml
+#   - Domains: empty / internal-only
+#   - Env vars: DOPPLER_TOKEN = prd_prd-scoped token
+#   - Auto deploy: OFF unless explicitly approved in a production release ticket
+#
+# Cutover model:
+#   - Backend already uses BRAID_MCP_URL=http://braid-mcp-server:8000.
+#   - This stack claims the same stable DNS aliases on aishanet.
+#   - Stop the legacy braid-mcp containers immediately before first deployment,
+#     or run a deliberate side-by-side soak using non-conflicting aliases.
+#
+# Coolify v4 path rule:
+#   Build context is `braid-mcp-node-server` because Coolify invokes compose
+#   with the cloned repo root as --project-directory. Do not use ../../ paths.
+
+services:
+  braid-mcp-server:
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
+    container_name: prod-braid-mcp-server
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 512m
+    mem_reservation: 256m
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=server
+      - PORT=8000
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 120s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - braid-mcp-server
+
+  braid-mcp-1:
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
+    container_name: prod-braid-mcp-1
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 384m
+    mem_reservation: 192m
+    depends_on:
+      braid-mcp-server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=node
+      - MCP_NODE_ID=prod-1
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 120s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - braid-mcp-1
+
+  braid-mcp-2:
+    image: aishacrm-mcp:coolify
+    build:
+      context: braid-mcp-node-server
+      dockerfile: Dockerfile
+    container_name: prod-braid-mcp-2
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 384m
+    mem_reservation: 192m
+    depends_on:
+      braid-mcp-server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - MCP_ROLE=node
+      - MCP_NODE_ID=prod-2
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN:-${DOPPLER_TOKEN_PROD:-}}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - MCP_SERVER_URL=http://braid-mcp-server:8000
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 120s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - braid-mcp-2
+
+networks:
+  # External production network shared with docker-compose.prod.yml and the
+  # existing prod-litellm Coolify app. Coolify must NOT recreate this network.
+  aishanet:
+    external: true
