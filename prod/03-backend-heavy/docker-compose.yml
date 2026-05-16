@@ -1,0 +1,88 @@
+# Prod Backend — Coolify-native build target on Hetzner.
+#
+# Phase 2 controlled-promotion migration for the production backend API.
+# Mirrors staging/01-backend-heavy/docker-compose.yml, but uses prd_prd Doppler
+# config, production domains, and the production aishanet external network.
+#
+# Deploy model:
+#   - Coolify Application "prod-backend-heavy" on the `Prod` / Hetzner server
+#     points at the mirrored repo source and this compose file.
+#   - Deploy must be manual promotion only. Do NOT enable deploy-on-every-main.
+#   - Redis remains in docker-compose.prod.yml so production stateful volumes do
+#     not move during this migration.
+#   - LiteLLM and MCP are separate Coolify apps reachable through aishanet DNS.
+#
+# Cutover model:
+#   - This service claims the stable aliases `backend` and `aishacrm-backend` on
+#     aishanet. Stop or disconnect the legacy compose-managed backend before
+#     letting this container claim production traffic.
+#   - Cloudflare/cloudflared/Caddy ingress should continue to route to the same
+#     Docker DNS/host port target after cutover, but verify live topology first.
+#
+# Coolify v4 path rule:
+#   Build context is `.` because Coolify invokes compose with the cloned repo
+#   root as --project-directory. Do not use ../../ paths.
+
+services:
+  backend:
+    image: aishacrm-backend:coolify
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: prod-aishacrm-backend
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    ports:
+      - "127.0.0.1:5001:3001"
+    # Slightly below the current legacy prod cap (3584m) so Coolify build/deploy
+    # headroom remains on the 8GB Hetzner host. NODE_OPTIONS keeps V8 heap under
+    # the container cap.
+    mem_limit: 3072m
+    mem_reservation: 1024m
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2560 --dns-result-order=ipv4first}
+      - UV_THREADPOOL_SIZE=2
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - BRAID_MCP_URL=http://braid-mcp-server:8000
+      - MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health
+      - MCP_NODE_ID=prod-aishacrm-backend
+      - LITELLM_BASE_URL=http://litellm:4000
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://scheduler.aishacrm.com}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://app.aishacrm.com}
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      - SUMMARY_LLM_PROVIDER=groq
+      - SUMMARY_LLM_MODEL=llama-3.1-8b-instant
+      - TELEMETRY_ENABLED=false
+      - AI_TRIGGERS_WORKER_INTERVAL_MS=300000
+      - CARE_RATE_LIMIT_MAX=${CARE_RATE_LIMIT_MAX:-10}
+      - CARE_RATE_LIMIT_DURATION=${CARE_RATE_LIMIT_DURATION:-60000}
+      - SERVICE_FQDN_BACKEND=https://api.aishacrm.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - backend
+          - aishacrm-backend
+
+networks:
+  # External production network shared with docker-compose.prod.yml and the
+  # other prod Coolify apps. Do not let Coolify recreate it.
+  aishanet:
+    external: true
