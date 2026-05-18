@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Prod compose files reconciled with live VPS-2 state (`prod/03-backend-heavy/docker-compose.yml`, `prod/04-app-fast/docker-compose.yml`)**: These two Coolify-native compose files existed on VPS-2 at `/opt/aishacrm-deploy/prod/` but were absent from git. Captured from the live server and committed verbatim. `03-backend-heavy` defines the backend service (mem_limit 3584m, port 4001, `aishacrm-backend` DNS alias, Doppler prd_prd, `MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health`). `04-app-fast` defines the frontend (port 4000) and `aisha-comms` communications worker (mem_limit 768m). Both join the external `aishanet` network by name.
+
 ### Removed
 
 - **OpenReplay** removed entirely from the codebase (4VD-22). Deleted `useOpenReplay.js`, `useOpenReplayTracking.js`, `OpenReplayControl.jsx`, `useOpenReplay.test.js`, `Layout.cls-fix.smoke.test.jsx`, the GitHub Actions self-hosted deploy workflow, and three OpenReplay docs. Removed `@openreplay/tracker` and `@openreplay/tracker-assist` npm packages. Stripped `VITE_OPENREPLAY_*` env vars from all docker-compose files and `env-schema.json`. `useSessionReplay` and `SessionReplayControl` now support Clarity only; `EnhancedUserManagement` now renders `SessionReplayControl` in place of the deleted `OpenReplayControl`.
