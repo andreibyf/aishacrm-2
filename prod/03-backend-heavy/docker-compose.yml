@@ -1,0 +1,82 @@
+# Production - Group 3: backend
+# Service: aishacrm-backend (Coolify-native build from OneDev)
+#
+# Redis (memory + cache) intentionally NOT in this compose - they remain
+# managed by the manual docker-compose.prod.yml stack on Prod.
+# Reason: Redis volumes hold session/cache state that Coolify would relabel.
+# Backend connects to manual redis via DNS aliases redis-memory / redis-cache
+# on the shared external network aishacrm_aishanet-staging.
+#
+# Applies all 9 Coolify v4 quirks captured during the litellm + braid migrations:
+#   1. context: . (NOT ../..) - Coolify --project-directory artifact root
+#   2. Service name `backend` + DNS alias `aishacrm-backend` (Doppler
+#      stg_stg.CRM_BACKEND_URL bakes in the latter; both must resolve)
+#   3. Network alias decouples DNS from Coolify's auto-generated container_name
+#   4. Network `staging-aishanet` maps to host network `aishacrm_aishanet-staging`
+#   5. mem_limit 3072m (matches prod cap, leaves build headroom)
+#   6. Doppler stg_stg config
+#   7. depends_on: not used here - redis is external (manual stack)
+#   8. healthcheck on /health
+#   9. log rotation (json-file 10m x 3)
+
+services:
+  backend:
+    image: aishacrm-backend:coolify
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: aishacrm-backend
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    ports:
+      - "127.0.0.1:4001:3001"
+    mem_limit: 3584m
+    mem_reservation: 1024m
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=3072 --dns-result-order=ipv4first}
+      - UV_THREADPOOL_SIZE=2
+      - REDIS_URL=redis://aishacrm-redis-memory:6379
+      - REDIS_CACHE_URL=redis://aishacrm-redis-cache:6379
+      - BRAID_MCP_URL=http://braid-mcp-server:8000
+      - MCP_NODE_HEALTH_URL=http://braid-mcp-server:8000/health
+      - MCP_NODE_ID=aishacrm-backend-prod
+      - LITELLM_BASE_URL=http://litellm:4000
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - CALCOM_DB_URL=postgresql://${CALCOM_DB_USER:-calcom}:${CALCOM_DB_PASSWORD}@calcom-db:5432/${CALCOM_DB_NAME:-calcom}
+      - CALCOM_WEBHOOK_BACKEND_URL=http://aishacrm-backend:3001
+      - PUBLIC_SCHEDULER_URL=${PUBLIC_SCHEDULER_URL:-https://scheduler.aishacrm.com}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://app.aishacrm.com}
+      - PEP_LLM_PROVIDER=groq
+      - PEP_LLM_MODEL=llama-3.3-70b-versatile
+      - SUMMARY_LLM_PROVIDER=groq
+      - SUMMARY_LLM_MODEL=llama-3.1-8b-instant
+      - TELEMETRY_ENABLED=false
+      - AI_TRIGGERS_WORKER_INTERVAL_MS=300000
+      - CARE_RATE_LIMIT_MAX=${CARE_RATE_LIMIT_MAX:-10}
+      - CARE_RATE_LIMIT_DURATION=${CARE_RATE_LIMIT_DURATION:-60000}
+      - SERVICE_FQDN_BACKEND=https://api.aishacrm.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - backend
+          - aishacrm-backend
+
+networks:
+  aishanet:
+    external: true
+    name: aishanet

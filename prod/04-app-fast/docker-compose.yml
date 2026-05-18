@@ -1,0 +1,95 @@
+# Production - Group 4: app-fast (frontend + communications worker)
+# Coolify-native build target on Hetzner.
+# Frontend soaks on host port 4100 while legacy production frontend remains on 4000.
+# Comms worker connects to the Coolify-native backend/API over the stable aishanet alias.
+
+services:
+  frontend:
+    image: aishacrm-frontend:coolify
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_AISHACRM_BACKEND_URL: ${VITE_AISHACRM_BACKEND_URL:-https://api.aishacrm.com}
+        VITE_CALCOM_URL: ${VITE_CALCOM_URL:-https://scheduler.aishacrm.com}
+        VITE_CURRENT_BRANCH: ${VITE_CURRENT_BRANCH:-main}
+        VITE_SYSTEM_TENANT_ID: ${VITE_SYSTEM_TENANT_ID:-a11dfb63-4b18-4eb8-872e-747af2e37c46}
+        APP_BUILD_VERSION: ${APP_BUILD_VERSION:-prod-${COOLIFY_RESOURCE_UUID:-unknown}}
+    container_name: prod-aishacrm-frontend
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    ports:
+      - "4000:3000"
+    mem_limit: 256m
+    mem_reservation: 128m
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - PORT=3000
+      - VITE_AISHACRM_BACKEND_URL=https://api.aishacrm.com
+      - VITE_CALCOM_URL=https://scheduler.aishacrm.com
+      - SERVICE_FQDN_FRONTEND=https://app.aishacrm.com
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - frontend
+          - aishacrm-frontend
+
+  aisha-comms:
+    image: aishacrm-backend:coolify
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: prod-aishacrm-comms
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 768m
+    mem_reservation: 256m
+    command: ["doppler", "run", "--", "npm", "run", "worker:communications"]
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-prd_prd}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=512 --dns-result-order=ipv4first}
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+      - CRM_BACKEND_URL=http://aishacrm-backend:3001
+      - COMMUNICATIONS_WORKER_POLL_INTERVAL_MS=${COMMUNICATIONS_WORKER_POLL_INTERVAL_MS:-60000}
+      - COMMUNICATIONS_WORKER_HEARTBEAT_PATH=/tmp/communications-worker-heartbeat.json
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "node -e \"const fs=require('fs');const p=process.env.COMMUNICATIONS_WORKER_HEARTBEAT_PATH||'/tmp/communications-worker-heartbeat.json';const c=Number.parseInt(process.env.COMMUNICATIONS_WORKER_POLL_INTERVAL_MS||'',10);const pollMs=Number.isInteger(c)&&c>0?c:60000;const maxLagMs=Math.max(180000,pollMs*3);const s=fs.statSync(p);process.exit(Date.now()-s.mtimeMs<maxLagMs?0:1)\""
+      interval: 120s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      aishanet:
+        aliases:
+          - aisha-comms
+
+networks:
+  aishanet:
+    external: true
+    name: aishanet
