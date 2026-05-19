@@ -1,203 +1,217 @@
-export const FINANCE_ACTIONS = Object.freeze({
-  CREATE_INVOICE_DRAFT: 'finance.invoice.create_draft',
-  POST_LEDGER_ENTRY: 'finance.ledger.post',
-  APPROVE_PAYMENT: 'finance.payment.approve',
-  ISSUE_REFUND: 'finance.refund.issue',
-});
+import { randomUUID } from 'node:crypto';
 
-export const AI_BLOCKED_ACTIONS = new Set([
-  FINANCE_ACTIONS.POST_LEDGER_ENTRY,
-  FINANCE_ACTIONS.APPROVE_PAYMENT,
-  FINANCE_ACTIONS.ISSUE_REFUND,
-]);
+export const FINANCE_CLASSIFICATIONS = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
 
-export function validateJournalEntry(entry) {
-  if (!entry || !Array.isArray(entry.lines) || entry.lines.length < 2) {
-    return {
-      balanced: false,
-      debitTotal: 0,
-      creditTotal: 0,
-      errors: ['journal entry requires at least two lines'],
-    };
-  }
+function toInteger(value) {
+  const normalized = Number(value || 0);
+  return Number.isFinite(normalized) ? Math.trunc(normalized) : 0;
+}
 
-  const debitTotal = entry.lines.reduce((sum, line) => sum + Number(line.debit || 0), 0);
-  const creditTotal = entry.lines.reduce((sum, line) => sum + Number(line.credit || 0), 0);
-  const errors = [];
-
-  for (const line of entry.lines) {
-    const debit = Number(line.debit || 0);
-    const credit = Number(line.credit || 0);
-    if (!line.account) errors.push('journal line account is required');
-    if (!line.classification) errors.push('journal line classification is required');
-    if (debit < 0 || credit < 0) errors.push('journal line amounts cannot be negative');
-    if (debit > 0 && credit > 0) errors.push('journal line cannot have both debit and credit');
-    if (debit === 0 && credit === 0) errors.push('journal line must include debit or credit');
-  }
-
-  if (Math.abs(debitTotal - creditTotal) >= 0.001) {
-    errors.push('debits must equal credits');
-  }
-
+function normalizeLine(line = {}, index = 0) {
   return {
-    balanced: errors.length === 0,
-    debitTotal,
-    creditTotal,
-    errors,
+    id: line.id || `line_${index + 1}`,
+    account_id: line.account_id || null,
+    account_name: line.account_name || 'Uncategorized',
+    classification: FINANCE_CLASSIFICATIONS.includes(line.classification)
+      ? line.classification
+      : 'Expense',
+    line_number: Number.isInteger(line.line_number) ? line.line_number : index + 1,
+    description: line.description || null,
+    debit_cents: Math.max(0, toInteger(line.debit_cents)),
+    credit_cents: Math.max(0, toInteger(line.credit_cents)),
   };
 }
 
-export function assertBalancedJournalEntry(entry) {
-  const validation = validateJournalEntry(entry);
-  if (!validation.balanced) {
-    const err = new Error(`Invalid journal entry: ${validation.errors.join('; ')}`);
-    err.code = 'FINANCE_JOURNAL_UNBALANCED';
-    err.validation = validation;
-    throw err;
+export function validateJournalLines(lines = []) {
+  const normalizedLines = Array.isArray(lines) ? lines.map(normalizeLine) : [];
+  const errors = [];
+
+  if (normalizedLines.length === 0) {
+    errors.push('At least one journal line is required.');
+  }
+
+  let debitCents = 0;
+  let creditCents = 0;
+
+  normalizedLines.forEach((line) => {
+    debitCents += line.debit_cents;
+    creditCents += line.credit_cents;
+
+    if (line.debit_cents > 0 && line.credit_cents > 0) {
+      errors.push(`Line ${line.line_number} cannot contain both debit and credit amounts.`);
+    }
+
+    if (line.debit_cents === 0 && line.credit_cents === 0) {
+      errors.push(`Line ${line.line_number} must contain either a debit or a credit amount.`);
+    }
+  });
+
+  if (debitCents !== creditCents) {
+    errors.push(
+      `Journal entry is unbalanced: debit ${debitCents} cents does not equal credit ${creditCents} cents.`,
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    debit_cents: debitCents,
+    credit_cents: creditCents,
+    lines: normalizedLines,
+  };
+}
+
+export function assertBalancedJournal(lines = []) {
+  const validation = validateJournalLines(lines);
+  if (!validation.valid) {
+    const error = new Error(validation.errors.join(' '));
+    error.code = 'FINANCE_UNBALANCED_JOURNAL';
+    error.statusCode = 400;
+    error.details = validation;
+    throw error;
   }
   return validation;
 }
 
-export function createInvoiceDraftJournalEntry({
-  tenant_id,
-  opportunity_id,
-  customer_id,
-  amount_cents,
-  currency = 'usd',
-  actor_id,
-  request_id,
-}) {
-  if (!tenant_id) throw new Error('tenant_id is required');
-  if (!amount_cents || Number(amount_cents) <= 0) throw new Error('amount_cents must be greater than 0');
-
-  const amount = Number(amount_cents);
-  const entry = {
-    id: `je_${Date.now()}`,
-    tenant_id,
-    source_type: 'crm.opportunity.closed_won',
-    source_id: opportunity_id || null,
-    customer_id: customer_id || null,
-    memo: 'Draft invoice journal generated from closed opportunity',
-    currency,
-    status: 'draft_pending_approval',
-    actor_id: actor_id || null,
-    request_id: request_id || null,
-    lines: [
-      {
-        account: 'Accounts Receivable',
-        classification: 'Asset',
-        statement: 'balanceSheet',
-        debit: amount,
-        credit: 0,
-      },
-      {
-        account: 'Revenue',
-        classification: 'Revenue',
-        statement: 'profitLoss',
-        debit: 0,
-        credit: amount,
-      },
-    ],
-  };
-
-  assertBalancedJournalEntry(entry);
-  return entry;
-}
-
-export function createReversalJournalEntry(entry, { actor_id, request_id } = {}) {
-  if (!entry) throw new Error('journal entry is required');
-  if (!['posted', 'approved'].includes(entry.status)) {
-    const err = new Error('only approved or posted journal entries can be reversed');
-    err.code = 'FINANCE_REVERSAL_INVALID_STATUS';
-    throw err;
-  }
-
-  const reversal = {
-    ...entry,
-    id: `je_reversal_${Date.now()}`,
-    source_type: 'finance.journal.reversal',
-    source_id: entry.id,
-    memo: `Reversal of ${entry.id}: ${entry.memo || ''}`.trim(),
-    status: 'pending_approval',
-    reversal_of: entry.id,
-    actor_id: actor_id || null,
-    request_id: request_id || null,
-    lines: entry.lines.map((line) => ({
-      ...line,
-      debit: Number(line.credit || 0),
-      credit: Number(line.debit || 0),
-    })),
-  };
-
-  assertBalancedJournalEntry(reversal);
-  return reversal;
-}
-
-export function deriveLedgerRows(entries = []) {
-  return entries.flatMap((entry) =>
-    entry.lines.map((line, index) => ({
-      tenant_id: entry.tenant_id,
-      journal_entry_id: entry.id,
-      line_number: index + 1,
-      account: line.account,
-      classification: line.classification,
-      debit: Number(line.debit || 0),
-      credit: Number(line.credit || 0),
-      source_type: entry.source_type,
-      source_id: entry.source_id,
-      status: entry.status,
-      currency: entry.currency || 'usd',
-      ai_generated: Boolean(entry.ai_generated),
-    })),
+function getPostedEntries(entries = []) {
+  return (Array.isArray(entries) ? entries : []).filter((entry) =>
+    ['posted', 'reversed'].includes(entry?.status),
   );
 }
 
-export function deriveAccountTotals(entries = []) {
-  return entries.flatMap((entry) => entry.lines).reduce((acc, line) => {
-    const creditNormal = ['Revenue', 'Liability', 'Equity'].includes(line.classification);
-    const signed = creditNormal
-      ? Number(line.credit || 0) - Number(line.debit || 0)
-      : Number(line.debit || 0) - Number(line.credit || 0);
-    acc[line.account] = (acc[line.account] || 0) + signed;
-    return acc;
-  }, {});
+function getAccountBucket(map, line) {
+  const key = line.account_id || `${line.classification}:${line.account_name}`;
+  if (!map.has(key)) {
+    map.set(key, {
+      account_id: line.account_id || null,
+      account_name: line.account_name,
+      classification: line.classification,
+      debit_cents: 0,
+      credit_cents: 0,
+      balance_cents: 0,
+    });
+  }
+  return map.get(key);
 }
 
-export function deriveProfitLoss(entries = []) {
-  const totals = deriveAccountTotals(entries);
-  const revenue = totals.Revenue || 0;
-  const costOfServices = -(totals['Cost of Services'] || 0);
-  const operatingExpenses = -(totals['Operating Expenses'] || 0);
-  const grossProfit = revenue + costOfServices;
-  const netIncome = grossProfit + operatingExpenses;
+export function buildLedger(entries = []) {
+  const accountMap = new Map();
 
-  return [
-    { category: 'Revenue', amount_cents: revenue },
-    { category: 'Cost of Services', amount_cents: costOfServices },
-    { category: 'Gross Profit', amount_cents: grossProfit },
-    { category: 'Operating Expenses', amount_cents: operatingExpenses },
-    { category: 'Net Income', amount_cents: netIncome },
-  ];
-}
+  getPostedEntries(entries).forEach((entry) => {
+    (entry.lines || []).forEach((rawLine, index) => {
+      const line = normalizeLine(rawLine, index);
+      const account = getAccountBucket(accountMap, line);
+      account.debit_cents += line.debit_cents;
+      account.credit_cents += line.credit_cents;
+      account.balance_cents += line.debit_cents - line.credit_cents;
+    });
+  });
 
-export function deriveBalanceSheet(entries = []) {
-  const totals = deriveAccountTotals(entries);
-  const netIncome = deriveProfitLoss(entries).find((row) => row.category === 'Net Income')?.amount_cents || 0;
+  const accounts = [...accountMap.values()].sort((a, b) =>
+    a.account_name.localeCompare(b.account_name),
+  );
 
-  return [
-    { section: 'Assets', account: 'Cash', amount_cents: totals.Cash || 0 },
-    { section: 'Assets', account: 'Accounts Receivable', amount_cents: totals['Accounts Receivable'] || 0 },
-    { section: 'Liabilities', account: 'Accounts Payable', amount_cents: -(totals['Accounts Payable'] || 0) },
-    { section: 'Equity', account: 'Retained Earnings', amount_cents: -netIncome },
-  ];
-}
-
-export function evaluateAiFinanceAction({ action, actor_type }) {
-  const isAiActor = actor_type === 'ai_agent';
-  const blocked = isAiActor && AI_BLOCKED_ACTIONS.has(action);
   return {
-    allowed: !blocked,
-    blocked,
-    reason: blocked ? 'AI actors cannot perform restricted financial writes or money movement' : 'allowed',
+    accounts,
+    totals: {
+      debit_cents: accounts.reduce((sum, account) => sum + account.debit_cents, 0),
+      credit_cents: accounts.reduce((sum, account) => sum + account.credit_cents, 0),
+    },
+  };
+}
+
+export function buildProfitAndLoss(entries = []) {
+  const ledger = buildLedger(entries);
+  const revenue_accounts = [];
+  const expense_accounts = [];
+
+  ledger.accounts.forEach((account) => {
+    if (account.classification === 'Revenue') {
+      revenue_accounts.push({
+        ...account,
+        amount_cents: account.credit_cents - account.debit_cents,
+      });
+    }
+    if (account.classification === 'Expense') {
+      expense_accounts.push({
+        ...account,
+        amount_cents: account.debit_cents - account.credit_cents,
+      });
+    }
+  });
+
+  const revenue_cents = revenue_accounts.reduce((sum, account) => sum + account.amount_cents, 0);
+  const expense_cents = expense_accounts.reduce((sum, account) => sum + account.amount_cents, 0);
+
+  return {
+    revenue_accounts,
+    expense_accounts,
+    totals: {
+      revenue_cents,
+      expense_cents,
+      net_income_cents: revenue_cents - expense_cents,
+    },
+  };
+}
+
+export function buildBalanceSheet(entries = []) {
+  const ledger = buildLedger(entries);
+
+  const assets = [];
+  const liabilities = [];
+  const equity = [];
+
+  ledger.accounts.forEach((account) => {
+    if (account.classification === 'Asset') {
+      assets.push({ ...account, amount_cents: account.debit_cents - account.credit_cents });
+    }
+    if (account.classification === 'Liability') {
+      liabilities.push({ ...account, amount_cents: account.credit_cents - account.debit_cents });
+    }
+    if (account.classification === 'Equity') {
+      equity.push({ ...account, amount_cents: account.credit_cents - account.debit_cents });
+    }
+  });
+
+  return {
+    assets,
+    liabilities,
+    equity,
+    totals: {
+      assets_cents: assets.reduce((sum, account) => sum + account.amount_cents, 0),
+      liabilities_cents: liabilities.reduce((sum, account) => sum + account.amount_cents, 0),
+      equity_cents: equity.reduce((sum, account) => sum + account.amount_cents, 0),
+    },
+  };
+}
+
+export function createReversalDraft(entry, overrides = {}) {
+  const sourceEntry = entry || {};
+  const reversedLines = (sourceEntry.lines || []).map((line, index) => {
+    const normalized = normalizeLine(line, index);
+    return {
+      ...normalized,
+      id: `${normalized.id}_reversal`,
+      debit_cents: normalized.credit_cents,
+      credit_cents: normalized.debit_cents,
+    };
+  });
+
+  return {
+    id: overrides.id || `journal_${randomUUID()}`,
+    tenant_id: overrides.tenant_id || sourceEntry.tenant_id,
+    source_type: 'journal_reversal',
+    source_id: sourceEntry.id || null,
+    memo: overrides.memo || `Reversal of ${sourceEntry.id || 'journal entry'}`,
+    currency: overrides.currency || sourceEntry.currency || 'usd',
+    status: overrides.status || 'pending_approval',
+    reversal_of: sourceEntry.id || null,
+    created_by: overrides.created_by || null,
+    braid_trace_id: overrides.braid_trace_id || null,
+    ai_generated: overrides.ai_generated === true,
+    governance_policy_snapshot: overrides.governance_policy_snapshot || {},
+    lines: reversedLines,
+    created_at: overrides.created_at || new Date().toISOString(),
+    updated_at: overrides.updated_at || new Date().toISOString(),
   };
 }
