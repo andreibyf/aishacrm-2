@@ -11,9 +11,14 @@ function resolveTenantId(req) {
 }
 
 function buildActor(req) {
+  // Actor identity is derived exclusively from the authenticated session.
+  // Never trust body-supplied actor_type or actor_id — doing so would allow
+  // any caller to impersonate a human actor and bypass AI governance checks.
+  const isAiAgent =
+    req.user?.is_ai_agent === true || req.user?.role === 'ai_agent';
   return {
-    id: req.user?.id || req.body?.actor_id || 'system',
-    type: req.body?.actor_type || (req.user?.is_ai_agent ? 'ai_agent' : 'human'),
+    id: req.user?.id || null,
+    type: isAiAgent ? 'ai_agent' : 'human',
   };
 }
 
