@@ -12,6 +12,7 @@ import {
   createGovernanceDecision,
   evaluateFinanceGovernance,
 } from './financeGovernanceDecision.js';
+import createFinanceEventStore from './financeEventStore.js';
 
 function createStore() {
   return {
@@ -31,7 +32,6 @@ function getTenantBucket(store, tenantId) {
       journalEntries: [],
       invoices: [],
       approvals: [],
-      auditEvents: [],
       adapterJobs: [],
       commands: [],
     });
@@ -53,14 +53,15 @@ function clone(value) {
 
 export function createFinanceDomainService(opts = {}) {
   const store = opts.store || createStore();
+  const eventStore = opts.eventStore || createFinanceEventStore();
   const now = opts.now || (() => new Date().toISOString());
 
   function appendCommand(bucket, envelope) {
     bucket.commands.push(envelope);
   }
 
-  function appendEvent(bucket, envelope) {
-    bucket.auditEvents.push(envelope);
+  function appendEvent(_bucket, envelope) {
+    eventStore.append(envelope);
   }
 
   function buildApprovalRecord({
@@ -105,8 +106,7 @@ export function createFinanceDomainService(opts = {}) {
     },
 
     listAuditEvents(tenantId) {
-      const bucket = getTenantBucket(store, tenantId);
-      return clone(bucket.auditEvents);
+      return eventStore.query({ tenant_id: tenantId });
     },
 
     getLedger(tenantId) {
@@ -587,7 +587,15 @@ export function createFinanceDomainService(opts = {}) {
     },
 
     getState(tenantId) {
-      return clone(getTenantBucket(store, tenantId));
+      const bucket = clone(getTenantBucket(store, tenantId));
+      // Populate auditEvents as an array so the route handler's Array.isArray() check
+      // works correctly after the event store replaced the old auditEvents bucket array.
+      bucket.auditEvents = eventStore.query({ tenant_id: tenantId });
+      return bucket;
+    },
+
+    getEventStore() {
+      return eventStore;
     },
   };
 }
