@@ -3,6 +3,7 @@ import logger from '../lib/logger.js';
 import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-db.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
+import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
 
 function resolveTenantId(req) {
   return (
@@ -22,19 +23,6 @@ function buildActor(req) {
   };
 }
 
-async function defaultModuleGate({ tenantId, getSupabaseClient }) {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from('modulesettings')
-    .select('module_name, is_enabled')
-    .eq('tenant_id', tenantId)
-    .in('module_name', ['financeOps', 'enterpriseFinance']);
-
-  if (error) throw error;
-
-  return (data || []).some((row) => row.is_enabled !== false);
-}
-
 function sendError(res, error) {
   const statusCode = Number(error?.statusCode) || 500;
   return res.status(statusCode).json({
@@ -48,7 +36,8 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
   const router = express.Router();
   const service = opts.service || createFinanceDomainService();
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
-  const isFinanceModuleEnabled = opts.isFinanceModuleEnabled || defaultModuleGate;
+  const isFinanceModuleEnabled = opts.isFinanceModuleEnabled
+    || (({ tenantId }) => checkFinanceOpsEnabled({ tenantId, getSupabaseClient }));
 
   router.use(validateTenantAccess);
 
@@ -71,6 +60,43 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
       next();
     } catch (error) {
       logger.error('[finance.v2] module gate error:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.get('/runtime/status', async (req, res) => {
+    try {
+      const state = typeof service.getState === 'function'
+        ? service.getState(req.financeTenantId)
+        : {
+            journalEntries: service.listJournalEntries(req.financeTenantId),
+            approvals: service.listApprovals(req.financeTenantId),
+            auditEvents: service.listAuditEvents(req.financeTenantId),
+            invoices: [],
+            adapterJobs: [],
+          };
+
+      res.json({
+        status: 'success',
+        data: {
+          tenant_id: req.financeTenantId,
+          runtime: {
+            mode: 'mock_read_only',
+            persistence: 'in_memory',
+            provider_sync: 'disabled',
+            governance: 'enabled',
+          },
+          counts: {
+            journal_entries: Array.isArray(state.journalEntries) ? state.journalEntries.length : 0,
+            invoices: Array.isArray(state.invoices) ? state.invoices.length : 0,
+            approvals: Array.isArray(state.approvals) ? state.approvals.length : 0,
+            audit_events: Array.isArray(state.auditEvents) ? state.auditEvents.length : 0,
+            adapter_jobs: Array.isArray(state.adapterJobs) ? state.adapterJobs.length : 0,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error('[finance.v2] runtime status failed:', error);
       sendError(res, error);
     }
   });
@@ -193,6 +219,22 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] reverse journal entry failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.post('/approvals/:id/approve', async (req, res) => {
+    try {
+      const result = service.approveFinanceAction({
+        tenantId: req.financeTenantId,
+        approvalId: req.params.id,
+        actor: buildActor(req),
+        requestId: req.headers['x-request-id'] || null,
+        braidTraceId: req.body?.braid_trace_id || null,
+      });
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] approve finance action failed:', error);
       sendError(res, error);
     }
   });
