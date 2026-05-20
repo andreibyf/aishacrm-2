@@ -5,6 +5,8 @@
  * All writes are in-memory only — no DB, no external provider writes.
  */
 
+import { randomUUID } from 'node:crypto';
+
 export class FinanceEventStoreError extends Error {
   constructor(message, code = 'FINANCE_EVENT_STORE_INVALID') {
     super(message);
@@ -13,10 +15,9 @@ export class FinanceEventStoreError extends Error {
   }
 }
 
+// CF-4: RFC 4122 UUID-based event IDs — globally unique, no timestamp coupling
 function generateEventId() {
-  // Use Date.now() + random suffix for a simple unique ID
-  const rand = Math.random().toString(36).slice(2, 9);
-  return `evt_${Date.now()}_${rand}`;
+  return `evt_${randomUUID()}`;
 }
 
 export function createFinanceEventStore() {
@@ -38,7 +39,9 @@ export function createFinanceEventStore() {
     }
 
     const event = Object.freeze({
-      id: generateEventId(),
+      // G1: Honor caller-supplied id (from createFinanceEventEnvelope) to preserve causation chains.
+      // Generate only when absent.
+      id: eventPartial.id || generateEventId(),
       tenant_id: eventPartial.tenant_id,
       event_type: eventPartial.event_type,
       aggregate_type: eventPartial.aggregate_type || null,
@@ -96,7 +99,10 @@ export function createFinanceEventStore() {
         'FINANCE_EVENT_STORE_INVALID',
       );
     }
-    return log.filter((evt) => evt.tenant_id === tenant_id);
+    // CF-5: Sort by created_at ASC so replay is deterministic regardless of append order
+    return log
+      .filter((evt) => evt.tenant_id === tenant_id)
+      .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
   }
 
   function getCount(tenant_id) {

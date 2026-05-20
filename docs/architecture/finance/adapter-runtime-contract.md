@@ -79,7 +79,7 @@ interface AccountingAdapter {
    */
   listObjects(
     objectType: CanonicalObjectType,
-    opts?: { limit?: number; cursor?: string; filters?: Record<string, unknown> }
+    opts?: { limit?: number; cursor?: string; filters?: Record<string, unknown> },
   ): Promise<{ items: ProviderObject[]; next_cursor: string | null }>;
 
   // ---- Mapping -----------------------------------------------------------
@@ -104,10 +104,7 @@ interface AccountingAdapter {
    * The adapter must NOT post or finalise the object on the provider side.
    * Returns the provider-assigned draft ID.
    */
-  pushDraft(
-    canonicalObject: CanonicalObject,
-    objectType: CanonicalObjectType
-  ): Promise<PushResult>;
+  pushDraft(canonicalObject: CanonicalObject, objectType: CanonicalObjectType): Promise<PushResult>;
 
   /**
    * Push a canonical object as a finalised record.
@@ -118,7 +115,7 @@ interface AccountingAdapter {
   pushFinal(
     canonicalObject: CanonicalObject,
     objectType: CanonicalObjectType,
-    approvalId: string
+    approvalId: string,
   ): Promise<PushResult>;
 
   /**
@@ -134,17 +131,14 @@ interface AccountingAdapter {
   voidRecord?(
     providerId: string,
     objectType: CanonicalObjectType,
-    approvalId: string
+    approvalId: string,
   ): Promise<VoidResult>;
 
   /**
    * Reconcile internal records against the provider's current state.
    * Read-only — produces a diff report, does not apply changes.
    */
-  reconcile?(
-    objectType: CanonicalObjectType,
-    since?: string
-  ): Promise<ReconcileReport>;
+  reconcile?(objectType: CanonicalObjectType, since?: string): Promise<ReconcileReport>;
 }
 ```
 
@@ -164,20 +158,20 @@ interface MappingResult {
   ok: boolean;
   data?: Record<string, unknown>;
   error?: string;
-  unmapped_fields?: string[];   // fields present in source but absent from target shape
+  unmapped_fields?: string[]; // fields present in source but absent from target shape
 }
 
 interface PushResult {
   ok: boolean;
-  provider_id: string;          // provider-assigned ID for the created/updated record
+  provider_id: string; // provider-assigned ID for the created/updated record
   provider_response: Record<string, unknown>;
   error?: string;
 }
 
 interface StatusResult {
   ok: boolean;
-  status: string;               // provider-native status string
-  canonical_status?: string;    // normalised: 'draft' | 'submitted' | 'posted' | 'void'
+  status: string; // provider-native status string
+  canonical_status?: string; // normalised: 'draft' | 'submitted' | 'posted' | 'void'
   provider_response: Record<string, unknown>;
 }
 
@@ -191,7 +185,7 @@ interface ReconcileReport {
   object_type: CanonicalObjectType;
   since: string;
   matched: number;
-  drifted: number;              // in provider but different from canonical
+  drifted: number; // in provider but different from canonical
   missing_from_provider: number;
   missing_from_canonical: number;
   drift_items: DriftItem[];
@@ -200,18 +194,18 @@ interface ReconcileReport {
 
 ### Required vs optional methods
 
-| Method | Required | Notes |
-|---|---|---|
-| `checkHealth` | Yes | Checked before any job is queued |
-| `fetchObject` | Yes | Used by `sync_status` jobs |
-| `listObjects` | Yes | Used by `reconcile` jobs and admin console |
-| `toCanonical` | Yes | Used on every pull job |
-| `fromCanonical` | Yes | Used on every push job |
-| `pushDraft` | Yes | Core write path (draft_only and above) |
-| `pushFinal` | Yes | Core write path (approval_required_write only) |
-| `syncStatus` | Yes | Required for job type `sync_status` |
-| `voidRecord` | Optional | Adapters omitting this throw `AdapterCapabilityError` |
-| `reconcile` | Optional | Can be added in a follow-up phase per provider |
+| Method          | Required | Notes                                                 |
+| --------------- | -------- | ----------------------------------------------------- |
+| `checkHealth`   | Yes      | Checked before any job is queued                      |
+| `fetchObject`   | Yes      | Used by `sync_status` jobs                            |
+| `listObjects`   | Yes      | Used by `reconcile` jobs and admin console            |
+| `toCanonical`   | Yes      | Used on every pull job                                |
+| `fromCanonical` | Yes      | Used on every push job                                |
+| `pushDraft`     | Yes      | Core write path (draft_only and above)                |
+| `pushFinal`     | Yes      | Core write path (approval_required_write only)        |
+| `syncStatus`    | Yes      | Required for job type `sync_status`                   |
+| `voidRecord`    | Optional | Adapters omitting this throw `AdapterCapabilityError` |
+| `reconcile`     | Optional | Can be added in a follow-up phase per provider        |
 
 ---
 
@@ -261,33 +255,34 @@ status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 ### Transition rules
 
-| Transition | Trigger | Actor |
-|---|---|---|
-| `queued → running` | Job processor claims the job (sets `status = 'running'`, increments `attempts`) | System |
-| `running → succeeded` | Adapter method returns `{ ok: true }` | System |
-| `running → failed` | Adapter method throws or returns `{ ok: false }` | System |
-| `failed → queued` | `next_attempt_at` has elapsed and `attempts < max_attempts` | System (retry scheduler) |
-| `any → cancelled` | Human or governance layer explicitly cancels before or during execution | Human or system |
+| Transition            | Trigger                                                                         | Actor                    |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------ |
+| `queued → running`    | Job processor claims the job (sets `status = 'running'`, increments `attempts`) | System                   |
+| `running → succeeded` | Adapter method returns `{ ok: true }`                                           | System                   |
+| `running → failed`    | Adapter method throws or returns `{ ok: false }`                                | System                   |
+| `failed → queued`     | `next_attempt_at` has elapsed and `attempts < max_attempts`                     | System (retry scheduler) |
+| `any → cancelled`     | Human or governance layer explicitly cancels before or during execution         | Human or system          |
 
 ### Retry policy
 
-| Parameter | Value | Notes |
-|---|---|---|
-| `max_attempts` | 5 | After 5 failures the job is permanently failed |
-| Backoff strategy | Exponential with jitter | `delay = min(2^attempts × 15s, 30min) + rand(0..5s)` |
-| Attempt 1 retry | 15 s | |
-| Attempt 2 retry | 30 s | |
-| Attempt 3 retry | 1 min | |
-| Attempt 4 retry | 2 min | |
-| Attempt 5 (final) | No retry | Job is terminal; `finance.adapter.sync_failed` with `permanent: true` |
+| Parameter         | Value                   | Notes                                                                 |
+| ----------------- | ----------------------- | --------------------------------------------------------------------- |
+| `max_attempts`    | 5                       | After 5 failures the job is permanently failed                        |
+| Backoff strategy  | Exponential with jitter | `delay = min(2^attempts × 15s, 30min) + rand(0..5s)`                  |
+| Attempt 1 retry   | 15 s                    |                                                                       |
+| Attempt 2 retry   | 30 s                    |                                                                       |
+| Attempt 3 retry   | 1 min                   |                                                                       |
+| Attempt 4 retry   | 2 min                   |                                                                       |
+| Attempt 5 (final) | No retry                | Job is terminal; `finance.adapter.sync_failed` with `permanent: true` |
 
 ### Permanent failure handling
 
 When `attempts >= max_attempts`:
+
 1. `status` remains `'failed'`.
 2. `error_message` is set to the last adapter error.
 3. `finance.adapter.sync_failed` event is emitted with `payload.permanent = true`.
-4. An approval record is created in `finance.approvals` with `aggregate_type = 'adapter_job'` and `status = 'pending'` — a human must review and decide whether to re-queue, cancel, or escalate.
+4. An approval record is created in `finance.approvals` with `target_type = 'adapter_job'` and `status = 'pending'` — a human must review and decide whether to re-queue, cancel, or escalate.
 5. The job is never re-queued automatically after this point.
 
 ### Job processor invariants
@@ -303,21 +298,21 @@ The `mode` field on `finance.adapter_jobs` and the provider connection config de
 
 ### Mode definitions
 
-| Mode | Meaning |
-|---|---|
-| `read_only` | No writes to the provider under any circumstances |
-| `draft_only` | Writes allowed only via `pushDraft` — no finalisation |
+| Mode                      | Meaning                                                                     |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `read_only`               | No writes to the provider under any circumstances                           |
+| `draft_only`              | Writes allowed only via `pushDraft` — no finalisation                       |
 | `approval_required_write` | Full writes allowed only after an `approved` finance.approval record exists |
 
 ### Operation permission matrix
 
 | Operation (`adapter_jobs.operation`) | `read_only` | `draft_only` | `approval_required_write` |
-|---|---|---|---|
-| `pull` (fetchObject, listObjects) | Allowed | Allowed | Allowed |
-| `sync_status` | Allowed | Allowed | Allowed |
-| `reconcile` | Allowed | Allowed | Allowed |
-| `push_draft` | Blocked | Allowed | Allowed |
-| `void` | Blocked | Blocked | Allowed + approval check |
+| ------------------------------------ | ----------- | ------------ | ------------------------- |
+| `pull` (fetchObject, listObjects)    | Allowed     | Allowed      | Allowed                   |
+| `sync_status`                        | Allowed     | Allowed      | Allowed                   |
+| `reconcile`                          | Allowed     | Allowed      | Allowed                   |
+| `push_draft`                         | Blocked     | Allowed      | Allowed                   |
+| `void`                               | Blocked     | Blocked      | Allowed + approval check  |
 
 `push_draft` calls `adapter.pushDraft()`. The provider-side record created must remain in a non-finalised state (QuickBooks Estimate, ERPNext draft, Xero draft invoice, NetSuite Estimate). If the provider has no draft concept, the adapter must throw `AdapterCapabilityError` and the job must not be retried.
 
@@ -336,24 +331,26 @@ function assertWritePermitted(job, approvalRecord = null) {
   }
 
   if (mode === 'read_only') {
-    throw new WriteGuardError(
-      `Operation '${operation}' blocked: adapter mode is read_only`,
-      { job_id: job.id, mode, operation }
-    );
+    throw new WriteGuardError(`Operation '${operation}' blocked: adapter mode is read_only`, {
+      job_id: job.id,
+      mode,
+      operation,
+    });
   }
 
   if (operation === 'void' && mode === 'draft_only') {
-    throw new WriteGuardError(
-      `Operation 'void' blocked: requires approval_required_write mode`,
-      { job_id: job.id, mode, operation }
-    );
+    throw new WriteGuardError(`Operation 'void' blocked: requires approval_required_write mode`, {
+      job_id: job.id,
+      mode,
+      operation,
+    });
   }
 
   if (mode === 'approval_required_write') {
     if (!approvalRecord || approvalRecord.status !== 'approved') {
       throw new WriteGuardError(
         `Operation '${operation}' blocked: no approved finance.approval record found`,
-        { job_id: job.id, mode, operation, approval_id: approvalRecord?.id }
+        { job_id: job.id, mode, operation, approval_id: approvalRecord?.id },
       );
     }
   }
@@ -372,11 +369,11 @@ In addition to the mode guard, the governance layer (`financeGovernanceDecision.
 
 ```js
 const CANONICAL_OBJECT_TYPES = {
-  CUSTOMER:      'Customer',
-  ACCOUNT:       'Account',
-  INVOICE:       'Invoice',
+  CUSTOMER: 'Customer',
+  ACCOUNT: 'Account',
+  INVOICE: 'Invoice',
   JOURNAL_ENTRY: 'JournalEntry',
-  PAYMENT:       'Payment',
+  PAYMENT: 'Payment',
 };
 ```
 
@@ -428,21 +425,21 @@ const PROVIDER_OBJECT_MAP = {
   // key: canonical object type
   // value: map of canonical field → provider field (null = not supported)
   Account: {
-    id:                 'Id',
-    code:               'AcctNum',
-    name:               'Name',
-    classification:     'Classification',
-    account_type:       'AccountType',
-    active:             'Active',
-    parent_account_id:  'ParentRef.value',
+    id: 'Id',
+    code: 'AcctNum',
+    name: 'Name',
+    classification: 'Classification',
+    account_type: 'AccountType',
+    active: 'Active',
+    parent_account_id: 'ParentRef.value',
   },
   JournalEntry: {
-    doc_number:     'DocNumber',
-    txn_date:       'TxnDate',
-    private_note:   'PrivateNote',
-    currency:       'CurrencyRef.value',
-    draft_only:     null,               // no QB equivalent; enforced locally
-    lines:          'Line',
+    doc_number: 'DocNumber',
+    txn_date: 'TxnDate',
+    private_note: 'PrivateNote',
+    currency: 'CurrencyRef.value',
+    draft_only: null, // no QB equivalent; enforced locally
+    lines: 'Line',
   },
 };
 ```
@@ -451,12 +448,12 @@ ERPNext, Xero, and NetSuite adapters must each ship their own `PROVIDER_OBJECT_M
 
 ### Unmapped field handling
 
-| Scenario | Rule |
-|---|---|
-| Provider object has fields not in the canonical shape | Pass through in `metadata` key: `{ ...canonical, metadata: { provider_extras: { ... } } }` |
+| Scenario                                                 | Rule                                                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Provider object has fields not in the canonical shape    | Pass through in `metadata` key: `{ ...canonical, metadata: { provider_extras: { ... } } }`  |
 | Canonical shape has fields the provider does not support | Set the adapter's map value to `null`; omit from the provider payload; log at `debug` level |
-| Provider returns a required canonical field as null | `toCanonical` returns `{ ok: false, error: 'missing required field: <name>' }` |
-| Type mismatch (e.g. provider returns string for amount) | Adapter is responsible for coercion; must not pass raw provider types through |
+| Provider returns a required canonical field as null      | `toCanonical` returns `{ ok: false, error: 'missing required field: <name>' }`              |
+| Type mismatch (e.g. provider returns string for amount)  | Adapter is responsible for coercion; must not pass raw provider types through               |
 
 The `metadata.provider_extras` pattern ensures no data is silently dropped during a round-trip, which matters for reconciliation.
 
@@ -470,24 +467,24 @@ Each provider adapter is initialised with a connection config object. This confi
 
 ```ts
 interface ProviderConnectionConfig {
-  provider:        'quickbooks' | 'erpnext' | 'xero' | 'netsuite';
-  mode:            'read_only' | 'draft_only' | 'approval_required_write';
-  base_url:        string;         // provider API root (e.g. 'https://quickbooks.api.intuit.com')
-  realm_id?:       string;         // QuickBooks: company/realm ID; NetSuite: account ID
-  company_id?:     string;         // ERPNext: company name; Xero: tenant ID
+  provider: 'quickbooks' | 'erpnext' | 'xero' | 'netsuite';
+  mode: 'read_only' | 'draft_only' | 'approval_required_write';
+  base_url: string; // provider API root (e.g. 'https://quickbooks.api.intuit.com')
+  realm_id?: string; // QuickBooks: company/realm ID; NetSuite: account ID
+  company_id?: string; // ERPNext: company name; Xero: tenant ID
   auth: {
-    type:          'oauth2' | 'api_key' | 'basic';
+    type: 'oauth2' | 'api_key' | 'basic';
     // oauth2:
     access_token?: string;
     refresh_token?: string;
-    token_expiry?:  string;        // ISO 8601
-    client_id?:    string;
-    client_secret?: string;        // fetched from Doppler at runtime, never stored in DB
+    token_expiry?: string; // ISO 8601
+    client_id?: string;
+    client_secret?: string; // fetched from Doppler at runtime, never stored in DB
     // api_key:
-    api_key?:      string;
+    api_key?: string;
     // basic:
-    username?:     string;
-    password?:     string;
+    username?: string;
+    password?: string;
   };
 }
 ```
@@ -515,16 +512,17 @@ No new migration needed for ERPNext POC — `api_credentials` JSONB is already t
 
 ### Per-provider auth specifics
 
-| Provider | Auth type | Notes |
-|---|---|---|
+| Provider   | Auth type                          | Notes                                                                                                                        |
+| ---------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | QuickBooks | OAuth2 (Authorization Code + PKCE) | `realm_id` required. Tokens expire in 1 h; `refresh_token` valid 100 days. Adapter must refresh automatically before expiry. |
-| ERPNext | API Key + Secret | `api_key` + `api_secret` pair. Long-lived. Rotate per tenant security policy. |
-| Xero | OAuth2 | `company_id` = Xero tenant ID. Must refresh before 30-min access token expiry. |
-| NetSuite | OAuth1 or Token-Based Auth (TBA) | `realm_id` = NetSuite account ID. TBA preferred for server-to-server. |
+| ERPNext    | API Key + Secret                   | `api_key` + `api_secret` pair. Long-lived. Rotate per tenant security policy.                                                |
+| Xero       | OAuth2                             | `company_id` = Xero tenant ID. Must refresh before 30-min access token expiry.                                               |
+| NetSuite   | OAuth1 or Token-Based Auth (TBA)   | `realm_id` = NetSuite account ID. TBA preferred for server-to-server.                                                        |
 
 ### Health check
 
 `adapter.checkHealth()` must:
+
 1. Make a lightweight read request to the provider API (e.g. QuickBooks `GET /v3/company/{realmId}/companyinfo/{realmId}`).
 2. Resolve within 5 000 ms.
 3. Return `{ ok: true, latency_ms, provider }` on success.
@@ -620,19 +618,19 @@ payload: {
 
 ### Phase 1 — complete
 
-| Item | Status |
-|---|---|
-| `finance.adapter_jobs` table DDL | Done |
-| Finance runtime gate (`ENABLE_FINANCE_OPS` env flag) | Done — `financeRuntimeGate.js` |
-| Per-tenant module gate (`modulesettings.financeOps`) | Done — `financeModuleGate.js` |
-| Governance layer (AI actor blocks, command authorization) | Done — `financeGovernanceDecision.js` |
-| QuickBooks canonical adapter (`mapAccountToQuickBooksCanonical`, `mapJournalEntryToQuickBooksCanonical`) | Done — `quickbooksCanonicalAdapter.js` |
-| Adapter job creation in domain service (`simulateDealWon` creates stub job) | Done — `financeDomainService.js` |
-| Finance event envelope standard | Done — `financeEventEnvelope.js` |
-| Finance route surface (`/api/v2/finance/*`) | Done — `finance.v2.js` |
-| Runtime status endpoint (`GET /api/v2/finance/runtime/status`) | Done — returns `mode: 'mock_read_only'` |
-| ERPNext / Xero / NetSuite PROVIDER_OBJECT_MAP | Not started |
-| Live HTTP calls to any provider | Not started |
+| Item                                                                                                     | Status                                  |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `finance.adapter_jobs` table DDL                                                                         | Done                                    |
+| Finance runtime gate (`ENABLE_FINANCE_OPS` env flag)                                                     | Done — `financeRuntimeGate.js`          |
+| Per-tenant module gate (`modulesettings.financeOps`)                                                     | Done — `financeModuleGate.js`           |
+| Governance layer (AI actor blocks, command authorization)                                                | Done — `financeGovernanceDecision.js`   |
+| QuickBooks canonical adapter (`mapAccountToQuickBooksCanonical`, `mapJournalEntryToQuickBooksCanonical`) | Done — `quickbooksCanonicalAdapter.js`  |
+| Adapter job creation in domain service (`simulateDealWon` creates stub job)                              | Done — `financeDomainService.js`        |
+| Finance event envelope standard                                                                          | Done — `financeEventEnvelope.js`        |
+| Finance route surface (`/api/v2/finance/*`)                                                              | Done — `finance.v2.js`                  |
+| Runtime status endpoint (`GET /api/v2/finance/runtime/status`)                                           | Done — returns `mode: 'mock_read_only'` |
+| ERPNext / Xero / NetSuite PROVIDER_OBJECT_MAP                                                            | Not started                             |
+| Live HTTP calls to any provider                                                                          | Not started                             |
 
 ### Phase 2 — live sandbox writes
 
@@ -664,40 +662,41 @@ The following must be completed before any Phase 2 adapter is activated:
 
 ### Existing endpoints (Phase 1)
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v2/finance/runtime/status` | Runtime health: mode, in-memory counts |
-| `GET` | `/api/v2/finance/journal-entries` | List journal entries for tenant |
-| `GET` | `/api/v2/finance/ledger` | Computed ledger |
-| `GET` | `/api/v2/finance/profit-loss` | P&L report |
-| `GET` | `/api/v2/finance/balance-sheet` | Balance sheet |
-| `POST` | `/api/v2/finance/draft-invoices` | Create draft invoice |
-| `PATCH` | `/api/v2/finance/draft-invoices/:id` | Update draft invoice |
-| `POST` | `/api/v2/finance/journal-drafts` | Create journal draft |
-| `POST` | `/api/v2/finance/simulate/deal-won` | Simulate deal-won journal + adapter job |
-| `POST` | `/api/v2/finance/journal-entries/:id/reverse` | Request journal reversal |
-| `POST` | `/api/v2/finance/approvals/:id/approve` | Approve a finance action |
+| Method  | Path                                          | Description                             |
+| ------- | --------------------------------------------- | --------------------------------------- |
+| `GET`   | `/api/v2/finance/runtime/status`              | Runtime health: mode, in-memory counts  |
+| `GET`   | `/api/v2/finance/journal-entries`             | List journal entries for tenant         |
+| `GET`   | `/api/v2/finance/ledger`                      | Computed ledger                         |
+| `GET`   | `/api/v2/finance/profit-loss`                 | P&L report                              |
+| `GET`   | `/api/v2/finance/balance-sheet`               | Balance sheet                           |
+| `POST`  | `/api/v2/finance/draft-invoices`              | Create draft invoice                    |
+| `PATCH` | `/api/v2/finance/draft-invoices/:id`          | Update draft invoice                    |
+| `POST`  | `/api/v2/finance/journal-drafts`              | Create journal draft                    |
+| `POST`  | `/api/v2/finance/simulate/deal-won`           | Simulate deal-won journal + adapter job |
+| `POST`  | `/api/v2/finance/journal-entries/:id/reverse` | Request journal reversal                |
+| `POST`  | `/api/v2/finance/approvals/:id/approve`       | Approve a finance action                |
 
 Note: `GET /api/v2/finance/accounting-adapters` and `GET /api/v2/finance/external/:provider/schema` are referenced in the architecture plan but are not yet present in `finance.v2.js`. They are listed below as Phase 2 additions.
 
 ### Required Phase 2 additions
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v2/finance/accounting-adapters` | List configured providers for tenant, with health check results |
-| `GET` | `/api/v2/finance/external/:provider/schema` | Return PROVIDER_OBJECT_MAP for the given provider |
-| `GET` | `/api/v2/finance/adapter-jobs` | List adapter jobs for tenant (paginated, filterable by status/provider) |
-| `GET` | `/api/v2/finance/adapter-jobs/:id` | Get single adapter job with full payload and provider_response |
-| `POST` | `/api/v2/finance/adapter-jobs` | Create and queue an adapter job (requires governance check) |
-| `POST` | `/api/v2/finance/adapter-jobs/:id/cancel` | Cancel a queued or failed job |
-| `POST` | `/api/v2/finance/adapter-jobs/:id/retry` | Re-queue a permanently failed job (human-only, clears attempts) |
-| `GET` | `/api/v2/finance/adapter-jobs/:id/events` | Audit trail of events for a specific job |
-| `POST` | `/api/v2/finance/providers/:provider/reconcile` | Trigger a reconcile job for an object type |
-| `GET` | `/api/v2/finance/providers/:provider/health` | Per-provider health check (calls `adapter.checkHealth()`) |
+| Method | Path                                            | Description                                                             |
+| ------ | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `GET`  | `/api/v2/finance/accounting-adapters`           | List configured providers for tenant, with health check results         |
+| `GET`  | `/api/v2/finance/external/:provider/schema`     | Return PROVIDER_OBJECT_MAP for the given provider                       |
+| `GET`  | `/api/v2/finance/adapter-jobs`                  | List adapter jobs for tenant (paginated, filterable by status/provider) |
+| `GET`  | `/api/v2/finance/adapter-jobs/:id`              | Get single adapter job with full payload and provider_response          |
+| `POST` | `/api/v2/finance/adapter-jobs`                  | Create and queue an adapter job (requires governance check)             |
+| `POST` | `/api/v2/finance/adapter-jobs/:id/cancel`       | Cancel a queued or failed job                                           |
+| `POST` | `/api/v2/finance/adapter-jobs/:id/retry`        | Re-queue a permanently failed job (human-only, clears attempts)         |
+| `GET`  | `/api/v2/finance/adapter-jobs/:id/events`       | Audit trail of events for a specific job                                |
+| `POST` | `/api/v2/finance/providers/:provider/reconcile` | Trigger a reconcile job for an object type                              |
+| `GET`  | `/api/v2/finance/providers/:provider/health`    | Per-provider health check (calls `adapter.checkHealth()`)               |
 
 ### Authentication and tenant scoping
 
 All finance routes are gated by:
+
 1. `validateTenantAccess` middleware (JWT, tenant_id resolution)
 2. The Finance module gate (`checkFinanceOpsEnabled`)
 3. Route-level governance checks where writes are involved
@@ -708,18 +707,19 @@ Actor type (`human` vs `ai_agent`) is derived exclusively from `req.user.is_ai_a
 
 ## 10. Architecture Decisions — Resolved
 
-| ID | Decision | Resolution |
-|---|---|---|
-| E1 | Finance event store schema | `finance` schema — `finance.events` table alongside `finance.adapter_jobs` |
-| E2 | Job processor deployment | Separate Coolify worker service on VPS-2 (not in-process, not Supabase cron) |
-| E3 | Approval record linkage | Per governed action/command — one approval per command dispatch, not per canonical object |
-| E4 | Credential storage | `tenant_integrations.api_credentials JSONB` exists and is used. Plain JSONB is acceptable for ERPNext POC. App-level encryption required before QuickBooks/Xero OAuth tokens are stored. No new migration needed for ERPNext. |
-| E5 | First live adapter target | **ERPNext first** (self-hosted, API key auth, no OAuth complexity). QuickBooks remains the canonical schema standard but is not the first OAuth implementation. |
-| E6 | `draft_only: true` field | Internal AiSHA metadata only — must be stripped before any provider payload is dispatched. Strip in the job processor dispatch layer, not in the canonical mapper. |
+| ID  | Decision                   | Resolution                                                                                                                                                                                                                    |
+| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | Finance event store schema | `finance` schema — `finance.events` table alongside `finance.adapter_jobs`                                                                                                                                                    |
+| E2  | Job processor deployment   | Separate Coolify worker service on VPS-2 (not in-process, not Supabase cron)                                                                                                                                                  |
+| E3  | Approval record linkage    | Per governed action/command — one approval per command dispatch, not per canonical object                                                                                                                                     |
+| E4  | Credential storage         | `tenant_integrations.api_credentials JSONB` exists and is used. Plain JSONB is acceptable for ERPNext POC. App-level encryption required before QuickBooks/Xero OAuth tokens are stored. No new migration needed for ERPNext. |
+| E5  | First live adapter target  | **ERPNext first** (self-hosted, API key auth, no OAuth complexity). QuickBooks remains the canonical schema standard but is not the first OAuth implementation.                                                               |
+| E6  | `draft_only: true` field   | Internal AiSHA metadata only — must be stripped before any provider payload is dispatched. Strip in the job processor dispatch layer, not in the canonical mapper.                                                            |
 
 ### E2 implications — separate worker service
 
 The job processor will be a standalone Node.js service deployed as a Coolify application on VPS-2. It:
+
 - Polls `finance.adapter_jobs WHERE status = 'queued' AND next_attempt_at <= now()`
 - Claims jobs with an optimistic lock (`UPDATE ... WHERE status = 'queued' RETURNING *`)
 - Calls the appropriate adapter
@@ -731,6 +731,7 @@ This avoids VPS-1 CPU pressure and keeps the adapter runtime horizontally scalab
 ### E5 implications — ERPNext POC first
 
 Phase 2 implementation sequence:
+
 1. ERPNext adapter (API key + secret, no OAuth) — proves the adapter interface end-to-end
 2. Finance event persistence to `finance.events` (finance schema)
 3. Job processor service (Coolify, VPS-2)

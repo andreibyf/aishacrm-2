@@ -96,6 +96,7 @@ The event dispatcher is responsible for routing new events to workers. The dispa
 ### Replay Protocol
 
 Replay is triggered when:
+
 - A new projection worker is registered for the first time.
 - An operator explicitly requests a rebuild (e.g., after a bug fix).
 - The worker's internal checksum/version does not match the current schema version.
@@ -134,14 +135,14 @@ Replay is blocking per tenant but non-blocking globally: other tenants' projecti
 
 **AiSHA Finance Ops projections are eventually consistent.**
 
-| Property | Guarantee |
-|---|---|
-| Ordering | Events are applied in `created_at` order within a tenant. |
-| Durability | An event that has been appended to the audit stream will eventually be reflected in all projections. |
-| Read-your-writes | Not guaranteed by default. A caller who just appended an event may read a projection that does not yet reflect that event. |
-| Read-your-writes (opt-in) | Callers who need read-your-writes can pass `{ await_event_id: 'evt_...' }` to `getProjection`. The projection layer will block up to `opts.timeout_ms` (default 2000) until the event has been applied, then return. |
+| Property                     | Guarantee                                                                                                                                                                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ordering                     | Events are applied in `created_at` order within a tenant.                                                                                                                                                                                                                                                     |
+| Durability                   | An event that has been appended to the audit stream will eventually be reflected in all projections.                                                                                                                                                                                                          |
+| Read-your-writes             | Not guaranteed by default. A caller who just appended an event may read a projection that does not yet reflect that event.                                                                                                                                                                                    |
+| Read-your-writes (opt-in)    | Callers who need read-your-writes can pass `{ await_event_id: 'evt_...' }` to `getProjection`. The projection layer will block up to `opts.timeout_ms` (default 2000) until the event has been applied, then return.                                                                                          |
 | Cross-projection consistency | Not guaranteed. Two projections may reflect different points in the event stream at the same instant. Callers that need cross-projection consistency (e.g., executive summary) should accept that summary-level figures may lag ledger-level figures by up to the staleness tolerance defined per projection. |
-| Replay consistency | During a replay, the pre-replay snapshot is served. Once the replay completes, reads immediately reflect the rebuilt state. |
+| Replay consistency           | During a replay, the pre-replay snapshot is served. Once the replay completes, reads immediately reflect the rebuilt state.                                                                                                                                                                                   |
 
 Projections do not provide serializable or linearizable reads. They are read models derived from an authoritative event stream; the event stream is the source of truth.
 
@@ -157,9 +158,9 @@ Used by: the Finance Ledger console view. The primary accounting reference for d
 
 ### Consumed Events
 
-| Event type | Effect |
-|---|---|
-| `finance.journal.posted` | Add all lines to account buckets. |
+| Event type                 | Effect                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `finance.journal.posted`   | Add all lines to account buckets.                                                             |
 | `finance.journal.reversed` | Add the reversal entry's lines (which are already debits/credits swapped) to account buckets. |
 
 Events for draft, validation failure, or pending-approval journal entries do not affect the ledger. Only entries with status `posted` or `reversed` contribute (matching `getPostedEntries` in `accountingEngine.js`).
@@ -247,9 +248,9 @@ Used by: the Finance P&L console panel, executive reporting, and the `executive_
 
 Same as `ledger`:
 
-| Event type | Effect |
-|---|---|
-| `finance.journal.posted` | Accumulate Revenue and Expense lines. |
+| Event type                 | Effect                                                        |
+| -------------------------- | ------------------------------------------------------------- |
+| `finance.journal.posted`   | Accumulate Revenue and Expense lines.                         |
 | `finance.journal.reversed` | Accumulate reversal lines (reduces original Revenue/Expense). |
 
 ### Read Model Shape
@@ -339,9 +340,9 @@ Used by: the Finance Balance Sheet console panel, period-close reporting, compli
 
 ### Consumed Events
 
-| Event type | Effect |
-|---|---|
-| `finance.journal.posted` | Accumulate Asset, Liability, and Equity lines. |
+| Event type                 | Effect                                                               |
+| -------------------------- | -------------------------------------------------------------------- |
+| `finance.journal.posted`   | Accumulate Asset, Liability, and Equity lines.                       |
 | `finance.journal.reversed` | Accumulate reversal lines (reduces original Asset/Liability/Equity). |
 
 ### Read Model Shape
@@ -435,12 +436,12 @@ Used by: the Finance Approvals console, workflow automation triggers, governance
 
 ### Consumed Events
 
-| Event type | Effect |
-|---|---|
-| `finance.approval.requested` | Add a new pending approval record to the queue. |
-| `finance.approval.approved` | Update the approval record to `approved`, set `approved_by` and `approved_at`. Remove from pending view. |
-| `finance.approval.rejected` | Update the approval record to `rejected`, set `rejected_by` and `rejected_at`. Remove from pending view. |
-| `finance.journal.reversal_requested` | Add a pending approval record (reversals always require approval). |
+| Event type                           | Effect                                                                                                   |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `finance.approval.requested`         | Add a new pending approval record to the queue.                                                          |
+| `finance.approval.approved`          | Update the approval record to `approved`, set `approved_by` and `approved_at`. Remove from pending view. |
+| `finance.approval.rejected`          | Update the approval record to `rejected`, set `rejected_by` and `rejected_at`. Remove from pending view. |
+| `finance.journal.reversal_requested` | Add a pending approval record (reversals always require approval).                                       |
 
 ### Read Model Shape
 
@@ -451,8 +452,8 @@ Used by: the Finance Approvals console, workflow automation triggers, governance
   pending: [
     {
       approval_id: string,               // 'approval_...'
-      aggregate_type: 'journal_entry' | 'invoice' | 'approval',
-      aggregate_id: string,
+      target_type: 'journal_entry' | 'invoice' | 'approval',
+      target_id: string,
       status: 'pending',
       requested_by: string | null,       // actor_id
       requested_at: string,              // ISO timestamp
@@ -469,8 +470,8 @@ Used by: the Finance Approvals console, workflow automation triggers, governance
   resolved: [
     {
       approval_id: string,
-      aggregate_type: string,
-      aggregate_id: string,
+      target_type: string,
+      target_id: string,
       status: 'approved' | 'rejected',
       requested_by: string | null,
       requested_at: string,
@@ -503,7 +504,7 @@ By default `getProjection` returns only `pending`. Pass `{ include_resolved: tru
 ```js
 getProjection(tenantId: string, opts?: {
   status?: 'pending' | 'approved' | 'rejected' | 'all',  // default: 'pending'
-  aggregate_type?: 'journal_entry' | 'invoice',
+  target_type?: 'journal_entry' | 'invoice',
   risk_level?: 'low' | 'medium' | 'high' | 'critical',
   ai_initiated?: boolean,
   include_resolved?: boolean,                              // default: false
@@ -560,12 +561,12 @@ Used by: the Finance Integrations console, adapter health dashboards, retry work
 
 ### Consumed Events
 
-| Event type | Effect |
-|---|---|
-| `finance.adapter.sync_queued` | Add a new adapter job record with `status: 'queued'`. |
-| `finance.adapter.sync_succeeded` | Update job to `status: 'succeeded'`, record `completed_at` and `external_id`. |
-| `finance.adapter.sync_failed` | Update job to `status: 'failed'`, record `failed_at`, `error_code`, `error_message`. |
-| `finance.approval.approved` | When the approved aggregate has a linked adapter job in `draft` status, transition that job to `status: 'queued'`. |
+| Event type                       | Effect                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `finance.adapter.sync_queued`    | Add a new adapter job record with `status: 'queued'`.                                                              |
+| `finance.adapter.sync_succeeded` | Update job to `status: 'succeeded'`, record `completed_at` and `external_id`.                                      |
+| `finance.adapter.sync_failed`    | Update job to `status: 'failed'`, record `failed_at`, `error_code`, `error_message`.                               |
+| `finance.approval.approved`      | When the approved aggregate has a linked adapter job in `draft` status, transition that job to `status: 'queued'`. |
 
 The last rule handles the deal-won / reversal flows in `financeDomainService.js` where an adapter job is created in `draft` state alongside a pending approval, and only becomes `queued` after approval is granted.
 
@@ -667,8 +668,8 @@ algorithm: RebuildAdapterQueue(events, tenantId)
       jobMap[event.payload.job_id] = { ...payload, status: 'queued', attempt_count: 0 }
 
     if event.event_type == 'finance.approval.approved':
-      // find any draft adapter job linked to this approval's aggregate_id
-      for each job in jobMap where job.aggregate_id == event.payload.approval.aggregate_id
+      // find any draft adapter job linked to this approval's target_id (CF-1: approvals use target_id, not aggregate_id)
+      for each job in jobMap where job.aggregate_id == event.payload.approval.target_id
                                and job.status == 'draft':
         job.status = 'queued'
         job.queued_at = event.created_at
@@ -838,10 +839,10 @@ This projection does not model bank account reconciliation or external cash data
 
 ### Consumed Events
 
-| Event type | Effect |
-|---|---|
-| `finance.journal.posted` | Update cash account balances from Asset-classified lines. |
-| `finance.journal.reversed` | Update cash account balances from reversal lines. |
+| Event type                 | Effect                                                    |
+| -------------------------- | --------------------------------------------------------- |
+| `finance.journal.posted`   | Update cash account balances from Asset-classified lines. |
+| `finance.journal.reversed` | Update cash account balances from reversal lines.         |
 
 ### Read Model Shape
 
@@ -1000,6 +1001,7 @@ finance.governance.action_blocked
 ```
 
 `alerts` is a derived list generated by the worker applying threshold rules:
+
 - `CRITICAL_APPROVALS_PENDING`: `approvals.critical_pending_count > 0`
 - `OLD_PENDING_APPROVAL`: any approval pending > 3600 s (1 hour)
 - `ADAPTER_FAILURES`: `adapters.failed_count > 0`

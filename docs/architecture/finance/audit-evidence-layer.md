@@ -74,31 +74,31 @@ create table finance.audit_events (
 
 Event types follow the pattern `finance.<aggregate>.<past_tense_verb>`. All defined types:
 
-| Event type | Aggregate | Trigger |
-|---|---|---|
-| `finance.journal.draft_created` | `journal_entry` | `createJournalDraft()` success |
-| `finance.journal.validation_failed` | `journal_entry` | `assertBalancedJournal()` throws |
-| `finance.journal.reversal_requested` | `journal_entry` | `reverseJournalEntry()` success |
-| `finance.journal.reversal_approved` | `journal_entry` | reversal approval granted |
-| `finance.journal.posted` | `journal_entry` | entry transitions to `posted` |
-| `finance.journal.reversed` | `journal_entry` | reversal entry transitions to `posted` |
-| `finance.journal.voided` | `journal_entry` | entry voided before posting |
-| `finance.invoice.draft_created` | `invoice` | `createDraftInvoice()` success |
-| `finance.invoice.draft_updated` | `invoice` | `updateDraftInvoice()` success |
-| `finance.invoice.submitted_for_approval` | `invoice` | status → `pending_approval` |
-| `finance.invoice.approved` | `invoice` | `approveFinanceAction()` on invoice |
-| `finance.invoice.sent` | `invoice` | status → `sent` |
-| `finance.invoice.paid` | `invoice` | status → `paid` |
-| `finance.invoice.voided` | `invoice` | status → `voided` |
-| `finance.approval.requested` | `approval` | approval record created |
-| `finance.approval.approved` | `approval` | `approveFinanceAction()` success |
-| `finance.approval.rejected` | `approval` | `rejectFinanceAction()` success |
-| `finance.approval.escalated` | `approval` | escalation triggered |
-| `finance.adapter.sync_queued` | `adapter_job` | job status → `queued` |
-| `finance.adapter.sync_succeeded` | `adapter_job` | job status → `succeeded` |
-| `finance.adapter.sync_failed` | `adapter_job` | job status → `failed` |
-| `finance.governance.blocked` | varies | governance evaluation returns `allowed: false` |
-| `finance.simulation.deal_won` | `journal_entry` | `simulateDealWon()` success |
+| Event type                               | Aggregate       | Trigger                                        |
+| ---------------------------------------- | --------------- | ---------------------------------------------- |
+| `finance.journal.draft_created`          | `journal_entry` | `createJournalDraft()` success                 |
+| `finance.journal.validation_failed`      | `journal_entry` | `assertBalancedJournal()` throws               |
+| `finance.journal.reversal_requested`     | `journal_entry` | `reverseJournalEntry()` success                |
+| `finance.journal.reversal_approved`      | `journal_entry` | reversal approval granted                      |
+| `finance.journal.posted`                 | `journal_entry` | entry transitions to `posted`                  |
+| `finance.journal.reversed`               | `journal_entry` | reversal entry transitions to `posted`         |
+| `finance.journal.voided`                 | `journal_entry` | entry voided before posting                    |
+| `finance.invoice.draft_created`          | `invoice`       | `createDraftInvoice()` success                 |
+| `finance.invoice.draft_updated`          | `invoice`       | `updateDraftInvoice()` success                 |
+| `finance.invoice.submitted_for_approval` | `invoice`       | status → `pending_approval`                    |
+| `finance.invoice.approved`               | `invoice`       | `approveFinanceAction()` on invoice            |
+| `finance.invoice.sent`                   | `invoice`       | status → `sent`                                |
+| `finance.invoice.paid`                   | `invoice`       | status → `paid`                                |
+| `finance.invoice.voided`                 | `invoice`       | status → `voided`                              |
+| `finance.approval.requested`             | `approval`      | approval record created                        |
+| `finance.approval.approved`              | `approval`      | `approveFinanceAction()` success               |
+| `finance.approval.rejected`              | `approval`      | `rejectFinanceAction()` success                |
+| `finance.approval.escalated`             | `approval`      | escalation triggered                           |
+| `finance.adapter.sync_queued`            | `adapter_job`   | job status → `queued`                          |
+| `finance.adapter.sync_succeeded`         | `adapter_job`   | job status → `succeeded`                       |
+| `finance.adapter.sync_failed`            | `adapter_job`   | job status → `failed`                          |
+| `finance.governance.action_blocked`      | varies          | governance evaluation returns `allowed: false` |
+| `finance.approval.requested`             | `approval`      | `simulateDealWon()` emits approval request     |
 
 ### 1.3 Payload Structure
 
@@ -187,15 +187,13 @@ In the persistent path (Supabase), `financeDomainService.js` routes all event wr
 // In the Supabase-backed event store adapter
 async function append(event) {
   // Never update an existing row — insert only
-  const { error } = await supabase
-    .from('finance.audit_events')
-    .insert(event);
+  const { error } = await supabase.from('finance.audit_events').insert(event);
 
   if (error) {
     // Surface the error; do NOT silently retry with an upsert or update
     throw new FinanceEventStoreError(
       `Failed to append audit event: ${error.message}`,
-      'FINANCE_EVENT_STORE_DB_ERROR'
+      'FINANCE_EVENT_STORE_DB_ERROR',
     );
   }
 }
@@ -210,6 +208,7 @@ The `finance.v2.js` route file exposes no endpoint that reads from or writes to 
 The audit query and evidence pack interfaces described in §7 are read-only. They return copies of event data; they do not expose any mutating path.
 
 **What is blocked:**
+
 - No route exposes `DELETE /finance/v2/audit-events/:id`.
 - No route exposes `PATCH /finance/v2/audit-events/:id`.
 - The `policy_decision` field on an event cannot be overwritten after the fact via any route.
@@ -225,11 +224,11 @@ A chain of custody is a reconstructible sequence of events that proves, without 
 
 Three fields connect events into chains:
 
-| Field | Purpose | Set by |
-|---|---|---|
-| `correlation_id` | Groups all events for one user intent or workflow run | `financeEventEnvelope.js`: defaults to `request_id` if not supplied |
-| `causation_id` | Points to the event or command that directly caused this event | Caller; usually the `id` of the preceding event |
-| `braid_trace_id` | Links all events in a single Braid tool execution | Passed through from the Braid runtime |
+| Field            | Purpose                                                        | Set by                                                              |
+| ---------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `correlation_id` | Groups all events for one user intent or workflow run          | `financeEventEnvelope.js`: defaults to `request_id` if not supplied |
+| `causation_id`   | Points to the event or command that directly caused this event | Caller; usually the `id` of the preceding event                     |
+| `braid_trace_id` | Links all events in a single Braid tool execution              | Passed through from the Braid runtime                               |
 
 `correlation_id` is the widest grouping. All events for "the AI agent drafted an invoice in response to user request X" share the same `correlation_id`. `causation_id` is the narrowest: it points to the single event that caused the next one in the chain.
 
@@ -300,16 +299,16 @@ When `actor_type = 'ai_agent'`, the following fields must be present in the audi
 
 ### 4.1 Required Fields for AI Events
 
-| Field | Location | Description |
-|---|---|---|
-| `braid_trace_id` | top-level column | The Braid execution trace ID. Links the event to the full Braid tool call log, including input parameters, intermediate steps, and model response. Required if `actor_type = 'ai_agent'`. |
-| `actor_id` | top-level column | The AI agent's identifier. For Braid-initiated actions, this is the Braid session or agent ID. |
-| `policy_decision.model` | inside `policy_decision` jsonb | The model identifier used (e.g., `gpt-4o`, `claude-3-5-sonnet-20241022`). |
-| `policy_decision.prompt_hash` | inside `policy_decision` jsonb | SHA-256 hex digest of the prompt sent to the model. Used to verify that the prompt on file matches what was actually sent. |
-| `policy_decision.evaluated_at` | inside `policy_decision` jsonb | ISO timestamp of when the governance evaluation ran. |
-| `policy_decision.allowed` | inside `policy_decision` jsonb | Whether the action was permitted. |
-| `policy_decision.risk_level` | inside `policy_decision` jsonb | `low` | `medium` | `high` | `critical` |
-| `policy_decision.policy_trace` | inside `policy_decision` jsonb | Array of policies evaluated, their result, and the reason. |
+| Field                          | Location                       | Description                                                                                                                                                                               |
+| ------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ | ---------- |
+| `braid_trace_id`               | top-level column               | The Braid execution trace ID. Links the event to the full Braid tool call log, including input parameters, intermediate steps, and model response. Required if `actor_type = 'ai_agent'`. |
+| `actor_id`                     | top-level column               | The AI agent's identifier. For Braid-initiated actions, this is the Braid session or agent ID.                                                                                            |
+| `policy_decision.model`        | inside `policy_decision` jsonb | The model identifier used (e.g., `gpt-4o`, `claude-3-5-sonnet-20241022`).                                                                                                                 |
+| `policy_decision.prompt_hash`  | inside `policy_decision` jsonb | SHA-256 hex digest of the prompt sent to the model. Used to verify that the prompt on file matches what was actually sent.                                                                |
+| `policy_decision.evaluated_at` | inside `policy_decision` jsonb | ISO timestamp of when the governance evaluation ran.                                                                                                                                      |
+| `policy_decision.allowed`      | inside `policy_decision` jsonb | Whether the action was permitted.                                                                                                                                                         |
+| `policy_decision.risk_level`   | inside `policy_decision` jsonb | `low`                                                                                                                                                                                     | `medium` | `high` | `critical` |
+| `policy_decision.policy_trace` | inside `policy_decision` jsonb | Array of policies evaluated, their result, and the reason.                                                                                                                                |
 
 `model` and `prompt_hash` are also promoted to top-level columns on `finance.audit_events` for indexing (see §1.1).
 
@@ -317,13 +316,13 @@ When `actor_type = 'ai_agent'`, the following fields must be present in the audi
 
 These fields are not currently captured by `financeGovernanceDecision.js` but should be added:
 
-| Field | Where to add | Description |
-|---|---|---|
-| `policy_decision.model_version` | `policy_decision` jsonb | Full model version string including date suffix if applicable |
-| `policy_decision.temperature` | `policy_decision` jsonb | Inference temperature used; relevant for reproducibility |
-| `policy_decision.token_count` | `policy_decision` jsonb | `{ prompt_tokens, completion_tokens }` — useful for cost attribution and anomaly detection |
-| `policy_decision.tool_call_id` | `policy_decision` jsonb | If the AI action was a tool call within a larger conversation, the tool call ID |
-| `payload.ai_reasoning_summary` | `payload` jsonb | A plain-language summary of the AI's stated reasoning (not the full prompt, which is hashed) |
+| Field                           | Where to add            | Description                                                                                  |
+| ------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
+| `policy_decision.model_version` | `policy_decision` jsonb | Full model version string including date suffix if applicable                                |
+| `policy_decision.temperature`   | `policy_decision` jsonb | Inference temperature used; relevant for reproducibility                                     |
+| `policy_decision.token_count`   | `policy_decision` jsonb | `{ prompt_tokens, completion_tokens }` — useful for cost attribution and anomaly detection   |
+| `policy_decision.tool_call_id`  | `policy_decision` jsonb | If the AI action was a tool call within a larger conversation, the tool call ID              |
+| `payload.ai_reasoning_summary`  | `payload` jsonb         | A plain-language summary of the AI's stated reasoning (not the full prompt, which is hashed) |
 
 ### 4.3 Governance Decision Shape (Current Implementation)
 
@@ -362,7 +361,7 @@ Three commands are permanently blocked for AI actors (from `financeGovernanceDec
 - `RejectFinanceActionCommand` — AI cannot reject approvals.
 - `PostJournalEntryCommand` — AI cannot post ledger truth.
 
-When any of these is attempted by an `ai_agent` actor, a `finance.governance.blocked` audit event is written with `policy_decision.allowed = false`, and the action is rejected with HTTP 403. The audit event is written even when the action is blocked.
+When any of these is attempted by an `ai_agent` actor, a `finance.governance.action_blocked` audit event is written with `policy_decision.allowed = false`, and the action is rejected with HTTP 403. The audit event is written even when the action is blocked.
 
 ---
 
@@ -413,14 +412,10 @@ async function getReversalChain(tenantId, journalEntryId) {
   });
 
   // 3. For each reversal entry found, fetch its own event chain
-  const reversalEntryIds = [...new Set(
-    reversalEvents.map(e => e.aggregate_id).filter(Boolean)
-  )];
+  const reversalEntryIds = [...new Set(reversalEvents.map((e) => e.aggregate_id).filter(Boolean))];
 
   const reversalChainEvents = await Promise.all(
-    reversalEntryIds.map(id =>
-      queryAuditTimeline({ tenant_id: tenantId, target_id: id })
-    )
+    reversalEntryIds.map((id) => queryAuditTimeline({ tenant_id: tenantId, target_id: id })),
   );
 
   return {
@@ -468,11 +463,11 @@ An evidence pack is a tamper-evident export of all audit events, approval record
 
 ```ts
 interface EvidencePackRequest {
-  tenant_id: string;          // UUID
-  from_date: string;          // ISO date, inclusive
-  to_date: string;            // ISO date, inclusive
-  target_type?: string;       // optional: 'invoice' | 'journal_entry' | 'approval'
-  target_id?: string;         // optional: specific aggregate ID
+  tenant_id: string; // UUID
+  from_date: string; // ISO date, inclusive
+  to_date: string; // ISO date, inclusive
+  target_type?: string; // optional: 'invoice' | 'journal_entry' | 'approval'
+  target_id?: string; // optional: specific aggregate ID
 }
 ```
 
@@ -572,8 +567,10 @@ An auditor receiving a pack can re-hash the events against the live DB to detect
 // Auditor verification pseudocode
 const liveEvents = await queryAuditTimeline({ tenant_id, from, to, target_id });
 const liveHash = sha256(JSON.stringify(liveEvents.sort(byCreatedAt)));
-assert(liveHash === pack.integrity.events_hash,
-  'Evidence pack events_hash does not match live audit log — potential tampering or pack is stale');
+assert(
+  liveHash === pack.integrity.events_hash,
+  'Evidence pack events_hash does not match live audit log — potential tampering or pack is stale',
+);
 ```
 
 ### 6.4 Example: AI-drafted invoice → human approved → posted
@@ -627,7 +624,9 @@ assert(liveHash === pack.integrity.events_hash,
       "causation_id": null,
       "model": "gpt-4o",
       "prompt_hash": "sha256:7f3a...",
-      "payload": { "invoice": { "id": "invoice_f7a9...", "status": "draft", "total_cents": 250000 } },
+      "payload": {
+        "invoice": { "id": "invoice_f7a9...", "status": "draft", "total_cents": 250000 }
+      },
       "policy_decision": {
         "allowed": true,
         "requires_approval": false,
@@ -671,7 +670,13 @@ assert(liveHash === pack.integrity.events_hash,
       "causation_id": "evt_bbbb",
       "model": null,
       "prompt_hash": null,
-      "payload": { "approval": { "id": "approval_r001", "status": "approved", "approved_by": "user_finance_controller_uuid" } },
+      "payload": {
+        "approval": {
+          "id": "approval_r001",
+          "status": "approved",
+          "approved_by": "user_finance_controller_uuid"
+        }
+      },
       "policy_decision": { "allowed": true, "requires_approval": false, "risk_level": "low" },
       "created_at": "2025-12-19T09:15:00Z"
     },
@@ -689,7 +694,9 @@ assert(liveHash === pack.integrity.events_hash,
       "causation_id": "evt_cccc",
       "model": null,
       "prompt_hash": null,
-      "payload": { "invoice": { "id": "invoice_f7a9...", "status": "sent", "total_cents": 250000 } },
+      "payload": {
+        "invoice": { "id": "invoice_f7a9...", "status": "sent", "total_cents": 250000 }
+      },
       "policy_decision": { "allowed": true, "requires_approval": false, "risk_level": "low" },
       "created_at": "2025-12-19T09:15:05Z"
     }
@@ -714,14 +721,30 @@ assert(liveHash === pack.integrity.events_hash,
       "aggregate_type": "invoice",
       "aggregate_id": "invoice_f7a9...",
       "snapshots": [
-        { "event_id": "evt_aaaa", "event_type": "finance.invoice.draft_created", "state": { "status": "draft", "total_cents": 250000 } },
-        { "event_id": "evt_dddd", "event_type": "finance.invoice.posted", "state": { "status": "sent", "total_cents": 250000 } }
+        {
+          "event_id": "evt_aaaa",
+          "event_type": "finance.invoice.draft_created",
+          "state": { "status": "draft", "total_cents": 250000 }
+        },
+        {
+          "event_id": "evt_dddd",
+          "event_type": "finance.invoice.posted",
+          "state": { "status": "sent", "total_cents": 250000 }
+        }
       ]
     }
   ],
   "governance_decisions": [
-    { "event_id": "evt_aaaa", "event_type": "finance.invoice.draft_created", "decision": { "allowed": true, "risk_level": "low", "model": "gpt-4o" } },
-    { "event_id": "evt_bbbb", "event_type": "finance.approval.requested", "decision": { "allowed": true, "requires_approval": true } }
+    {
+      "event_id": "evt_aaaa",
+      "event_type": "finance.invoice.draft_created",
+      "decision": { "allowed": true, "risk_level": "low", "model": "gpt-4o" }
+    },
+    {
+      "event_id": "evt_bbbb",
+      "event_type": "finance.approval.requested",
+      "decision": { "allowed": true, "requires_approval": true }
+    }
   ]
 }
 ```
@@ -738,28 +761,28 @@ Returns all audit events matching the given filters, ordered by `created_at` asc
 
 ```ts
 interface AuditTimelineQuery {
-  tenant_id: string;             // required
-  from?: string;                 // ISO datetime, inclusive; default: 90 days ago
-  to?: string;                   // ISO datetime, inclusive; default: now()
-  actor_id?: string;             // filter by actor
+  tenant_id: string; // required
+  from?: string; // ISO datetime, inclusive; default: 90 days ago
+  to?: string; // ISO datetime, inclusive; default: now()
+  actor_id?: string; // filter by actor
   actor_type?: 'human' | 'ai_agent' | 'system';
-  event_type?: string;           // exact match or prefix match with trailing '*'
-  target_id?: string;            // filter by aggregate_id
-  target_type?: string;          // filter by aggregate_type
-  correlation_id?: string;       // filter by correlation_id
-  braid_trace_id?: string;       // filter by braid_trace_id
+  event_type?: string; // exact match or prefix match with trailing '*'
+  target_id?: string; // filter by aggregate_id
+  target_type?: string; // filter by aggregate_type
+  correlation_id?: string; // filter by correlation_id
+  braid_trace_id?: string; // filter by braid_trace_id
   payload_filter?: Record<string, unknown>; // filter by top-level payload fields (key equality)
-  limit?: number;                // default: 500; max: 5000
-  offset?: number;               // default: 0
+  limit?: number; // default: 500; max: 5000
+  offset?: number; // default: 0
 }
 
 interface AuditTimelineResult {
   events: AuditEvent[];
-  total_count: number;           // count without limit/offset, for pagination
-  query: AuditTimelineQuery;     // echo of input
+  total_count: number; // count without limit/offset, for pagination
+  query: AuditTimelineQuery; // echo of input
 }
 
-async function queryAuditTimeline(query: AuditTimelineQuery): Promise<AuditTimelineResult>
+async function queryAuditTimeline(query: AuditTimelineQuery): Promise<AuditTimelineResult>;
 ```
 
 **Implementation notes:**
@@ -793,12 +816,13 @@ Generates a tamper-evident evidence pack (see §6) for a given tenant and time r
 
 ```ts
 interface EvidencePackRequest {
-  tenant_id: string;             // required
-  from_date: string;             // ISO date, inclusive
-  to_date: string;               // ISO date, inclusive
+  tenant_id: string; // required
+  from_date: string; // ISO date, inclusive
+  to_date: string; // ISO date, inclusive
   target_type?: string;
   target_id?: string;
-  generated_by: {               // who is requesting the pack (for pack metadata)
+  generated_by: {
+    // who is requesting the pack (for pack metadata)
     actor_id: string;
     actor_type: 'human' | 'system';
   };
@@ -824,7 +848,7 @@ interface EvidencePack {
   governance_decisions: GovernanceDecisionEntry[];
 }
 
-async function buildEvidencePack(request: EvidencePackRequest): Promise<EvidencePack>
+async function buildEvidencePack(request: EvidencePackRequest): Promise<EvidencePack>;
 ```
 
 **Implementation notes:**
@@ -849,10 +873,7 @@ interface ReversalChain {
   }>;
 }
 
-async function getReversalChain(
-  tenantId: string,
-  journalEntryId: string
-): Promise<ReversalChain>
+async function getReversalChain(tenantId: string, journalEntryId: string): Promise<ReversalChain>;
 ```
 
 **Implementation notes:**
@@ -975,10 +996,10 @@ create index idx_finance_audit_events_model
 
 ## Architecture Decisions — Resolved
 
-| ID | Topic | Decision |
-|---|---|---|
-| D1 | `audit_events` schema shape | **Use migration 168 payload-centered shape.** The scaffold doc described `before_state`/`after_state` columns — these do not exist in migration 168. State is captured inside `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. All interface specs in this document follow migration 168. |
+| ID  | Topic                       | Decision                                                                                                                                                                                                                                                                                                                                                                |
+| --- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | `audit_events` schema shape | **Use migration 168 payload-centered shape.** The scaffold doc described `before_state`/`after_state` columns — these do not exist in migration 168. State is captured inside `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. All interface specs in this document follow migration 168. |
 
 ---
 
-*This document is part of the Finance Ops architecture suite. Related: Track A (Event Store), Track B (Projection Contracts), Track C (Approval Orchestration), Track E (Adapter Runtime Contract), Track F (Security / RLS / Persistence Hardening).*
+_This document is part of the Finance Ops architecture suite. Related: Track A (Event Store), Track B (Projection Contracts), Track C (Approval Orchestration), Track E (Adapter Runtime Contract), Track F (Security / RLS / Persistence Hardening)._

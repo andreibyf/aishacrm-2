@@ -55,6 +55,7 @@ export function createFinanceDomainService(opts = {}) {
   const store = opts.store || createStore();
   const eventStore = opts.eventStore || createFinanceEventStore();
   const now = opts.now || (() => new Date().toISOString());
+  const generateId = opts.generateId || randomUUID;
 
   function appendCommand(bucket, envelope) {
     bucket.commands.push(envelope);
@@ -72,17 +73,21 @@ export function createFinanceDomainService(opts = {}) {
     decision,
     requestId = null,
   }) {
+    const ts = now();
     return {
-      id: `approval_${randomUUID()}`,
+      id: `approval_${generateId()}`,
       tenant_id: tenantId,
-      aggregate_type: aggregateType,
-      aggregate_id: aggregateId,
+      target_type: aggregateType,
+      target_id: aggregateId,
       status: 'pending',
       requested_by: actor.id,
-      requested_at: now(),
+      requested_at: ts,
       approval_policy: decision.approval_policy || null,
       escalation_target: decision.escalation_target || null,
+      risk_level: decision.risk_level || 'high',
       request_id: requestId,
+      created_at: ts,
+      updated_at: ts,
     };
   }
 
@@ -152,7 +157,7 @@ export function createFinanceDomainService(opts = {}) {
       }
 
       const invoice = {
-        id: `invoice_${randomUUID()}`,
+        id: `invoice_${generateId()}`,
         tenant_id: tenantId,
         status: 'draft',
         customer_id: payload.customer_id || null,
@@ -310,7 +315,7 @@ export function createFinanceDomainService(opts = {}) {
       });
 
       const journalEntry = {
-        id: `journal_${randomUUID()}`,
+        id: `journal_${generateId()}`,
         tenant_id: tenantId,
         source_type: payload.source_type || 'finance',
         source_id: payload.source_id || null,
@@ -404,6 +409,18 @@ export function createFinanceDomainService(opts = {}) {
       draftEntry.governance_policy_snapshot = decision;
       draftEntry.updated_at = now();
 
+      const existingApprovalForDeal = bucket.approvals.find(
+        (a) =>
+          a.target_id === draftEntry.id &&
+          !['approved', 'rejected', 'cancelled'].includes(a.status),
+      );
+      if (existingApprovalForDeal) {
+        const err = new Error(`A pending approval already exists for target ${draftEntry.id}`);
+        err.code = 'FINANCE_APPROVAL_DUPLICATE';
+        err.statusCode = 409;
+        throw err;
+      }
+
       const approval = buildApprovalRecord({
         tenantId,
         actor: normalizedActor,
@@ -415,7 +432,7 @@ export function createFinanceDomainService(opts = {}) {
       bucket.approvals.push(approval);
 
       const adapterJob = {
-        id: `adapter_job_${randomUUID()}`,
+        id: `adapter_job_${generateId()}`,
         tenant_id: tenantId,
         status: 'draft',
         provider: payload.provider || 'quickbooks',
@@ -495,6 +512,18 @@ export function createFinanceDomainService(opts = {}) {
       });
 
       bucket.journalEntries.push(reversalEntry);
+
+      const existingApprovalForReversal = bucket.approvals.find(
+        (a) =>
+          a.target_id === reversalEntry.id &&
+          !['approved', 'rejected', 'cancelled'].includes(a.status),
+      );
+      if (existingApprovalForReversal) {
+        const err = new Error(`A pending approval already exists for target ${reversalEntry.id}`);
+        err.code = 'FINANCE_APPROVAL_DUPLICATE';
+        err.statusCode = 409;
+        throw err;
+      }
 
       const approval = buildApprovalRecord({
         tenantId,

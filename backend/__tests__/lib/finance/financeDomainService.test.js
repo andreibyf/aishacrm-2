@@ -83,6 +83,87 @@ test('financeDomainService blocks AI approvals', () => {
   );
 });
 
+// CF-1: approval field naming
+test('financeDomainService approval uses target_type and target_id, not aggregate_type/aggregate_id', () => {
+  const service = createFinanceDomainService();
+  const result = service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  const approval = result.approval;
+  assert.ok('target_type' in approval, 'approval should have target_type field');
+  assert.ok('target_id' in approval, 'approval should have target_id field');
+  assert.equal(approval.target_type, 'journal_entry');
+  assert.equal(approval.target_id, result.journal_entry.id);
+  assert.ok(!('aggregate_type' in approval), 'approval must not have aggregate_type field');
+  assert.ok(!('aggregate_id' in approval), 'approval must not have aggregate_id field');
+});
+
+// CF-6: approval schema completeness
+test('financeDomainService approval record includes risk_level, created_at, updated_at', () => {
+  const service = createFinanceDomainService();
+  const result = service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  const approval = result.approval;
+  assert.ok(approval.risk_level, 'approval should have risk_level');
+  assert.ok(approval.created_at, 'approval should have created_at');
+  assert.ok(approval.updated_at, 'approval should have updated_at');
+});
+
+// CF-2: idempotency guard — simulateDealWon throws 409 when a pending approval
+// already exists for the same target journal entry id.
+// Uses opts.generateId to produce a deterministic id sequence so the second call
+// produces the same journal entry id as the first, triggering the guard.
+test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on duplicate target_id', () => {
+  // generateId() is called as: `journal_${generateId()}` for journal entries,
+  // `approval_${generateId()}` for approvals, and `adapter_job_${generateId()}` for jobs.
+  // Sequence per simulateDealWon call: journal entry id raw → approval id raw → adapter job id raw
+  const ids = [
+    // first simulateDealWon
+    'deal_001', // → journal entry id becomes 'journal_deal_001'
+    'deal_001', // → approval id becomes 'approval_deal_001'
+    'deal_001', // → adapter job id becomes 'adapter_job_deal_001'
+    // second simulateDealWon — same raw id → same journal entry id 'journal_deal_001'
+    'deal_001', // → journal entry id becomes 'journal_deal_001' (collision!)
+    'deal_retry', // → approval id (never reached — guard fires before this)
+    'deal_retry', // → adapter job id (never reached)
+  ];
+  let idIdx = 0;
+  const service = createFinanceDomainService({
+    generateId: () => ids[idIdx++] ?? 'fallback_id',
+  });
+
+  // First call — succeeds
+  service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 25000 },
+  });
+
+  // Second call — same journal entry id produced, guard detects existing pending approval
+  let thrown;
+  try {
+    service.simulateDealWon({
+      tenantId: TENANT_ID,
+      actor: { id: 'user-1', type: 'human' },
+      payload: { amount_cents: 25000 },
+    });
+  } catch (err) {
+    thrown = err;
+  }
+
+  assert.ok(thrown, 'second simulateDealWon should throw');
+  assert.equal(thrown.code, 'FINANCE_APPROVAL_DUPLICATE');
+  assert.equal(thrown.statusCode, 409);
+  assert.match(thrown.message, /pending approval already exists/i);
+});
+
 test('financeDomainService reversal creates a new journal entry instead of deleting history', () => {
   const service = createFinanceDomainService();
 

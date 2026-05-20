@@ -17,6 +17,13 @@ test('append assigns id and created_at', () => {
 
   assert.ok(typeof evt.id === 'string', 'id should be a string');
   assert.ok(evt.id.startsWith('evt_'), 'id should start with evt_');
+  // CF-4: id must be evt_<uuid> — verify UUID portion is well-formed
+  const uuidPart = evt.id.slice(4);
+  assert.match(
+    uuidPart,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    'id UUID portion should be a valid v4 UUID',
+  );
   assert.ok(typeof evt.created_at === 'string', 'created_at should be a string');
   assert.ok(!isNaN(Date.parse(evt.created_at)), 'created_at should be a valid ISO timestamp');
 });
@@ -103,9 +110,21 @@ test('query filters by event_type', () => {
 
 test('query filters by aggregate_id', () => {
   const store = createFinanceEventStore();
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.invoice.draft_created', aggregate_id: 'invoice_1' });
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.invoice.draft_updated', aggregate_id: 'invoice_1' });
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.invoice.draft_created', aggregate_id: 'invoice_2' });
+  store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.invoice.draft_created',
+    aggregate_id: 'invoice_1',
+  });
+  store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.invoice.draft_updated',
+    aggregate_id: 'invoice_1',
+  });
+  store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.invoice.draft_created',
+    aggregate_id: 'invoice_2',
+  });
 
   const result = store.query({ tenant_id: TENANT_A, aggregate_id: 'invoice_1' });
   assert.equal(result.length, 2);
@@ -115,17 +134,30 @@ test('query filters by aggregate_id', () => {
   );
 });
 
-test('replay returns events oldest-first in append order', () => {
+test('replay returns events sorted by created_at ASC (oldest first)', () => {
   const store = createFinanceEventStore();
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.first' });
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.second' });
-  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.third' });
+  const e1 = store.append({ tenant_id: TENANT_A, event_type: 'finance.test.first' });
+  const e2 = store.append({ tenant_id: TENANT_A, event_type: 'finance.test.second' });
+  const e3 = store.append({ tenant_id: TENANT_A, event_type: 'finance.test.third' });
 
   const replayed = store.replay(TENANT_A);
   assert.equal(replayed.length, 3);
-  assert.equal(replayed[0].event_type, 'finance.test.first');
-  assert.equal(replayed[1].event_type, 'finance.test.second');
-  assert.equal(replayed[2].event_type, 'finance.test.third');
+
+  // Verify created_at ordering is non-decreasing (oldest-first)
+  assert.ok(
+    replayed[0].created_at <= replayed[1].created_at,
+    'first event created_at should be <= second',
+  );
+  assert.ok(
+    replayed[1].created_at <= replayed[2].created_at,
+    'second event created_at should be <= third',
+  );
+
+  // Verify the events present are the three we appended (by id)
+  const ids = new Set(replayed.map((e) => e.id));
+  assert.ok(ids.has(e1.id), 'replay should include event 1');
+  assert.ok(ids.has(e2.id), 'replay should include event 2');
+  assert.ok(ids.has(e3.id), 'replay should include event 3');
 });
 
 test('getCount returns correct count per tenant', () => {
@@ -185,4 +217,104 @@ test('integration: getEventStore() returns the internal event store', () => {
 
   const count = store.getCount(TENANT_A);
   assert.ok(count >= 1, 'store should have at least one event after createDraftInvoice');
+});
+
+// G1 — caller-supplied id and causation chain integrity
+
+test('append honors caller-supplied id — stored event carries the same id', () => {
+  const store = createFinanceEventStore();
+  const callerSuppliedId = 'evt_00000000-0000-4000-8000-aaaaaaaaaaaa';
+
+  const stored = store.append({
+    id: callerSuppliedId,
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.with_supplied_id',
+  });
+
+  assert.equal(stored.id, callerSuppliedId, 'stored event must carry the caller-supplied id');
+
+  // Verify the event is retrievable by query (not a phantom)
+  const found = store.query({ tenant_id: TENANT_A });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].id, callerSuppliedId);
+});
+
+test('append generates id when none supplied — format is evt_<uuid>', () => {
+  const store = createFinanceEventStore();
+
+  const stored = store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.generated_id',
+  });
+
+  assert.ok(stored.id.startsWith('evt_'), 'generated id must start with evt_');
+  const uuidPart = stored.id.slice(4);
+  assert.match(
+    uuidPart,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    'generated id UUID portion must be a valid v4 UUID',
+  );
+});
+
+test('causation chain: stored event id is stable and usable as causation_id for next event', () => {
+  const store = createFinanceEventStore();
+
+  // Simulate: envelope builder pre-assigns id, then caller uses that same id for causation
+  const parentId = 'evt_00000000-0000-4000-8000-parent000000';
+  const parent = store.append({
+    id: parentId,
+    tenant_id: TENANT_A,
+    event_type: 'finance.journal.draft_created',
+  });
+
+  const child = store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.approval.requested',
+    causation_id: parent.id, // must equal parentId, not some generated id
+  });
+
+  assert.equal(parent.id, parentId, 'parent stored id must match the caller-supplied id');
+  assert.equal(
+    child.causation_id,
+    parentId,
+    'child causation_id must point to the actual stored parent id',
+  );
+
+  // Traversal: find all events caused by parent
+  const caused = store.query({ tenant_id: TENANT_A }).filter((e) => e.causation_id === parentId);
+  assert.equal(caused.length, 1, 'exactly one event should cite the parent as its cause');
+  assert.equal(caused[0].event_type, 'finance.approval.requested');
+});
+
+test('replay still orders by created_at ASC after caller-supplied ids are honored', () => {
+  const store = createFinanceEventStore();
+
+  const e1 = store.append({
+    id: 'evt_fixed-1',
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.first',
+  });
+  const e2 = store.append({
+    id: 'evt_fixed-2',
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.second',
+  });
+  const e3 = store.append({
+    id: 'evt_fixed-3',
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.third',
+  });
+
+  const replayed = store.replay(TENANT_A);
+  assert.equal(replayed.length, 3);
+
+  // created_at ordering must be non-decreasing
+  assert.ok(replayed[0].created_at <= replayed[1].created_at, 'first created_at <= second');
+  assert.ok(replayed[1].created_at <= replayed[2].created_at, 'second created_at <= third');
+
+  // All three events must be present
+  const ids = new Set(replayed.map((e) => e.id));
+  assert.ok(ids.has(e1.id));
+  assert.ok(ids.has(e2.id));
+  assert.ok(ids.has(e3.id));
 });
