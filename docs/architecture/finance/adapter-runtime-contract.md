@@ -540,7 +540,7 @@ Events use the standard `financeEventEnvelope.js` shape. Adapter events are emit
 
 ```js
 {
-  id: `evt_${uuid}`,
+  id: uuid,                            // bare v4 UUID — no evt_ prefix (M-1)
   tenant_id: string,
   event_type: string,
   aggregate_type: 'adapter_job',
