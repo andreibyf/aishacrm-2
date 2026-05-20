@@ -55,6 +55,58 @@ describe('isFinanceOpsEnabled (pure)', () => {
     assert.equal(FINANCE_MODULE_KEYS.CANONICAL, 'financeOps');
     assert.equal(FINANCE_MODULE_KEYS.ALIAS, 'enterpriseFinance');
   });
+
+  // T-4: M-6 — is_enabled: null must NOT open the gate (permissive !==false removed)
+  test('T-4: returns false when matching row has is_enabled: null', () => {
+    const rows = [{ module_name: 'financeOps', is_enabled: null }];
+    assert.equal(isFinanceOpsEnabled({ rows }), false);
+  });
+
+  test('T-4: returns false when matching row has is_enabled: undefined', () => {
+    const rows = [{ module_name: 'financeOps', is_enabled: undefined }];
+    assert.equal(isFinanceOpsEnabled({ rows }), false);
+  });
+
+  test('T-4: returns false when matching row has is_enabled: 0 (falsy non-boolean)', () => {
+    const rows = [{ module_name: 'financeOps', is_enabled: 0 }];
+    assert.equal(isFinanceOpsEnabled({ rows }), false);
+  });
+
+  // T-5: R-6 — CANONICAL wins when both keys exist with conflicting values
+  test('T-5: CANONICAL row wins when it is enabled and ALIAS row is disabled', () => {
+    const rows = [
+      { module_name: 'financeOps', is_enabled: true },
+      { module_name: 'enterpriseFinance', is_enabled: false },
+    ];
+    assert.equal(isFinanceOpsEnabled({ rows }), true);
+  });
+
+  test('T-5: CANONICAL row wins when it is disabled and ALIAS row is enabled', () => {
+    const rows = [
+      { module_name: 'financeOps', is_enabled: false },
+      { module_name: 'enterpriseFinance', is_enabled: true },
+    ];
+    assert.equal(isFinanceOpsEnabled({ rows }), false);
+  });
+
+  test('T-5: ALIAS alone is used when no CANONICAL row exists', () => {
+    const rows = [{ module_name: 'enterpriseFinance', is_enabled: true }];
+    assert.equal(isFinanceOpsEnabled({ rows }), true);
+  });
+
+  test('T-5: CANONICAL wins regardless of row order in array', () => {
+    // Simulate Supabase returning rows in either order — result must be deterministic
+    const rowsAliasFirst = [
+      { module_name: 'enterpriseFinance', is_enabled: false },
+      { module_name: 'financeOps', is_enabled: true },
+    ];
+    const rowsCanonicalFirst = [
+      { module_name: 'financeOps', is_enabled: true },
+      { module_name: 'enterpriseFinance', is_enabled: false },
+    ];
+    assert.equal(isFinanceOpsEnabled({ rows: rowsAliasFirst }), true);
+    assert.equal(isFinanceOpsEnabled({ rows: rowsCanonicalFirst }), true);
+  });
 });
 
 // ── DB-integrated via mock Supabase client ────────────────────────────────────

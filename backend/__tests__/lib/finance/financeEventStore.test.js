@@ -8,6 +8,10 @@ import createFinanceDomainService from '../../../lib/finance/financeDomainServic
 const TENANT_A = '00000000-0000-4000-8000-aaaaaaaaaaaa';
 const TENANT_B = '00000000-0000-4000-8000-bbbbbbbbbbbb';
 
+// M-1: IDs must be bare v4 UUIDs — no evt_ prefix — so they are directly
+// insertable into uuid-typed Postgres columns.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 test('append assigns id and created_at', () => {
   const store = createFinanceEventStore();
   const evt = store.append({
@@ -15,15 +19,9 @@ test('append assigns id and created_at', () => {
     event_type: 'finance.test.created',
   });
 
+  // M-1: generated id must be a bare v4 UUID with no prefix
   assert.ok(typeof evt.id === 'string', 'id should be a string');
-  assert.ok(evt.id.startsWith('evt_'), 'id should start with evt_');
-  // CF-4: id must be evt_<uuid> — verify UUID portion is well-formed
-  const uuidPart = evt.id.slice(4);
-  assert.match(
-    uuidPart,
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    'id UUID portion should be a valid v4 UUID',
-  );
+  assert.match(evt.id, UUID_PATTERN, 'id must be a valid v4 UUID (no prefix)');
   assert.ok(typeof evt.created_at === 'string', 'created_at should be a string');
   assert.ok(!isNaN(Date.parse(evt.created_at)), 'created_at should be a valid ISO timestamp');
 });
@@ -223,7 +221,8 @@ test('integration: getEventStore() returns the internal event store', () => {
 
 test('append honors caller-supplied id — stored event carries the same id', () => {
   const store = createFinanceEventStore();
-  const callerSuppliedId = 'evt_00000000-0000-4000-8000-aaaaaaaaaaaa';
+  // M-1: caller-supplied IDs must be bare UUIDs — no prefix
+  const callerSuppliedId = '00000000-0000-4000-8000-aaaaaaaaaaaa';
 
   const stored = store.append({
     id: callerSuppliedId,
@@ -239,7 +238,7 @@ test('append honors caller-supplied id — stored event carries the same id', ()
   assert.equal(found[0].id, callerSuppliedId);
 });
 
-test('append generates id when none supplied — format is evt_<uuid>', () => {
+test('append generates id when none supplied — format is a bare v4 UUID', () => {
   const store = createFinanceEventStore();
 
   const stored = store.append({
@@ -247,20 +246,15 @@ test('append generates id when none supplied — format is evt_<uuid>', () => {
     event_type: 'finance.test.generated_id',
   });
 
-  assert.ok(stored.id.startsWith('evt_'), 'generated id must start with evt_');
-  const uuidPart = stored.id.slice(4);
-  assert.match(
-    uuidPart,
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    'generated id UUID portion must be a valid v4 UUID',
-  );
+  // M-1: no prefix — must be a valid v4 UUID directly
+  assert.match(stored.id, UUID_PATTERN, 'generated id must be a valid v4 UUID (no evt_ prefix)');
 });
 
 test('causation chain: stored event id is stable and usable as causation_id for next event', () => {
   const store = createFinanceEventStore();
 
   // Simulate: envelope builder pre-assigns id, then caller uses that same id for causation
-  const parentId = 'evt_00000000-0000-4000-8000-parent000000';
+  const parentId = '00000000-0000-4000-8000-bbbbbbbbbbbb';
   const parent = store.append({
     id: parentId,
     tenant_id: TENANT_A,
@@ -290,17 +284,17 @@ test('replay still orders by created_at ASC after caller-supplied ids are honore
   const store = createFinanceEventStore();
 
   const e1 = store.append({
-    id: 'evt_fixed-1',
+    id: '00000000-0000-4000-8001-000000000001',
     tenant_id: TENANT_A,
     event_type: 'finance.test.first',
   });
   const e2 = store.append({
-    id: 'evt_fixed-2',
+    id: '00000000-0000-4000-8001-000000000002',
     tenant_id: TENANT_A,
     event_type: 'finance.test.second',
   });
   const e3 = store.append({
-    id: 'evt_fixed-3',
+    id: '00000000-0000-4000-8001-000000000003',
     tenant_id: TENANT_A,
     event_type: 'finance.test.third',
   });
@@ -317,4 +311,44 @@ test('replay still orders by created_at ASC after caller-supplied ids are honore
   assert.ok(ids.has(e1.id));
   assert.ok(ids.has(e2.id));
   assert.ok(ids.has(e3.id));
+});
+
+// T-11 — CF-5: deterministic tie-break for events with identical created_at timestamps
+test('T-11: replay is deterministic when events share identical created_at — _seq preserves insertion order', () => {
+  const store = createFinanceEventStore();
+
+  // Append many events in rapid succession. In fast test environments multiple
+  // events will share the same millisecond timestamp. The _seq tie-breaker must
+  // ensure replay() returns them in insertion order regardless.
+  const COUNT = 20;
+  const appended = [];
+  for (let i = 0; i < COUNT; i++) {
+    appended.push(
+      store.append({
+        tenant_id: TENANT_A,
+        event_type: `finance.test.burst_${i}`,
+      }),
+    );
+  }
+
+  const replayed = store.replay(TENANT_A);
+  assert.equal(replayed.length, COUNT, 'all appended events must appear in replay');
+
+  // Verify non-decreasing created_at across all pairs
+  for (let i = 1; i < replayed.length; i++) {
+    assert.ok(
+      replayed[i - 1].created_at <= replayed[i].created_at,
+      `created_at must be non-decreasing at index ${i}`,
+    );
+  }
+
+  // For any pair that shares the same timestamp, insertion order (_seq) must be preserved.
+  // We verify this by checking that the replayed order matches the appended order.
+  const appendedIds = appended.map((e) => e.id);
+  const replayedIds = replayed.map((e) => e.id);
+  assert.deepEqual(
+    replayedIds,
+    appendedIds,
+    'replay must return events in insertion order (tie-broken by _seq)',
+  );
 });

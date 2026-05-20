@@ -6,17 +6,17 @@ import createFinanceDomainService from '../lib/finance/financeDomainService.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
 
 function resolveTenantId(req) {
-  return (
-    req.tenant?.id || req.query?.tenant_id || req.body?.tenant_id || req.user?.tenant_id || null
-  );
+  // M-5: Trust only server-injected sources. req.body?.tenant_id and req.query?.tenant_id
+  // are attacker-controlled; a manipulated body can supply a foreign tenant_id that
+  // propagates into domain service calls before any mismatch is detected.
+  return req.tenant?.id || req.user?.tenant_id || null;
 }
 
 function buildActor(req) {
   // Actor identity is derived exclusively from the authenticated session.
   // Never trust body-supplied actor_type or actor_id — doing so would allow
   // any caller to impersonate a human actor and bypass AI governance checks.
-  const isAiAgent =
-    req.user?.is_ai_agent === true || req.user?.role === 'ai_agent';
+  const isAiAgent = req.user?.is_ai_agent === true || req.user?.role === 'ai_agent';
   return {
     id: req.user?.id || null,
     type: isAiAgent ? 'ai_agent' : 'human',
@@ -36,8 +36,9 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
   const router = express.Router();
   const service = opts.service || createFinanceDomainService();
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
-  const isFinanceModuleEnabled = opts.isFinanceModuleEnabled
-    || (({ tenantId }) => checkFinanceOpsEnabled({ tenantId, getSupabaseClient }));
+  const isFinanceModuleEnabled =
+    opts.isFinanceModuleEnabled ||
+    (({ tenantId }) => checkFinanceOpsEnabled({ tenantId, getSupabaseClient }));
 
   router.use(validateTenantAccess);
 
@@ -66,15 +67,16 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.get('/runtime/status', async (req, res) => {
     try {
-      const state = typeof service.getState === 'function'
-        ? service.getState(req.financeTenantId)
-        : {
-            journalEntries: service.listJournalEntries(req.financeTenantId),
-            approvals: service.listApprovals(req.financeTenantId),
-            auditEvents: service.listAuditEvents(req.financeTenantId),
-            invoices: [],
-            adapterJobs: [],
-          };
+      const state =
+        typeof service.getState === 'function'
+          ? service.getState(req.financeTenantId)
+          : {
+              journalEntries: service.listJournalEntries(req.financeTenantId),
+              approvals: service.listApprovals(req.financeTenantId),
+              auditEvents: service.listAuditEvents(req.financeTenantId),
+              invoices: [],
+              adapterJobs: [],
+            };
 
       res.json({
         status: 'success',

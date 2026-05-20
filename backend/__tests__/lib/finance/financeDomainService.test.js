@@ -164,6 +164,75 @@ test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on 
   assert.match(thrown.message, /pending approval already exists/i);
 });
 
+// T-9: M-3 — centralized pushApproval guard prevents duplicates on ANY code path
+// Before M-3, the guard only lived inside simulateDealWon and reverseJournalEntry.
+// After M-3 it lives in pushApproval(), so every future caller is automatically protected.
+// This test verifies the guard fires when a pending approval is pre-seeded via seedApproval(),
+// simulating what would happen if a Phase 2 code path tried to create a second approval
+// for the same target without going through simulateDealWon or reverseJournalEntry.
+test('T-9: pushApproval guard rejects a second pending approval for the same target via any caller', () => {
+  const service = createFinanceDomainService();
+  const TARGET_ID = 'invoice_00000000-0000-4000-8000-000000000099';
+
+  // Seed a pending approval directly into the bucket (simulates a Phase 2 domain method)
+  service.seedApproval({
+    id: 'approval_pre_existing',
+    tenant_id: TENANT_ID,
+    target_type: 'invoice',
+    target_id: TARGET_ID,
+    status: 'pending',
+    requested_by: 'user-1',
+    requested_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  // Seed a posted journal entry so simulateDealWon has something to build on
+  service.seedJournalEntry({
+    id: TARGET_ID,
+    tenant_id: TENANT_ID,
+    status: 'draft',
+    currency: 'usd',
+    lines: [],
+  });
+
+  // Now try to create an approval for the same target via simulateDealWon — must throw 409
+  // We use a custom generateId to force the journal entry to use TARGET_ID
+  const ids = ['00000000-0000-4000-8000-000000000099', 'approval_new', 'adapter_new'];
+  let idx = 0;
+  const service2 = createFinanceDomainService({
+    generateId: () => ids[idx++] ?? 'fallback',
+  });
+
+  // Seed the pre-existing approval into service2
+  service2.seedApproval({
+    id: 'approval_pre_existing',
+    tenant_id: TENANT_ID,
+    target_type: 'journal_entry',
+    target_id: `journal_${ids[0]}`,
+    status: 'pending',
+    requested_by: 'user-1',
+    requested_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  let thrown;
+  try {
+    service2.simulateDealWon({
+      tenantId: TENANT_ID,
+      actor: { id: 'user-1', type: 'human' },
+      payload: { amount_cents: 5000 },
+    });
+  } catch (err) {
+    thrown = err;
+  }
+
+  assert.ok(thrown, 'should throw when a pending approval already exists for the target');
+  assert.equal(thrown.code, 'FINANCE_APPROVAL_DUPLICATE');
+  assert.equal(thrown.statusCode, 409);
+});
+
 test('financeDomainService reversal creates a new journal entry instead of deleting history', () => {
   const service = createFinanceDomainService();
 

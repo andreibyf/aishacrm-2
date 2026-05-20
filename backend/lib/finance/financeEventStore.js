@@ -15,14 +15,19 @@ export class FinanceEventStoreError extends Error {
   }
 }
 
-// CF-4: RFC 4122 UUID-based event IDs — globally unique, no timestamp coupling
+// CF-4 / M-1: Bare UUID — finance_events.id is a uuid column in Postgres.
+// No prefix so the generated value is directly insertable into a uuid-typed column.
 function generateEventId() {
-  return `evt_${randomUUID()}`;
+  return randomUUID();
 }
 
 export function createFinanceEventStore() {
   // Internal log — array of frozen event objects
   const log = [];
+  // CF-5: monotonic insertion counter used as a deterministic tie-breaker when
+  // two events share the same created_at millisecond. Ensures replay() is stable
+  // even without sub-millisecond clock resolution.
+  let seqCounter = 0;
 
   function append(eventPartial) {
     if (!eventPartial || !eventPartial.tenant_id) {
@@ -39,6 +44,9 @@ export function createFinanceEventStore() {
     }
 
     const event = Object.freeze({
+      // CF-5: monotonic insertion index for stable sort tie-breaking in replay().
+      // Stripped from DB persistence — this is an in-memory scaffolding detail only.
+      _seq: ++seqCounter,
       // G1: Honor caller-supplied id (from createFinanceEventEnvelope) to preserve causation chains.
       // Generate only when absent.
       id: eventPartial.id || generateEventId(),
@@ -99,10 +107,16 @@ export function createFinanceEventStore() {
         'FINANCE_EVENT_STORE_INVALID',
       );
     }
-    // CF-5: Sort by created_at ASC so replay is deterministic regardless of append order
+    // CF-5: Sort by created_at ASC, with _seq as a deterministic tie-breaker for
+    // events that share the same millisecond timestamp. This guarantees stable
+    // replay ordering without sub-millisecond clock resolution.
     return log
       .filter((evt) => evt.tenant_id === tenant_id)
-      .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+      .sort((a, b) => {
+        if (a.created_at < b.created_at) return -1;
+        if (a.created_at > b.created_at) return 1;
+        return a._seq - b._seq;
+      });
   }
 
   function getCount(tenant_id) {

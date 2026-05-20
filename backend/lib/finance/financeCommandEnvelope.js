@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-
-function normalizeActorType(actorType) {
-  if (actorType === 'ai_agent' || actorType === 'system') return actorType;
-  return 'human';
-}
+import { normalizeActorType } from './financeActorUtils.js';
 
 export function createFinanceCommandEnvelope({
   tenantId,
@@ -16,10 +12,10 @@ export function createFinanceCommandEnvelope({
   causationId = null,
   braidTraceId = null,
   payload = {},
-  createdAt = new Date().toISOString(),
 } = {}) {
+  // M-1: Bare UUID — no prefix. finance_commands.id is a uuid column in Postgres.
   return {
-    id: `cmd_${randomUUID()}`,
+    id: randomUUID(),
     tenant_id: tenantId,
     command_type: commandType,
     actor_id: actorId,
@@ -30,7 +26,9 @@ export function createFinanceCommandEnvelope({
     causation_id: causationId,
     braid_trace_id: braidTraceId,
     payload,
-    created_at: createdAt,
+    // R-5: created_at is always the moment of construction; callers cannot inject
+    // arbitrary timestamps into audit records.
+    created_at: new Date().toISOString(),
   };
 }
 

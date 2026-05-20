@@ -65,6 +65,31 @@ export function createFinanceDomainService(opts = {}) {
     eventStore.append(envelope);
   }
 
+  // M-3 / CF-2: Centralized duplicate approval guard.
+  // Previously the tenant+target_type+target_id uniqueness check was duplicated
+  // inline inside simulateDealWon and reverseJournalEntry. Any new code path
+  // that calls bucket.approvals.push() directly bypasses the invariant silently.
+  // All approval creation MUST go through pushApproval().
+  function pushApproval(bucket, record) {
+    const existing = bucket.approvals.find(
+      (a) =>
+        a.tenant_id === record.tenant_id &&
+        a.target_type === record.target_type &&
+        a.target_id === record.target_id &&
+        !['approved', 'rejected', 'cancelled'].includes(a.status),
+    );
+    if (existing) {
+      const err = new Error(
+        `A pending approval already exists for ${record.target_type} ${record.target_id}`,
+      );
+      err.code = 'FINANCE_APPROVAL_DUPLICATE';
+      err.statusCode = 409;
+      throw err;
+    }
+    bucket.approvals.push(record);
+    return record;
+  }
+
   function buildApprovalRecord({
     tenantId,
     actor,
@@ -409,27 +434,17 @@ export function createFinanceDomainService(opts = {}) {
       draftEntry.governance_policy_snapshot = decision;
       draftEntry.updated_at = now();
 
-      const existingApprovalForDeal = bucket.approvals.find(
-        (a) =>
-          a.target_id === draftEntry.id &&
-          !['approved', 'rejected', 'cancelled'].includes(a.status),
+      const approval = pushApproval(
+        bucket,
+        buildApprovalRecord({
+          tenantId,
+          actor: normalizedActor,
+          aggregateType: 'journal_entry',
+          aggregateId: draftEntry.id,
+          decision,
+          requestId,
+        }),
       );
-      if (existingApprovalForDeal) {
-        const err = new Error(`A pending approval already exists for target ${draftEntry.id}`);
-        err.code = 'FINANCE_APPROVAL_DUPLICATE';
-        err.statusCode = 409;
-        throw err;
-      }
-
-      const approval = buildApprovalRecord({
-        tenantId,
-        actor: normalizedActor,
-        aggregateType: 'journal_entry',
-        aggregateId: draftEntry.id,
-        decision,
-        requestId,
-      });
-      bucket.approvals.push(approval);
 
       const adapterJob = {
         id: `adapter_job_${generateId()}`,
@@ -513,27 +528,17 @@ export function createFinanceDomainService(opts = {}) {
 
       bucket.journalEntries.push(reversalEntry);
 
-      const existingApprovalForReversal = bucket.approvals.find(
-        (a) =>
-          a.target_id === reversalEntry.id &&
-          !['approved', 'rejected', 'cancelled'].includes(a.status),
+      const approval = pushApproval(
+        bucket,
+        buildApprovalRecord({
+          tenantId,
+          actor: normalizedActor,
+          aggregateType: 'journal_entry',
+          aggregateId: reversalEntry.id,
+          decision,
+          requestId,
+        }),
       );
-      if (existingApprovalForReversal) {
-        const err = new Error(`A pending approval already exists for target ${reversalEntry.id}`);
-        err.code = 'FINANCE_APPROVAL_DUPLICATE';
-        err.statusCode = 409;
-        throw err;
-      }
-
-      const approval = buildApprovalRecord({
-        tenantId,
-        actor: normalizedActor,
-        aggregateType: 'journal_entry',
-        aggregateId: reversalEntry.id,
-        decision,
-        requestId,
-      });
-      bucket.approvals.push(approval);
 
       appendEvent(
         bucket,
@@ -613,6 +618,15 @@ export function createFinanceDomainService(opts = {}) {
       const bucket = getTenantBucket(store, entry?.tenant_id);
       bucket.journalEntries.push(clone(entry));
       return clone(entry);
+    },
+
+    // T-9 / testing: seed a pre-existing approval record directly into the bucket.
+    // This lets tests verify that pushApproval() rejects duplicates for ANY caller,
+    // not just the two domain methods that were already using inline guards before M-3.
+    seedApproval(approval) {
+      const bucket = getTenantBucket(store, approval?.tenant_id);
+      bucket.approvals.push(clone(approval));
+      return clone(approval);
     },
 
     getState(tenantId) {

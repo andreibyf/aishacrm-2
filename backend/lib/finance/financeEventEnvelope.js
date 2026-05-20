@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-
-function normalizeActorType(actorType) {
-  if (actorType === 'ai_agent' || actorType === 'system') return actorType;
-  return 'human';
-}
+import { normalizeActorType } from './financeActorUtils.js';
 
 export function createFinanceEventEnvelope({
   tenantId,
@@ -19,10 +15,12 @@ export function createFinanceEventEnvelope({
   causationId = null,
   payload = {},
   policyDecision = {},
-  createdAt = new Date().toISOString(),
 } = {}) {
+  // M-1: Bare UUID — no prefix. finance_events.id is a uuid column in Postgres.
+  // Causation chains: caller may pre-assign this id via createFinanceEventEnvelope and pass it
+  // to financeEventStore.append() so downstream events can reference it as causation_id.
   return {
-    id: `evt_${randomUUID()}`,
+    id: randomUUID(),
     tenant_id: tenantId,
     event_type: eventType,
     aggregate_type: aggregateType,
@@ -36,7 +34,9 @@ export function createFinanceEventEnvelope({
     causation_id: causationId,
     payload,
     policy_decision: policyDecision,
-    created_at: createdAt,
+    // R-5: created_at is always the moment of construction; callers cannot inject
+    // arbitrary timestamps into audit records.
+    created_at: new Date().toISOString(),
   };
 }
 

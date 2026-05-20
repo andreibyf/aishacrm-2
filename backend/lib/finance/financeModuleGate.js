@@ -31,12 +31,21 @@ export function isFinanceOpsEnabled({ rows = [], featureFlags = {} } = {}) {
   if (featureFlags.financeOps === true) return true;
   if (featureFlags.financeOps === false) return false;
 
-  const match = (Array.isArray(rows) ? rows : []).find((row) =>
+  const validRows = (Array.isArray(rows) ? rows : []).filter((row) =>
     FINANCE_MODULE_KEY_SET.has(row?.module_name),
   );
 
-  if (!match) return false;
-  return match.is_enabled !== false;
+  if (validRows.length === 0) return false;
+
+  // R-6: When both CANONICAL (financeOps) and ALIAS (enterpriseFinance) rows exist
+  // with conflicting is_enabled values, CANONICAL wins. Array.find() on an unordered
+  // Supabase result is non-deterministic — explicit resolution is required.
+  const canonical = validRows.find((r) => r.module_name === FINANCE_MODULE_KEYS.CANONICAL);
+  const match = canonical || validRows[0];
+
+  // M-6: Permissive null fallback removed. A missing or null is_enabled field must
+  // not silently expose finance routes. Only an explicit true enables the module.
+  return match.is_enabled === true;
 }
 
 /**

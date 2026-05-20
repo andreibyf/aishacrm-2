@@ -173,14 +173,22 @@ export function buildBalanceSheet(entries = []) {
     }
   });
 
+  const assets_cents = assets.reduce((sum, account) => sum + account.amount_cents, 0);
+  const liabilities_cents = liabilities.reduce((sum, account) => sum + account.amount_cents, 0);
+  const equity_cents = equity.reduce((sum, account) => sum + account.amount_cents, 0);
+
   return {
     assets,
     liabilities,
     equity,
     totals: {
-      assets_cents: assets.reduce((sum, account) => sum + account.amount_cents, 0),
-      liabilities_cents: liabilities.reduce((sum, account) => sum + account.amount_cents, 0),
-      equity_cents: equity.reduce((sum, account) => sum + account.amount_cents, 0),
+      assets_cents,
+      liabilities_cents,
+      equity_cents,
+      // R-3: Expose the fundamental accounting equation check. Posted data that
+      // fails this indicates a ledger integrity bug — surfacing it allows callers
+      // to detect corruption rather than silently consuming imbalanced sheets.
+      is_balanced: assets_cents === liabilities_cents + equity_cents,
     },
   };
 }
@@ -208,7 +216,10 @@ export function createReversalDraft(entry, overrides = {}) {
     reversal_of: sourceEntry.id || null,
     created_by: overrides.created_by || null,
     braid_trace_id: overrides.braid_trace_id || null,
-    ai_generated: overrides.ai_generated === true,
+    // R-2: Propagate ai_generated from the source entry when the override does not
+    // explicitly set it. Previous code used `=== true`, which silently dropped the
+    // flag for AI-generated source entries, corrupting the audit trail.
+    ai_generated: overrides.ai_generated ?? sourceEntry.ai_generated ?? false,
     governance_policy_snapshot: overrides.governance_policy_snapshot || {},
     lines: reversedLines,
     created_at: overrides.created_at || new Date().toISOString(),
