@@ -114,7 +114,7 @@
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.6.5",
     "react-rnd": "^10.5.3",
-    "react-router-dom": "^7.13.1",
+    "react-router-dom": "^7.15.0",
     "recharts": "^3.7.0",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.1",
