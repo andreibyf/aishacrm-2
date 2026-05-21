@@ -49,6 +49,21 @@
 
 ## 3. finance.projection.ledger
 
+> **Implementation status — Phase 2B-8 (minimal ledger harness).** Implemented as
+> `backend/lib/finance/projections/ledgerProjection.js`
+> (`createLedgerProjectionWorker()`) — the first projection consumer built on the
+> Phase 2B-7 Projection Runtime. The 2B-8 minimal scope consumes
+> **`finance.journal.posted` only**; `finance.journal.reversed`, `as_of_date`
+> point-in-time queries, and the `meta` block are deferred to a later phase.
+> The worker conforms to the runtime worker contract: `handleEvent` / `replay`
+> accumulate each journal line into a per-account bucket in the tenant-scoped
+> store; `getProjection(tenantId, opts, store)` assembles the read model
+> (`{ tenant_id, accounts, totals }`, accounts sorted by `account_name`,
+> `balance_cents = debit_cents − credit_cents`). A `finance.journal.posted`
+> event missing `payload.journal_entry.lines` throws — the runtime surfaces
+> that as a degraded projection. The sections below remain the eventual
+> full-ledger target.
+
 ### Purpose
 
 Answers: "What is the current running balance for every account across all posted journal entries?"
