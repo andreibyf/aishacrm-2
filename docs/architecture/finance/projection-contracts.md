@@ -87,7 +87,7 @@ Every projection worker must implement the following interface. Workers are iden
 
 The event dispatcher is responsible for routing new events to workers. The dispatch contract is:
 
-1. An event is appended to the event stream (via `finance.audit.event_appended`).
+1. An event is appended to the event stream.
 2. The dispatcher reads `event.event_type` and delivers the envelope to every worker whose `consumedEvents` array includes that type.
 3. Dispatch is sequential within a tenant: workers for the same tenant receive events in `created_at` order. Cross-tenant dispatch may be parallelized.
 4. A worker's `handleEvent` must acknowledge (return/resolve) before the next event for that tenant is dispatched to that worker.
@@ -140,7 +140,7 @@ Replay is blocking per tenant but non-blocking globally: other tenants' projecti
 | Ordering                     | Events are applied in `created_at` order within a tenant.                                                                                                                                                                                                                                                     |
 | Durability                   | An event that has been appended to the audit stream will eventually be reflected in all projections.                                                                                                                                                                                                          |
 | Read-your-writes             | Not guaranteed by default. A caller who just appended an event may read a projection that does not yet reflect that event.                                                                                                                                                                                    |
-| Read-your-writes (opt-in)    | Callers who need read-your-writes can pass `{ await_event_id: 'evt_...' }` to `getProjection`. The projection layer will block up to `opts.timeout_ms` (default 2000) until the event has been applied, then return.                                                                                          |
+| Read-your-writes (opt-in)    | Callers who need read-your-writes can pass `{ await_event_id: '<event uuid>' }` to `getProjection`. The projection layer will block up to `opts.timeout_ms` (default 2000) until the event has been applied, then return.                                                                                     |
 | Cross-projection consistency | Not guaranteed. Two projections may reflect different points in the event stream at the same instant. Callers that need cross-projection consistency (e.g., executive summary) should accept that summary-level figures may lag ledger-level figures by up to the staleness tolerance defined per projection. |
 | Replay consistency           | During a replay, the pre-replay snapshot is served. Once the replay completes, reads immediately reflect the rebuilt state.                                                                                                                                                                                   |
 
@@ -441,7 +441,14 @@ Used by: the Finance Approvals console, workflow automation triggers, governance
 | `finance.approval.requested`         | Add a new pending approval record to the queue.                                                          |
 | `finance.approval.approved`          | Update the approval record to `approved`, set `approved_by` and `approved_at`. Remove from pending view. |
 | `finance.approval.rejected`          | Update the approval record to `rejected`, set `rejected_by` and `rejected_at`. Remove from pending view. |
+| `finance.approval.cancelled`         | Mark the approval `cancelled`; remove from pending view, keep in resolved history.                       |
 | `finance.journal.reversal_requested` | Add a pending approval record (reversals always require approval).                                       |
+
+A `finance.approval.cancelled` event closes a pending approval before it is acted on:
+the queue item is marked inactive/closed, removed from the `pending` worklist, and
+retained in the `resolved` array with `status: 'cancelled'`. Cancellation never deletes
+the approval — the full `requested → cancelled` history is preserved in the immutable
+event stream and surfaced by the `audit_timeline` projection.
 
 ### Read Model Shape
 
@@ -472,10 +479,10 @@ Used by: the Finance Approvals console, workflow automation triggers, governance
       approval_id: string,
       target_type: string,
       target_id: string,
-      status: 'approved' | 'rejected',
+      status: 'approved' | 'rejected' | 'cancelled',
       requested_by: string | null,
       requested_at: string,
-      resolved_by: string | null,
+      resolved_by: string | null,    // approver, rejecter, or canceller
       resolved_at: string | null,
       approval_policy: string | null,
       risk_level: string,
@@ -503,7 +510,7 @@ By default `getProjection` returns only `pending`. Pass `{ include_resolved: tru
 
 ```js
 getProjection(tenantId: string, opts?: {
-  status?: 'pending' | 'approved' | 'rejected' | 'all',  // default: 'pending'
+  status?: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'all',  // default: 'pending'
   target_type?: 'journal_entry' | 'invoice',
   risk_level?: 'low' | 'medium' | 'high' | 'critical',
   ai_initiated?: boolean,
@@ -540,8 +547,14 @@ algorithm: RebuildApprovalQueue(events, tenantId)
       approvalMap[id].resolved_by = event.actor_id
       approvalMap[id].resolved_at = event.created_at
 
+    if event.event_type == 'finance.approval.cancelled':
+      id = event.payload.approval.id
+      approvalMap[id].status = 'cancelled'
+      approvalMap[id].resolved_by = event.actor_id
+      approvalMap[id].resolved_at = event.created_at
+
   pending  = approvalMap.values() where status == 'pending'
-  resolved = approvalMap.values() where status in ['approved', 'rejected']
+  resolved = approvalMap.values() where status in ['approved', 'rejected', 'cancelled']
   return { pending, resolved, totals }
 ```
 
@@ -707,7 +720,7 @@ Used by: the Finance Audit console, compliance exports, governance reviews, debu
 
 ### Consumed Events
 
-All finance event types:
+All finance business event types:
 
 ```
 finance.invoice.draft_created
@@ -722,13 +735,18 @@ finance.journal.reversed
 finance.approval.requested
 finance.approval.approved
 finance.approval.rejected
+finance.approval.cancelled
 finance.adapter.sync_queued
 finance.adapter.sync_succeeded
 finance.adapter.sync_failed
 finance.governance.action_allowed
 finance.governance.action_blocked
-finance.audit.event_appended
 ```
+
+`finance.audit.event_appended` is a reserved internal infrastructure event, not a
+business event. The audit timeline consumes it **only** when the projection is
+explicitly configured to surface infrastructure events; by default it is filtered
+out. It must never be treated as a substitute for the business event it accompanies.
 
 ### Read Model Shape
 
@@ -739,7 +757,7 @@ finance.audit.event_appended
   total_events: number,
   events: [
     {
-      event_id: string,                // 'evt_...'
+      event_id: string,                // bare v4 UUID
       event_type: string,
       aggregate_type: string,
       aggregate_id: string | null,

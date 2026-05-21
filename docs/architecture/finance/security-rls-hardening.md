@@ -54,16 +54,16 @@ Finance writes flow exclusively through the backend service layer — there is n
 - `service_only` = `(SELECT auth.role()) = 'service_role'`
 - `DENY` = `USING (false)` — explicit deny, no rows visible, no operation permitted
 
-| Table | SELECT | INSERT | UPDATE | DELETE |
-|---|---|---|---|---|
-| `finance.accounts` | `tenant_match` | `service_only` | `service_only` | DENY |
-| `finance.journal_entries` | `tenant_match` | `service_only` | `service_only` (status transitions only — see §3) | DENY |
-| `finance.journal_lines` | `tenant_match` | `service_only` | DENY | DENY |
-| `finance.invoices` | `tenant_match` | `service_only` | `service_only` (draft status only — see §3) | DENY |
-| `finance.invoice_lines` | `tenant_match` | `service_only` | `service_only` | DENY |
-| `finance.approvals` | `tenant_match` | `service_only` | `service_only` (non-terminal status only — see §3) | DENY |
-| `finance.audit_events` | `tenant_match` | `service_only` | DENY | DENY |
-| `finance.adapter_jobs` | `tenant_match` | `service_only` | `service_only` | DENY |
+| Table                     | SELECT         | INSERT         | UPDATE                                             | DELETE |
+| ------------------------- | -------------- | -------------- | -------------------------------------------------- | ------ |
+| `finance.accounts`        | `tenant_match` | `service_only` | `service_only`                                     | DENY   |
+| `finance.journal_entries` | `tenant_match` | `service_only` | `service_only` (status transitions only — see §3)  | DENY   |
+| `finance.journal_lines`   | `tenant_match` | `service_only` | DENY                                               | DENY   |
+| `finance.invoices`        | `tenant_match` | `service_only` | `service_only` (draft status only — see §3)        | DENY   |
+| `finance.invoice_lines`   | `tenant_match` | `service_only` | `service_only`                                     | DENY   |
+| `finance.approvals`       | `tenant_match` | `service_only` | `service_only` (non-terminal status only — see §3) | DENY   |
+| `finance.audit_events`    | `tenant_match` | `service_only` | DENY                                               | DENY   |
+| `finance.adapter_jobs`    | `tenant_match` | `service_only` | `service_only`                                     | DENY   |
 
 **Rationale for `service_only` INSERT/UPDATE:**
 Finance writes must always go through the domain service layer, which enforces governance decisions (`financeGovernanceDecision.js`). Direct authenticated client writes would bypass the `evaluateFinanceGovernance` check, actor identity derivation, and audit event emission. The RLS `service_only` constraint enforces this at the database layer.
@@ -299,7 +299,7 @@ function assertMutable(record, tableName) {
   const IMMUTABLE_STATUSES = ['posted', 'reversed', 'voided', 'approved', 'executed'];
   if (IMMUTABLE_STATUSES.includes(record.status)) {
     const err = new Error(
-      `Cannot mutate ${tableName} ${record.id}: status is '${record.status}'. Use reversal or void workflow.`
+      `Cannot mutate ${tableName} ${record.id}: status is '${record.status}'. Use reversal or void workflow.`,
     );
     err.statusCode = 409;
     throw err;
@@ -390,8 +390,7 @@ function buildActor(req) {
   // Actor identity is derived exclusively from the authenticated session.
   // Never trust body-supplied actor_type or actor_id — doing so would allow
   // any caller to impersonate a human actor and bypass AI governance checks.
-  const isAiAgent =
-    req.user?.is_ai_agent === true || req.user?.role === 'ai_agent';
+  const isAiAgent = req.user?.is_ai_agent === true || req.user?.role === 'ai_agent';
   return {
     id: req.user?.id || null,
     type: isAiAgent ? 'ai_agent' : 'human',
@@ -498,21 +497,22 @@ For operations that mutate finance state — post, approve, reverse, void — th
 
 ### 8.1 Required Fields on Every Audit Event
 
-| Field | Source | Notes |
-|---|---|---|
-| `event_type` | Command name | e.g., `PostJournalEntryCommand`, `ApproveFinanceActionCommand`, `RequestJournalReversalCommand` |
-| `aggregate_type` | Domain entity | e.g., `journal_entry`, `invoice`, `approval` |
-| `aggregate_id` | Record UUID | The UUID of the affected finance record |
-| `actor_id` | `req.user.id` via `buildActor(req)` | UUID of the authenticated user; `null` for system events |
-| `actor_type` | `buildActor(req).type` | `'human'` or `'ai_agent'` — derived from session only |
-| `source` | Route identifier | e.g., `'finance.v2.approvals.approve'`, `'braid.finance.postJournalEntry'` |
-| `request_id` | `req.headers['x-request-id']` | Correlation ID from the HTTP request header; null if absent |
-| `braid_trace_id` | `req.body.braid_trace_id` | Braid execution trace; null for human-initiated requests |
-| `correlation_id` | Derived from request_id or generated | Links related events in a single operation chain |
-| `policy_decision` | Full `GovernanceDecision` object | The complete snapshot from `evaluateFinanceGovernance` result, including `risk_level`, `policy_trace`, `approved`, `model`, `prompt_hash`, `evaluated_at` |
-| `payload` | Operation-specific | For post: entry id + amount + balance; for approve: approval id + approver; for reverse: original entry id + reason |
-| `tenant_id` | `req.financeTenantId` | Always the middleware-resolved UUID |
-| `created_at` | `now()` (DB default) | Do not allow caller to supply this value |
+| Field             | Source                               | Notes                                                                                                                                                     |
+| ----------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_type`      | Canonical finance event taxonomy     | A `finance.*` event name — e.g., `finance.journal.posted`, `finance.approval.approved`, `finance.journal.reversal_requested`. Never a command name.       |
+| `command_type`    | Command name                         | e.g., `PostJournalEntryCommand` — carried in `payload.command_type` (and the `policy_decision` snapshot), never used as `event_type`.                     |
+| `aggregate_type`  | Domain entity                        | e.g., `journal_entry`, `invoice`, `approval`                                                                                                              |
+| `aggregate_id`    | Record UUID                          | The UUID of the affected finance record                                                                                                                   |
+| `actor_id`        | `req.user.id` via `buildActor(req)`  | UUID of the authenticated user; `null` for system events                                                                                                  |
+| `actor_type`      | `buildActor(req).type`               | `'human'` or `'ai_agent'` — derived from session only                                                                                                     |
+| `source`          | Route identifier                     | e.g., `'finance.v2.approvals.approve'`, `'braid.finance.postJournalEntry'`                                                                                |
+| `request_id`      | `req.headers['x-request-id']`        | Correlation ID from the HTTP request header; null if absent                                                                                               |
+| `braid_trace_id`  | `req.body.braid_trace_id`            | Braid execution trace; null for human-initiated requests                                                                                                  |
+| `correlation_id`  | Derived from request_id or generated | Links related events in a single operation chain                                                                                                          |
+| `policy_decision` | Full `GovernanceDecision` object     | The complete snapshot from `evaluateFinanceGovernance` result, including `risk_level`, `policy_trace`, `approved`, `model`, `prompt_hash`, `evaluated_at` |
+| `payload`         | Operation-specific                   | For post: entry id + amount + balance; for approve: approval id + approver; for reverse: original entry id + reason                                       |
+| `tenant_id`       | `req.financeTenantId`                | Always the middleware-resolved UUID                                                                                                                       |
+| `created_at`      | `now()` (DB default)                 | Do not allow caller to supply this value                                                                                                                  |
 
 ### 8.2 IP Address
 
@@ -548,21 +548,25 @@ For high-risk operations (post, approve, reverse), both must be written atomical
 ### 8.4 Minimum Audit Event Example
 
 ```javascript
-// Emitted on: PostJournalEntryCommand, ApproveFinanceActionCommand, RequestJournalReversalCommand
+// Triggered by: PostJournalEntryCommand, ApproveFinanceActionCommand, RequestJournalReversalCommand.
+// event_type is ALWAYS a canonical finance.* event name — never the command name.
+// The command name is carried separately in payload.command_type.
+// Example below is the journal-post case (PostJournalEntryCommand -> finance.journal.posted).
 const auditEvent = {
   tenant_id: req.financeTenantId,
-  event_type: commandType,                          // 'PostJournalEntryCommand'
+  event_type: 'finance.journal.posted', // canonical finance.* event — never a command name
   aggregate_type: 'journal_entry',
   aggregate_id: journalEntry.id,
-  actor_id: actor.id,                               // from buildActor(req)
-  actor_type: actor.type,                           // 'human' | 'ai_agent'
+  actor_id: actor.id, // from buildActor(req)
+  actor_type: actor.type, // 'human' | 'ai_agent'
   source: 'finance.v2.journal_entries.post',
   request_id: req.headers['x-request-id'] || null,
   braid_trace_id: req.body?.braid_trace_id || null,
   correlation_id: req.headers['x-request-id'] || generateCorrelationId(),
-  causation_id: null,                               // set if this event was caused by another event
-  policy_decision: governanceDecision,              // full object from evaluateFinanceGovernance
+  causation_id: null, // set if this event was caused by another event
+  policy_decision: governanceDecision, // full object from evaluateFinanceGovernance
   payload: {
+    command_type: commandType, // e.g. 'PostJournalEntryCommand' — command name lives here
     amount_cents: totalDebitCents,
     entry_number: journalEntry.entry_number,
     balance_verified: true,
@@ -578,24 +582,24 @@ const auditEvent = {
 
 ## Appendix A: Architecture Decisions — Resolved
 
-| ID | Topic | Decision |
-|---|---|---|
-| F1 | `entry_number` nullable+unique | **Generate before insert.** The domain service must generate an entry number (e.g., `JE-<timestamp>-<random>`) before INSERT so the unique constraint is always satisfied. Fix in `financeDomainService.js` before staging migration. |
-| F2 | `finance` schema PostgREST exposure | **Excluded by default.** `finance` must not appear in Supabase exposed schemas. Confirmed posture: Section 7 stands. Verify in Supabase Dashboard → API → Exposed schemas before staging. |
-| F3 | service_role bypass | **Verify in staging.** Run a backend query against a finance table in the staging environment and confirm `(SELECT auth.role()) = 'service_role'` grants unrestricted access. This is a pre-staging confirmation step, not a code change. |
-| D1 | audit_events shape | **Use migration 168 payload-centered shape.** `before_state`/`after_state` columns from the scaffold doc are dropped. State is captured in `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. |
+| ID  | Topic                               | Decision                                                                                                                                                                                                                                                                  |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | `entry_number` nullable+unique      | **Generate before insert.** The domain service must generate an entry number (e.g., `JE-<timestamp>-<random>`) before INSERT so the unique constraint is always satisfied. Fix in `financeDomainService.js` before staging migration.                                     |
+| F2  | `finance` schema PostgREST exposure | **Excluded by default.** `finance` must not appear in Supabase exposed schemas. Confirmed posture: Section 7 stands. Verify in Supabase Dashboard → API → Exposed schemas before staging.                                                                                 |
+| F3  | service_role bypass                 | **Verify in staging.** Run a backend query against a finance table in the staging environment and confirm `(SELECT auth.role()) = 'service_role'` grants unrestricted access. This is a pre-staging confirmation step, not a code change.                                 |
+| D1  | audit_events shape                  | **Use migration 168 payload-centered shape.** `before_state`/`after_state` columns from the scaffold doc are dropped. State is captured in `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. |
 
 ---
 
 ## Appendix B: Key File Locations
 
-| File | Purpose |
-|---|---|
-| `backend/migrations/168_finance_ops_runtime_scaffold.sql` | Finance schema and table creation (dev draft) |
-| `backend/migrations/058_consolidate_rls_contacts.sql` | Live CRM RLS pattern — reference for claim expression |
-| `backend/migrations/080_ai_suggestions_table.sql` | Alternative `current_setting` claim pattern |
-| `backend/routes/finance.v2.js` | Finance API routes — actor identity, no DELETE routes |
-| `backend/middleware/validateTenant.js` | Tenant access enforcement middleware |
-| `backend/lib/finance/financeGovernanceDecision.js` | AI governance rules — `AI_BLOCKED_COMMANDS`, risk levels |
-| `docs/reference/DATABASE_REFERENCE.md` | Canonical schema reference — update when finance tables finalized |
-| `docs/contributing/PARALLEL_AGENTS.md` | Coordination rules before pushing |
+| File                                                      | Purpose                                                           |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| `backend/migrations/168_finance_ops_runtime_scaffold.sql` | Finance schema and table creation (dev draft)                     |
+| `backend/migrations/058_consolidate_rls_contacts.sql`     | Live CRM RLS pattern — reference for claim expression             |
+| `backend/migrations/080_ai_suggestions_table.sql`         | Alternative `current_setting` claim pattern                       |
+| `backend/routes/finance.v2.js`                            | Finance API routes — actor identity, no DELETE routes             |
+| `backend/middleware/validateTenant.js`                    | Tenant access enforcement middleware                              |
+| `backend/lib/finance/financeGovernanceDecision.js`        | AI governance rules — `AI_BLOCKED_COMMANDS`, risk levels          |
+| `docs/reference/DATABASE_REFERENCE.md`                    | Canonical schema reference — update when finance tables finalized |
+| `docs/contributing/PARALLEL_AGENTS.md`                    | Coordination rules before pushing                                 |

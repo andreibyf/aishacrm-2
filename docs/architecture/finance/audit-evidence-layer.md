@@ -24,7 +24,7 @@ The `finance.audit_events` table stores one row per finance event. The row maps 
 -- finance.audit_events (from migration 168, with additions specified here)
 create table finance.audit_events (
   -- Identity
-  id              text primary key,              -- evt_{uuid}, never a bare uuid
+  id              uuid primary key default gen_random_uuid(),  -- bare v4 UUID; never evt_-prefixed (M-1)
   tenant_id       uuid not null,
 
   -- Event classification
@@ -99,6 +99,13 @@ Event types follow the pattern `finance.<aggregate>.<past_tense_verb>`. All defi
 | `finance.adapter.sync_succeeded`         | `adapter_job`   | job status → `succeeded`                       |
 | `finance.adapter.sync_failed`            | `adapter_job`   | job status → `failed`                          |
 | `finance.governance.action_blocked`      | varies          | governance evaluation returns `allowed: false` |
+
+`finance.audit.event_appended` is intentionally **not** in the table above. It is a
+reserved internal infrastructure event — an event-store integrity signal (event
+persisted / checksummed / replicated / dispatched / archived), not a business domain
+event. It is never emitted in place of the actual business event, and evidence packs
+(§6) include it only when proving event-store integrity, not as part of normal
+business flow. See the canonical taxonomy split in the Finance Ops scaffold.
 
 ### 1.3 Payload Structure
 
@@ -261,30 +268,30 @@ For a reversal chain, `causation_id` traversal is used (see §5).
 
 ```
 [event 1] finance.invoice.draft_created
-  id:             evt_aaaa
-  correlation_id: req_1234          ← HTTP request from Braid tool call
-  causation_id:   null              ← first event in the chain
+  id:             00000000-0000-4000-8000-00000000aaaa
+  correlation_id: req_1234                              ← HTTP request from Braid tool call
+  causation_id:   null                                  ← first event in the chain
   braid_trace_id: trace_braid_001
   actor_type:     ai_agent
 
 [event 2] finance.approval.requested
-  id:             evt_bbbb
-  correlation_id: req_1234          ← same request span
-  causation_id:   evt_aaaa          ← caused by draft creation
+  id:             00000000-0000-4000-8000-00000000bbbb
+  correlation_id: req_1234                              ← same request span
+  causation_id:   00000000-0000-4000-8000-00000000aaaa  ← caused by draft creation
   braid_trace_id: trace_braid_001
   actor_type:     ai_agent
 
 [event 3] finance.approval.approved
-  id:             evt_cccc
-  correlation_id: req_9999          ← human reviewer's request
-  causation_id:   evt_bbbb          ← caused by approval request
-  braid_trace_id: null              ← human action; no Braid trace
+  id:             00000000-0000-4000-8000-00000000cccc
+  correlation_id: req_9999                              ← human reviewer's request
+  causation_id:   00000000-0000-4000-8000-00000000bbbb  ← caused by approval request
+  braid_trace_id: null                                  ← human action; no Braid trace
   actor_type:     human
 
 [event 4] finance.invoice.posted
-  id:             evt_dddd
+  id:             00000000-0000-4000-8000-00000000dddd
   correlation_id: req_9999
-  causation_id:   evt_cccc
+  causation_id:   00000000-0000-4000-8000-00000000cccc
   braid_trace_id: null
   actor_type:     human
 ```
@@ -385,10 +392,10 @@ original_entry (id: A) → reversal_entry (id: B, reversal_of: A)
 
 ```
 [event 1] finance.journal.posted       -- aggregate_id: A, causation_id: null (or prior event)
-[event 2] finance.journal.reversal_requested  -- aggregate_id: B, causation_id: evt_1, payload.original_entry_id: A
-[event 3] finance.approval.requested   -- aggregate_id: approval_R, causation_id: evt_2
-[event 4] finance.approval.approved    -- aggregate_id: approval_R, causation_id: evt_3
-[event 5] finance.journal.reversed     -- aggregate_id: B, causation_id: evt_4, payload.original_entry_id: A
+[event 2] finance.journal.reversal_requested  -- aggregate_id: B, causation_id: (event 1 id), payload.original_entry_id: A
+[event 3] finance.approval.requested   -- aggregate_id: approval_R, causation_id: (event 2 id)
+[event 4] finance.approval.approved    -- aggregate_id: approval_R, causation_id: (event 3 id)
+[event 5] finance.journal.reversed     -- aggregate_id: B, causation_id: (event 4 id), payload.original_entry_id: A
 ```
 
 `payload.original_entry_id` in events 2 and 5 provides a direct foreign-key-style link back to entry A without requiring a join through `finance.journal_entries.reversal_of`.
@@ -534,8 +541,8 @@ An evidence pack is a single JSON document with the following sections:
       aggregate_type: "invoice",
       aggregate_id: "invoice_aaa",
       snapshots: [
-        { event_id: "evt_aaaa", event_type: "finance.invoice.draft_created", state: { ... } },
-        { event_id: "evt_bbbb", event_type: "finance.invoice.draft_updated", state: { ... } }
+        { event_id: "00000000-0000-4000-8000-aaa000000001", event_type: "finance.invoice.draft_created", state: { ... } },
+        { event_id: "00000000-0000-4000-8000-aaa000000002", event_type: "finance.invoice.draft_updated", state: { ... } }
       ]
     }
   ],
@@ -543,7 +550,7 @@ An evidence pack is a single JSON document with the following sections:
   // Governance decisions (deduplicated; one entry per unique policy_decision snapshot)
   governance_decisions: [
     {
-      event_id: "evt_aaaa",
+      event_id: "00000000-0000-4000-8000-aaa000000001",
       event_type: "finance.invoice.draft_created",
       decision: { ...full policy_decision object }
     }
@@ -745,12 +752,12 @@ assert(
   ],
   "governance_decisions": [
     {
-      "event_id": "evt_aaaa",
+      "event_id": "00000000-0000-4000-8000-aaa000000001",
       "event_type": "finance.invoice.draft_created",
       "decision": { "allowed": true, "risk_level": "low", "model": "gpt-4o" }
     },
     {
-      "event_id": "evt_bbbb",
+      "event_id": "00000000-0000-4000-8000-aaa000000002",
       "event_type": "finance.approval.requested",
       "decision": { "allowed": true, "requires_approval": true }
     }

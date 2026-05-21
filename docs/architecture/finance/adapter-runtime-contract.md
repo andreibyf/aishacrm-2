@@ -285,6 +285,15 @@ When `attempts >= max_attempts`:
 4. An approval record is created in `finance.approvals` with `target_type = 'adapter_job'` and `status = 'pending'` — a human must review and decide whether to re-queue, cancel, or escalate.
 5. The job is never re-queued automatically after this point.
 
+### Retry idempotency
+
+Adapter jobs are delivered **at-least-once**: a transient failure followed by a retry, or a stuck-job watchdog reset, can cause the same job to execute more than once. Every adapter operation must therefore be idempotent across retries.
+
+- `queued → running` claiming uses an optimistic lock (`UPDATE ... WHERE status = 'queued' RETURNING id`) so concurrent processors never double-claim a job.
+- `pushDraft` / `pushFinal` must not create a duplicate provider record on retry. Where the provider supports an idempotency key (or a deterministic external reference derived from `adapter_jobs.id`), the adapter must send it. Where it does not, the adapter must first call `syncStatus` / `fetchObject` to detect whether the prior attempt already succeeded before re-issuing the write.
+- Event emission on retry is governed by the event-store posture: the store is append-always and does **not** deduplicate, so the job processor must not emit a duplicate `finance.adapter.sync_succeeded` for a job that already reached a terminal state. The processor checks job status before emitting.
+- The canonical idempotency contract for the whole runtime — event store, domain layer, projections, and this job processor — is documented in the Finance Ops scaffold ("Idempotency posture → Final idempotency posture by layer").
+
 ### Job processor invariants
 
 - A job in `running` state must be claimed with an optimistic lock (UPDATE ... WHERE status = 'queued' RETURNING id). Concurrent processors must not double-claim.
