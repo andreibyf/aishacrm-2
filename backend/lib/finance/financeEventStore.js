@@ -15,7 +15,7 @@ export class FinanceEventStoreError extends Error {
   }
 }
 
-// CF-4 / M-1: Bare UUID — finance_events.id is a uuid column in Postgres.
+// CF-4 / M-1: Bare UUID — finance.audit_events.id is a uuid column in Postgres.
 // No prefix so the generated value is directly insertable into a uuid-typed column.
 function generateEventId() {
   return randomUUID();

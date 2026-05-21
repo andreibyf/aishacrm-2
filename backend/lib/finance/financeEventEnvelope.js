@@ -16,7 +16,7 @@ export function createFinanceEventEnvelope({
   payload = {},
   policyDecision = {},
 } = {}) {
-  // M-1: Bare UUID — no prefix. finance_events.id is a uuid column in Postgres.
+  // M-1: Bare UUID — no prefix. finance.audit_events.id is a uuid column in Postgres.
   // Causation chains: caller may pre-assign this id via createFinanceEventEnvelope and pass it
   // to financeEventStore.append() so downstream events can reference it as causation_id.
   return {

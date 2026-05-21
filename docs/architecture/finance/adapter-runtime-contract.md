@@ -657,7 +657,7 @@ The following must be completed before any Phase 2 adapter is activated:
 
 6. **Write guard enforcement in job processor.** The `assertWritePermitted` guard must be called as the first step of every job execution, loading the approval record from DB if required.
 
-7. **Event persistence.** The current `financeEventStore` is in-memory. Phase 2 requires writing events to a `finance_events` Supabase table for durable audit trails.
+7. **Event persistence.** The current in-process `financeEventStore` is in-memory. Phase 2 requires writing events to the `finance.audit_events` table for durable audit trails (delivered in Phase 2B — see `event-store-persistence.md`).
 
 8. **`ENABLE_FINANCE_OPS` flag in Coolify.** This flag must be explicitly enabled per environment. It defaults to absent (off). A release decision is required before enabling on staging or production.
 
@@ -718,7 +718,7 @@ Actor type (`human` vs `ai_agent`) is derived exclusively from `req.user.is_ai_a
 
 | ID  | Decision                   | Resolution                                                                                                                                                                                                                    |
 | --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | Finance event store schema | `finance` schema — `finance.events` table alongside `finance.adapter_jobs`                                                                                                                                                    |
+| E1  | Finance event store schema | `finance` schema — `finance.audit_events` table alongside `finance.adapter_jobs`                                                                                                                                                    |
 | E2  | Job processor deployment   | Separate Coolify worker service on VPS-2 (not in-process, not Supabase cron)                                                                                                                                                  |
 | E3  | Approval record linkage    | Per governed action/command — one approval per command dispatch, not per canonical object                                                                                                                                     |
 | E4  | Credential storage         | `tenant_integrations.api_credentials JSONB` exists and is used. Plain JSONB is acceptable for ERPNext POC. App-level encryption required before QuickBooks/Xero OAuth tokens are stored. No new migration needed for ERPNext. |
@@ -742,7 +742,7 @@ This avoids VPS-1 CPU pressure and keeps the adapter runtime horizontally scalab
 Phase 2 implementation sequence:
 
 1. ERPNext adapter (API key + secret, no OAuth) — proves the adapter interface end-to-end
-2. Finance event persistence to `finance.events` (finance schema)
+2. Finance event persistence to `finance.audit_events` (finance schema)
 3. Job processor service (Coolify, VPS-2)
 4. QuickBooks adapter (OAuth2) — builds on the proven interface
 5. Xero adapter — same OAuth pattern as QuickBooks

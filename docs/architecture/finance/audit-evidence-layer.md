@@ -66,7 +66,7 @@ create table finance.audit_events (
 
 **Key design choices:**
 
-- `id` is a bare v4 UUID (`randomUUID()` from `node:crypto`). Prefixed formats (`evt_*`) are not used because `finance_events.id` is a `uuid` column in Postgres — prefixed strings fail at insert (M-1).
+- `id` is a bare v4 UUID (`randomUUID()` from `node:crypto`). Prefixed formats (`evt_*`) are not used because `finance.audit_events.id` is a `uuid` column in Postgres — prefixed strings fail at insert (M-1).
 - `created_at` is DB-generated (`default now()`). Application code must not supply this value; the DB clock is the source of truth for ordering.
 - `model` and `prompt_hash` are promoted from inside `policy_decision.jsonb` to top-level columns so they can be indexed and queried without JSONB extraction. The values must remain identical inside `policy_decision` as well.
 
