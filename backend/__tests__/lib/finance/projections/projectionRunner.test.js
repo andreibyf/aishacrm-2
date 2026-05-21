@@ -427,3 +427,184 @@ test('replay and dispatch converge to the same final state', async () => {
   assert.deepEqual(replayed, dispatched);
   assert.deepEqual(replayed, ['e1', 'e2', 'e3']);
 });
+
+// ── Code-review fixes (P1 / P2) ────────────────────────────────────────────────
+
+// [P1] A degraded projection must pause dispatch — later events may depend on
+// the missing state, so continuing risks compounding divergence and a
+// permanently skipped event. Recovery is operator-triggered replay only.
+test('a degraded projection pauses dispatch — later events stay unapplied, cursor frozen', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(
+    recordingWorker({
+      projectionName: 'p',
+      handleEvent: (event, store) => {
+        if (event.id === 'bad') throw new Error('boom');
+        store.set('events', [...(store.get('events') || []), event.id]);
+      },
+    }),
+  );
+
+  // First event fails -> projection is degraded.
+  await runner.dispatch(evt('bad', { createdAt: '2026-05-21T01:00:00.000Z' }));
+  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+
+  // A later, well-formed event must be PAUSED — not delivered to the handler.
+  const result = await runner.dispatch(evt('later', { createdAt: '2026-05-21T02:00:00.000Z' }));
+
+  assert.equal(result.dispatched[0].outcome, 'paused');
+  assert.equal(
+    provider.getLiveStore('p', TENANT_A).get('events'),
+    undefined,
+    'a later event must not be applied while the projection is degraded',
+  );
+  assert.equal(
+    runner.status('p', TENANT_A).cursor,
+    null,
+    'the cursor must not advance past the failed event while degraded',
+  );
+});
+
+// [P1] A handler that mutates state and then throws must leave NO partial
+// writes visible — the live store stays at the last fully-applied event.
+test('a handler that mutates then throws leaves the live store untouched', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(
+    recordingWorker({
+      projectionName: 'p',
+      handleEvent: (event, store) => {
+        store.set('partial', 'written-before-throw');
+        store.set('events', ['half-applied']);
+        throw new Error('boom after mutation');
+      },
+    }),
+  );
+
+  await runner.dispatch(evt('e1'));
+
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).keys(),
+    [],
+    'no write from a failed handler may be visible in the live store',
+  );
+  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+});
+
+// [P1] A clear() inside a failed handler must also be rolled back.
+test('a handler that clears the store then throws does not wipe the live store', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(
+    recordingWorker({
+      projectionName: 'p',
+      handleEvent: (event, store) => {
+        store.clear();
+        throw new Error('boom after clear');
+      },
+    }),
+  );
+  provider.getLiveStore('p', TENANT_A).set('important', 'keep-me');
+
+  await runner.dispatch(evt('e1'));
+
+  assert.equal(
+    provider.getLiveStore('p', TENANT_A).get('important'),
+    'keep-me',
+    'a clear() inside a failed handler must be rolled back',
+  );
+});
+
+// [P2] replay must defensively scope events to the target tenant rather than
+// trusting the event store to never return mixed-tenant rows.
+test('replay drops events whose tenant_id does not match the target tenant', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const eventStore = fakeEventStore({
+    [TENANT_A]: [
+      evt('a1', { tenant: TENANT_A, createdAt: '2026-05-21T01:00:00.000Z' }),
+      evt('foreign', { tenant: TENANT_B, createdAt: '2026-05-21T02:00:00.000Z' }),
+      evt('a2', { tenant: TENANT_A, createdAt: '2026-05-21T03:00:00.000Z' }),
+    ],
+  });
+  const runner = makeRunner({ eventStore, storeProvider: provider });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A);
+
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).get('events'),
+    ['a1', 'a2'],
+    "a foreign-tenant event must never be replayed into another tenant's projection",
+  );
+});
+
+// ── Buffered-store rollback isolation ──────────────────────────────────────────
+
+// [P1] The runtime must enforce rollback isolation even for a badly-written
+// (non-immutable) handler: get() must never expose a mutable live-store
+// reference, so an in-place mutation inside a failed handler cannot corrupt
+// the live store.
+test('a handler that mutates a live value in place then throws does not corrupt the live store', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(
+    recordingWorker({
+      projectionName: 'p',
+      handleEvent: (event, store) => {
+        // Non-immutable handler: read the value and mutate it IN PLACE.
+        store.get('events').push(event.id);
+        store.get('meta').count += 1;
+        throw new Error('boom after in-place mutation');
+      },
+    }),
+  );
+  const live = provider.getLiveStore('p', TENANT_A);
+  live.set('events', ['seed']);
+  live.set('meta', { count: 0 });
+
+  await runner.dispatch(evt('e1'));
+
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).get('events'),
+    ['seed'],
+    'an in-place array mutation inside a failed handler must not reach the live store',
+  );
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).get('meta'),
+    { count: 0 },
+    'an in-place object mutation inside a failed handler must not reach the live store',
+  );
+  assert.equal(runner.status('p', TENANT_A).cursor, null, 'the cursor must not advance');
+  assert.equal(runner.status('p', TENANT_A).is_degraded, true, 'the projection is degraded');
+});
+
+// Success path: a handler that mutates a (cloned) value and explicitly set()s
+// it still commits the intended change.
+test('a handler that mutates a value and set()s it commits the change on success', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(
+    recordingWorker({
+      projectionName: 'p',
+      handleEvent: (event, store) => {
+        const events = store.get('events') || [];
+        events.push(event.id);
+        store.set('events', events);
+      },
+    }),
+  );
+  provider.getLiveStore('p', TENANT_A).set('events', ['seed']);
+
+  await runner.dispatch(evt('e1', { createdAt: '2026-05-21T01:00:00.000Z' }));
+
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).get('events'),
+    ['seed', 'e1'],
+    'an explicit set() of a mutated value is committed to the live store on success',
+  );
+  assert.deepEqual(runner.status('p', TENANT_A).cursor, {
+    created_at: '2026-05-21T01:00:00.000Z',
+    id: 'e1',
+  });
+});

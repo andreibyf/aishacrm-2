@@ -205,12 +205,20 @@ The per-`(projection, tenant)` runtime metadata:
    `event.event_type`, after applying the filtering rules of §5 (notably:
    infrastructure events are excluded from business projections).
 3. For each target worker, load `ProjectionState` for `(projectionName, event.tenant_id)`:
+   - **If the projection is `degraded` → pause:** the event is not delivered and
+     the cursor does not advance (§11). It stays unapplied until an
+     operator-triggered replay recovers the projection.
    - If the event's position `(created_at, id)` is **not strictly greater** than
      `state.cursor` → **skip** (already applied — see §6).
-   - Otherwise call `worker.handleEvent(event, liveStore)`.
-   - On success → advance `cursor` to the event's position; reset `error_count`.
-   - On throw → retry up to **3×** with exponential back-off; if still failing →
-     mark the projection `degraded` (§11) and do **not** advance the cursor.
+   - Otherwise apply the event — the handler runs against an **isolated
+     per-event buffer** (a write overlay on the live store), never the live
+     store directly.
+   - On success → **commit** the buffer to the live store all-or-nothing, then
+     advance `cursor` to the event's position; reset `error_count`.
+   - On throw → retry up to **3×** with exponential back-off (a fresh buffer per
+     attempt); if still failing → discard the buffer (the live store is
+     untouched), mark the projection `degraded` (§11), and do **not** advance
+     the cursor.
 4. **Sequencing** — dispatch is sequential per `(projection, tenant)`: a worker
    fully acknowledges one event before the next event for that tenant is
    delivered to it. Different tenants and different projections dispatch
@@ -366,23 +374,32 @@ Other tenants and other projections dispatch and replay concurrently.
 
 **Entry.** A projection becomes `degraded` when a live `handleEvent` exhausts
 its 3 retries (exponential back-off), or when a `replay` fails. The Runner sets
-`is_degraded = true`, records `error_count`, and reflects it in `state`.
+`is_degraded = true`, records `error_count`, and reflects it in `state`. The
+failed event applies nothing — its handler runs against an isolated buffer that
+is discarded on failure (§4) — so the live store is left exactly at the last
+fully-applied event.
 
 **While degraded:**
 
-- Reads are still served, from the last-good store — the read model is **stale
-  and possibly divergent** (a skipped event may have left a gap). `getProjection`
-  results carry `meta.is_degraded = true` so UIs display a staleness / integrity
-  warning.
-- The Runner continues best-effort live dispatch. A later `handleEvent`
-  succeeding does **not** clear `is_degraded` — a prior failed event may have
-  left a gap that subsequent events cannot heal.
+- Reads continue to be served from the **last-good store** — stale, but
+  internally consistent (no partial writes from the failed event leak in).
+  `getProjection` results carry `meta.is_degraded = true` so UIs display a
+  staleness warning.
+- **Dispatch is paused for that `(projection, tenant)`.** Later events are not
+  delivered to the worker and the cursor does not advance. A prior event failed,
+  and later events may depend on the state it would have produced; continuing to
+  dispatch would risk compounding divergence and permanently skipping the failed
+  event.
+- New events therefore remain unapplied until recovery.
 
 **Recovery — operator-triggered only.**
 
 - A degraded projection is cleared **exclusively** by a successful `replay`, and
   that replay is **initiated by an operator** (or monitoring / a runbook). The
   Runner **never auto-triggers** replay recovery.
+- The replay clears `is_degraded` and catches the projection up by rebuilding it
+  from the event stream — including the previously failed event and every event
+  paused after it.
 - Rationale: a degraded projection signals possible read-model divergence or a
   real handler defect. Automatic replay would mask the failure and risk a replay
   loop if the defect persists. Recovery must be **explicit and observable** — the
@@ -403,7 +420,7 @@ Finance Ops projections are **eventually consistent**.
 | Read-your-writes (opt-in)    | A caller may pass `{ await_event_id }` to `getProjection`. The Runner blocks up to `opts.timeout_ms` (default 2000) until that event's position is at or before the projection's cursor, then returns. |
 | Cross-projection consistency | Not guaranteed. Projections have independent cursors (§6) and may reflect different stream positions at the same instant. Roll-up consumers (e.g. `executive_summary`) must tolerate component lag.    |
 | Replay consistency           | During a replay the pre-replay snapshot is served; at the atomic promote, reads switch wholesale to the rebuilt model.                                                                                 |
-| Degraded reads               | A degraded projection serves stale, possibly-divergent data, flagged `is_degraded` (§11).                                                                                                              |
+| Degraded reads               | A degraded projection pauses dispatch and serves stale but internally consistent data from the last-good store, flagged `is_degraded` (§11).                                                           |
 
 Projections are not serializable or linearizable — they are read models derived
 from the authoritative event stream. The event stream is the source of truth.

@@ -60,6 +60,73 @@ function defaultState(schemaVersion) {
 }
 
 /**
+ * Defensive deep clone for projection-store values. Primitive values (and
+ * `null`) pass through unchanged; arrays and objects are deep-cloned so the
+ * projection runtime never shares a mutable reference between the live store,
+ * the per-event buffer, and a handler.
+ */
+function cloneValue(value) {
+  if (value === null || typeof value !== 'object') return value;
+  return structuredClone(value);
+}
+
+/**
+ * Wraps a live ProjectionStore so one event's writes are isolated. Reads fall
+ * through to the live store; writes accumulate in a buffer and reach the live
+ * store only on commit(). If the handler throws, the buffer is discarded and
+ * the live store is left untouched — no partial state is ever visible.
+ *
+ * Rollback isolation: get() never returns a live-store reference and set()
+ * never stores a caller-held reference — both deep-clone object/array values.
+ * So even a badly-written handler that mutates a returned value in place
+ * cannot corrupt the live store when its event later fails.
+ */
+function createBufferedStore(liveStore) {
+  let cleared = false;
+  const writes = new Map(); // key -> { op: 'set', value } | { op: 'delete' }
+  return {
+    get(key) {
+      if (writes.has(key)) {
+        const write = writes.get(key);
+        return write.op === 'delete' ? undefined : cloneValue(write.value);
+      }
+      // Clone the live value — never hand the handler a live-store reference.
+      return cleared ? undefined : cloneValue(liveStore.get(key));
+    },
+    set(key, value) {
+      // Store an independent clone so a reference the caller still holds
+      // cannot mutate the buffered value.
+      writes.set(key, { op: 'set', value: cloneValue(value) });
+    },
+    delete(key) {
+      writes.set(key, { op: 'delete' });
+    },
+    keys() {
+      const result = new Set(cleared ? [] : liveStore.keys());
+      for (const [key, write] of writes) {
+        if (write.op === 'delete') result.delete(key);
+        else result.add(key);
+      }
+      return [...result];
+    },
+    clear() {
+      cleared = true;
+      writes.clear();
+    },
+    /** Apply the buffered writes to the live store. */
+    commit() {
+      if (cleared) liveStore.clear();
+      for (const [key, write] of writes) {
+        if (write.op === 'delete') liveStore.delete(key);
+        // Clone on apply too — the live store must not share a reference with
+        // the buffer that is about to be discarded.
+        else liveStore.set(key, cloneValue(write.value));
+      }
+    },
+  };
+}
+
+/**
  * @param {object} deps
  * @param {{ replay: Function }} deps.eventStore     finance event store (read side)
  * @param {object}               deps.storeProvider  projection store provider
@@ -144,12 +211,17 @@ export function createProjectionRunner({
     );
   }
 
-  async function applyWithRetry(worker, event, store) {
+  // Apply one event to an isolated per-event buffer, retrying on failure.
+  // Returns the buffer to commit on success; throws after the last attempt.
+  async function applyEvent(worker, event, liveStore) {
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // A fresh buffer per attempt — a retried handler never sees a prior
+      // attempt's partial writes.
+      const buffer = createBufferedStore(liveStore);
       try {
-        await worker.handleEvent(event, store);
-        return;
+        await worker.handleEvent(event, buffer);
+        return buffer;
       } catch (err) {
         lastError = err;
         if (attempt < maxAttempts) {
@@ -164,16 +236,28 @@ export function createProjectionRunner({
     const tenantId = event.tenant_id;
     const state = getState(worker, tenantId);
 
+    // A degraded projection PAUSES dispatch. Later events may depend on the
+    // missing state, so continuing risks compounding divergence. The event
+    // stays unapplied and the cursor is frozen until an operator-triggered
+    // replay recovers the projection (runtime §11).
+    if (state.is_degraded) {
+      return { projectionName: worker.projectionName, outcome: 'paused' };
+    }
+
     // Cursor guard — once-delivery: apply only events strictly after the cursor.
     if (!isAfterCursor(event, state.cursor)) {
       return { projectionName: worker.projectionName, outcome: 'skipped' };
     }
 
-    const store = storeProvider.getLiveStore(worker.projectionName, tenantId);
+    const liveStore = storeProvider.getLiveStore(worker.projectionName, tenantId);
+    let buffer;
     try {
-      await applyWithRetry(worker, event, store);
+      // The handler writes into an isolated per-event buffer, never the live
+      // store — a handler that mutates then throws leaves no partial state.
+      buffer = await applyEvent(worker, event, liveStore);
     } catch {
-      // Failed handler -> degraded; the cursor is NOT advanced (runtime §11).
+      // Failed handler -> degraded; the cursor is NOT advanced and the live
+      // store is untouched (the buffer is discarded).
       storeProvider.setState(worker.projectionName, tenantId, {
         ...state,
         state: 'degraded',
@@ -183,11 +267,12 @@ export function createProjectionRunner({
       return { projectionName: worker.projectionName, outcome: 'degraded' };
     }
 
-    // Success -> the Runner advances the cursor. A later success does NOT clear
-    // an existing degraded flag — only an operator-triggered replay does.
+    // The handler fully succeeded — commit its writes to the live store
+    // all-or-nothing, then the Runner advances the cursor.
+    buffer.commit();
     storeProvider.setState(worker.projectionName, tenantId, {
       ...state,
-      state: state.is_degraded ? 'degraded' : 'idle',
+      state: 'idle',
       cursor: positionOf(event),
       error_count: 0,
     });
@@ -216,8 +301,14 @@ export function createProjectionRunner({
 
     try {
       const all = await eventStore.replay(tenantId);
+      // Defensively scope to the target tenant — never trust the event store to
+      // be perfect about tenant isolation. A foreign-tenant row must never be
+      // replayed into another tenant's projection state.
+      const tenantScoped = all.filter((event) => event.tenant_id === tenantId);
       // Enforce the frozen Track A order regardless of the event store backend.
-      const ordered = [...all].sort((a, b) => comparePosition(positionOf(a), positionOf(b)));
+      const ordered = [...tenantScoped].sort((a, b) =>
+        comparePosition(positionOf(a), positionOf(b)),
+      );
       const filtered = ordered.filter((event) => workerConsumes(worker, event));
 
       const shadow = storeProvider.createShadowStore(worker.projectionName, tenantId);
