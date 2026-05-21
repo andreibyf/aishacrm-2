@@ -43,6 +43,12 @@ export function createFinanceEventStore() {
       );
     }
 
+    // A-3: IDEMPOTENCY POSTURE — append-always.
+    // This store does NOT deduplicate on caller-supplied id. Two calls with the same id
+    // produce two distinct records in the log. Callers that require exactly-once semantics
+    // must guard upstream (e.g., the CF-2 duplicate approval guard in financeDomainService).
+    // This posture is intentional for the in-memory scaffold: replay is audit-faithful,
+    // and dedup logic belongs in the domain layer, not the event store.
     const event = Object.freeze({
       // CF-5: monotonic insertion index for stable sort tie-breaking in replay().
       // Stripped from DB persistence — this is an in-memory scaffolding detail only.

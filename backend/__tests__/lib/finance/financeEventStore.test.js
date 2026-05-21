@@ -352,3 +352,37 @@ test('T-11: replay is deterministic when events share identical created_at — _
     'replay must return events in insertion order (tie-broken by _seq)',
   );
 });
+
+// A-3 — Idempotency posture: append-always (no dedup on caller-supplied id)
+test('A-3: append-always — two calls with the same id produce two records (no dedup)', () => {
+  const store = createFinanceEventStore();
+  const SHARED_ID = '00000000-0000-4000-8000-eeeeeeeeeeee';
+
+  store.append({
+    id: SHARED_ID,
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.first',
+  });
+
+  store.append({
+    id: SHARED_ID,
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.second',
+  });
+
+  const results = store.query({ tenant_id: TENANT_A });
+  assert.equal(
+    results.length,
+    2,
+    'append-always: two appends with the same id must produce two records',
+  );
+  assert.ok(
+    results.every((e) => e.id === SHARED_ID),
+    'both records carry the caller-supplied id',
+  );
+  assert.notEqual(
+    results[0].event_type,
+    results[1].event_type,
+    'both records are independently stored with their own event_type',
+  );
+});

@@ -93,12 +93,12 @@ Event types follow the pattern `finance.<aggregate>.<past_tense_verb>`. All defi
 | `finance.approval.requested`             | `approval`      | approval record created                        |
 | `finance.approval.approved`              | `approval`      | `approveFinanceAction()` success               |
 | `finance.approval.rejected`              | `approval`      | `rejectFinanceAction()` success                |
+| `finance.approval.cancelled`             | `approval`      | `cancelApproval()` success                     |
 | `finance.approval.escalated`             | `approval`      | escalation triggered                           |
 | `finance.adapter.sync_queued`            | `adapter_job`   | job status → `queued`                          |
 | `finance.adapter.sync_succeeded`         | `adapter_job`   | job status → `succeeded`                       |
 | `finance.adapter.sync_failed`            | `adapter_job`   | job status → `failed`                          |
 | `finance.governance.action_blocked`      | varies          | governance evaluation returns `allowed: false` |
-| `finance.approval.requested`             | `approval`      | `simulateDealWon()` emits approval request     |
 
 ### 1.3 Payload Structure
 
@@ -611,7 +611,7 @@ assert(
   },
   "events": [
     {
-      "id": "evt_aaaa",
+      "id": "00000000-0000-4000-8000-aaa000000001",
       "event_type": "finance.invoice.draft_created",
       "aggregate_type": "invoice",
       "aggregate_id": "invoice_f7a9...",
@@ -639,7 +639,7 @@ assert(
       "created_at": "2025-12-19T08:00:01Z"
     },
     {
-      "id": "evt_bbbb",
+      "id": "00000000-0000-4000-8000-aaa000000002",
       "event_type": "finance.approval.requested",
       "aggregate_type": "approval",
       "aggregate_id": "approval_r001",
@@ -649,15 +649,22 @@ assert(
       "request_id": "req_1234",
       "braid_trace_id": "trace_braid_001",
       "correlation_id": "req_1234",
-      "causation_id": "evt_aaaa",
+      "causation_id": "00000000-0000-4000-8000-aaa000000001",
       "model": "gpt-4o",
       "prompt_hash": "sha256:7f3a...",
-      "payload": { "approval": { "id": "approval_r001", "status": "pending" } },
+      "payload": {
+        "approval": {
+          "id": "approval_r001",
+          "target_type": "invoice",
+          "target_id": "invoice_f7a9...",
+          "status": "pending"
+        }
+      },
       "policy_decision": { "allowed": true, "requires_approval": true, "risk_level": "low" },
       "created_at": "2025-12-19T08:00:02Z"
     },
     {
-      "id": "evt_cccc",
+      "id": "00000000-0000-4000-8000-aaa000000003",
       "event_type": "finance.approval.approved",
       "aggregate_type": "approval",
       "aggregate_id": "approval_r001",
@@ -667,12 +674,14 @@ assert(
       "request_id": "req_9999",
       "braid_trace_id": null,
       "correlation_id": "req_9999",
-      "causation_id": "evt_bbbb",
+      "causation_id": "00000000-0000-4000-8000-aaa000000002",
       "model": null,
       "prompt_hash": null,
       "payload": {
         "approval": {
           "id": "approval_r001",
+          "target_type": "invoice",
+          "target_id": "invoice_f7a9...",
           "status": "approved",
           "approved_by": "user_finance_controller_uuid"
         }
@@ -681,7 +690,7 @@ assert(
       "created_at": "2025-12-19T09:15:00Z"
     },
     {
-      "id": "evt_dddd",
+      "id": "00000000-0000-4000-8000-aaa000000004",
       "event_type": "finance.invoice.posted",
       "aggregate_type": "invoice",
       "aggregate_id": "invoice_f7a9...",
@@ -691,7 +700,7 @@ assert(
       "request_id": "req_9999",
       "braid_trace_id": null,
       "correlation_id": "req_9999",
-      "causation_id": "evt_cccc",
+      "causation_id": "00000000-0000-4000-8000-aaa000000003",
       "model": null,
       "prompt_hash": null,
       "payload": {
@@ -705,8 +714,8 @@ assert(
     {
       "id": "approval_r001",
       "tenant_id": "759a83e8-...",
-      "aggregate_type": "invoice",
-      "aggregate_id": "invoice_f7a9...",
+      "target_type": "invoice",
+      "target_id": "invoice_f7a9...",
       "status": "approved",
       "requested_by": "braid_agent_001",
       "requested_at": "2025-12-19T08:00:02Z",
@@ -722,12 +731,12 @@ assert(
       "aggregate_id": "invoice_f7a9...",
       "snapshots": [
         {
-          "event_id": "evt_aaaa",
+          "event_id": "00000000-0000-4000-8000-aaa000000001",
           "event_type": "finance.invoice.draft_created",
           "state": { "status": "draft", "total_cents": 250000 }
         },
         {
-          "event_id": "evt_dddd",
+          "event_id": "00000000-0000-4000-8000-aaa000000004",
           "event_type": "finance.invoice.posted",
           "state": { "status": "sent", "total_cents": 250000 }
         }
