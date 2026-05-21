@@ -25,126 +25,25 @@
 
 ## 1. Projection Worker Contract
 
-Every projection worker must implement the following interface. Workers are identified by their projection name (e.g., `finance.projection.ledger`).
-
-### Interface
-
-```js
-/**
- * @typedef {Object} ProjectionWorker
- */
-{
-  /**
-   * The canonical name of this projection.
-   * Must match one of the 8 defined projection names.
-   * @type {string}
-   */
-  projectionName: 'finance.projection.<name>',
-
-  /**
-   * The event types this worker consumes.
-   * Only events with matching event_type values will be dispatched.
-   * @type {string[]}
-   */
-  consumedEvents: ['finance.journal.posted', ...],
-
-  /**
-   * Called by the event dispatcher for each new event after the worker
-   * has been registered. Must be idempotent — called once per event_id.
-   *
-   * @param {FinanceEventEnvelope} event  The full canonical event envelope.
-   * @param {ProjectionStore}      store  Tenant-scoped mutable read-model store.
-   * @returns {void | Promise<void>}
-   */
-  handleEvent(event, store),
-
-  /**
-   * Called during a full replay. The dispatcher will call this method
-   * once for each event in stream order, starting from the beginning of
-   * the tenant's event history.
-   *
-   * Implementations may batch internal state updates; the store is
-   * committed only after all events have been replayed.
-   *
-   * @param {FinanceEventEnvelope[]} events  Ordered event stream for tenant.
-   * @param {ProjectionStore}        store   Fresh empty store for this tenant.
-   * @returns {void | Promise<void>}
-   */
-  replay(events, store),
-
-  /**
-   * Returns the current read model for the given tenant.
-   *
-   * @param {string}           tenantId
-   * @param {ProjectionOpts}   opts      Projection-specific query options.
-   * @returns {object}  The projection's read model shape (defined per projection below).
-   */
-  getProjection(tenantId, opts),
-}
-```
-
-### Event Dispatch Protocol
-
-The event dispatcher is responsible for routing new events to workers. The dispatch contract is:
-
-1. An event is appended to the event stream.
-2. The dispatcher reads `event.event_type` and delivers the envelope to every worker whose `consumedEvents` array includes that type.
-3. Dispatch is sequential within a tenant: workers for the same tenant receive events in `created_at` order. Cross-tenant dispatch may be parallelized.
-4. A worker's `handleEvent` must acknowledge (return/resolve) before the next event for that tenant is dispatched to that worker.
-5. If `handleEvent` throws, the dispatcher logs the failure and retries up to 3 times with exponential back-off before marking the projection as `degraded`. A degraded projection continues to accept new events but its staleness marker is updated.
-
-### Replay Protocol
-
-Replay is triggered when:
-
-- A new projection worker is registered for the first time.
-- An operator explicitly requests a rebuild (e.g., after a bug fix).
-- The worker's internal checksum/version does not match the current schema version.
-
-Replay steps:
-
-```
-1. Mark projection as REPLAYING (reads still served from previous snapshot).
-2. Fetch all events for tenant ordered by created_at ASC.
-3. Create a fresh in-memory store instance for the tenant.
-4. Call worker.replay(events, freshStore).
-5. Atomically swap the live store with freshStore.
-6. Clear REPLAYING marker; update last_rebuilt_at timestamp.
-```
-
-Replay is blocking per tenant but non-blocking globally: other tenants' projections continue to be updated during another tenant's replay.
-
-### ProjectionStore Interface
-
-```js
-/**
- * Minimal mutable store passed to workers. The concrete implementation
- * determines persistence (in-memory Map, Redis, Postgres JSONB, etc.).
- */
-{
-  get(key: string): any,
-  set(key: string, value: any): void,
-  delete(key: string): void,
-  keys(): string[],
-}
-```
+> **Superseded — see [`projection-runtime.md`](./projection-runtime.md).**
+> The projection worker interface, event dispatch rules, replay protocol, and
+> the `ProjectionStore` abstraction are now defined authoritatively by the
+> Projection Runtime contract: §2 (Projection Worker Interface), §3 (Projection
+> Store Abstraction), §4 (Event Dispatch Rules), and §9 (Replay Lifecycle).
+>
+> Track B (this document) covers only the **per-projection read-model
+> definitions** — consumed-event lists, output shapes, and projection-specific
+> rebuild logic — in §3–§10 below.
 
 ---
 
 ## 2. Consistency Model
 
-**AiSHA Finance Ops projections are eventually consistent.**
-
-| Property                     | Guarantee                                                                                                                                                                                                                                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ordering                     | Events are applied in `created_at` order within a tenant.                                                                                                                                                                                                                                                     |
-| Durability                   | An event that has been appended to the audit stream will eventually be reflected in all projections.                                                                                                                                                                                                          |
-| Read-your-writes             | Not guaranteed by default. A caller who just appended an event may read a projection that does not yet reflect that event.                                                                                                                                                                                    |
-| Read-your-writes (opt-in)    | Callers who need read-your-writes can pass `{ await_event_id: '<event uuid>' }` to `getProjection`. The projection layer will block up to `opts.timeout_ms` (default 2000) until the event has been applied, then return.                                                                                     |
-| Cross-projection consistency | Not guaranteed. Two projections may reflect different points in the event stream at the same instant. Callers that need cross-projection consistency (e.g., executive summary) should accept that summary-level figures may lag ledger-level figures by up to the staleness tolerance defined per projection. |
-| Replay consistency           | During a replay, the pre-replay snapshot is served. Once the replay completes, reads immediately reflect the rebuilt state.                                                                                                                                                                                   |
-
-Projections do not provide serializable or linearizable reads. They are read models derived from an authoritative event stream; the event stream is the source of truth.
+> **Superseded — see [`projection-runtime.md`](./projection-runtime.md) §12.**
+> The Finance Ops projection consistency model — ordering, durability,
+> read-your-writes (and the opt-in `await_event_id` wait), cross-projection
+> consistency, replay consistency, and degraded reads — is defined
+> authoritatively by the Projection Runtime contract.
 
 ---
 
