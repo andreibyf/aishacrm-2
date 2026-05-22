@@ -146,10 +146,18 @@ The worker:
   with the Postgres-backed `financeEventStore.pg.js` as `eventStore`.
 - Registers every projection worker (the eight defined in
   [`projection-contracts.md`](./projection-contracts.md)).
-- Runs a **catch-up poll loop**: for each tenant, query the event store for
-  events appended after each projection's persisted cursor and feed them to the
-  Runner via `dispatch(event)`. The Runner's cursor guard makes re-delivery and
-  out-of-order delivery safe.
+- Runs a **catch-up poll loop**. The event-store interface
+  (`append` / `query` / `replay` / `getCount`) exposes no "events appended
+  after cursor" query, so the worker calls `replay(tenantId)` for the full
+  ordered tenant stream and feeds every event to the Runner via
+  `dispatch(event)`; the Runner's cursor guard drops already-applied events,
+  making re-delivery and out-of-order delivery safe and correct. This is
+  O(full tenant stream) per poll cycle — adequate for a controlled staging
+  tenant. An incremental `query({ tenant_id, afterCursor })` is an additive
+  interface extension required before production-scale event volumes. See
+  [`projection-worker-staging-plan.md`](./projection-worker-staging-plan.md)
+  §3.1 (Phase 2C-6), which corrected this point and to which this bullet was
+  reconciled.
 - Exposes `replay` / `replayAll` as an operator-triggered control surface (the
   only path that clears a degraded projection — the Runner never auto-recovers).
 
