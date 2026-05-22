@@ -24,16 +24,16 @@ No new finance semantics; this is an operations plan.
 Finance Ops observability fits the existing stack — it does not introduce a new
 monitoring system.
 
-| Capability | What exists | Where |
-| ---------- | ----------- | ----- |
-| Structured logging | **Pino** — JSON logs, automatic secret redaction, `LOG_LEVEL` control | `backend/lib/logger.js` |
-| Log capture | Docker `json-file` driver (`max-size 10m`, `max-file 3`) | `docker-compose.yml`, `prod/*` compose, `finance-workers.example.yml` |
-| Container/app logs | Coolify per-app log view | Coolify (VPS-1 / VPS-2 / Hetzner) |
-| Service health monitoring | **Uptime Kuma** | VPS-2 (`DEPLOY_TOPOLOGY.md`) |
-| Worker health surface | `GET /health` (liveness) + `GET /ready` (readiness) on `FINANCE_WORKER_HEALTH_PORT` | each finance worker (`worker-service-topology.md` §8) |
-| Backend health | `GET /health`, `GET /api/system/health` | main backend |
-| Worker heartbeat | in-process heartbeat **timer** (`FINANCE_WORKER_HEARTBEAT_MS`) feeding `GET /health` — finance workers do **not** write to `system_logs` | each finance worker (`worker-service-topology.md` §8.1) |
-| Main-backend heartbeat | `system_logs` heartbeat rows — **main backend only**, unrelated to finance workers | backend |
+| Capability                | What exists                                                                                                                              | Where                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Structured logging        | **Pino** — JSON logs, automatic secret redaction, `LOG_LEVEL` control                                                                    | `backend/lib/logger.js`                                               |
+| Log capture               | Docker `json-file` driver (`max-size 10m`, `max-file 3`)                                                                                 | `docker-compose.yml`, `prod/*` compose, `finance-workers.example.yml` |
+| Container/app logs        | Coolify per-app log view                                                                                                                 | Coolify (VPS-1 / VPS-2 / Hetzner)                                     |
+| Service health monitoring | **Uptime Kuma**                                                                                                                          | VPS-2 (`DEPLOY_TOPOLOGY.md`)                                          |
+| Worker health surface     | `GET /health` (liveness) + `GET /ready` (readiness) on `FINANCE_WORKER_HEALTH_PORT`                                                      | each finance worker (`worker-service-topology.md` §8)                 |
+| Backend health            | `GET /health`, `GET /api/system/health`                                                                                                  | main backend                                                          |
+| Worker heartbeat          | in-process heartbeat **timer** (`FINANCE_WORKER_HEARTBEAT_MS`) feeding `GET /health` — finance workers do **not** write to `system_logs` | each finance worker (`worker-service-topology.md` §8.1)               |
+| Main-backend heartbeat    | `system_logs` heartbeat rows — **main backend only**, unrelated to finance workers                                                       | backend                                                               |
 
 **Not present:** Prometheus / Grafana are **not** in the repo today. This plan
 therefore does **not** depend on them — signals are delivered through Pino logs,
@@ -47,17 +47,17 @@ worker is noted as a clean future enhancement (§5), not a Phase 2C requirement.
 Each signal below must be observable before staging activation. "Surface" is
 where the signal is read; "Alert" is how an operator is notified.
 
-| # | Signal | Source | Surface | Alert |
-| - | ------ | ------ | ------- | ----- |
-| 1 | **Worker up/down** | process liveness; heartbeat timer | worker `GET /health`; container state in Coolify | Uptime Kuma monitor on `/health` → down alert |
-| 2 | **Worker lag** | max age across `(projection, tenant)` cursors vs newest event; oldest unclaimed `queued` adapter job | worker `GET /ready` JSON | Uptime Kuma keyword/JSON check on `/ready` → `503` alert when lag exceeds threshold |
-| 3 | **Replay failure** | a `replay()` that throws → projection set `degraded` | `finance.projection_state.status='degraded'` + `degraded_reason`; Pino `error` log | log-based alert on `degraded_reason`; surfaces via signal 4 |
-| 4 | **Degraded projection** | count of `(projection, tenant)` pairs in `degraded` | `GET /ready` degraded count; `finance.projection_state` | Uptime Kuma → `503`; alert when count > 0 |
-| 5 | **Adapter sync failure** | `finance.adapter.sync_failed` events; `finance.adapter_jobs.status='failed'` | event stream; `adapter_queue` projection; Pino `warn` log | log-based alert; rate alert on repeated failures |
-| 6 | **Dead-letter count** | terminal `failed` jobs + `pending` `adapter_job` approvals (2C-10 §5) | `GET /ready` dead-letter count; `finance.approvals` | Uptime Kuma → `503`; alert when count > 0 |
-| 7 | **Audit evidence build failure** | `buildEvidencePack` throw, or malformed-lineage `warn` (2C-7 §9) | audit worker `GET /ready`; Pino `error`/`warn` log | log-based alert; `/ready` `503` on repeated build failure |
-| 8 | **RLS / tenant mismatch error** | a query that returns the wrong/zero tenant rows, or `validateTenantAccess` rejection on a finance route | Pino `error`/`warn` log with `tenant_id`; backend logs | log-based alert — any finance RLS/tenant-mismatch error is high-severity |
-| 9 | **Finance route 401/403 spikes** | auth/module-gate rejections on `/api/v2/finance/*` | backend access logs; Pino logs with status code | rate alert on 401/403 volume per route |
+| #   | Signal                           | Source                                                                                                  | Surface                                                                            | Alert                                                                               |
+| --- | -------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1   | **Worker up/down**               | process liveness; heartbeat timer                                                                       | worker `GET /health`; container state in Coolify                                   | Uptime Kuma monitor on `/health` → down alert                                       |
+| 2   | **Worker lag**                   | max age across `(projection, tenant)` cursors vs newest event; oldest unclaimed `queued` adapter job    | worker `GET /ready` JSON                                                           | Uptime Kuma keyword/JSON check on `/ready` → `503` alert when lag exceeds threshold |
+| 3   | **Replay failure**               | a `replay()` that throws → projection set `degraded`                                                    | `finance.projection_state.status='degraded'` + `degraded_reason`; Pino `error` log | log-based alert on `degraded_reason`; surfaces via signal 4                         |
+| 4   | **Degraded projection**          | count of `(projection, tenant)` pairs in `degraded`                                                     | `GET /ready` degraded count; `finance.projection_state`                            | Uptime Kuma → `503`; alert when count > 0                                           |
+| 5   | **Adapter sync failure**         | `finance.adapter.sync_failed` events; `finance.adapter_jobs.status='failed'`                            | event stream; `adapter_queue` projection; Pino `warn` log                          | log-based alert; rate alert on repeated failures                                    |
+| 6   | **Dead-letter count**            | terminal `failed` jobs + `pending` `adapter_job` approvals (2C-10 §5)                                   | `GET /ready` dead-letter count; `finance.approvals`                                | Uptime Kuma → `503`; alert when count > 0                                           |
+| 7   | **Audit evidence build failure** | `buildEvidencePack` throw, or malformed-lineage `warn` (2C-7 §9)                                        | audit worker `GET /ready`; Pino `error`/`warn` log                                 | log-based alert; `/ready` `503` on repeated build failure                           |
+| 8   | **RLS / tenant mismatch error**  | a query that returns the wrong/zero tenant rows, or `validateTenantAccess` rejection on a finance route | Pino `error`/`warn` log with `tenant_id`; backend logs                             | log-based alert — any finance RLS/tenant-mismatch error is high-severity            |
+| 9   | **Finance route 401/403 spikes** | auth/module-gate rejections on `/api/v2/finance/*`                                                      | backend access logs; Pino logs with status code                                    | rate alert on 401/403 volume per route                                              |
 
 Signals 1–2, 4, 6, 7 are read primarily from the worker `/ready` endpoints —
 which is why every finance worker exposes a structured readiness surface
@@ -152,16 +152,16 @@ documented**," and every signal in §3 meets it.
 Every signal in §3 is actionable — it names a condition an operator can resolve,
 not just a number:
 
-| Signal | Operator action |
-| ------ | --------------- |
-| Worker up/down | Restart via Coolify; check logs for the crash cause. |
-| Worker lag | Check DB reachability and event volume; confirm the worker is enabled and polling. |
+| Signal                               | Operator action                                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker up/down                       | Restart via Coolify; check logs for the crash cause.                                                                                                     |
+| Worker lag                           | Check DB reachability and event volume; confirm the worker is enabled and polling.                                                                       |
 | Replay failure / degraded projection | Inspect `degraded_reason`; fix the handler defect or data issue; trigger an operator `replay` (`projection-runtime.md` §11 — recovery is operator-only). |
-| Adapter sync failure | Inspect `error_message`/`error_code`; transient → let retry run; systemic → pause the worker. |
-| Dead-letter count | Follow the 2C-10 §6 recovery steps — inspect, decide, re-queue/cancel/escalate. |
-| Audit evidence build failure | Inspect the malformed-lineage `warn`; identify the upstream emitter. |
-| RLS / tenant mismatch | **Halt** — treat as a potential isolation breach; investigate before continuing (a stop condition, `phase-2c-rls-application-plan.md`). |
-| 401/403 spike | Check auth/module-gate config; distinguish a misconfiguration from probing. |
+| Adapter sync failure                 | Inspect `error_message`/`error_code`; transient → let retry run; systemic → pause the worker.                                                            |
+| Dead-letter count                    | Follow the 2C-10 §6 recovery steps — inspect, decide, re-queue/cancel/escalate.                                                                          |
+| Audit evidence build failure         | Inspect the malformed-lineage `warn`; identify the upstream emitter.                                                                                     |
+| RLS / tenant mismatch                | **Halt** — treat as a potential isolation breach; investigate before continuing (a stop condition, `phase-2c-rls-application-plan.md`).                  |
+| 401/403 spike                        | Check auth/module-gate config; distinguish a misconfiguration from probing.                                                                              |
 
 Degraded projections and dead-lettered jobs are **operator-resolved by design**
 (`projection-runtime.md` §11; `dead-letter-retry-verification.md` §6) — the
@@ -171,12 +171,12 @@ observability layer reports them; it never auto-recovers.
 
 ## 8. Acceptance Criteria — Self-Check
 
-| 2C-11 acceptance criterion | Status |
-| -------------------------- | ------ |
+| 2C-11 acceptance criterion                 | Status                                                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Alerts exist or are documented for staging | ✅ Sections 3, 6 — every required signal mapped to an Uptime Kuma monitor or a documented log-based/runbook alert. |
-| Log fields include `tenant_id` where safe | ✅ Section 4.1 — `tenant_id` (a UUID) required on every finance log line where known. |
-| No secrets in logs | ✅ Section 4.2 — global Pino redaction + finance-specific never-log rule (no JWT contents, no `api_credentials`). |
-| Failures are actionable | ✅ Section 7 — each signal mapped to a concrete operator action / runbook step. |
+| Log fields include `tenant_id` where safe  | ✅ Section 4.1 — `tenant_id` (a UUID) required on every finance log line where known.                              |
+| No secrets in logs                         | ✅ Section 4.2 — global Pino redaction + finance-specific never-log rule (no JWT contents, no `api_credentials`).  |
+| Failures are actionable                    | ✅ Section 7 — each signal mapped to a concrete operator action / runbook step.                                    |
 
 ---
 

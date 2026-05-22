@@ -85,10 +85,10 @@ sandbox/draft-only until a separate, explicit gate.
 
 From `finance-worker-deployment-config.md` §3.2, set on the adapter worker:
 
-| Variable | Staging value | Effect |
-| -------- | ------------- | ------ |
-| `FINANCE_PROVIDER_WRITES_ENABLED` | `false` | **Dominant kill switch.** While `false`, the worker performs **no** outbound provider HTTP write of any kind — it may only map/validate payloads and advance job state. |
-| `FINANCE_ADAPTER_MODE` | `draft_only` | Caps the adapter at `pushDraft`. `approval_required_write` (the `pushFinal` / `void` path) is **never** set in staging config. |
+| Variable                          | Staging value | Effect                                                                                                                                                                  |
+| --------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FINANCE_PROVIDER_WRITES_ENABLED` | `false`       | **Dominant kill switch.** While `false`, the worker performs **no** outbound provider HTTP write of any kind — it may only map/validate payloads and advance job state. |
+| `FINANCE_ADAPTER_MODE`            | `draft_only`  | Caps the adapter at `pushDraft`. `approval_required_write` (the `pushFinal` / `void` path) is **never** set in staging config.                                          |
 
 `FINANCE_PROVIDER_WRITES_ENABLED=false` dominates: even with
 `FINANCE_ADAPTER_MODE=draft_only`, **no provider write occurs while it is
@@ -204,7 +204,7 @@ Failure is never silent:
 - On permanent failure (5 attempts exhausted), the worker emits
   `finance.adapter.sync_failed` with `permanent: true` **and** creates a
   `finance.approvals` record with `target_type = 'adapter_job'`, `status =
-  'pending'` — the dead-letter path requiring human review
+'pending'` — the dead-letter path requiring human review
   (`adapter-runtime-contract.md` §3).
 - A stuck-job watchdog resets any job in `running` longer than
   `FINANCE_ADAPTER_STUCK_JOB_MS` (default 5 min) back to `queued`.
@@ -252,12 +252,12 @@ on the next enabled run, or remain safely claimable. `finance.adapter_jobs` and
 
 ## 12. Acceptance Criteria — Self-Check
 
-| 2C-8 acceptance criterion | Status |
-| ------------------------- | ------ |
-| Adapter worker cannot write to live providers | ✅ Sections 4–5, 7 — two enforcement layers; `FINANCE_PROVIDER_WRITES_ENABLED=false` code-gated; sandbox `base_url` only; no live QB/Xero credentials. |
-| Sandbox-only behavior enforced by configuration **and** code guard | ✅ Section 3 — Layer 1 config (§4) + Layer 2 code (`assertWritePermitted` + provider-writes-enabled gate, §5). |
-| Provider payload strips internal runtime metadata | ✅ Section 6 — E6 `buildProviderPayload` boundary; `draft_only`/governance/trace fields stripped; test obligation recorded. |
-| Failed jobs are observable | ✅ Section 9 — `sync_failed` events, permanent-failure dead-letter approval record, stuck-job watchdog, `/ready` count. |
+| 2C-8 acceptance criterion                                          | Status                                                                                                                                                 |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Adapter worker cannot write to live providers                      | ✅ Sections 4–5, 7 — two enforcement layers; `FINANCE_PROVIDER_WRITES_ENABLED=false` code-gated; sandbox `base_url` only; no live QB/Xero credentials. |
+| Sandbox-only behavior enforced by configuration **and** code guard | ✅ Section 3 — Layer 1 config (§4) + Layer 2 code (`assertWritePermitted` + provider-writes-enabled gate, §5).                                         |
+| Provider payload strips internal runtime metadata                  | ✅ Section 6 — E6 `buildProviderPayload` boundary; `draft_only`/governance/trace fields stripped; test obligation recorded.                            |
+| Failed jobs are observable                                         | ✅ Section 9 — `sync_failed` events, permanent-failure dead-letter approval record, stuck-job watchdog, `/ready` count.                                |
 
 ---
 

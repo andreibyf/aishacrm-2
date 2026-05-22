@@ -23,14 +23,14 @@ activation review ([`staging-activation-review.md`](./staging-activation-review.
 Finance Ops access is the conjunction of independent gates. This is what makes
 "one tenant only" structurally true.
 
-| Layer | Scope | Effect | Controlled by |
-| ----- | ----- | ------ | ------------- |
-| Runtime gate — `ENABLE_FINANCE_OPS` | per **environment** | Mounts the `/api/v2/finance` route surface. While unset, the routes return `404` — they do not exist. | `financeRuntimeGate.js` |
-| Module gate — `financeOps` | per **tenant** | Even with routes mounted, a request is authorized only if the **requesting tenant** has the `financeOps` module enabled (`modulesettings.financeOps`). | `financeModuleGate.js` |
-| Worker gate — three-tier | per **environment** (worker apps) | `ENABLE_FINANCE_OPS && ENABLE_FINANCE_WORKERS && <per-worker flag>` — runs the background workers. | `finance-worker-deployment-config.md` §3.1 |
+| Layer                               | Scope                             | Effect                                                                                                                                                 | Controlled by                              |
+| ----------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| Runtime gate — `ENABLE_FINANCE_OPS` | per **environment**               | Mounts the `/api/v2/finance` route surface. While unset, the routes return `404` — they do not exist.                                                  | `financeRuntimeGate.js`                    |
+| Module gate — `financeOps`          | per **tenant**                    | Even with routes mounted, a request is authorized only if the **requesting tenant** has the `financeOps` module enabled (`modulesettings.financeOps`). | `financeModuleGate.js`                     |
+| Worker gate — three-tier            | per **environment** (worker apps) | `ENABLE_FINANCE_OPS && ENABLE_FINANCE_WORKERS && <per-worker flag>` — runs the background workers.                                                     | `finance-worker-deployment-config.md` §3.1 |
 
 **Key point — `ENABLE_FINANCE_OPS` is not global access.** It only makes the
-route surface *exist* in staging. *Access* is still per-tenant: every finance
+route surface _exist_ in staging. _Access_ is still per-tenant: every finance
 request passes through the `financeOps` module gate. So enabling Finance Ops for
 one tenant means: `ENABLE_FINANCE_OPS=true` in staging **plus** the `financeOps`
 module flag set for **exactly one** tenant. Every other tenant that reaches the
@@ -101,16 +101,16 @@ Run §5 below. All checks must pass before the activation is considered live.
 Run against the staging environment after Step 3 (and Step 4 if workers were
 enabled). Each check has an expected result; any deviation fails the activation.
 
-| # | Check | Request | Expected |
-| - | ----- | ------- | -------- |
-| 1 | **Route auth** | Any `/api/v2/finance/*` request with no / invalid auth | `401` — `authenticateRequest` rejects it. |
-| 2 | **Module gate — denied** | Authenticated request from a tenant **without** `financeOps` | Rejected by the module gate (`403`/`404`) — proves access is per-tenant. |
-| 3 | **Module gate — allowed** | Authenticated request from the **controlled** tenant | Passes the module gate. |
-| 4 | **Replay / runtime status** | `GET /api/v2/finance/runtime/status` (controlled tenant) | `200`; tenant-scoped runtime posture reported. |
-| 5 | **Draft invoice** | `POST /api/v2/finance/draft-invoices` (controlled tenant) | `201`, status `draft`, no provider write, tenant-scoped. |
-| 6 | **Journal draft — balanced** | `POST /api/v2/finance/journal-drafts`, balanced lines | `201`, journal draft created. |
-| 7 | **Journal draft — unbalanced** | `POST /api/v2/finance/journal-drafts`, unbalanced lines | `400`, rejected, no partial write. |
-| 8 | **Approval block** | `ai_agent` actor attempts `POST /api/v2/finance/approvals/:id/approve` | `403` — AI actors cannot approve; the block is session-derived and survives a body-spoofed `actor_type`. |
+| #   | Check                          | Request                                                                | Expected                                                                                                 |
+| --- | ------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | **Route auth**                 | Any `/api/v2/finance/*` request with no / invalid auth                 | `401` — `authenticateRequest` rejects it.                                                                |
+| 2   | **Module gate — denied**       | Authenticated request from a tenant **without** `financeOps`           | Rejected by the module gate (`403`/`404`) — proves access is per-tenant.                                 |
+| 3   | **Module gate — allowed**      | Authenticated request from the **controlled** tenant                   | Passes the module gate.                                                                                  |
+| 4   | **Replay / runtime status**    | `GET /api/v2/finance/runtime/status` (controlled tenant)               | `200`; tenant-scoped runtime posture reported.                                                           |
+| 5   | **Draft invoice**              | `POST /api/v2/finance/draft-invoices` (controlled tenant)              | `201`, status `draft`, no provider write, tenant-scoped.                                                 |
+| 6   | **Journal draft — balanced**   | `POST /api/v2/finance/journal-drafts`, balanced lines                  | `201`, journal draft created.                                                                            |
+| 7   | **Journal draft — unbalanced** | `POST /api/v2/finance/journal-drafts`, unbalanced lines                | `400`, rejected, no partial write.                                                                       |
+| 8   | **Approval block**             | `ai_agent` actor attempts `POST /api/v2/finance/approvals/:id/approve` | `403` — AI actors cannot approve; the block is session-derived and survives a body-spoofed `actor_type`. |
 
 Checks 1–3 cover route auth and the module gate; 5 the draft invoice; 6–7 the
 journal draft; 8 the approval block; 4 the replay/runtime status. Capture every
@@ -138,12 +138,12 @@ rebuildable cache. Re-enabling re-runs Steps 2–5.
 
 ## 7. Acceptance Criteria — Self-Check
 
-| 2C-13 acceptance criterion | Status |
-| -------------------------- | ------ |
-| No global enablement | ✅ Section 2 — `ENABLE_FINANCE_OPS` only mounts the route; access is per-tenant via the `financeOps` module gate. |
-| One tenant only | ✅ Sections 3–4 — the `financeOps` module flag is set for exactly one selected `tenant_id`; all others are rejected by the module gate. |
-| Rollback is one command/config change | ✅ Section 6 — per-tenant module-flag disable, or the `ENABLE_FINANCE_OPS=false` environment kill switch. |
-| Smoke tests cover route auth, module gate, draft invoice, journal draft, approval block, replay status | ✅ Section 5 — checks 1–3 (auth + module gate), 5 (draft invoice), 6–7 (journal draft), 8 (approval block), 4 (replay/runtime status). |
+| 2C-13 acceptance criterion                                                                             | Status                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| No global enablement                                                                                   | ✅ Section 2 — `ENABLE_FINANCE_OPS` only mounts the route; access is per-tenant via the `financeOps` module gate.                       |
+| One tenant only                                                                                        | ✅ Sections 3–4 — the `financeOps` module flag is set for exactly one selected `tenant_id`; all others are rejected by the module gate. |
+| Rollback is one command/config change                                                                  | ✅ Section 6 — per-tenant module-flag disable, or the `ENABLE_FINANCE_OPS=false` environment kill switch.                               |
+| Smoke tests cover route auth, module gate, draft invoice, journal draft, approval block, replay status | ✅ Section 5 — checks 1–3 (auth + module gate), 5 (draft invoice), 6–7 (journal draft), 8 (approval block), 4 (replay/runtime status).  |
 
 ---
 

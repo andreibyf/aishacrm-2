@@ -10,7 +10,7 @@
 
 ## 1. Goal and Scope
 
-Define — and specify how to *prove* — the **first provider integration target**,
+Define — and specify how to _prove_ — the **first provider integration target**,
 ERPNext, in **sandbox only**. This document is the **gate definition**: it states
 what must be true for the ERPNext integration to be considered proven, and the
 procedure that demonstrates it.
@@ -224,14 +224,14 @@ decision recorded in [`production-readiness-review.md`](./production-readiness-r
 
 ## 9. Acceptance Criteria — Self-Check
 
-| 2C-9 acceptance criterion | Status |
-| ------------------------- | ------ |
-| ERPNext integration remains sandbox-only | ✅ Sections 3, 5.1, 7 — sandbox/local `base_url` only, guard-rejected otherwise; production connection prohibited. |
-| Draft-only mode is enforced | ✅ Section 5.3 — three levels: ERPNext `docstatus = 0` (no submit), `mode = 'draft_only'` write guard, `FINANCE_PROVIDER_WRITES_ENABLED` kill switch. |
-| Provider payload does not include internal metadata | ✅ Section 5.4 — E6 stripping; round-trip + payload-content assertion in the proof procedure. |
-| Adapter events are emitted/replayable | ✅ Section 5.5 — canonical adapter events to the append-only store; replay reconstructs `adapter_queue`. |
+| 2C-9 acceptance criterion                           | Status                                                                                                                                                |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ERPNext integration remains sandbox-only            | ✅ Sections 3, 5.1, 7 — sandbox/local `base_url` only, guard-rejected otherwise; production connection prohibited.                                    |
+| Draft-only mode is enforced                         | ✅ Section 5.3 — three levels: ERPNext `docstatus = 0` (no submit), `mode = 'draft_only'` write guard, `FINANCE_PROVIDER_WRITES_ENABLED` kill switch. |
+| Provider payload does not include internal metadata | ✅ Section 5.4 — E6 stripping; round-trip + payload-content assertion in the proof procedure.                                                         |
+| Adapter events are emitted/replayable               | ✅ Section 5.5 — canonical adapter events to the append-only store; replay reconstructs `adapter_queue`.                                              |
 
-> **Note:** these criteria are satisfied at the *gate-definition* level by this
+> **Note:** these criteria are satisfied at the _gate-definition_ level by this
 > document. The runtime demonstration (§6) executes when the ERPNext adapter is
 > implemented in a later phase — Phase 2C delivers the gate and procedure, not
 > the adapter code.

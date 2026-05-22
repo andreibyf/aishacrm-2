@@ -33,15 +33,15 @@ same state as one built incrementally by sequential `dispatch()`. Its
 `runReplayValidation()` returns `{ passed, checks }`, where each check is
 structured `{ name, passed, detail }`:
 
-| Harness check | What it proves |
-| ------------- | -------------- |
-| `checkConvergence` | dispatch-built state == replay-built state |
-| `checkReplayOrdering` | frozen Track A order (`created_at` ASC, `id` tie-break), incl. the tie-break case |
-| `checkPerProjectionParity` | ledger / approval_queue / adapter_queue each rebuild correctly |
-| `checkRepeatedReplayDeterminism` | replaying the same stream twice yields byte-identical state |
-| `checkInfrastructureEventFiltering` | `finance.audit.event_appended` never reaches a business projection |
-| `checkDegradedRecovery` | a degraded projection recovers only via operator-triggered replay |
-| `checkTenantIsolation` | per-`(projection, tenant)` isolation; no cross-tenant contamination |
+| Harness check                       | What it proves                                                                    |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| `checkConvergence`                  | dispatch-built state == replay-built state                                        |
+| `checkReplayOrdering`               | frozen Track A order (`created_at` ASC, `id` tie-break), incl. the tie-break case |
+| `checkPerProjectionParity`          | ledger / approval_queue / adapter_queue each rebuild correctly                    |
+| `checkRepeatedReplayDeterminism`    | replaying the same stream twice yields byte-identical state                       |
+| `checkInfrastructureEventFiltering` | `finance.audit.event_appended` never reaches a business projection                |
+| `checkDegradedRecovery`             | a degraded projection recovers only via operator-triggered replay                 |
+| `checkTenantIsolation`              | per-`(projection, tenant)` isolation; no cross-tenant contamination               |
 
 The 2C-12 drill **uses** this harness as its verification engine and adds the
 operational wrapper: a real controlled tenant, a real before/after snapshot of
@@ -202,12 +202,12 @@ The drill is **idempotent and repeatable**:
 
 ## 8. Acceptance Criteria — Self-Check
 
-| 2C-12 acceptance criterion | Status |
-| -------------------------- | ------ |
+| 2C-12 acceptance criterion           | Status                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | Replay output matches expected state | ✅ Steps 3–8 — before/after comparison + `runReplayValidation()`; ledger/approval/adapter parity + evidence determinism. |
-| Divergence is detected | ✅ Section 5 — structural harness checks + byte-level snapshot diff; divergence is a blocking stop condition. |
-| Rollback/restore procedure exists | ✅ Section 6 — restore from snapshot or by deterministic rebuild; event stream untouched. |
-| Drill is repeatable | ✅ Section 7 — replay is a pure function of the event stream; snapshot/restore leaves no residue. |
+| Divergence is detected               | ✅ Section 5 — structural harness checks + byte-level snapshot diff; divergence is a blocking stop condition.            |
+| Rollback/restore procedure exists    | ✅ Section 6 — restore from snapshot or by deterministic rebuild; event stream untouched.                                |
+| Drill is repeatable                  | ✅ Section 7 — replay is a pure function of the event stream; snapshot/restore leaves no residue.                        |
 
 ---
 

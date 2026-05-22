@@ -22,8 +22,8 @@ No new finance semantics. Provider writes remain sandbox-only throughout (§8).
 
 ## 2. Retry Count
 
-| Parameter | Value | Env override |
-| --------- | ----- | ------------ |
+| Parameter                            | Value | Env override                                 |
+| ------------------------------------ | ----- | -------------------------------------------- |
 | Max attempts before terminal failure | **5** | `FINANCE_ADAPTER_MAX_ATTEMPTS` (default `5`) |
 
 After 5 failed attempts a job is **permanently failed** and is **never
@@ -45,20 +45,20 @@ delay_after_attempt_n = min(2^(n-1) × FINANCE_ADAPTER_BACKOFF_BASE_MS,
                         + random(0 .. 5000 ms)   -- jitter
 ```
 
-| Env var | Default | Purpose |
-| ------- | ------- | ------- |
-| `FINANCE_ADAPTER_BACKOFF_BASE_MS` | `15000` (15 s) | Base unit — the delay after attempt 1. |
-| `FINANCE_ADAPTER_BACKOFF_CAP_MS` | `1800000` (30 min) | Upper bound on any single delay. |
+| Env var                           | Default            | Purpose                                |
+| --------------------------------- | ------------------ | -------------------------------------- |
+| `FINANCE_ADAPTER_BACKOFF_BASE_MS` | `15000` (15 s)     | Base unit — the delay after attempt 1. |
+| `FINANCE_ADAPTER_BACKOFF_CAP_MS`  | `1800000` (30 min) | Upper bound on any single delay.       |
 
 Concrete schedule (base 15 s, doubling each attempt, capped 30 min):
 
-| Failed attempt | Backoff before next attempt |
-| -------------- | --------------------------- |
-| 1 | `2^0 × 15 s` = ~15 s (+ jitter) |
-| 2 | `2^1 × 15 s` = ~30 s (+ jitter) |
-| 3 | `2^2 × 15 s` = ~1 min (+ jitter) |
-| 4 | `2^3 × 15 s` = ~2 min (+ jitter) |
-| 5 | **no retry — terminal** |
+| Failed attempt | Backoff before next attempt      |
+| -------------- | -------------------------------- |
+| 1              | `2^0 × 15 s` = ~15 s (+ jitter)  |
+| 2              | `2^1 × 15 s` = ~30 s (+ jitter)  |
+| 3              | `2^2 × 15 s` = ~1 min (+ jitter) |
+| 4              | `2^3 × 15 s` = ~2 min (+ jitter) |
+| 5              | **no retry — terminal**          |
 
 > **Exponent note.** `adapter-runtime-contract.md` §3 writes the formula as
 > `2^attempts × 15 s`. Read with 1-indexed `attempts`, that is off by one from
@@ -71,9 +71,9 @@ Concrete schedule (base 15 s, doubling each attempt, capped 30 min):
 becomes re-claimable; a `failed → queued` retry only happens once `next_attempt_at`
 has elapsed **and** `attempts < max_attempts`.
 
-**Determinism note.** The *sequence of states* (`queued → running → failed →
-queued → … → failed terminal`) and the *number of attempts* are fully
-deterministic. The backoff *delay* is deterministic per attempt **plus** a
+**Determinism note.** The _sequence of states_ (`queued → running → failed →
+queued → … → failed terminal`) and the _number of attempts_ are fully
+deterministic. The backoff _delay_ is deterministic per attempt **plus** a
 bounded `0–5 s` jitter — jitter spreads retry load and prevents thundering-herd
 synchronization; it never changes the outcome, only the timing within a known
 ±5 s window. Retry behavior is therefore deterministic in every dimension that
@@ -108,11 +108,11 @@ A terminal `failed` job is distinguished from a retryable `failed` job by
 The dead-letter state is the permanently-failed job plus its pending review
 record. It is visible — and **durable** — in three independent places:
 
-| Surface | What it shows | Durability |
-| ------- | ------------- | ---------- |
-| `finance.adapter_jobs` row | `status = 'failed'`, `attempts = max`, `error_message`, `error_payload`, `next_attempt_at = null` | A finance operational row; not auto-deleted. |
-| `finance.approvals` row | `target_type = 'adapter_job'`, `status = 'pending'` — the live human-review worklist entry | No application code deletes a finance approval row. A DB-level hard-delete guard (`security-rls-hardening.md` §3.1 `prevent_hard_delete_posted`) is **DRAFT — not yet migrated** (`staging-rls-validation.md` §5.1), so this row is not yet trigger-protected. The definitive non-disappearance guarantee is the append-only `sync_failed` event below, not this row. |
-| `finance.audit_events` | the `finance.adapter.sync_failed` event with `permanent: true` | **Append-only and immutable** at the DB layer (migration 169 triggers) — the failure record can never be edited or removed. |
+| Surface                    | What it shows                                                                                     | Durability                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `finance.adapter_jobs` row | `status = 'failed'`, `attempts = max`, `error_message`, `error_payload`, `next_attempt_at = null` | A finance operational row; not auto-deleted.                                                                                                                                                                                                                                                                                                                          |
+| `finance.approvals` row    | `target_type = 'adapter_job'`, `status = 'pending'` — the live human-review worklist entry        | No application code deletes a finance approval row. A DB-level hard-delete guard (`security-rls-hardening.md` §3.1 `prevent_hard_delete_posted`) is **DRAFT — not yet migrated** (`staging-rls-validation.md` §5.1), so this row is not yet trigger-protected. The definitive non-disappearance guarantee is the append-only `sync_failed` event below, not this row. |
+| `finance.audit_events`     | the `finance.adapter.sync_failed` event with `permanent: true`                                    | **Append-only and immutable** at the DB layer (migration 169 triggers) — the failure record can never be edited or removed.                                                                                                                                                                                                                                           |
 
 Because the terminal `sync_failed` event is in the append-only event store, the
 dead-letter fact is **permanent and replayable** — it cannot silently disappear
@@ -154,7 +154,7 @@ operator action — the worker never auto-recovers it.
 
 The recovery path is deliberately manual: a permanently-failed job means the
 provider call, the payload, or the configuration is wrong — an operator must
-understand *why* before re-running it.
+understand _why_ before re-running it.
 
 ---
 
@@ -215,13 +215,13 @@ Run against the controlled staging tenant, adapter worker enabled,
 
 ## 10. Acceptance Criteria — Self-Check
 
-| 2C-10 acceptance criterion | Status |
-| -------------------------- | ------ |
-| Retry behavior is deterministic | ✅ Sections 2–3 — fixed max attempts, deterministic exponential schedule + bounded ±5 s jitter; state sequence fully deterministic. |
-| Failed adapter jobs are visible | ✅ Section 5 — three durable surfaces + `/ready` count. |
-| Dead-letter state cannot silently disappear | ✅ Section 5 — terminal `sync_failed` event is append-only/immutable; the event stream is the permanent backstop. |
-| Operator can inspect failure cause | ✅ Sections 4, 6 — `error_message`/`error_payload` on the job, full history in the `sync_failed` event. |
-| Provider writes remain sandbox-only | ✅ Section 8 — retry/recovery runs under the unchanged two-layer guard. |
+| 2C-10 acceptance criterion                  | Status                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Retry behavior is deterministic             | ✅ Sections 2–3 — fixed max attempts, deterministic exponential schedule + bounded ±5 s jitter; state sequence fully deterministic. |
+| Failed adapter jobs are visible             | ✅ Section 5 — three durable surfaces + `/ready` count.                                                                             |
+| Dead-letter state cannot silently disappear | ✅ Section 5 — terminal `sync_failed` event is append-only/immutable; the event stream is the permanent backstop.                   |
+| Operator can inspect failure cause          | ✅ Sections 4, 6 — `error_message`/`error_payload` on the job, full history in the `sync_failed` event.                             |
+| Provider writes remain sandbox-only         | ✅ Section 8 — retry/recovery runs under the unchanged two-layer guard.                                                             |
 
 ---
 

@@ -12,7 +12,7 @@
 
 **Do not activate production.** This document does not enable, prepare, or
 schedule a production rollout. It records — explicitly — what must be true
-*before* production activation can be considered, so that the production gate is
+_before_ production activation can be considered, so that the production gate is
 a deliberate, separate decision and never a drift from staging activation.
 
 ---
@@ -140,11 +140,11 @@ The production-activation gate is **distinct from** the staging-activation gate
 
 ## 5. Acceptance Criteria — Self-Check
 
-| 2C-15 acceptance criterion | Status |
-| -------------------------- | ------ |
-| Production remains disabled | ✅ Section 2 — `ENABLE_FINANCE_OPS` unset in production; no migration, no worker, no provider connection, no tenant flag. |
-| Requirements are explicit | ✅ Section 3 — ten production prerequisites enumerated, each scoped out of Phase 2C. |
-| Future production gate is separate from staging activation | ✅ Section 4 — production gate is a distinct, future review; staging activation confers no production authority. |
+| 2C-15 acceptance criterion                                 | Status                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Production remains disabled                                | ✅ Section 2 — `ENABLE_FINANCE_OPS` unset in production; no migration, no worker, no provider connection, no tenant flag. |
+| Requirements are explicit                                  | ✅ Section 3 — ten production prerequisites enumerated, each scoped out of Phase 2C.                                      |
+| Future production gate is separate from staging activation | ✅ Section 4 — production gate is a distinct, future review; staging activation confers no production authority.          |
 
 ---
 
