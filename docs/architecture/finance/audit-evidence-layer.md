@@ -1,7 +1,7 @@
 # Finance Ops: Audit and Evidence Layer
 
 **Track D — Design Specification**
-**Status:** Draft v1.0 | December 2025
+**Status:** Draft v1.0 | December 2025 — §7 interface implemented (Phase 2B-11; see §9)
 **Scope:** `finance.audit_events`, evidence pack generation, auditor query interface, retention policy
 
 ---
@@ -1005,6 +1005,117 @@ create index idx_finance_audit_events_model
   on finance.audit_events (tenant_id, model)
   where model is not null;
 ```
+
+---
+
+## 9. Phase 2B-11 — Audit / Evidence Builder Runtime (Implemented)
+
+**Status:** Implemented | **Module:** `backend/lib/finance/auditEvidenceBuilder.js`
+**Tests:** `backend/__tests__/lib/finance/auditEvidenceBuilder.test.js` (15 tests, `node:test`)
+
+Phase 2B-11 implements the §7 auditor query interface as a **pure, read-only
+library module**. It reconstructs evidence packs entirely from the finance event
+stream — no DB, no routes, no provider calls, no network I/O, no mutation of any
+source record.
+
+### 9.1 Public API
+
+The module is a pure function library, not a worker. All three §7 functions
+operate over **either** an array of event envelopes **or** a finance event store
+(anything exposing `.replay(tenantId)` — e.g. `financeEventStore.js`). The
+`events` source is the first positional argument:
+
+```js
+// Build a tamper-evident evidence pack (§6).
+buildEvidencePack(events, {
+  tenantId,            // required — tenant isolation boundary
+  fromDate, toDate,    // inclusive ISO bounds on created_at
+  targetType,          // optional aggregate_type filter
+  targetId,            // optional aggregate_id; widens to its full correlation_id span
+  generatedBy,         // { actor_id, actor_type } — pack metadata
+  packId,              // injectable for determinism; default `pack_${randomUUID()}`
+  generatedAt,         // injectable ISO timestamp; default new Date().toISOString()
+  idFactory, clock,    // optional alternative sources for packId / generatedAt
+  includeInfrastructureEvents, // include the reserved event_appended event (default false)
+}) -> EvidencePack
+
+// Read-only timeline query (§7.1).
+queryAuditTimeline(events, {
+  tenant_id,           // required
+  from, to,            // inclusive ISO bounds
+  actor_id, actor_type,
+  event_type,          // exact, or trailing-'*' prefix match
+  target_id, target_type,
+  correlation_id, causation_id, braid_trace_id,
+  payload_filter,      // top-level payload key-equality
+  limit, offset,       // default 500 / 0; limit capped at 5000
+  includeInfrastructureEvents,
+}) -> { events, total_count, query }
+
+// Reconstruct a journal entry's reversal chain (§5.3 / §7.3).
+getReversalChain(events, tenantId, journalEntryId)
+  -> { original_entry_id, original_events, reversal_chains }
+
+// Helpers.
+isCanonicalFinanceEvent(eventType) -> boolean
+RESERVED_INFRASTRUCTURE_EVENT  // 'finance.audit.event_appended'
+```
+
+`buildEvidencePack` is also the default export.
+
+### 9.2 Determinism
+
+`pack_id` and `generated_at` are inherently volatile, so they are **injectable**.
+With `packId` / `generatedAt` (or `idFactory` / `clock`) supplied, two builds
+from the same event stream are **byte-identical** — including all three integrity
+hashes. `pack_hash` is computed over the assembled pack with
+`integrity.pack_hash` excluded; every other field is derived deterministically
+from the (sorted, deep-cloned) event set.
+
+### 9.3 Evidence pack shape — as implemented
+
+The pack follows §6.2 with two additive fields that the §6.2 prose described
+but the §6.2 code sample did not show as top-level keys:
+
+- `reversals: { count, entries }` — reversal lineage. `entries` is an array of
+  `getReversalChain` results. `summary.reversals` keeps the §6.2 short form
+  (`{ count, entries: [...originalEntryIds] }`).
+- `adapter_jobs: []` — deduplicated adapter-job snapshots (latest per id),
+  present whenever `payload.adapter_job` events exist. Empty array when absent.
+
+`state_timeline` snapshots additionally carry `created_at` alongside
+`event_id` / `event_type` / `state` so the timeline is self-orderable.
+
+### 9.4 Contract enforcement
+
+- **Tenant isolation.** A mixed-tenant event array yields a pack containing
+  **zero** other-tenant data anywhere (events, approvals, hashes, summary).
+- **Canonical event names only.** Only `finance.*` event names are consumed. A
+  command name (`PostJournalEntryCommand`, `ApproveFinanceActionCommand`) is
+  never silently accepted as an `event_type` — it fails the `finance.` prefix
+  check and is dropped.
+- **Track A vocabulary preserved.** Events use `aggregate_type` / `aggregate_id`;
+  approval records use `target_type` / `target_id`. The module never introduces
+  `object_type` / `object_id`.
+- **Reserved infrastructure event.** `finance.audit.event_appended` (§1.2) is
+  excluded from normal business evidence unless `includeInfrastructureEvents` is
+  set.
+- **Graceful absence.** No approvals → `approvals: []`; no adapter jobs →
+  `adapter_jobs: []`; no reversals → `reversals: { count: 0, entries: [] }`. An
+  empty event stream produces a valid empty pack — never throws.
+
+### 9.5 Deviations from this spec
+
+- `buildEvidencePack` / `getReversalChain` / `queryAuditTimeline` are
+  **synchronous** and take the event source as their first argument, rather than
+  the `async` DB-backed signatures sketched in §7. The Phase 2B-11 scope is the
+  in-memory event-sourced runtime (consistent with `financeEventStore.js` and
+  the projection runtime); a Supabase-backed adapter can wrap these pure
+  functions later without changing the pack shape.
+- §7.2's note that pack generation "should itself be logged to a separate
+  `audit_pack_requests` table" is **not** implemented — this module performs no
+  writes of any kind (a hard Phase 2B-11 constraint). Request logging belongs to
+  the future route/persistence layer that calls this builder.
 
 ---
 
