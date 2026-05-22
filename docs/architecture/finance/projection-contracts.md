@@ -358,8 +358,8 @@ algorithm: RebuildBalanceSheet(events, tenantId, as_of_date)
 > moves its approval out of `pending` and into `resolved`. The 2B-9
 > `getProjection(tenantId, opts, store)` returns the minimal read model
 > `{ pending, resolved }` — pending entries carry `{ approval_id, tenant_id,
-> target_type, target_id, risk_level, requested_by, created_at,
-> approval_policy, escalation_target }`; resolved entries carry
+target_type, target_id, risk_level, requested_by, created_at,
+approval_policy, escalation_target }`; resolved entries carry
 > `{ approval_id, status, resolved_by, resolved_at, target_type, target_id }`.
 > `finance.approval.requested` is **create-only** — a duplicate request (at-least-once
 > delivery / replay) for an `approval_id` that already has a record, pending or
@@ -510,6 +510,57 @@ algorithm: RebuildApprovalQueue(events, tenantId)
 ---
 
 ## 7. finance.projection.adapter_queue
+
+> **Implementation status — Phase 2B-10 (minimal adapter-queue harness).**
+> Implemented as `backend/lib/finance/projections/adapterQueueProjection.js`
+> (`createAdapterQueueProjectionWorker()`) — the operational bridge between
+> finance events and the adapter-job lifecycle, built on the Phase 2B-7
+> Projection Runtime. It is a replayable read model, **not** a scheduler,
+> worker, retry engine, or provider client. The 2B-10 minimal scope consumes
+> the three canonical sync events — **`finance.adapter.sync_queued`,
+> `finance.adapter.sync_succeeded`, `finance.adapter.sync_failed`**; the
+> `finance.approval.approved` draft→queued rule (last row of the table below)
+> is deferred. The store is keyed by `adapter_job_id`, so there is structurally
+> exactly one record per adapter job within a tenant-scoped projection — the
+> invariant that one active queue item exists per `adapter_job_id` per tenant
+> holds by construction. Every adapter event carries the full
+> `payload.adapter_job` snapshot, so each event is self-describing and the
+> handler is an unconditional upsert ("creates or updates"); `sync_queued`
+> after `sync_failed` is the legitimate retry re-queue path. `handleEvent` /
+> `replay` share one apply path, so live dispatch and rebuild-from-zero produce
+> identical state. The 2B-10 `getProjection(tenantId, opts, store)` returns the
+> minimal shape `{ queued, running, failed, completed }`; each queue item
+> carries `{ adapter_job_id, tenant_id, provider, aggregate_type, aggregate_id,
+operation, mode, status, attempts, error_message, created_at, updated_at,
+correlation_id, causation_id }` — `status` is derived from the event type and
+> the bucket from `status`. These names are a deliberate minimal-subset
+> divergence from the fuller §7 draft below: `adapter_job_id` (not `job_id`),
+> `attempts` (not `attempt_count`), `running` / `completed` buckets (not
+> `in_flight` / `succeeded`), and the worker reads the nested
+> `payload.adapter_job`. A `finance.adapter.sync_*` emitter must populate
+> `payload.adapter_job` with the canonical `finance.adapter_jobs` record shape
+> — `aggregate_type` / `aggregate_id` / `operation` / `mode`, with `status`
+> one of `draft` / `queued` / `running` / `succeeded` / `failed`. That shape
+> is now reconciled across all three Phase-1 sources: the `simulateDealWon`
+> draft adapter-job object in `financeDomainService.js`, the
+> `finance.adapter_jobs` table (migration 168), and this §7 contract all agree
+> on it, so the `sync_*` emitter can be built directly against it. The
+> adapter-job record reuses the Track A `aggregate_type` / `aggregate_id`
+> envelope vocabulary (also used by `finance.audit_events` and
+> `finance.approvals`) rather than introducing `object_*` naming drift.
+> (`simulateDealWon` previously omitted `operation` / `mode`; it now carries
+> them.) The
+> `running` bucket has no consumed source event in 2B-10 (no in-flight event is
+> canonical yet) and stays empty until one is added. `tenant_id` is sourced
+> from the event envelope (the runtime store-partitioning boundary), never from
+> `payload.adapter_job.tenant_id`. The future-ready events
+> `finance.adapter.sync_cancelled`, `finance.adapter.retry_scheduled`, and
+> `finance.adapter.dead_lettered` are not yet canonical, so they are not
+> consumed — the runner ignores them (accepted, never crash or degrade). An
+> adapter event missing `payload.adapter_job.id` throws — the runtime surfaces
+> that as a degraded projection. The `totals`, `meta`, `as_of`, `external_id`,
+> `duration_ms`, and query filters are deferred; the sections below remain the
+> eventual full target.
 
 ### Purpose
 
@@ -1026,7 +1077,7 @@ Implementors may optimize this to a single O(n) event stream pass rather than fi
 
 **`finance.journal.posted` and `finance.journal.reversed` are the only events that affect accounting projections.** Draft and pending-approval entries do not touch the ledger, P&L, balance sheet, or cash position. This mirrors the `getPostedEntries` filter in `accountingEngine.js` which only includes entries with `status in ['posted', 'reversed']`.
 
-**Adapter jobs in `draft` status.** The `financeDomainService.js` `simulateDealWon` method creates adapter jobs with `status: 'draft'` — these are not yet `queued`. The adapter_queue projection handles the `finance.approval.approved` event to transition draft jobs to `queued`. This implies that `event.payload` for `finance.approval.approved` must include enough information to correlate back to the draft adapter job (specifically the `aggregate_id` of the approved item). Workers must handle missing correlations gracefully.
+**Adapter jobs in `draft` status.** The `financeDomainService.js` `simulateDealWon` method creates adapter jobs with `status: 'draft'` — these are not yet `queued`. `draft` is a canonical adapter-job status: it is the pre-approval lifecycle position, present in the `finance.adapter_jobs` status enum (`draft` / `queued` / `running` / `succeeded` / `failed`) and the default for a newly created row. The adapter_queue projection handles the `finance.approval.approved` event to transition draft jobs to `queued`. This implies that `event.payload` for `finance.approval.approved` must include enough information to correlate back to the draft adapter job (specifically the `aggregate_id` of the approved item). Workers must handle missing correlations gracefully.
 
 **`executive_summary` materializes its own state.** An alternative design would have `getProjection` on the executive summary fan out to the other seven projection workers at query time. This is rejected because it couples read latency to the slowest sub-projection and makes staleness reasoning harder. Each projection worker is independent; the executive summary worker subscribes to the same events and maintains its own denormalized state.
 

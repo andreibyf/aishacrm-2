@@ -101,6 +101,32 @@ test('financeDomainService approval uses target_type and target_id, not aggregat
   assert.ok(!('aggregate_id' in approval), 'approval must not have aggregate_id field');
 });
 
+// Adapter-job shape — simulateDealWon must emit the canonical finance.adapter_jobs
+// record shape: aggregate_type / aggregate_id (the Track A envelope vocabulary,
+// shared with finance.audit_events / finance.approvals) plus operation / mode,
+// which the pre-reconciliation object omitted.
+test('financeDomainService simulateDealWon adapter_job carries aggregate_type/aggregate_id and operation/mode', () => {
+  const service = createFinanceDomainService();
+  const result = service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  const job = result.adapter_job;
+  assert.equal(job.aggregate_type, 'journal_entry', 'adapter_job should carry aggregate_type');
+  assert.equal(
+    job.aggregate_id,
+    result.journal_entry.id,
+    'adapter_job.aggregate_id should be the draft journal entry id',
+  );
+  assert.equal(job.operation, 'push_draft', 'adapter_job should declare its operation');
+  assert.equal(job.mode, 'draft_only', 'adapter_job should declare its mode');
+  assert.equal(job.status, 'draft', 'adapter_job is created in the pre-approval draft status');
+  assert.ok(!('object_type' in job), 'adapter_job must not carry the object_type field');
+  assert.ok(!('object_id' in job), 'adapter_job must not carry the object_id field');
+});
+
 // CF-6: approval schema completeness
 test('financeDomainService approval record includes risk_level, created_at, updated_at', () => {
   const service = createFinanceDomainService();

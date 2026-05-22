@@ -453,6 +453,8 @@ export function createFinanceDomainService(opts = {}) {
         provider: payload.provider || 'quickbooks',
         aggregate_type: 'journal_entry',
         aggregate_id: draftEntry.id,
+        operation: 'push_draft',
+        mode: 'draft_only',
         created_at: now(),
         updated_at: now(),
       };
