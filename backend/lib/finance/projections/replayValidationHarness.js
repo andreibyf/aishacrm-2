@@ -66,6 +66,13 @@ function orderEvents(events) {
   return [...events].sort(compareEventOrder);
 }
 
+// The reserved infrastructure event types. They are event-store integrity
+// signals, never business facts: business projections must never consume them
+// and they must never advance a business-projection cursor (projection-
+// runtime.md §13). Re-stated here so the harness can validate the runtime's
+// filtering independently of the runtime it checks.
+const INFRASTRUCTURE_EVENT_TYPES = new Set(['finance.audit.event_appended']);
+
 // ── Contract-faithful validation event store ──────────────────────────────────
 
 /**
@@ -417,7 +424,140 @@ export async function checkPerProjectionParity(events, tenantId, config = {}) {
   );
 }
 
-// ── Check 4 — degraded recovery ───────────────────────────────────────────────
+// ── Check 4 — repeated-replay determinism ─────────────────────────────────────
+
+/**
+ * Repeated-replay determinism check.
+ *
+ * Convergence (Check 1) proves dispatch and a single replay agree. This check
+ * proves the third leg of the acceptance contract: replaying the SAME event
+ * stream more than once yields byte-identical projection state every time.
+ *
+ * `replay()` rebuilds into a fresh shadow store and atomically promotes it, so
+ * a second replay must reproduce the first exactly. A divergence means a
+ * projection's `replay()` is not a pure function of the event stream (it
+ * depends on hidden mutable state, wall-clock time, iteration order, etc.) —
+ * which would make a rebuilt read model non-reproducible.
+ *
+ * @param {object[]} events    finance.* events for ONE tenant
+ * @param {string}   tenantId  the tenant under test
+ * @param {object}  [config]   harness config (see createDefaultHarnessConfig)
+ * @returns {Promise<{name,passed,detail}>}
+ */
+export async function checkRepeatedReplayDeterminism(events, tenantId, config = {}) {
+  const cfg = resolveConfig(config);
+  const ordered = orderEvents(events.filter((e) => e.tenant_id === tenantId));
+
+  const runtime = buildRuntime(cfg);
+  appendAll(runtime.eventStore, ordered);
+
+  // First replay of every projection; snapshot the resulting live state.
+  for (const worker of runtime.workers) {
+    await runtime.runner.replay(worker.projectionName, tenantId);
+  }
+  const firstPass = {};
+  for (const worker of runtime.workers) {
+    firstPass[worker.projectionName] = snapshotStore(
+      runtime.storeProvider.getLiveStore(worker.projectionName, tenantId),
+    );
+  }
+
+  // Second replay on the SAME runtime — must rebuild byte-identical state.
+  for (const worker of runtime.workers) {
+    await runtime.runner.replay(worker.projectionName, tenantId);
+  }
+  const perProjection = [];
+  for (const worker of runtime.workers) {
+    const name = worker.projectionName;
+    const secondPass = snapshotStore(runtime.storeProvider.getLiveStore(name, tenantId));
+    perProjection.push({ projection: name, stable: deepEqual(firstPass[name], secondPass) });
+  }
+
+  return result(
+    'repeated_replay_determinism',
+    perProjection.every((p) => p.stable),
+    {
+      tenant_id: tenantId,
+      event_count: ordered.length,
+      projections: perProjection,
+    },
+  );
+}
+
+// ── Check 5 — infrastructure-event filtering ──────────────────────────────────
+
+/**
+ * Infrastructure-event filtering check.
+ *
+ * The reserved infrastructure event `finance.audit.event_appended` is an
+ * event-store integrity signal, not a business fact. Business projections must
+ * never consume it and it must never advance a business-projection cursor
+ * (projection-runtime.md §13).
+ *
+ * The check rebuilds every projection twice for one tenant — once from the full
+ * stream (business + infrastructure events) and once from the business events
+ * only — and asserts both the projection state AND the cursor are byte-identical
+ * for every projection. If an infrastructure event leaked into a projection or
+ * advanced its cursor, the two rebuilds would diverge.
+ *
+ * `detail.coverage_exercised` reports whether the stream actually contained an
+ * infrastructure event: a stream without one passes vacuously (with-infra and
+ * business-only are the same stream), so the flag makes a vacuous pass visible.
+ *
+ * @param {object[]} events    finance.* events for ONE tenant
+ * @param {string}   tenantId  the tenant under test
+ * @param {object}  [config]   harness config
+ * @returns {Promise<{name,passed,detail}>}
+ */
+export async function checkInfrastructureEventFiltering(events, tenantId, config = {}) {
+  const cfg = resolveConfig(config);
+  const scoped = orderEvents(events.filter((e) => e.tenant_id === tenantId));
+  const businessOnly = scoped.filter((e) => !INFRASTRUCTURE_EVENT_TYPES.has(e.event_type));
+  const infraCount = scoped.length - businessOnly.length;
+
+  // Runtime 1 — full stream, business + infrastructure events.
+  const withInfra = buildRuntime(cfg);
+  appendAll(withInfra.eventStore, scoped);
+  for (const worker of withInfra.workers) {
+    await withInfra.runner.replay(worker.projectionName, tenantId);
+  }
+  // Runtime 2 — business events only.
+  const withoutInfra = buildRuntime(cfg);
+  appendAll(withoutInfra.eventStore, businessOnly);
+  for (const worker of withoutInfra.workers) {
+    await withoutInfra.runner.replay(worker.projectionName, tenantId);
+  }
+
+  const perProjection = [];
+  for (const worker of withInfra.workers) {
+    const name = worker.projectionName;
+    const fullState = snapshotStore(withInfra.storeProvider.getLiveStore(name, tenantId));
+    const businessState = snapshotStore(withoutInfra.storeProvider.getLiveStore(name, tenantId));
+    const stateIdentical = deepEqual(fullState, businessState);
+    // An infrastructure event must not advance a business projection's cursor.
+    const cursorWithInfra = withInfra.runner.status(name, tenantId).cursor;
+    const cursorBusinessOnly = withoutInfra.runner.status(name, tenantId).cursor;
+    const cursorIdentical = deepEqual(cursorWithInfra, cursorBusinessOnly);
+    perProjection.push({
+      projection: name,
+      state_identical: stateIdentical,
+      cursor_identical: cursorIdentical,
+    });
+  }
+
+  return result(
+    'infrastructure_event_filtering',
+    perProjection.every((p) => p.state_identical && p.cursor_identical),
+    {
+      tenant_id: tenantId,
+      infrastructure_event_count: infraCount,
+      coverage_exercised: infraCount > 0,
+      projections: perProjection,
+    },
+  );
+}
+
+// ── Check 6 — degraded recovery ───────────────────────────────────────────────
 
 /**
  * Degraded-recovery check.
@@ -548,7 +688,7 @@ function isConsumedBy(workers, projectionName, event) {
   return Boolean(worker) && worker.consumedEvents.includes(event.event_type);
 }
 
-// ── Check 5 — tenant isolation ────────────────────────────────────────────────
+// ── Check 7 — tenant isolation ────────────────────────────────────────────────
 
 /**
  * Tenant isolation check.
@@ -682,10 +822,11 @@ export async function checkTenantIsolation({ events, tenantA, tenantB, config = 
 /**
  * Run the full replay-validation suite and return the aggregate report.
  *
- * Single-tenant checks (convergence, ordering, parity, degraded recovery) run
- * against `tenantA`'s slice of the stream. The tenant-isolation check runs only
- * when both `tenantA` and `tenantB` are supplied and each has at least one
- * event in the stream.
+ * Single-tenant checks (convergence, ordering, parity, repeated-replay
+ * determinism, infrastructure-event filtering, degraded recovery) run against
+ * `tenantA`'s slice of the stream. The tenant-isolation check runs only when
+ * both `tenantA` and `tenantB` are supplied and each has at least one event in
+ * the stream.
  *
  * @param {object} opts
  * @param {object[]} opts.events            full finance.* event stream
@@ -720,6 +861,8 @@ export async function runReplayValidation({
   checks.push(await checkConvergence(tenantAEvents, tenantA, config));
   checks.push(await checkReplayOrdering(tenantAEvents, tenantA, config));
   checks.push(await checkPerProjectionParity(tenantAEvents, tenantA, config));
+  checks.push(await checkRepeatedReplayDeterminism(tenantAEvents, tenantA, config));
+  checks.push(await checkInfrastructureEventFiltering(tenantAEvents, tenantA, config));
 
   if (faultId) {
     checks.push(

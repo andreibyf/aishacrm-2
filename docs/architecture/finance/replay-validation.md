@@ -19,8 +19,9 @@ proves the central correctness invariant of every Finance Ops projection:
 > sequential `dispatch()` of the same events.
 
 It also asserts the surrounding contract guarantees the runtime depends on: the
-frozen replay ordering, the degraded-recovery invariant, and per-`(projection,
-tenant)` tenant isolation.
+frozen replay ordering, repeated-replay determinism, infrastructure-event
+filtering, the degraded-recovery invariant, and per-`(projection, tenant)`
+tenant isolation.
 
 The harness is a **test/validation utility**. It is the executable counterpart
 of the [`projection-runtime.md`](./projection-runtime.md) contract — where that
@@ -49,10 +50,12 @@ It builds on the same two frozen inputs as the runtime:
 2. [The Ordering Contract](#2-the-ordering-contract)
 3. [The Degraded-Recovery Invariant](#3-the-degraded-recovery-invariant)
 4. [Tenant Isolation](#4-tenant-isolation)
-5. [The Harness API](#5-the-harness-api)
-6. [The Validation Event Store](#6-the-validation-event-store)
-7. [Result Shape](#7-result-shape)
-8. [Relationship to projection-runtime.md](#8-relationship-to-projection-runtimemd)
+5. [Repeated-Replay Determinism](#5-repeated-replay-determinism)
+6. [Infrastructure-Event Filtering](#6-infrastructure-event-filtering)
+7. [The Harness API](#7-the-harness-api)
+8. [The Validation Event Store](#8-the-validation-event-store)
+9. [Result Shape](#9-result-shape)
+10. [Relationship to projection-runtime.md](#10-relationship-to-projection-runtimemd)
 
 ---
 
@@ -170,10 +173,50 @@ The check fails (`passed: false`) if any of the three surfaces a problem;
 
 ---
 
-## 5. The Harness API
+## 5. Repeated-Replay Determinism
+
+Convergence (§1) proves dispatch and a _single_ replay agree. The acceptance
+contract has a third leg: replaying the **same event stream more than once**
+must yield byte-identical projection state every time.
+
+`checkRepeatedReplayDeterminism` replays every projection for a tenant, snapshots
+the live stores, replays every projection a second time on the same runtime, and
+asserts the second snapshot is deep-equal to the first. Because `replay()`
+rebuilds into a fresh shadow store and atomically promotes it, a stable
+projection reproduces its state exactly. A divergence means a projection's
+`replay()` is **not a pure function of the event stream** — it depends on hidden
+mutable state, wall-clock time, or iteration order — which would make a rebuilt
+read model non-reproducible. `detail.projections` reports a `stable` boolean per
+projection.
+
+---
+
+## 6. Infrastructure-Event Filtering
+
+`finance.audit.event_appended` is a reserved **infrastructure** event — an
+event-store integrity signal, not a business fact. Business projections must
+never consume it, and it must never advance a business-projection cursor
+([`projection-runtime.md` §13](./projection-runtime.md)).
+
+`checkInfrastructureEventFiltering` rebuilds every projection twice for one
+tenant — once from the full stream (business **+** infrastructure events) and
+once from the **business events only** — and asserts that, for every projection,
+both the read-model state **and** the cursor are byte-identical. If an
+infrastructure event leaked into a projection or nudged its cursor, the two
+rebuilds would diverge.
+
+`detail.coverage_exercised` reports whether the stream actually contained an
+infrastructure event. A stream without one passes _vacuously_ (the with-infra
+and business-only streams are identical), so the flag makes a vacuous pass
+visible rather than silently green — the same anti-vacuous-pass discipline
+`replay_ordering` applies with `tie_break_exercised`.
+
+---
+
+## 7. The Harness API
 
 All check functions return a structured result `{ name, passed, detail }`
-(see §7). The aggregate runner returns `{ passed, checks: [...] }`.
+(see §9). The aggregate runner returns `{ passed, checks: [...] }`.
 
 | Function                                                                             | Purpose                                                                                                                                                                                           |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -181,6 +224,8 @@ All check functions return a structured result `{ name, passed, detail }`
 | `checkConvergence(events, tenantId, config?)`                                        | Dispatch-vs-replay convergence for all registered projections.                                                                                                                                    |
 | `checkReplayOrdering(events, tenantId, config?)`                                     | `replay()` returns events in `created_at` ASC / `id` ASC, including the tie-break.                                                                                                                |
 | `checkPerProjectionParity(events, tenantId, config?)`                                | Convergence reported per individual projection.                                                                                                                                                   |
+| `checkRepeatedReplayDeterminism(events, tenantId, config?)`                          | Replaying the same stream twice yields byte-identical state.                                                                                                                                      |
+| `checkInfrastructureEventFiltering(events, tenantId, config?)`                       | Infrastructure events never reach business projections or advance cursors.                                                                                                                        |
 | `checkDegradedRecovery({ events, tenantId, failEventId, projectionName?, config? })` | Degrade → pause → operator replay → correct recovery.                                                                                                                                             |
 | `checkTenantIsolation({ events, tenantA, tenantB, config? })`                        | No cross-tenant leakage; per-tenant cursors.                                                                                                                                                      |
 | `compareEventOrder(a, b)`                                                            | Track A total-order comparator (exported helper).                                                                                                                                                 |
@@ -207,7 +252,7 @@ rest of the wiring intact.
 
 ---
 
-## 6. The Validation Event Store
+## 8. The Validation Event Store
 
 The production `financeEventStore` deliberately **re-stamps `created_at`** at
 append time — callers cannot inject timestamps, which is an audit-integrity
@@ -224,13 +269,14 @@ the order the runtime consumes is the same.
 
 ---
 
-## 7. Result Shape
+## 9. Result Shape
 
 Each check returns:
 
 ```js
 {
   name: 'convergence' | 'replay_ordering' | 'per_projection_parity'
+      | 'repeated_replay_determinism' | 'infrastructure_event_filtering'
       | 'degraded_recovery' | 'tenant_isolation',
   passed: boolean,
   detail: { /* check-specific evidence */ },
@@ -253,7 +299,7 @@ lifecycle assertion as a named boolean.
 
 ---
 
-## 8. Relationship to projection-runtime.md
+## 10. Relationship to projection-runtime.md
 
 [`projection-runtime.md`](./projection-runtime.md) is the **authoritative
 runtime/harness contract** — it _defines_ cursor semantics, the shadow-store +

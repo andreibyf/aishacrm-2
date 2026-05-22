@@ -5,6 +5,8 @@ import {
   checkConvergence,
   checkReplayOrdering,
   checkPerProjectionParity,
+  checkRepeatedReplayDeterminism,
+  checkInfrastructureEventFiltering,
   checkDegradedRecovery,
   checkTenantIsolation,
   runReplayValidation,
@@ -125,6 +127,19 @@ function adapterEvent(eventType, id, { tenant = TENANT_A, createdAt, adapterJobI
         updated_at: createdAt,
       },
     },
+  };
+}
+
+/** A reserved finance.audit.event_appended infrastructure event. */
+function auditEventAppended(id, { tenant = TENANT_A, createdAt } = {}) {
+  return {
+    id,
+    tenant_id: tenant,
+    event_type: 'finance.audit.event_appended',
+    created_at: createdAt || '2026-05-21T00:00:00.000Z',
+    aggregate_type: 'audit_event',
+    aggregate_id: `evt-${id}`,
+    payload: { event_appended: { id: `evt-${id}` } },
   };
 }
 
@@ -284,6 +299,73 @@ test('checkPerProjectionParity passes for ledger, approval_queue, adapter_queue'
   assert.equal(res.passed, true);
   assert.equal(res.detail.projections.length, 3);
   assert.ok(res.detail.projections.every((p) => p.converged));
+});
+
+// ── Repeated-replay determinism ───────────────────────────────────────────────
+
+test('checkRepeatedReplayDeterminism passes — replaying twice yields identical state', async () => {
+  const res = await checkRepeatedReplayDeterminism(healthyStream(), TENANT_A);
+
+  assert.equal(res.name, 'repeated_replay_determinism');
+  assert.equal(res.passed, true);
+  assert.equal(res.detail.projections.length, 3);
+  assert.ok(res.detail.projections.every((p) => p.stable));
+});
+
+test('checkRepeatedReplayDeterminism detects a non-deterministic replay — passed:false', async () => {
+  // A worker whose replay() depends on hidden mutable state (a closure counter)
+  // rather than purely on the event stream — so a second replay diverges from
+  // the first. This is exactly the non-reproducible-rebuild bug the check guards.
+  let replayRuns = 0;
+  const nonDeterministicConfig = {
+    createWorkers: () => [
+      {
+        projectionName: 'finance.projection.ledger',
+        consumedEvents: ['finance.journal.posted'],
+        schemaVersion: 1,
+        handleEvent() {},
+        replay(_events, store) {
+          replayRuns += 1;
+          store.set('run', replayRuns);
+        },
+        getProjection() {
+          return {};
+        },
+      },
+    ],
+  };
+
+  const res = await checkRepeatedReplayDeterminism(
+    healthyStream(),
+    TENANT_A,
+    nonDeterministicConfig,
+  );
+
+  assert.equal(res.passed, false, 'a replay that is not a pure function of the stream must fail');
+  assert.ok(res.detail.projections.some((p) => !p.stable));
+});
+
+// ── Infrastructure-event filtering ────────────────────────────────────────────
+
+test('checkInfrastructureEventFiltering passes — infra events never reach business projections', async () => {
+  // Interleave finance.audit.event_appended infrastructure events into the
+  // business stream — including one AFTER the last business event. Business
+  // projections must rebuild identically with or without them, and no cursor
+  // may advance past a business event onto an infrastructure event.
+  const stream = [
+    ...healthyStream(),
+    auditEventAppended('i01', { createdAt: '2026-05-21T01:30:00.000Z' }),
+    auditEventAppended('i02', { createdAt: '2026-05-21T23:00:00.000Z' }),
+  ];
+
+  const res = await checkInfrastructureEventFiltering(stream, TENANT_A);
+
+  assert.equal(res.name, 'infrastructure_event_filtering');
+  assert.equal(res.passed, true);
+  assert.equal(res.detail.coverage_exercised, true, 'the stream actually contained infra events');
+  assert.equal(res.detail.infrastructure_event_count, 2);
+  assert.equal(res.detail.projections.length, 3);
+  assert.ok(res.detail.projections.every((p) => p.state_identical && p.cursor_identical));
 });
 
 // ── Degraded recovery ─────────────────────────────────────────────────────────
@@ -452,7 +534,14 @@ test('checkTenantIsolation structural check catches a tenant_id-less leak', asyn
 test('runReplayValidation passes the full suite for a healthy two-tenant stream', async () => {
   const a = healthyStream(TENANT_A);
   const b = healthyStream(TENANT_B).map((e) => ({ ...e, id: `B-${e.id}` }));
-  const events = [...a, ...b];
+  // Interleave infrastructure events so the infrastructure-filtering check is
+  // genuinely exercised (coverage_exercised: true), not a vacuous pass.
+  const events = [
+    ...a,
+    ...b,
+    auditEventAppended('i-a', { tenant: TENANT_A, createdAt: '2026-05-21T01:30:00.000Z' }),
+    auditEventAppended('i-b', { tenant: TENANT_B, createdAt: '2026-05-21T01:30:00.000Z' }),
+  ];
 
   const report = await runReplayValidation({
     events,
@@ -461,12 +550,15 @@ test('runReplayValidation passes the full suite for a healthy two-tenant stream'
   });
 
   assert.equal(report.passed, true);
-  // convergence, ordering, parity, degraded recovery, tenant isolation.
-  assert.equal(report.checks.length, 5);
+  // convergence, ordering, parity, repeated replay, infra filtering, degraded
+  // recovery, tenant isolation.
+  assert.equal(report.checks.length, 7);
   assert.deepEqual(report.checks.map((c) => c.name).sort(), [
     'convergence',
     'degraded_recovery',
+    'infrastructure_event_filtering',
     'per_projection_parity',
+    'repeated_replay_determinism',
     'replay_ordering',
     'tenant_isolation',
   ]);
@@ -480,7 +572,7 @@ test('runReplayValidation skips tenant isolation when only one tenant is given',
   });
 
   assert.equal(report.passed, true);
-  assert.equal(report.checks.length, 4, 'no tenant_isolation check without tenantB');
+  assert.equal(report.checks.length, 6, 'no tenant_isolation check without tenantB');
   assert.ok(!report.checks.some((c) => c.name === 'tenant_isolation'));
 });
 
