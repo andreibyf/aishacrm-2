@@ -11,6 +11,8 @@ import {
   compareEventOrder,
   createDefaultHarnessConfig,
 } from '../../../../lib/finance/projections/replayValidationHarness.js';
+import { createMemoryProjectionStoreProvider } from '../../../../lib/finance/projections/projectionStore.memory.js';
+import { createLedgerProjectionWorker } from '../../../../lib/finance/projections/ledgerProjection.js';
 
 const TENANT_A = '00000000-0000-4000-8000-aaaaaaaaaaaa';
 const TENANT_B = '00000000-0000-4000-8000-bbbbbbbbbbbb';
@@ -388,6 +390,61 @@ test('checkTenantIsolation detects a leaked cross-tenant row — passed:false', 
   assert.equal(res.passed, false, 'a cross-tenant leak must fail isolation');
   assert.ok(res.detail.leaks.length >= 1);
   assert.equal(res.detail.leaks[0].tenant_id, TENANT_A);
+});
+
+/**
+ * A deliberately broken store provider that is NOT tenant-partitioned: it
+ * ignores the tenantId argument, so every tenant shares one store per
+ * projection. Models a real isolation bug — and one the `tenant_id`-field leak
+ * scan cannot see when the projection's values carry no tenant id.
+ */
+function createNonPartitionedStoreProvider() {
+  const real = createMemoryProjectionStoreProvider();
+  const SHARED = 'shared-non-partitioned';
+  return {
+    getLiveStore: (name) => real.getLiveStore(name, SHARED),
+    createShadowStore: (name) => real.createShadowStore(name, SHARED),
+    promoteShadow: (name) => real.promoteShadow(name, SHARED),
+    discardShadow: (name) => real.discardShadow(name, SHARED),
+    getState: (name) => real.getState(name, SHARED),
+    setState: (name, _tenantId, state) => real.setState(name, SHARED, state),
+  };
+}
+
+test('checkTenantIsolation structural check catches a tenant_id-less leak', async () => {
+  // The tenant_id leak scan only sees contamination stamped into a value's
+  // tenant_id field. Ledger account buckets carry NO tenant_id — so a
+  // non-tenant-partitioned store (a real isolation bug) merges one tenant's
+  // ledger into another's, invisibly to that scan. The structural check
+  // (full-stream rebuild vs tenant-only rebuild) must still catch it.
+  const nonPartitionedConfig = {
+    createStoreProvider: () => createNonPartitionedStoreProvider(),
+    createWorkers: () => [createLedgerProjectionWorker()],
+  };
+
+  const events = [
+    journalPosted('e01', 100000, { tenant: TENANT_A, createdAt: '2026-05-21T01:00:00.000Z' }),
+    journalPosted('e02', 999, { tenant: TENANT_B, createdAt: '2026-05-21T02:00:00.000Z' }),
+  ];
+
+  const res = await checkTenantIsolation({
+    events,
+    tenantA: TENANT_A,
+    tenantB: TENANT_B,
+    config: nonPartitionedConfig,
+  });
+
+  assert.equal(res.passed, false, 'a non-partitioned ledger must fail isolation');
+  assert.equal(
+    res.detail.leaks.length,
+    0,
+    'the tenant_id field scan is structurally blind to this — it reports no leaks',
+  );
+  assert.ok(
+    res.detail.contamination.length >= 1,
+    'the structural check is what catches the value-shape-agnostic leak',
+  );
+  assert.equal(res.detail.contamination[0].projection, 'finance.projection.ledger');
 });
 
 // ── Aggregate suite ───────────────────────────────────────────────────────────

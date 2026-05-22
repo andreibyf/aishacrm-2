@@ -1020,10 +1020,12 @@ source record.
 
 ### 9.1 Public API
 
-The module is a pure function library, not a worker. All three §7 functions
-operate over **either** an array of event envelopes **or** a finance event store
-(anything exposing `.replay(tenantId)` — e.g. `financeEventStore.js`). The
-`events` source is the first positional argument:
+The module is a pure function library, not a worker. All three §7 functions are
+`async` and operate over **either** an array of event envelopes **or** a finance
+event store (anything exposing `.replay(tenantId)` — the synchronous in-memory
+`financeEventStore.js` or the asynchronous Postgres adapter
+`financeEventStore.pg.js`; both are awaited). The `events` source is the first
+positional argument:
 
 ```js
 // Build a tamper-evident evidence pack (§6).
@@ -1106,12 +1108,12 @@ but the §6.2 code sample did not show as top-level keys:
 
 ### 9.5 Deviations from this spec
 
-- `buildEvidencePack` / `getReversalChain` / `queryAuditTimeline` are
-  **synchronous** and take the event source as their first argument, rather than
-  the `async` DB-backed signatures sketched in §7. The Phase 2B-11 scope is the
-  in-memory event-sourced runtime (consistent with `financeEventStore.js` and
-  the projection runtime); a Supabase-backed adapter can wrap these pure
-  functions later without changing the pack shape.
+- `buildEvidencePack` / `getReversalChain` / `queryAuditTimeline` take the event
+  source as their first positional argument (an event array or an event store),
+  rather than the request-object signatures sketched in §7. They are **async**
+  and `await` the event source, so they work unchanged with both the synchronous
+  in-memory `financeEventStore.js` and the asynchronous Postgres adapter
+  `financeEventStore.pg.js` — honoring the `async` contract §7 already declares.
 - §7.2's note that pack generation "should itself be logged to a separate
   `audit_pack_requests` table" is **not** implemented — this module performs no
   writes of any kind (a hard Phase 2B-11 constraint). Request logging belongs to

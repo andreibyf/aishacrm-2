@@ -149,7 +149,7 @@ function aiInvoiceChain(tenantId = TENANT_A) {
 
 // ── Determinism ─────────────────────────────────────────────────────────────
 
-test('evidence pack is deterministic from the same event stream', () => {
+test('evidence pack is deterministic from the same event stream', async () => {
   const events = aiInvoiceChain();
   const opts = {
     tenantId: TENANT_A,
@@ -160,8 +160,8 @@ test('evidence pack is deterministic from the same event stream', () => {
     generatedAt: FIXED_GENERATED_AT,
   };
 
-  const pack1 = buildEvidencePack(events, opts);
-  const pack2 = buildEvidencePack(events, opts);
+  const pack1 = await buildEvidencePack(events, opts);
+  const pack2 = await buildEvidencePack(events, opts);
 
   assert.deepEqual(pack1, pack2, 'two builds with injected ids must be deeply equal');
   assert.equal(pack1.integrity.events_hash, pack2.integrity.events_hash);
@@ -171,8 +171,8 @@ test('evidence pack is deterministic from the same event stream', () => {
   assert.equal(JSON.stringify(pack1), JSON.stringify(pack2));
 });
 
-test('pack_hash is computed over the pack excluding integrity.pack_hash itself', () => {
-  const pack = buildEvidencePack(aiInvoiceChain(), {
+test('pack_hash is computed over the pack excluding integrity.pack_hash itself', async () => {
+  const pack = await buildEvidencePack(aiInvoiceChain(), {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -185,7 +185,7 @@ test('pack_hash is computed over the pack excluding integrity.pack_hash itself',
 
 // ── Tenant isolation ────────────────────────────────────────────────────────
 
-test('tenant isolation: a pack for tenant A contains zero tenant B data', () => {
+test('tenant isolation: a pack for tenant A contains zero tenant B data', async () => {
   const mixed = [
     ...aiInvoiceChain(TENANT_A),
     evt({
@@ -208,7 +208,7 @@ test('tenant isolation: a pack for tenant A contains zero tenant B data', () => 
     }),
   ];
 
-  const pack = buildEvidencePack(mixed, {
+  const pack = await buildEvidencePack(mixed, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -226,16 +226,16 @@ test('tenant isolation: a pack for tenant A contains zero tenant B data', () => 
   assert.equal(pack.event_count, 4, 'only the 4 tenant-A events appear');
 });
 
-test('queryAuditTimeline filters strictly by tenant_id', () => {
+test('queryAuditTimeline filters strictly by tenant_id', async () => {
   const mixed = [...aiInvoiceChain(TENANT_A), ...aiInvoiceChain(TENANT_B)];
-  const resultA = queryAuditTimeline(mixed, { tenant_id: TENANT_A });
+  const resultA = await queryAuditTimeline(mixed, { tenant_id: TENANT_A });
   assert.equal(resultA.total_count, 4);
   assert.ok(resultA.events.every((e) => e.tenant_id === TENANT_A));
 });
 
 // ── Missing optional lineage handled gracefully ─────────────────────────────
 
-test('missing optional lineage: no approvals / no adapter jobs / no reversals', () => {
+test('missing optional lineage: no approvals / no adapter jobs / no reversals', async () => {
   const eventsOnly = [
     evt({
       id: '00000000-0000-4000-8000-ccc000000001',
@@ -247,7 +247,7 @@ test('missing optional lineage: no approvals / no adapter jobs / no reversals', 
     }),
   ];
 
-  const pack = buildEvidencePack(eventsOnly, {
+  const pack = await buildEvidencePack(eventsOnly, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -260,8 +260,8 @@ test('missing optional lineage: no approvals / no adapter jobs / no reversals', 
   assert.equal(pack.event_count, 1);
 });
 
-test('buildEvidencePack does not throw on an empty event stream', () => {
-  const pack = buildEvidencePack([], {
+test('buildEvidencePack does not throw on an empty event stream', async () => {
+  const pack = await buildEvidencePack([], {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -275,9 +275,9 @@ test('buildEvidencePack does not throw on an empty event stream', () => {
 
 // ── Full chain reconstruction ───────────────────────────────────────────────
 
-test('full chain: AI-drafted invoice → approval requested → approved → posted', () => {
+test('full chain: AI-drafted invoice → approval requested → approved → posted', async () => {
   const events = aiInvoiceChain();
-  const pack = buildEvidencePack(events, {
+  const pack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     targetType: 'invoice',
     targetId: 'invoice_f7a9',
@@ -328,7 +328,7 @@ test('full chain: AI-drafted invoice → approval requested → approved → pos
 
 // ── Reversal lineage ────────────────────────────────────────────────────────
 
-test('reversal lineage reconstructed via payload.original_entry_id', () => {
+test('reversal lineage reconstructed via payload.original_entry_id', async () => {
   const postedId = '00000000-0000-4000-8000-ddd000000001';
   const reversalReqId = '00000000-0000-4000-8000-ddd000000002';
   const reversalApprovedId = '00000000-0000-4000-8000-ddd000000003';
@@ -384,7 +384,7 @@ test('reversal lineage reconstructed via payload.original_entry_id', () => {
     }),
   ];
 
-  const chain = getReversalChain(events, TENANT_A, 'journal_A');
+  const chain = await getReversalChain(events, TENANT_A, 'journal_A');
   assert.equal(chain.original_entry_id, 'journal_A');
   assert.equal(chain.original_events.length, 1, 'one event for the original entry');
   assert.equal(chain.original_events[0].id, postedId);
@@ -392,7 +392,7 @@ test('reversal lineage reconstructed via payload.original_entry_id', () => {
   assert.equal(chain.reversal_chains[0].reversal_entry_id, 'journal_B');
   assert.equal(chain.reversal_chains[0].events.length, 2, 'reversal_requested + reversed');
 
-  const pack = buildEvidencePack(events, {
+  const pack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -405,7 +405,7 @@ test('reversal lineage reconstructed via payload.original_entry_id', () => {
 
 // ── Adapter-job lineage ─────────────────────────────────────────────────────
 
-test('adapter-job lineage present when adapter events exist', () => {
+test('adapter-job lineage present when adapter events exist', async () => {
   const events = [
     evt({
       id: '00000000-0000-4000-8000-eee000000001',
@@ -445,7 +445,7 @@ test('adapter-job lineage present when adapter events exist', () => {
     }),
   ];
 
-  const pack = buildEvidencePack(events, {
+  const pack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -463,9 +463,9 @@ test('adapter-job lineage present when adapter events exist', () => {
 
 // ── Tamper evidence ─────────────────────────────────────────────────────────
 
-test('tamper evidence: mutating one event yields a different events_hash', () => {
+test('tamper evidence: mutating one event yields a different events_hash', async () => {
   const events = aiInvoiceChain();
-  const pack = buildEvidencePack(events, {
+  const pack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -478,7 +478,7 @@ test('tamper evidence: mutating one event yields a different events_hash', () =>
     ...tampered[0],
     payload: { invoice: { id: 'invoice_f7a9', status: 'draft', total_cents: 999999 } },
   };
-  const tamperedPack = buildEvidencePack(tampered, {
+  const tamperedPack = await buildEvidencePack(tampered, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -499,7 +499,7 @@ test('tamper evidence: mutating one event yields a different events_hash', () =>
 
 // ── Canonical event-name enforcement ────────────────────────────────────────
 
-test('only canonical finance.* event names are consumed; command names are rejected', () => {
+test('only canonical finance.* event names are consumed; command names are rejected', async () => {
   assert.equal(isCanonicalFinanceEvent('finance.invoice.draft_created'), true);
   assert.equal(isCanonicalFinanceEvent('PostJournalEntryCommand'), false);
   assert.equal(isCanonicalFinanceEvent('ApproveFinanceActionCommand'), false);
@@ -519,7 +519,7 @@ test('only canonical finance.* event names are consumed; command names are rejec
     }),
   ];
 
-  const pack = buildEvidencePack(events, {
+  const pack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -539,7 +539,7 @@ test('only canonical finance.* event names are consumed; command names are rejec
 
 // ── Reserved infrastructure event handling ──────────────────────────────────
 
-test('reserved finance.audit.event_appended is excluded from normal evidence', () => {
+test('reserved finance.audit.event_appended is excluded from normal evidence', async () => {
   const events = [
     ...aiInvoiceChain(),
     evt({
@@ -552,7 +552,7 @@ test('reserved finance.audit.event_appended is excluded from normal evidence', (
     }),
   ];
 
-  const normalPack = buildEvidencePack(events, {
+  const normalPack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -560,7 +560,7 @@ test('reserved finance.audit.event_appended is excluded from normal evidence', (
   });
   assert.equal(normalPack.event_count, 4, 'infrastructure event excluded by default');
 
-  const integrityPack = buildEvidencePack(events, {
+  const integrityPack = await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -572,13 +572,13 @@ test('reserved finance.audit.event_appended is excluded from normal evidence', (
 
 // ── Event store input ───────────────────────────────────────────────────────
 
-test('buildEvidencePack accepts a finance event store as input', () => {
+test('buildEvidencePack accepts a finance event store as input', async () => {
   const store = createFinanceEventStore();
   for (const e of aiInvoiceChain()) {
     store.append(e);
   }
 
-  const pack = buildEvidencePack(store, {
+  const pack = await buildEvidencePack(store, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,
@@ -589,9 +589,42 @@ test('buildEvidencePack accepts a finance event store as input', () => {
   assert.ok(pack.events.every((e) => e.tenant_id === TENANT_A));
 });
 
-test('queryAuditTimeline supports event-type prefix matching', () => {
+test('buildEvidencePack accepts an async (Promise-returning) event store', async () => {
+  // Mirrors the Postgres adapter financeEventStore.pg.js, whose replay() and
+  // query() are async. resolveEvents must AWAIT the store — never treat the
+  // returned Promise as if it were a plain array.
+  const chain = aiInvoiceChain();
+  const asyncStore = {
+    replay: async (tenantId) => chain.filter((e) => e.tenant_id === tenantId),
+    query: async ({ tenant_id }) => chain.filter((e) => e.tenant_id === tenant_id),
+  };
+
+  const pack = await buildEvidencePack(asyncStore, {
+    tenantId: TENANT_A,
+    packId: FIXED_PACK_ID,
+    generatedAt: FIXED_GENERATED_AT,
+    generatedBy: GENERATED_BY,
+  });
+  assert.equal(pack.event_count, 4, 'all four events read from the async store');
+  assert.ok(pack.events.every((e) => e.tenant_id === TENANT_A));
+
+  // queryAuditTimeline and getReversalChain must also handle an async store.
+  const timeline = await queryAuditTimeline(asyncStore, { tenant_id: TENANT_A });
+  assert.equal(timeline.total_count, 4);
+
+  // A pack built from the async store must match one built from the raw array.
+  const arrayPack = await buildEvidencePack(chain, {
+    tenantId: TENANT_A,
+    packId: FIXED_PACK_ID,
+    generatedAt: FIXED_GENERATED_AT,
+    generatedBy: GENERATED_BY,
+  });
+  assert.equal(pack.integrity.pack_hash, arrayPack.integrity.pack_hash);
+});
+
+test('queryAuditTimeline supports event-type prefix matching', async () => {
   const events = aiInvoiceChain();
-  const invoiceEvents = queryAuditTimeline(events, {
+  const invoiceEvents = await queryAuditTimeline(events, {
     tenant_id: TENANT_A,
     event_type: 'finance.invoice.*',
   });
@@ -599,10 +632,10 @@ test('queryAuditTimeline supports event-type prefix matching', () => {
   assert.ok(invoiceEvents.events.every((e) => e.event_type.startsWith('finance.invoice.')));
 });
 
-test('buildEvidencePack is read-only — source events are not mutated', () => {
+test('buildEvidencePack is read-only — source events are not mutated', async () => {
   const events = aiInvoiceChain();
   const before = JSON.stringify(events);
-  buildEvidencePack(events, {
+  await buildEvidencePack(events, {
     tenantId: TENANT_A,
     packId: FIXED_PACK_ID,
     generatedAt: FIXED_GENERATED_AT,

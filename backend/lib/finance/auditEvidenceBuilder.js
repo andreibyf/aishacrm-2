@@ -62,18 +62,21 @@ export function isCanonicalFinanceEvent(eventType) {
 
 /**
  * Normalize the `events` argument: accept EITHER an array of event envelopes OR
- * a finance event store exposing `.replay(tenantId)`. Always returns a plain
- * array of events for `tenantId`.
+ * a finance event store exposing `.replay(tenantId)` / `.query(...)`. The store
+ * methods may be synchronous (the in-memory `financeEventStore.js`) or
+ * asynchronous (the Postgres adapter `financeEventStore.pg.js`) — the result is
+ * awaited either way, so this is always safe for both backends. Resolves to a
+ * plain array of events for `tenantId`.
  */
-function resolveEvents(source, tenantId) {
+async function resolveEvents(source, tenantId) {
   if (Array.isArray(source)) {
     return source;
   }
   if (source && typeof source.replay === 'function') {
-    return source.replay(tenantId);
+    return await source.replay(tenantId);
   }
   if (source && typeof source.query === 'function') {
-    return source.query({ tenant_id: tenantId });
+    return await source.query({ tenant_id: tenantId });
   }
   throw new TypeError(
     'auditEvidenceBuilder: events source must be an array of event envelopes ' +
@@ -152,7 +155,7 @@ function matchPayloadFilter(payload, payloadFilter) {
  * `created_at ASC` then `id ASC` (the canonical ordering — see §7.1).
  *
  * @param {Array|object} events  Array of event envelopes OR a finance event
- *   store with `.replay(tenantId)`.
+ *   store with `.replay(tenantId)` (synchronous or async — both are awaited).
  * @param {object} query
  * @param {string} query.tenant_id          required — tenant isolation boundary
  * @param {string} [query.from]             inclusive ISO lower bound on created_at
@@ -170,9 +173,9 @@ function matchPayloadFilter(payload, payloadFilter) {
  * @param {number} [query.offset]           default 0
  * @param {boolean} [query.includeInfrastructureEvents]  include the reserved
  *   `finance.audit.event_appended` event (default false)
- * @returns {{events: Array, total_count: number, query: object}}
+ * @returns {Promise<{events: Array, total_count: number, query: object}>}
  */
-export function queryAuditTimeline(events, query = {}) {
+export async function queryAuditTimeline(events, query = {}) {
   const {
     tenant_id: tenantId,
     from = null,
@@ -195,7 +198,7 @@ export function queryAuditTimeline(events, query = {}) {
     throw new TypeError('queryAuditTimeline: tenant_id is required');
   }
 
-  const resolved = resolveEvents(events, tenantId);
+  const resolved = await resolveEvents(events, tenantId);
 
   const filtered = resolved.filter((evt) => {
     if (!evt || evt.tenant_id !== tenantId) return false;
@@ -242,13 +245,13 @@ export function queryAuditTimeline(events, query = {}) {
  * compound reversal is detected by calling `getReversalChain` again on each
  * `reversal_entry_id`.
  *
- * @param {Array|object} events       event array OR event store
+ * @param {Array|object} events       event array OR event store (sync or async)
  * @param {string} tenantId
  * @param {string} journalEntryId
- * @returns {{original_entry_id: string, original_events: Array,
- *   reversal_chains: Array<{reversal_entry_id: string, events: Array}>}}
+ * @returns {Promise<{original_entry_id: string, original_events: Array,
+ *   reversal_chains: Array<{reversal_entry_id: string, events: Array}>}>}
  */
-export function getReversalChain(events, tenantId, journalEntryId) {
+export async function getReversalChain(events, tenantId, journalEntryId) {
   if (!tenantId) {
     throw new TypeError('getReversalChain: tenantId is required');
   }
@@ -256,20 +259,24 @@ export function getReversalChain(events, tenantId, journalEntryId) {
     throw new TypeError('getReversalChain: journalEntryId is required');
   }
 
-  const resolved = resolveEvents(events, tenantId);
+  const resolved = await resolveEvents(events, tenantId);
 
   // 1. All events for the original entry's own aggregate timeline.
-  const originalEvents = queryAuditTimeline(resolved, {
-    tenant_id: tenantId,
-    target_id: journalEntryId,
-  }).events;
+  const originalEvents = (
+    await queryAuditTimeline(resolved, {
+      tenant_id: tenantId,
+      target_id: journalEntryId,
+    })
+  ).events;
 
   // 2. All reversal events pointing back to the original via
   //    payload.original_entry_id.
-  const reversalEvents = queryAuditTimeline(resolved, {
-    tenant_id: tenantId,
-    payload_filter: { original_entry_id: journalEntryId },
-  }).events;
+  const reversalEvents = (
+    await queryAuditTimeline(resolved, {
+      tenant_id: tenantId,
+      payload_filter: { original_entry_id: journalEntryId },
+    })
+  ).events;
 
   // 3. The distinct reversal entry aggregate ids, in stable (sorted) order so
   //    the chain is replay-deterministic.
@@ -277,13 +284,17 @@ export function getReversalChain(events, tenantId, journalEntryId) {
     ...new Set(reversalEvents.map((e) => e.aggregate_id).filter(Boolean)),
   ].sort();
 
-  const reversalChains = reversalEntryIds.map((id) => ({
-    reversal_entry_id: id,
-    events: queryAuditTimeline(resolved, {
-      tenant_id: tenantId,
-      target_id: id,
-    }).events,
-  }));
+  const reversalChains = await Promise.all(
+    reversalEntryIds.map(async (id) => ({
+      reversal_entry_id: id,
+      events: (
+        await queryAuditTimeline(resolved, {
+          tenant_id: tenantId,
+          target_id: id,
+        })
+      ).events,
+    })),
+  );
 
   return {
     original_entry_id: journalEntryId,
@@ -415,15 +426,15 @@ function buildGovernanceDecisions(sortedEvents) {
  * `{ count, entries }` — `{ count: 0, entries: [] }` when there are no
  * reversals (graceful handling of absent optional lineage).
  */
-function buildReversalLineage(events, tenantId, sortedEvents) {
+async function buildReversalLineage(events, tenantId, sortedEvents) {
   const originalIds = new Set();
   for (const evt of sortedEvents) {
     const originalId = evt.payload && evt.payload.original_entry_id;
     if (originalId) originalIds.add(originalId);
   }
   const sortedOriginalIds = [...originalIds].sort();
-  const entries = sortedOriginalIds.map((originalId) =>
-    getReversalChain(events, tenantId, originalId),
+  const entries = await Promise.all(
+    sortedOriginalIds.map((originalId) => getReversalChain(events, tenantId, originalId)),
   );
   return {
     count: sortedOriginalIds.length,
@@ -498,7 +509,7 @@ function buildSummary(sortedEvents, fromDate, toDate, reversalLineage) {
  * `aggregate_id` matches `targetId` (audit-evidence-layer.md §6.1 / §7.2).
  *
  * @param {Array|object} events    Array of event envelopes OR a finance event
- *   store with `.replay(tenantId)`.
+ *   store with `.replay(tenantId)` (synchronous or async — both are awaited).
  * @param {object} options
  * @param {string} options.tenantId        required — tenant isolation boundary
  * @param {string} [options.fromDate]      inclusive ISO lower bound on created_at
@@ -516,9 +527,9 @@ function buildSummary(sortedEvents, fromDate, toDate, reversalLineage) {
  * @param {() => string} [options.clock]      alternative generated_at source
  * @param {boolean} [options.includeInfrastructureEvents]  include the reserved
  *   `finance.audit.event_appended` integrity event (default false)
- * @returns {object} the evidence pack (see audit-evidence-layer.md §6.2)
+ * @returns {Promise<object>} the evidence pack (see audit-evidence-layer.md §6.2)
  */
-export function buildEvidencePack(events, options = {}) {
+export async function buildEvidencePack(events, options = {}) {
   const {
     tenantId,
     fromDate = null,
@@ -537,7 +548,7 @@ export function buildEvidencePack(events, options = {}) {
     throw new TypeError('buildEvidencePack: tenantId is required');
   }
 
-  const resolved = resolveEvents(events, tenantId);
+  const resolved = await resolveEvents(events, tenantId);
 
   // Deterministic injection points: packId / generatedAt are inherently
   // volatile, so they are injectable. With fixed values the whole pack — and
@@ -548,33 +559,39 @@ export function buildEvidencePack(events, options = {}) {
     generatedAt ?? (typeof clock === 'function' ? clock() : new Date().toISOString());
 
   // Base selection: tenant-scoped, date-ranged, optionally aggregate-typed.
-  let selected = queryAuditTimeline(resolved, {
-    tenant_id: tenantId,
-    from: fromDate,
-    to: toDate,
-    target_type: targetType,
-    includeInfrastructureEvents,
-  }).events;
+  let selected = (
+    await queryAuditTimeline(resolved, {
+      tenant_id: tenantId,
+      from: fromDate,
+      to: toDate,
+      target_type: targetType,
+      includeInfrastructureEvents,
+    })
+  ).events;
 
   // §6.1 — when a specific targetId is supplied, widen to the full
   // correlation_id span of the earliest event for that aggregate so the entire
   // intent chain is captured even when the caller queries by the final
   // aggregate.
   if (targetId) {
-    const targetEvents = queryAuditTimeline(resolved, {
-      tenant_id: tenantId,
-      target_id: targetId,
-      includeInfrastructureEvents,
-    }).events;
+    const targetEvents = (
+      await queryAuditTimeline(resolved, {
+        tenant_id: tenantId,
+        target_id: targetId,
+        includeInfrastructureEvents,
+      })
+    ).events;
     const correlationId = targetEvents.length > 0 ? targetEvents[0].correlation_id : undefined;
     if (correlationId) {
-      selected = queryAuditTimeline(resolved, {
-        tenant_id: tenantId,
-        from: fromDate,
-        to: toDate,
-        correlation_id: correlationId,
-        includeInfrastructureEvents,
-      }).events;
+      selected = (
+        await queryAuditTimeline(resolved, {
+          tenant_id: tenantId,
+          from: fromDate,
+          to: toDate,
+          correlation_id: correlationId,
+          includeInfrastructureEvents,
+        })
+      ).events;
     } else {
       // No correlation_id on the target — fall back to the aggregate timeline.
       selected = targetEvents;
@@ -589,7 +606,7 @@ export function buildEvidencePack(events, options = {}) {
   const adapterJobs = buildAdapterJobs(sortedEvents);
   const stateTimeline = buildStateTimeline(sortedEvents);
   const governanceDecisions = buildGovernanceDecisions(sortedEvents);
-  const reversalLineage = buildReversalLineage(resolved, tenantId, sortedEvents);
+  const reversalLineage = await buildReversalLineage(resolved, tenantId, sortedEvents);
   const summary = buildSummary(sortedEvents, fromDate, toDate, reversalLineage);
 
   const eventsHash = sha256(sortedEvents);

@@ -149,11 +149,24 @@ Projection stores, cursors, and `ProjectionState` are partitioned by
 `checkTenantIsolation` interleaves two tenants' event streams into one event
 log, rebuilds every projection for each tenant, and asserts:
 
-- **No row leakage** — every value in a tenant's projection store carries that
-  tenant's `tenant_id`; a value stamped with the _other_ tenant's id is a leak.
+- **No row leakage (`tenant_id`-field scan)** — every value in a tenant's
+  projection store carries that tenant's `tenant_id`; a value stamped with the
+  _other_ tenant's id is a leak. This is a fast, direct signal, but it can only
+  see contamination that lands in a value's `tenant_id` field.
+- **Structural isolation (value-shape agnostic)** — a projection rebuilt from
+  the full interleaved stream must be byte-identical to one rebuilt from _only_
+  that tenant's events. Any divergence is contamination. Unlike the field scan,
+  this proof holds even for projections whose stored values carry no `tenant_id`
+  at all — e.g. the ledger, whose per-account buckets are
+  `{ account_id, account_name, classification, debit_cents, credit_cents }`.
+  Without this check, a future bug merging cross-tenant amounts into a shared
+  ledger bucket would pass the field scan undetected.
 - **Per-`(projection, tenant)` cursors** — each tenant's cursor reflects the
   position of _its own_ last consumed event, never advanced by the other
   tenant's stream. The two tenants' cursors are independent.
+
+The check fails (`passed: false`) if any of the three surfaces a problem;
+`detail` carries `leaks`, `contamination`, and `cursor_issues` separately.
 
 ---
 

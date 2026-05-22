@@ -557,7 +557,13 @@ function isConsumedBy(workers, projectionName, event) {
  * replay, and asserts:
  *
  *  - Each tenant's rebuilt read model contains ONLY rows whose `tenant_id` is
- *    that tenant (no cross-tenant leakage in any projection store value).
+ *    that tenant — the `tenant_id`-field leak scan. A fast, direct signal, but
+ *    it can only see contamination that lands in a value's `tenant_id` field.
+ *  - Structural isolation: a projection rebuilt from the full interleaved
+ *    stream is byte-identical to one rebuilt from ONLY that tenant's events.
+ *    This proof is value-shape agnostic, so it catches contamination even in
+ *    projections (like the ledger, whose account buckets carry no `tenant_id`)
+ *    that the field scan above is structurally blind to.
  *  - Cursors are per-(projection, tenant): each tenant's cursor reflects only
  *    its own events, so the two tenants' cursors are independent.
  *
@@ -624,12 +630,51 @@ export async function checkTenantIsolation({ events, tenantA, tenantB, config = 
     }
   }
 
-  return result('tenant_isolation', leaks.length === 0 && cursorIssues.length === 0, {
-    tenant_a: tenantA,
-    tenant_b: tenantB,
-    leaks,
-    cursor_issues: cursorIssues,
-  });
+  // Structural isolation proof — value-shape agnostic.
+  //
+  // The leak scan above can only see contamination that lands in a stored
+  // value's `tenant_id` field. A projection whose values carry no tenant id at
+  // all — e.g. the ledger's per-account buckets — could merge another tenant's
+  // amounts into a shared bucket and still pass that scan. So additionally
+  // prove isolation structurally: a projection rebuilt from the FULL
+  // interleaved stream must be byte-identical to one rebuilt from ONLY this
+  // tenant's events. Any divergence is contamination, whatever the value shape.
+  const contamination = [];
+  for (const tenantId of [tenantA, tenantB]) {
+    const isolated = buildRuntime(cfg);
+    appendAll(
+      isolated.eventStore,
+      events.filter((e) => e.tenant_id === tenantId),
+    );
+    for (const worker of isolated.workers) {
+      await isolated.runner.replay(worker.projectionName, tenantId);
+    }
+    for (const worker of runtime.workers) {
+      const name = worker.projectionName;
+      const fullStream = snapshotStore(runtime.storeProvider.getLiveStore(name, tenantId));
+      const isolatedOnly = snapshotStore(isolated.storeProvider.getLiveStore(name, tenantId));
+      if (!deepEqual(fullStream, isolatedOnly)) {
+        contamination.push({
+          projection: name,
+          tenant_id: tenantId,
+          full_stream: fullStream,
+          isolated: isolatedOnly,
+        });
+      }
+    }
+  }
+
+  return result(
+    'tenant_isolation',
+    leaks.length === 0 && cursorIssues.length === 0 && contamination.length === 0,
+    {
+      tenant_a: tenantA,
+      tenant_b: tenantB,
+      leaks,
+      cursor_issues: cursorIssues,
+      contamination,
+    },
+  );
 }
 
 // ── Aggregate runner ──────────────────────────────────────────────────────────
