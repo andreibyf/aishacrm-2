@@ -411,7 +411,7 @@ test('the approval queue projection ignores finance.audit.event_appended', async
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.pending.length, 0);
   assert.equal(queue.resolved.length, 0);
-  assert.equal(runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 test('the approval queue projection ignores events it does not consume', async () => {
@@ -447,7 +447,7 @@ test('a malformed finance.approval.requested degrades the projection and pauses 
     created_at: '2026-05-21T01:00:00.000Z',
     payload: {},
   });
-  assert.equal(runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A).is_degraded, true);
+  assert.equal((await runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A)).is_degraded, true);
 
   // A subsequent valid request is paused while degraded.
   await runner.dispatch(
@@ -458,7 +458,7 @@ test('a malformed finance.approval.requested degrades the projection and pauses 
     0,
     'while degraded, later events are not applied to the queue',
   );
-  assert.equal(runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 test('a resolution event for an unknown approval degrades the projection', async () => {
@@ -475,6 +475,6 @@ test('a resolution event for an unknown approval degrades the projection', async
     }),
   );
 
-  assert.equal(runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A).is_degraded, true);
+  assert.equal((await runner.status(APPROVAL_QUEUE_PROJECTION_NAME, TENANT_A)).is_degraded, true);
   assert.equal(queueOf(worker, provider, TENANT_A).resolved.length, 0);
 });

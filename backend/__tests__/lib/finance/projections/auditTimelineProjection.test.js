@@ -268,7 +268,7 @@ test('with includeInfrastructureEvents false (default), finance.audit.event_appe
   const timeline = timelineOf(worker, provider, TENANT_A);
   assert.equal(timeline.total_events, 0);
   assert.equal(timeline.events.length, 0);
-  assert.equal(runner.status(AUDIT_TIMELINE_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(AUDIT_TIMELINE_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 test('with includeInfrastructureEvents true, finance.audit.event_appended IS in the timeline', async () => {

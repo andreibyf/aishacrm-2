@@ -214,7 +214,7 @@ test('the ledger projection ignores finance.audit.event_appended', async () => {
   });
 
   assert.equal(ledgerOf(worker, provider, TENANT_A).accounts.length, 0);
-  assert.equal(runner.status(LEDGER_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(LEDGER_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 test('the ledger projection ignores events it does not consume', async () => {
@@ -250,7 +250,7 @@ test('a malformed finance.journal.posted degrades the projection and pauses late
     created_at: '2026-05-21T01:00:00.000Z',
     payload: {},
   });
-  assert.equal(runner.status(LEDGER_PROJECTION_NAME, TENANT_A).is_degraded, true);
+  assert.equal((await runner.status(LEDGER_PROJECTION_NAME, TENANT_A)).is_degraded, true);
 
   // A subsequent valid posting is paused while degraded.
   await runner.dispatch(balancedPosting('e2', 999, { createdAt: '2026-05-21T02:00:00.000Z' }));
@@ -260,7 +260,7 @@ test('a malformed finance.journal.posted degrades the projection and pauses late
     0,
     'while degraded, later events are not applied to the ledger',
   );
-  assert.equal(runner.status(LEDGER_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(LEDGER_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 // ── Tenant isolation (acceptance) ──────────────────────────────────────────────

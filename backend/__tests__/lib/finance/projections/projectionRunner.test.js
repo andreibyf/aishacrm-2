@@ -136,7 +136,7 @@ test('dispatch applies a consumed event and advances the cursor', async () => {
   await runner.dispatch(evt('e1', { createdAt: '2026-05-21T01:00:00.000Z' }));
 
   assert.deepEqual(provider.getLiveStore('p', TENANT_A).get('events'), ['e1']);
-  assert.deepEqual(runner.status('p', TENANT_A).cursor, {
+  assert.deepEqual((await runner.status('p', TENANT_A)).cursor, {
     created_at: '2026-05-21T01:00:00.000Z',
     id: 'e1',
   });
@@ -164,7 +164,7 @@ test('dispatch only routes events a worker consumes', async () => {
   await runner.dispatch(evt('e1', { type: 'finance.invoice.draft_created' }));
 
   assert.equal(provider.getLiveStore('p', TENANT_A).get('events'), undefined);
-  assert.equal(runner.status('p', TENANT_A).cursor, null);
+  assert.equal((await runner.status('p', TENANT_A)).cursor, null);
 });
 
 test('cursors are tracked independently per (projection, tenant)', async () => {
@@ -195,7 +195,7 @@ test('a failing handler puts the projection into degraded state', async () => {
 
   await runner.dispatch(evt('e1'));
 
-  const status = runner.status('p', TENANT_A);
+  const status = (await runner.status('p', TENANT_A));
   assert.equal(status.is_degraded, true);
   assert.equal(status.state, 'degraded');
 });
@@ -214,7 +214,7 @@ test('a failing handler does not advance the cursor', async () => {
 
   await runner.dispatch(evt('e1', { createdAt: '2026-05-21T01:00:00.000Z' }));
 
-  assert.equal(runner.status('p', TENANT_A).cursor, null);
+  assert.equal((await runner.status('p', TENANT_A)).cursor, null);
 });
 
 test('degraded state is cleared only by a successful replay (operator-triggered)', async () => {
@@ -232,11 +232,11 @@ test('degraded state is cleared only by a successful replay (operator-triggered)
   );
 
   await runner.dispatch(evt('e1'));
-  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true);
 
   await runner.replay('p', TENANT_A);
 
-  const status = runner.status('p', TENANT_A);
+  const status = (await runner.status('p', TENANT_A));
   assert.equal(status.is_degraded, false);
   assert.equal(status.state, 'idle');
 });
@@ -257,7 +257,7 @@ test('replay rebuilds the projection from the event store and sets the cursor', 
   await runner.replay('p', TENANT_A);
 
   assert.deepEqual(provider.getLiveStore('p', TENANT_A).get('events'), ['e1', 'e2']);
-  assert.deepEqual(runner.status('p', TENANT_A).cursor, {
+  assert.deepEqual((await runner.status('p', TENANT_A)).cursor, {
     created_at: '2026-05-21T02:00:00.000Z',
     id: 'e2',
   });
@@ -321,7 +321,7 @@ test('a failed replay promotes nothing — the live store is left untouched', as
     ['pre-existing'],
     'a failed replay must not mutate the live store',
   );
-  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true);
 });
 
 test('replayAll rebuilds every registered projection', async () => {
@@ -371,7 +371,7 @@ test('finance.audit.event_appended is not delivered to a business projection (ev
     'infrastructure events must not reach a business projection',
   );
   assert.equal(
-    runner.status('p', TENANT_A).cursor,
+    (await runner.status('p', TENANT_A)).cursor,
     null,
     'infrastructure events must never advance a business-projection cursor',
   );
@@ -448,7 +448,7 @@ test('a degraded projection pauses dispatch — later events stay unapplied, cur
 
   // First event fails -> projection is degraded.
   await runner.dispatch(evt('bad', { createdAt: '2026-05-21T01:00:00.000Z' }));
-  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true);
 
   // A later, well-formed event must be PAUSED — not delivered to the handler.
   const result = await runner.dispatch(evt('later', { createdAt: '2026-05-21T02:00:00.000Z' }));
@@ -460,7 +460,7 @@ test('a degraded projection pauses dispatch — later events stay unapplied, cur
     'a later event must not be applied while the projection is degraded',
   );
   assert.equal(
-    runner.status('p', TENANT_A).cursor,
+    (await runner.status('p', TENANT_A)).cursor,
     null,
     'the cursor must not advance past the failed event while degraded',
   );
@@ -489,7 +489,7 @@ test('a handler that mutates then throws leaves the live store untouched', async
     [],
     'no write from a failed handler may be visible in the live store',
   );
-  assert.equal(runner.status('p', TENANT_A).is_degraded, true);
+  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true);
 });
 
 // [P1] A clear() inside a failed handler must also be rolled back.
@@ -575,8 +575,8 @@ test('a handler that mutates a live value in place then throws does not corrupt 
     { count: 0 },
     'an in-place object mutation inside a failed handler must not reach the live store',
   );
-  assert.equal(runner.status('p', TENANT_A).cursor, null, 'the cursor must not advance');
-  assert.equal(runner.status('p', TENANT_A).is_degraded, true, 'the projection is degraded');
+  assert.equal((await runner.status('p', TENANT_A)).cursor, null, 'the cursor must not advance');
+  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true, 'the projection is degraded');
 });
 
 // Success path: a handler that mutates a (cloned) value and explicitly set()s
@@ -603,8 +603,89 @@ test('a handler that mutates a value and set()s it commits the change on success
     ['seed', 'e1'],
     'an explicit set() of a mutated value is committed to the live store on success',
   );
-  assert.deepEqual(runner.status('p', TENANT_A).cursor, {
+  assert.deepEqual((await runner.status('p', TENANT_A)).cursor, {
     created_at: '2026-05-21T01:00:00.000Z',
     id: 'e1',
+  });
+});
+
+// ── Async store-provider seam ──────────────────────────────────────────────────
+
+/**
+ * Wrap the sync memory provider so every provider method returns a Promise.
+ * This stands in for a real async backend (e.g. Postgres) without changing the
+ * underlying semantics — the live ProjectionStore returned by getLiveStore
+ * remains synchronous (per design constraint #3).
+ */
+function asyncifyProvider(sync) {
+  return {
+    async getLiveStore(projectionName, tenantId) {
+      return sync.getLiveStore(projectionName, tenantId);
+    },
+    async createShadowStore(projectionName, tenantId) {
+      return sync.createShadowStore(projectionName, tenantId);
+    },
+    async promoteShadow(projectionName, tenantId) {
+      return sync.promoteShadow(projectionName, tenantId);
+    },
+    async discardShadow(projectionName, tenantId) {
+      return sync.discardShadow(projectionName, tenantId);
+    },
+    async getState(projectionName, tenantId) {
+      return sync.getState(projectionName, tenantId);
+    },
+    async setState(projectionName, tenantId, state) {
+      return sync.setState(projectionName, tenantId, state);
+    },
+  };
+}
+
+// An async provider (e.g. Postgres) must be supported by the runner's
+// store-provider seam. Every provider call site must `await` the result so the
+// runner sees the resolved value rather than a Promise. With a sync provider
+// `await value` is a no-op, so this change is fully backward-compatible.
+test('dispatch works with a fully async store provider (Postgres-style seam)', async () => {
+  const sync = createMemoryProjectionStoreProvider();
+  const asyncProvider = asyncifyProvider(sync);
+  const runner = makeRunner({ storeProvider: asyncProvider });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.dispatch(evt('e1', { createdAt: '2026-05-21T01:00:00.000Z' }));
+
+  // The underlying live store must hold the applied event — proving the runner
+  // resolved the Promise from `getLiveStore` rather than treating it as a store.
+  assert.deepEqual(sync.getLiveStore('p', TENANT_A).get('events'), ['e1']);
+
+  // The cursor must advance — proving the runner resolved the Promise from
+  // `getState`/`setState` rather than treating the Promise as the state record.
+  const status = await runner.status('p', TENANT_A);
+  assert.deepEqual(status.cursor, {
+    created_at: '2026-05-21T01:00:00.000Z',
+    id: 'e1',
+  });
+  assert.equal(status.state, 'idle');
+  assert.equal(status.is_degraded, false);
+});
+
+test('replay works with a fully async store provider (Postgres-style seam)', async () => {
+  const sync = createMemoryProjectionStoreProvider();
+  const asyncProvider = asyncifyProvider(sync);
+  const eventStore = fakeEventStore({
+    [TENANT_A]: [
+      evt('e1', { createdAt: '2026-05-21T01:00:00.000Z' }),
+      evt('e2', { createdAt: '2026-05-21T02:00:00.000Z' }),
+    ],
+  });
+  const runner = makeRunner({ eventStore, storeProvider: asyncProvider });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A);
+
+  // Shadow store was created, written into, and atomically promoted.
+  assert.deepEqual(sync.getLiveStore('p', TENANT_A).get('events'), ['e1', 'e2']);
+  const status = await runner.status('p', TENANT_A);
+  assert.deepEqual(status.cursor, {
+    created_at: '2026-05-21T02:00:00.000Z',
+    id: 'e2',
   });
 });

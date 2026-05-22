@@ -205,9 +205,10 @@ export function createProjectionRunner({
     return true;
   }
 
-  function getState(worker, tenantId) {
+  async function getState(worker, tenantId) {
     return (
-      storeProvider.getState(worker.projectionName, tenantId) || defaultState(worker.schemaVersion)
+      (await storeProvider.getState(worker.projectionName, tenantId)) ||
+      defaultState(worker.schemaVersion)
     );
   }
 
@@ -234,7 +235,7 @@ export function createProjectionRunner({
 
   async function dispatchToWorker(worker, event) {
     const tenantId = event.tenant_id;
-    const state = getState(worker, tenantId);
+    const state = await getState(worker, tenantId);
 
     // A degraded projection PAUSES dispatch. Later events may depend on the
     // missing state, so continuing risks compounding divergence. The event
@@ -249,7 +250,7 @@ export function createProjectionRunner({
       return { projectionName: worker.projectionName, outcome: 'skipped' };
     }
 
-    const liveStore = storeProvider.getLiveStore(worker.projectionName, tenantId);
+    const liveStore = await storeProvider.getLiveStore(worker.projectionName, tenantId);
     let buffer;
     try {
       // The handler writes into an isolated per-event buffer, never the live
@@ -258,7 +259,7 @@ export function createProjectionRunner({
     } catch {
       // Failed handler -> degraded; the cursor is NOT advanced and the live
       // store is untouched (the buffer is discarded).
-      storeProvider.setState(worker.projectionName, tenantId, {
+      await storeProvider.setState(worker.projectionName, tenantId, {
         ...state,
         state: 'degraded',
         is_degraded: true,
@@ -270,7 +271,7 @@ export function createProjectionRunner({
     // The handler fully succeeded — commit its writes to the live store
     // all-or-nothing, then the Runner advances the cursor.
     buffer.commit();
-    storeProvider.setState(worker.projectionName, tenantId, {
+    await storeProvider.setState(worker.projectionName, tenantId, {
       ...state,
       state: 'idle',
       cursor: positionOf(event),
@@ -296,8 +297,11 @@ export function createProjectionRunner({
   }
 
   async function doReplay(worker, tenantId) {
-    const prior = getState(worker, tenantId);
-    storeProvider.setState(worker.projectionName, tenantId, { ...prior, state: 'replaying' });
+    const prior = await getState(worker, tenantId);
+    await storeProvider.setState(worker.projectionName, tenantId, {
+      ...prior,
+      state: 'replaying',
+    });
 
     try {
       const all = await eventStore.replay(tenantId);
@@ -311,14 +315,14 @@ export function createProjectionRunner({
       );
       const filtered = ordered.filter((event) => workerConsumes(worker, event));
 
-      const shadow = storeProvider.createShadowStore(worker.projectionName, tenantId);
+      const shadow = await storeProvider.createShadowStore(worker.projectionName, tenantId);
       await worker.replay(filtered, shadow);
 
       const cursor = filtered.length ? positionOf(filtered[filtered.length - 1]) : null;
       // Atomic promotion — the live store is replaced wholesale.
-      storeProvider.promoteShadow(worker.projectionName, tenantId);
+      await storeProvider.promoteShadow(worker.projectionName, tenantId);
 
-      storeProvider.setState(worker.projectionName, tenantId, {
+      await storeProvider.setState(worker.projectionName, tenantId, {
         state: 'idle',
         cursor,
         last_rebuilt_at: new Date().toISOString(),
@@ -331,9 +335,9 @@ export function createProjectionRunner({
       // Failed rebuild -> discard the shadow (the live store is untouched) and
       // mark degraded. Recovery is operator-triggered only.
       if (typeof storeProvider.discardShadow === 'function') {
-        storeProvider.discardShadow(worker.projectionName, tenantId);
+        await storeProvider.discardShadow(worker.projectionName, tenantId);
       }
-      storeProvider.setState(worker.projectionName, tenantId, {
+      await storeProvider.setState(worker.projectionName, tenantId, {
         ...prior,
         state: 'degraded',
         is_degraded: true,
@@ -359,7 +363,7 @@ export function createProjectionRunner({
     return results;
   }
 
-  function status(projectionName, tenantId) {
+  async function status(projectionName, tenantId) {
     const worker = workers.get(projectionName);
     if (!worker) {
       throw new ProjectionRuntimeError(`projection not registered: ${projectionName}`, NOT_FOUND);

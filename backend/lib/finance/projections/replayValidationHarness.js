@@ -535,8 +535,8 @@ export async function checkInfrastructureEventFiltering(events, tenantId, config
     const businessState = snapshotStore(withoutInfra.storeProvider.getLiveStore(name, tenantId));
     const stateIdentical = deepEqual(fullState, businessState);
     // An infrastructure event must not advance a business projection's cursor.
-    const cursorWithInfra = withInfra.runner.status(name, tenantId).cursor;
-    const cursorBusinessOnly = withoutInfra.runner.status(name, tenantId).cursor;
+    const cursorWithInfra = (await withInfra.runner.status(name, tenantId)).cursor;
+    const cursorBusinessOnly = (await withoutInfra.runner.status(name, tenantId)).cursor;
     const cursorIdentical = deepEqual(cursorWithInfra, cursorBusinessOnly);
     perProjection.push({
       projection: name,
@@ -631,7 +631,7 @@ export async function checkDegradedRecovery({
   for (const event of ordered) {
     await faulted.runner.dispatch(event);
     if (event.id === failEventId) {
-      const status = faulted.runner.status(targetName, tenantId);
+      const status = (await faulted.runner.status(targetName, tenantId));
       degradedAfterFault = status.is_degraded === true && status.state === 'degraded';
       cursorAtFault = status.cursor;
       break;
@@ -650,12 +650,12 @@ export async function checkDegradedRecovery({
     const dispatchResult = await faulted.runner.dispatch(laterEvent);
     const target = dispatchResult.dispatched.find((d) => d.projectionName === targetName);
     laterPaused = Boolean(target) && target.outcome === 'paused';
-    cursorFrozen = deepEqual(faulted.runner.status(targetName, tenantId).cursor, cursorAtFault);
+    cursorFrozen = deepEqual((await faulted.runner.status(targetName, tenantId)).cursor, cursorAtFault);
   }
 
   // ── Phase 3: operator-triggered replay must recover to idle ────────────────
   await faulted.runner.replay(targetName, tenantId);
-  const recovered = faulted.runner.status(targetName, tenantId);
+  const recovered = (await faulted.runner.status(targetName, tenantId));
   const recoveredToIdle = recovered.is_degraded === false && recovered.state === 'idle';
 
   // ── Phase 4: the recovered read model must equal a clean reference build ────
@@ -758,7 +758,7 @@ export async function checkTenantIsolation({ events, tenantA, tenantB, config = 
             id: tenantConsumed[tenantConsumed.length - 1].id,
           }
         : null;
-      const actualCursor = runtime.runner.status(name, tenantId).cursor;
+      const actualCursor = (await runtime.runner.status(name, tenantId)).cursor;
       if (!deepEqual(actualCursor, expectedCursor)) {
         cursorIssues.push({
           projection: name,

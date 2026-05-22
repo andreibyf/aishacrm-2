@@ -477,7 +477,7 @@ test('the adapter queue projection ignores finance.audit.event_appended', async 
 
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.queued.length, 0);
-  assert.equal(runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
 
 test('the adapter queue projection ignores events it does not consume', async () => {
@@ -519,7 +519,7 @@ test('accepts but ignores finance.adapter.sync_cancelled (future-ready, not yet 
   assert.equal(queue.failed.length, 0);
   assert.equal(queue.completed.length, 0);
   assert.equal(
-    runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A).is_degraded,
+    (await runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A)).is_degraded,
     false,
     'a not-yet-canonical adapter event is ignored, not degraded',
   );
@@ -541,7 +541,7 @@ test('a malformed adapter event degrades the projection and pauses later dispatc
     created_at: '2026-05-21T01:00:00.000Z',
     payload: {},
   });
-  assert.equal(runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A).is_degraded, true);
+  assert.equal((await runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A)).is_degraded, true);
 
   // A subsequent valid event is paused while degraded.
   await runner.dispatch(
@@ -555,5 +555,5 @@ test('a malformed adapter event degrades the projection and pauses later dispatc
     0,
     'while degraded, later events are not applied to the queue',
   );
-  assert.equal(runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A).cursor, null);
+  assert.equal((await runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A)).cursor, null);
 });
