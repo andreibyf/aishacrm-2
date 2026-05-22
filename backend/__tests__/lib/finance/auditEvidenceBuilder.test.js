@@ -273,6 +273,82 @@ test('buildEvidencePack does not throw on an empty event stream', async () => {
   assert.deepEqual(pack.reversals, { count: 0, entries: [] });
 });
 
+test('malformed lineage is handled gracefully and never mutates source events', async () => {
+  // Lineage payloads that are present but structurally broken: a string where
+  // an approval object is expected, an adapter job missing its id, a non-string
+  // original_entry_id, and a null payload. The builder must not throw, must not
+  // mutate any source event, and must skip the broken lineage rather than
+  // fabricate it.
+  const malformed = [
+    evt({
+      id: '00000000-0000-4000-8000-ddd0000000a1',
+      event_type: 'finance.invoice.draft_created',
+      aggregate_type: 'invoice',
+      aggregate_id: 'invoice_ok',
+      payload: { invoice: { id: 'invoice_ok', status: 'draft' } },
+      created_at: '2025-12-19T08:00:00.000Z',
+    }),
+    evt({
+      id: '00000000-0000-4000-8000-ddd0000000a2',
+      event_type: 'finance.approval.requested',
+      aggregate_type: 'approval',
+      aggregate_id: 'approval_broken',
+      payload: { approval: 'not-an-object' }, // approval is a string
+      created_at: '2025-12-19T08:01:00.000Z',
+    }),
+    evt({
+      id: '00000000-0000-4000-8000-ddd0000000a3',
+      event_type: 'finance.adapter.sync_queued',
+      aggregate_type: 'adapter_job',
+      aggregate_id: 'adapter_broken',
+      payload: { adapter_job: { provider: 'quickbooks', status: 'queued' } }, // no id
+      created_at: '2025-12-19T08:02:00.000Z',
+    }),
+    evt({
+      id: '00000000-0000-4000-8000-ddd0000000a4',
+      event_type: 'finance.journal.reversal_requested',
+      aggregate_type: 'journal_entry',
+      aggregate_id: 'journal_broken',
+      payload: { original_entry_id: 12345 }, // non-string lineage key
+      created_at: '2025-12-19T08:03:00.000Z',
+    }),
+    evt({
+      id: '00000000-0000-4000-8000-ddd0000000a5',
+      event_type: 'finance.journal.posted',
+      aggregate_type: 'journal_entry',
+      aggregate_id: 'journal_nullpayload',
+      payload: null, // payload absent entirely
+      created_at: '2025-12-19T08:04:00.000Z',
+    }),
+  ];
+
+  const before = JSON.stringify(malformed);
+
+  const pack = await buildEvidencePack(malformed, {
+    tenantId: TENANT_A,
+    packId: FIXED_PACK_ID,
+    generatedAt: FIXED_GENERATED_AT,
+    generatedBy: GENERATED_BY,
+  });
+
+  // Source events are byte-identical — malformed lineage never mutates input.
+  assert.equal(JSON.stringify(malformed), before, 'malformed input left untouched');
+
+  // The pack is still produced; broken lineage is skipped, not fatal.
+  assert.equal(pack.event_count, 5, 'all canonical events still counted');
+  assert.deepEqual(pack.approvals, [], 'a non-object approval is skipped');
+  assert.deepEqual(pack.adapter_jobs, [], 'an adapter job with no id is skipped');
+
+  // Determinism still holds for a malformed stream.
+  const pack2 = await buildEvidencePack(malformed, {
+    tenantId: TENANT_A,
+    packId: FIXED_PACK_ID,
+    generatedAt: FIXED_GENERATED_AT,
+    generatedBy: GENERATED_BY,
+  });
+  assert.equal(pack.integrity.pack_hash, pack2.integrity.pack_hash);
+});
+
 // ── Full chain reconstruction ───────────────────────────────────────────────
 
 test('full chain: AI-drafted invoice → approval requested → approved → posted', async () => {
