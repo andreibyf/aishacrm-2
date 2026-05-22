@@ -342,6 +342,37 @@ algorithm: RebuildBalanceSheet(events, tenantId, as_of_date)
 
 ## 6. finance.projection.approval_queue
 
+> **Implementation status — Phase 2B-9 (minimal approval-queue harness).**
+> Implemented as `backend/lib/finance/projections/approvalQueueProjection.js`
+> (`createApprovalQueueProjectionWorker()`) — the first projection consumer that
+> tracks operational workflow state rather than accounting math, built on the
+> Phase 2B-7 Projection Runtime. The 2B-9 minimal scope consumes the four
+> approval lifecycle events — **`finance.approval.requested`,
+> `finance.approval.approved`, `finance.approval.rejected`,
+> `finance.approval.cancelled`**; `finance.journal.reversal_requested` is
+> deferred. The store is keyed by `approval_id`, so there is structurally
+> exactly one record per approval within a tenant-scoped projection — the
+> invariant that no two active pending records exist for one `approval_id`
+> holds by construction. `handleEvent` / `replay` share one apply path, so live
+> dispatch and rebuild-from-zero produce identical state. A resolution event
+> moves its approval out of `pending` and into `resolved`. The 2B-9
+> `getProjection(tenantId, opts, store)` returns the minimal read model
+> `{ pending, resolved }` — pending entries carry `{ approval_id, tenant_id,
+> target_type, target_id, risk_level, requested_by, created_at,
+> approval_policy, escalation_target }`; resolved entries carry
+> `{ approval_id, status, resolved_by, resolved_at, target_type, target_id }`.
+> `finance.approval.requested` is **create-only** — a duplicate request (at-least-once
+> delivery / replay) for an `approval_id` that already has a record, pending or
+> resolved, is a no-op, so an already-resolved approval is never reopened. The
+> read-model `tenant_id` is sourced from the event envelope (the runtime
+> store-partitioning boundary), never from `payload.approval.tenant_id`. An
+> approval event missing `payload.approval.id`, or a resolution event
+> referencing an approval with no prior `finance.approval.requested`, throws —
+> the runtime surfaces that as a degraded projection. The `totals`, `meta`,
+> `ai_initiated`, `age_seconds`, query filters, and the
+> `finance.journal.reversal_requested` source are deferred; the sections below
+> remain the eventual full target.
+
 ### Purpose
 
 Answers: "Which finance actions are currently pending human approval, who requested them, and what is the risk level?"
