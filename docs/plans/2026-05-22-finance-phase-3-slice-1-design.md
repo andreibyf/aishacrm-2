@@ -39,12 +39,11 @@ the domain service's own (Phase-1, in-memory) state model.
 
 ### Out of scope (Slice 2 / later / deferred)
 
-Separate `finance-audit-worker` process · `audit_pack_requests` · adapter worker
-
-- ERPNext adapter + DB-backed `finance.adapter_jobs` writes · incremental
-  "events-after-cursor" event-store query · routes reading from
-  `finance.projection_state` · fixing the domain service's own in-memory state
-  persistence.
+- Separate `finance-audit-worker` process and `audit_pack_requests`.
+- Adapter worker, ERPNext adapter, and DB-backed `finance.adapter_jobs` writes (Slice 2).
+- Incremental "events-after-cursor" event-store query.
+- Routes reading from `finance.projection_state`.
+- Fixing the domain service's own in-memory state persistence.
 
 ---
 
