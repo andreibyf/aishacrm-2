@@ -276,9 +276,7 @@ export function startFinanceProjectionWorker({
     // The factory is normally called from the standalone entry block which
     // builds runner+eventStore from env. If a caller skips that wiring and
     // we have nothing to drive, refuse to start rather than crash mid-cycle.
-    logger.error(
-      '[finance-projection-worker] cannot start without { runner, eventStore } wiring',
-    );
+    logger.error('[finance-projection-worker] cannot start without { runner, eventStore } wiring');
     return {
       stop: () => {
         logger.debug('[finance-projection-worker] stop called on unwired worker');
@@ -388,10 +386,7 @@ if (
   const pool = new pg.Pool({
     connectionString,
     max: Number.parseInt(process.env.FINANCE_DB_POOL_MAX || '5', 10),
-    statement_timeout: Number.parseInt(
-      process.env.FINANCE_DB_STATEMENT_TIMEOUT_MS || '30000',
-      10,
-    ),
+    statement_timeout: Number.parseInt(process.env.FINANCE_DB_STATEMENT_TIMEOUT_MS || '30000', 10),
   });
 
   const runner = buildProjectionRunner({ pool });

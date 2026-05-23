@@ -313,5 +313,8 @@ test('runProjectionPollCycle — never throws even when every tenant fails', asy
     tenantIds: [TENANT_A, TENANT_B],
   });
   assert.equal(summary.length, 2);
-  assert.equal(summary.every((row) => row.ok === false), true);
+  assert.equal(
+    summary.every((row) => row.ok === false),
+    true,
+  );
 });
