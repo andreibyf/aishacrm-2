@@ -314,8 +314,10 @@ async function executeConvergence({ dispatchRuntime, replayRuntime, ordered, ten
   const perProjection = [];
   for (const worker of dispatchRuntime.workers) {
     const name = worker.projectionName;
-    const dispatched = snapshotStore(dispatchRuntime.storeProvider.getLiveStore(name, tenantId));
-    const replayed = snapshotStore(replayRuntime.storeProvider.getLiveStore(name, tenantId));
+    const dispatched = snapshotStore(
+      await dispatchRuntime.storeProvider.getLiveStore(name, tenantId),
+    );
+    const replayed = snapshotStore(await replayRuntime.storeProvider.getLiveStore(name, tenantId));
     const converged = deepEqual(dispatched, replayed);
     perProjection.push({
       projection: name,
@@ -458,7 +460,7 @@ export async function checkRepeatedReplayDeterminism(events, tenantId, config = 
   const firstPass = {};
   for (const worker of runtime.workers) {
     firstPass[worker.projectionName] = snapshotStore(
-      runtime.storeProvider.getLiveStore(worker.projectionName, tenantId),
+      await runtime.storeProvider.getLiveStore(worker.projectionName, tenantId),
     );
   }
 
@@ -469,7 +471,7 @@ export async function checkRepeatedReplayDeterminism(events, tenantId, config = 
   const perProjection = [];
   for (const worker of runtime.workers) {
     const name = worker.projectionName;
-    const secondPass = snapshotStore(runtime.storeProvider.getLiveStore(name, tenantId));
+    const secondPass = snapshotStore(await runtime.storeProvider.getLiveStore(name, tenantId));
     perProjection.push({ projection: name, stable: deepEqual(firstPass[name], secondPass) });
   }
 
@@ -531,8 +533,10 @@ export async function checkInfrastructureEventFiltering(events, tenantId, config
   const perProjection = [];
   for (const worker of withInfra.workers) {
     const name = worker.projectionName;
-    const fullState = snapshotStore(withInfra.storeProvider.getLiveStore(name, tenantId));
-    const businessState = snapshotStore(withoutInfra.storeProvider.getLiveStore(name, tenantId));
+    const fullState = snapshotStore(await withInfra.storeProvider.getLiveStore(name, tenantId));
+    const businessState = snapshotStore(
+      await withoutInfra.storeProvider.getLiveStore(name, tenantId),
+    );
     const stateIdentical = deepEqual(fullState, businessState);
     // An infrastructure event must not advance a business projection's cursor.
     const cursorWithInfra = (await withInfra.runner.status(name, tenantId)).cursor;
@@ -631,7 +635,7 @@ export async function checkDegradedRecovery({
   for (const event of ordered) {
     await faulted.runner.dispatch(event);
     if (event.id === failEventId) {
-      const status = (await faulted.runner.status(targetName, tenantId));
+      const status = await faulted.runner.status(targetName, tenantId);
       degradedAfterFault = status.is_degraded === true && status.state === 'degraded';
       cursorAtFault = status.cursor;
       break;
@@ -650,12 +654,15 @@ export async function checkDegradedRecovery({
     const dispatchResult = await faulted.runner.dispatch(laterEvent);
     const target = dispatchResult.dispatched.find((d) => d.projectionName === targetName);
     laterPaused = Boolean(target) && target.outcome === 'paused';
-    cursorFrozen = deepEqual((await faulted.runner.status(targetName, tenantId)).cursor, cursorAtFault);
+    cursorFrozen = deepEqual(
+      (await faulted.runner.status(targetName, tenantId)).cursor,
+      cursorAtFault,
+    );
   }
 
   // ── Phase 3: operator-triggered replay must recover to idle ────────────────
   await faulted.runner.replay(targetName, tenantId);
-  const recovered = (await faulted.runner.status(targetName, tenantId));
+  const recovered = await faulted.runner.status(targetName, tenantId);
   const recoveredToIdle = recovered.is_degraded === false && recovered.state === 'idle';
 
   // ── Phase 4: the recovered read model must equal a clean reference build ────
@@ -663,8 +670,12 @@ export async function checkDegradedRecovery({
   appendAll(reference.eventStore, ordered);
   await reference.runner.replay(targetName, tenantId);
 
-  const recoveredState = snapshotStore(faulted.storeProvider.getLiveStore(targetName, tenantId));
-  const referenceState = snapshotStore(reference.storeProvider.getLiveStore(targetName, tenantId));
+  const recoveredState = snapshotStore(
+    await faulted.storeProvider.getLiveStore(targetName, tenantId),
+  );
+  const referenceState = snapshotStore(
+    await reference.storeProvider.getLiveStore(targetName, tenantId),
+  );
   const stateCorrect = deepEqual(recoveredState, referenceState);
 
   const passed =
@@ -736,7 +747,7 @@ export async function checkTenantIsolation({ events, tenantA, tenantB, config = 
       [tenantA, tenantB],
       [tenantB, tenantA],
     ]) {
-      const store = runtime.storeProvider.getLiveStore(name, tenantId);
+      const store = await runtime.storeProvider.getLiveStore(name, tenantId);
       for (const key of store.keys()) {
         const value = store.get(key);
         // Any stored value carrying the other tenant's id is a leak.
@@ -791,8 +802,8 @@ export async function checkTenantIsolation({ events, tenantA, tenantB, config = 
     }
     for (const worker of runtime.workers) {
       const name = worker.projectionName;
-      const fullStream = snapshotStore(runtime.storeProvider.getLiveStore(name, tenantId));
-      const isolatedOnly = snapshotStore(isolated.storeProvider.getLiveStore(name, tenantId));
+      const fullStream = snapshotStore(await runtime.storeProvider.getLiveStore(name, tenantId));
+      const isolatedOnly = snapshotStore(await isolated.storeProvider.getLiveStore(name, tenantId));
       if (!deepEqual(fullStream, isolatedOnly)) {
         contamination.push({
           projection: name,

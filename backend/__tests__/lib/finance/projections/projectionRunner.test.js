@@ -195,7 +195,7 @@ test('a failing handler puts the projection into degraded state', async () => {
 
   await runner.dispatch(evt('e1'));
 
-  const status = (await runner.status('p', TENANT_A));
+  const status = await runner.status('p', TENANT_A);
   assert.equal(status.is_degraded, true);
   assert.equal(status.state, 'degraded');
 });
@@ -236,7 +236,7 @@ test('degraded state is cleared only by a successful replay (operator-triggered)
 
   await runner.replay('p', TENANT_A);
 
-  const status = (await runner.status('p', TENANT_A));
+  const status = await runner.status('p', TENANT_A);
   assert.equal(status.is_degraded, false);
   assert.equal(status.state, 'idle');
 });
@@ -576,7 +576,11 @@ test('a handler that mutates a live value in place then throws does not corrupt 
     'an in-place object mutation inside a failed handler must not reach the live store',
   );
   assert.equal((await runner.status('p', TENANT_A)).cursor, null, 'the cursor must not advance');
-  assert.equal((await runner.status('p', TENANT_A)).is_degraded, true, 'the projection is degraded');
+  assert.equal(
+    (await runner.status('p', TENANT_A)).is_degraded,
+    true,
+    'the projection is degraded',
+  );
 });
 
 // Success path: a handler that mutates a (cloned) value and explicitly set()s
