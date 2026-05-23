@@ -551,3 +551,61 @@ test('pg provider drives a full runner dispatch+replay identically to memory (pa
   assert.equal(row.status, 'idle');
   assert.equal(row.cursor_event_id, 'e3', 'cursor advances to the last applied event');
 });
+
+// ── Regression: cold-start replay does not wipe state_json (review I-1) ───────
+
+test('cold-start replay does not wipe state_json (regression for review I-1)', async () => {
+  // Seed a row with meaningful state_json. The (projection, tenant) cache is
+  // cold for this pair when replay starts — the bug being guarded against is
+  // that the runner's opening setState({state:'replaying'}) would, under a
+  // cold cache, fall back to an empty snapshot and durably blank state_json
+  // before the rebuild even runs. The fix is a getLiveStore call BEFORE that
+  // first setState so the cache is hydrated and setState preserves state_json.
+  const seededStateJson = {
+    important: 'do_not_lose',
+    accounts: [{ id: 'cash' }],
+  };
+  const pool = createFakePool();
+  seedRow(pool, LEDGER_PROJECTION_NAME, TENANT_A, {
+    schema_version: 1,
+    cursor_event_id: '11111111-1111-4111-8111-111111111111',
+    cursor_created_at: '2026-05-20T00:00:00.000Z',
+    state_json: seededStateJson,
+    status: 'idle',
+  });
+
+  // Event store whose replay() throws — forces the runner's doReplay catch
+  // path, which marks the row degraded. Crucially, the pre-throw
+  // setState({state:'replaying'}) must NOT have blanked state_json.
+  const failingEventStore = {
+    async replay() {
+      throw new Error('event store unavailable');
+    },
+  };
+
+  const provider = createPgProjectionStoreProvider({ pool });
+  const runner = createProjectionRunner({
+    eventStore: failingEventStore,
+    storeProvider: provider,
+    retryBackoffMs: 0,
+  });
+  const worker = createLedgerProjectionWorker();
+  runner.register(worker);
+
+  // No prior getLiveStore for (LEDGER_PROJECTION_NAME, TENANT_A) — the cache
+  // is cold when replay starts. This is the exact precondition of I-1.
+  const result = await runner.replay(LEDGER_PROJECTION_NAME, TENANT_A);
+
+  assert.equal(result.outcome, 'degraded', 'failing event store leaves projection degraded');
+
+  // The durable row preserves the seeded state_json (the I-1 fix) and the
+  // catch path advanced status to 'degraded'.
+  const row = pool.rows.get(`${LEDGER_PROJECTION_NAME}::${TENANT_A}`);
+  assert.ok(row, 'projection_state row must still exist');
+  assert.deepEqual(
+    row.state_json,
+    seededStateJson,
+    'state_json must be preserved across a failed replay — I-1 regression',
+  );
+  assert.equal(row.status, 'degraded', 'failed replay marks the row degraded');
+});

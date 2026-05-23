@@ -298,6 +298,12 @@ export function createProjectionRunner({
 
   async function doReplay(worker, tenantId) {
     const prior = await getState(worker, tenantId);
+    // Hydrate the live store before transitioning to 'replaying' so the provider's
+    // setState write preserves the existing state_json. Without this, a Postgres
+    // provider whose cache is cold for this (projection, tenant) would fall back
+    // to an empty snapshot and durably blank state_json — violating the
+    // no-partial-persistence constraint.
+    await storeProvider.getLiveStore(worker.projectionName, tenantId);
     await storeProvider.setState(worker.projectionName, tenantId, {
       ...prior,
       state: 'replaying',

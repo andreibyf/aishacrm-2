@@ -274,6 +274,14 @@ export function createPgProjectionStoreProvider({ pool } = {}) {
     }
   }
 
+  // Known runtime concern (operator-visible): the runner sets status='replaying'
+  // before promoteShadow and only flips to 'idle' in a subsequent setState.
+  // If that final setState fails, the row is durably stuck at 'replaying' until
+  // an operator-triggered replay re-runs. The provider correctly persists what
+  // the runner asks for; hardening the runner's failure path (e.g. wrapping the
+  // post-promote setState in a try/catch that marks degraded on failure) is a
+  // follow-up at the runner layer, not the provider layer. Tracked as I-2 in the
+  // Task 4 code review.
   async function promoteShadow(projectionName, tenantId) {
     const key = keyOf(projectionName, tenantId);
     const shadow = shadowStores.get(key);
