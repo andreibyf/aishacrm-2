@@ -169,11 +169,11 @@ test('getCount returns correct count per tenant', () => {
   assert.equal(store.getCount('00000000-0000-4000-8000-cccccccccccc'), 0);
 });
 
-test('integration: createFinanceDomainService emits events through store after createDraftInvoice', () => {
+test('integration: createFinanceDomainService emits events through store after createDraftInvoice', async () => {
   const eventStore = createFinanceEventStore();
   const service = createFinanceDomainService({ eventStore });
 
-  const result = service.createDraftInvoice({
+  const result = await service.createDraftInvoice({
     tenantId: TENANT_A,
     actor: { id: 'user-1', type: 'human' },
     payload: {

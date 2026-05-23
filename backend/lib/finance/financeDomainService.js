@@ -61,8 +61,12 @@ export function createFinanceDomainService(opts = {}) {
     bucket.commands.push(envelope);
   }
 
-  function appendEvent(_bucket, envelope) {
-    eventStore.append(envelope);
+  // Task 6: appendEvent is async. The in-memory financeEventStore.js returns
+  // synchronously (await is a no-op there), and the financeEventStore.pg.js
+  // adapter returns a Promise from its underlying pg.query() — only by awaiting
+  // do we preserve correctness for both stores.
+  async function appendEvent(_bucket, envelope) {
+    await eventStore.append(envelope);
   }
 
   // M-3 / CF-2: Centralized duplicate approval guard.
@@ -135,8 +139,8 @@ export function createFinanceDomainService(opts = {}) {
       return clone(bucket.approvals);
     },
 
-    listAuditEvents(tenantId) {
-      return eventStore.query({ tenant_id: tenantId });
+    async listAuditEvents(tenantId) {
+      return await eventStore.query({ tenant_id: tenantId });
     },
 
     getLedger(tenantId) {
@@ -154,7 +158,13 @@ export function createFinanceDomainService(opts = {}) {
       return buildBalanceSheet(bucket.journalEntries);
     },
 
-    createDraftInvoice({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+    async createDraftInvoice({
+      tenantId,
+      actor,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
       const command = createFinanceCommandEnvelope({
@@ -202,7 +212,7 @@ export function createFinanceDomainService(opts = {}) {
       };
       bucket.invoices.push(invoice);
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -225,7 +235,7 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
-    updateDraftInvoice({
+    async updateDraftInvoice({
       tenantId,
       invoiceId,
       actor,
@@ -266,7 +276,7 @@ export function createFinanceDomainService(opts = {}) {
         updated_at: now(),
       });
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -289,7 +299,13 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
-    createJournalDraft({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+    async createJournalDraft({
+      tenantId,
+      actor,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
       const command = createFinanceCommandEnvelope({
@@ -307,7 +323,7 @@ export function createFinanceDomainService(opts = {}) {
       try {
         validation = assertBalancedJournal(payload.lines || []);
       } catch (error) {
-        appendEvent(
+        await appendEvent(
           bucket,
           createFinanceEventEnvelope({
             tenantId,
@@ -357,7 +373,7 @@ export function createFinanceDomainService(opts = {}) {
       };
       bucket.journalEntries.push(journalEntry);
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -380,12 +396,18 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
-    simulateDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+    async simulateDealWon({
+      tenantId,
+      actor,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
       const amountCents = Number(payload.amount_cents || 0);
 
-      const draft = this.createJournalDraft({
+      const draft = await this.createJournalDraft({
         tenantId,
         actor: normalizedActor,
         requestId,
@@ -460,7 +482,7 @@ export function createFinanceDomainService(opts = {}) {
       };
       bucket.adapterJobs.push(adapterJob);
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -485,7 +507,7 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
-    reverseJournalEntry({
+    async reverseJournalEntry({
       tenantId,
       journalEntryId,
       actor,
@@ -542,7 +564,7 @@ export function createFinanceDomainService(opts = {}) {
         }),
       );
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -571,7 +593,13 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
-    approveFinanceAction({ tenantId, approvalId, actor, requestId = null, braidTraceId = null }) {
+    async approveFinanceAction({
+      tenantId,
+      approvalId,
+      actor,
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
       const decision = evaluateFinanceGovernance({
@@ -594,7 +622,7 @@ export function createFinanceDomainService(opts = {}) {
       approval.approved_by = normalizedActor.id;
       approval.approved_at = now();
 
-      appendEvent(
+      await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
@@ -631,11 +659,11 @@ export function createFinanceDomainService(opts = {}) {
       return clone(approval);
     },
 
-    getState(tenantId) {
+    async getState(tenantId) {
       const bucket = clone(getTenantBucket(store, tenantId));
       // Populate auditEvents as an array so the route handler's Array.isArray() check
       // works correctly after the event store replaced the old auditEvents bucket array.
-      bucket.auditEvents = eventStore.query({ tenant_id: tenantId });
+      bucket.auditEvents = await eventStore.query({ tenant_id: tenantId });
       return bucket;
     },
 

@@ -5,10 +5,10 @@ import createFinanceDomainService from '../../../lib/finance/financeDomainServic
 const TENANT_ID = '00000000-0000-4000-8000-000000000001';
 const OTHER_TENANT_ID = '00000000-0000-4000-8000-000000000002';
 
-test('financeDomainService enforces balanced journal drafts', () => {
+test('financeDomainService enforces balanced journal drafts', async () => {
   const service = createFinanceDomainService();
 
-  assert.throws(
+  await assert.rejects(
     () =>
       service.createJournalDraft({
         tenantId: TENANT_ID,
@@ -34,10 +34,10 @@ test('financeDomainService enforces balanced journal drafts', () => {
   );
 });
 
-test('financeDomainService keeps journal visibility tenant-scoped', () => {
+test('financeDomainService keeps journal visibility tenant-scoped', async () => {
   const service = createFinanceDomainService();
 
-  service.createJournalDraft({
+  await service.createJournalDraft({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: {
@@ -62,9 +62,9 @@ test('financeDomainService keeps journal visibility tenant-scoped', () => {
   assert.equal(service.listJournalEntries(OTHER_TENANT_ID).length, 0);
 });
 
-test('financeDomainService blocks AI approvals', () => {
+test('financeDomainService blocks AI approvals', async () => {
   const service = createFinanceDomainService();
-  const result = service.simulateDealWon({
+  const result = await service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: { amount_cents: 5000 },
@@ -72,7 +72,7 @@ test('financeDomainService blocks AI approvals', () => {
 
   assert.equal(result.approval_required, true);
 
-  assert.throws(
+  await assert.rejects(
     () =>
       service.approveFinanceAction({
         tenantId: TENANT_ID,
@@ -84,9 +84,9 @@ test('financeDomainService blocks AI approvals', () => {
 });
 
 // CF-1: approval field naming
-test('financeDomainService approval uses target_type and target_id, not aggregate_type/aggregate_id', () => {
+test('financeDomainService approval uses target_type and target_id, not aggregate_type/aggregate_id', async () => {
   const service = createFinanceDomainService();
-  const result = service.simulateDealWon({
+  const result = await service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: { amount_cents: 10000 },
@@ -105,9 +105,9 @@ test('financeDomainService approval uses target_type and target_id, not aggregat
 // record shape: aggregate_type / aggregate_id (the Track A envelope vocabulary,
 // shared with finance.audit_events / finance.approvals) plus operation / mode,
 // which the pre-reconciliation object omitted.
-test('financeDomainService simulateDealWon adapter_job carries aggregate_type/aggregate_id and operation/mode', () => {
+test('financeDomainService simulateDealWon adapter_job carries aggregate_type/aggregate_id and operation/mode', async () => {
   const service = createFinanceDomainService();
-  const result = service.simulateDealWon({
+  const result = await service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: { amount_cents: 10000 },
@@ -128,9 +128,9 @@ test('financeDomainService simulateDealWon adapter_job carries aggregate_type/ag
 });
 
 // CF-6: approval schema completeness
-test('financeDomainService approval record includes risk_level, created_at, updated_at', () => {
+test('financeDomainService approval record includes risk_level, created_at, updated_at', async () => {
   const service = createFinanceDomainService();
-  const result = service.simulateDealWon({
+  const result = await service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: { amount_cents: 10000 },
@@ -146,7 +146,7 @@ test('financeDomainService approval record includes risk_level, created_at, upda
 // already exists for the same target journal entry id.
 // Uses opts.generateId to produce a deterministic id sequence so the second call
 // produces the same journal entry id as the first, triggering the guard.
-test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on duplicate target_id', () => {
+test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on duplicate target_id', async () => {
   // generateId() is called as: `journal_${generateId()}` for journal entries,
   // `approval_${generateId()}` for approvals, and `adapter_job_${generateId()}` for jobs.
   // Sequence per simulateDealWon call: journal entry id raw → approval id raw → adapter job id raw
@@ -166,7 +166,7 @@ test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on 
   });
 
   // First call — succeeds
-  service.simulateDealWon({
+  await service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
     payload: { amount_cents: 25000 },
@@ -175,7 +175,7 @@ test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on 
   // Second call — same journal entry id produced, guard detects existing pending approval
   let thrown;
   try {
-    service.simulateDealWon({
+    await service.simulateDealWon({
       tenantId: TENANT_ID,
       actor: { id: 'user-1', type: 'human' },
       payload: { amount_cents: 25000 },
@@ -196,7 +196,7 @@ test('financeDomainService simulateDealWon throws FINANCE_APPROVAL_DUPLICATE on 
 // This test verifies the guard fires when a pending approval is pre-seeded via seedApproval(),
 // simulating what would happen if a Phase 2 code path tried to create a second approval
 // for the same target without going through simulateDealWon or reverseJournalEntry.
-test('T-9: pushApproval guard rejects a second pending approval for the same target via any caller', () => {
+test('T-9: pushApproval guard rejects a second pending approval for the same target via any caller', async () => {
   const service = createFinanceDomainService();
   const TARGET_ID = 'invoice_00000000-0000-4000-8000-000000000099';
 
@@ -245,7 +245,7 @@ test('T-9: pushApproval guard rejects a second pending approval for the same tar
 
   let thrown;
   try {
-    service2.simulateDealWon({
+    await service2.simulateDealWon({
       tenantId: TENANT_ID,
       actor: { id: 'user-1', type: 'human' },
       payload: { amount_cents: 5000 },
@@ -259,7 +259,70 @@ test('T-9: pushApproval guard rejects a second pending approval for the same tar
   assert.equal(thrown.statusCode, 409);
 });
 
-test('financeDomainService reversal creates a new journal entry instead of deleting history', () => {
+// Task 6 — async event path: the domain service must await eventStore.append so that
+// async event stores (e.g., financeEventStore.pg.js) work. With the previous sync
+// implementation, appendEvent did not await — the returned Promise was discarded and
+// any error from the async store became an unhandled rejection. This test drives the
+// switch by surfacing a rejection from the async store: only an awaiting caller can
+// observe the failure as a thrown error.
+test('financeDomainService awaits async event store on createDraftInvoice', async () => {
+  const appended = [];
+  const asyncEventStore = {
+    append: async (envelope) => {
+      // Yield to the event loop so we are unambiguously asynchronous, then either
+      // record the envelope (success path) or signal failure to a caller that awaits.
+      await Promise.resolve();
+      if (envelope.event_type === 'finance.invoice.draft_created' && envelope.__probe_fail) {
+        throw new Error('event store rejected');
+      }
+      appended.push(envelope);
+      return envelope;
+    },
+    query: async () => [],
+    replay: async () => [],
+    getCount: async () => 0,
+  };
+  const service = createFinanceDomainService({ eventStore: asyncEventStore });
+
+  // Happy path — caller must await and observe the appended envelope synchronously
+  // after the await resolves.
+  const result = await service.createDraftInvoice({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { customer_id: 'cust_1', subtotal_cents: 1000, total_cents: 1000 },
+  });
+
+  assert.ok(result.invoice, 'createDraftInvoice should return the invoice');
+  assert.equal(appended.length, 1, 'async event store should receive the envelope');
+  assert.equal(appended[0].event_type, 'finance.invoice.draft_created');
+  assert.equal(appended[0].tenant_id, TENANT_ID);
+  assert.equal(appended[0].aggregate_id, result.invoice.id);
+
+  // Failure path — a sync (non-awaiting) call site would *not* throw here because the
+  // store's rejection lives in a discarded Promise. An awaiting caller MUST observe the
+  // rejection as a thrown error. We probe by passing a custom payload field that the
+  // event-envelope factory propagates onto the envelope.
+  let thrown;
+  try {
+    // Inject the probe by stubbing eventStore.append to always reject for the second
+    // invocation regardless of the envelope shape — this isolates the await behavior.
+    asyncEventStore.append = async () => {
+      await Promise.resolve();
+      throw new Error('event store rejected');
+    };
+    await service.createDraftInvoice({
+      tenantId: TENANT_ID,
+      actor: { id: 'user-2', type: 'human' },
+      payload: { customer_id: 'cust_2', subtotal_cents: 2000, total_cents: 2000 },
+    });
+  } catch (err) {
+    thrown = err;
+  }
+  assert.ok(thrown, 'awaiting caller must observe event store rejection');
+  assert.match(thrown.message, /event store rejected/);
+});
+
+test('financeDomainService reversal creates a new journal entry instead of deleting history', async () => {
   const service = createFinanceDomainService();
 
   service.seedJournalEntry({
@@ -284,7 +347,7 @@ test('financeDomainService reversal creates a new journal entry instead of delet
     ],
   });
 
-  const result = service.reverseJournalEntry({
+  const result = await service.reverseJournalEntry({
     tenantId: TENANT_ID,
     journalEntryId: 'journal-posted-1',
     actor: { id: 'user-2', type: 'human' },
