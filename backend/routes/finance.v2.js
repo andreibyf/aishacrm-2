@@ -3,6 +3,7 @@ import logger from '../lib/logger.js';
 import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-db.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
+import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
 
 function resolveTenantId(req) {
@@ -32,9 +33,18 @@ function sendError(res, error) {
   });
 }
 
-export default function createFinanceV2Routes(_pgPool, opts = {}) {
+export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
-  const service = opts.service || createFinanceDomainService();
+  // Task 7: Event-store DI selection. Default is the in-memory event store
+  // (safe for tests, local dev, and any environment without the gate enabled).
+  // The Postgres adapter is selected only when ENABLE_FINANCE_PERSISTENT_EVENTS=true
+  // AND a pg pool is wired in by server.js. When the flag is set but no pool is
+  // available, fall through to the in-memory default rather than throwing at boot.
+  const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
+  const eventStore =
+    opts.eventStore ||
+    (persistentEvents && pgPool ? createFinancePgEventStore({ pool: pgPool }) : undefined);
+  const service = opts.service || createFinanceDomainService(eventStore ? { eventStore } : {});
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
     opts.isFinanceModuleEnabled ||
@@ -69,11 +79,11 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
     try {
       const state =
         typeof service.getState === 'function'
-          ? service.getState(req.financeTenantId)
+          ? await service.getState(req.financeTenantId)
           : {
               journalEntries: service.listJournalEntries(req.financeTenantId),
               approvals: service.listApprovals(req.financeTenantId),
-              auditEvents: service.listAuditEvents(req.financeTenantId),
+              auditEvents: await service.listAuditEvents(req.financeTenantId),
               invoices: [],
               adapterJobs: [],
             };
@@ -145,7 +155,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.post('/draft-invoices', async (req, res) => {
     try {
-      const result = service.createDraftInvoice({
+      const result = await service.createDraftInvoice({
         tenantId: req.financeTenantId,
         actor: buildActor(req),
         payload: req.body || {},
@@ -161,7 +171,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.patch('/draft-invoices/:id', async (req, res) => {
     try {
-      const result = service.updateDraftInvoice({
+      const result = await service.updateDraftInvoice({
         tenantId: req.financeTenantId,
         invoiceId: req.params.id,
         actor: buildActor(req),
@@ -178,7 +188,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.post('/journal-drafts', async (req, res) => {
     try {
-      const result = service.createJournalDraft({
+      const result = await service.createJournalDraft({
         tenantId: req.financeTenantId,
         actor: buildActor(req),
         payload: req.body || {},
@@ -194,7 +204,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.post('/simulate/deal-won', async (req, res) => {
     try {
-      const result = service.simulateDealWon({
+      const result = await service.simulateDealWon({
         tenantId: req.financeTenantId,
         actor: buildActor(req),
         payload: req.body || {},
@@ -210,7 +220,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.post('/journal-entries/:id/reverse', async (req, res) => {
     try {
-      const result = service.reverseJournalEntry({
+      const result = await service.reverseJournalEntry({
         tenantId: req.financeTenantId,
         journalEntryId: req.params.id,
         actor: buildActor(req),
@@ -227,7 +237,7 @@ export default function createFinanceV2Routes(_pgPool, opts = {}) {
 
   router.post('/approvals/:id/approve', async (req, res) => {
     try {
-      const result = service.approveFinanceAction({
+      const result = await service.approveFinanceAction({
         tenantId: req.financeTenantId,
         approvalId: req.params.id,
         actor: buildActor(req),

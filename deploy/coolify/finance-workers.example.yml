@@ -42,7 +42,7 @@ services:
     mem_limit: 512m
     mem_reservation: 192m
     # NOT-YET-IMPLEMENTED entry point — see header.
-    command: ["doppler", "run", "--", "npm", "run", "worker:finance-projection"]
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-projection']
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
@@ -52,6 +52,15 @@ services:
       - ENABLE_FINANCE_OPS=false
       - ENABLE_FINANCE_WORKERS=false
       - ENABLE_FINANCE_PROJECTION_WORKER=false
+      # ── Event-store persistence gate (Phase 3 Slice 1, Task 7) ──
+      # The projection worker reads finance.audit_events via the pg event store.
+      # ENABLE_FINANCE_PERSISTENT_EVENTS must also be set to "true" on the BACKEND
+      # APP for newly-emitted events to be persisted to Postgres — without that,
+      # the in-memory event store is used and the worker has nothing to replay.
+      # FINANCE_CONTROLLED_TENANT_IDS is the optional comma-separated allow-list
+      # that scopes which tenants the worker processes; leave empty for "all".
+      - ENABLE_FINANCE_PERSISTENT_EVENTS=false
+      - FINANCE_CONTROLLED_TENANT_IDS=
       # ── Polling / batching ──
       - FINANCE_WORKER_POLL_INTERVAL_MS=${FINANCE_WORKER_POLL_INTERVAL_MS:-5000}
       - FINANCE_WORKER_BATCH_SIZE=${FINANCE_WORKER_BATCH_SIZE:-100}
@@ -64,7 +73,7 @@ services:
       - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
       - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/health || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
       interval: 60s
       timeout: 5s
       retries: 3
@@ -72,8 +81,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       aishanet:
         aliases:
@@ -94,7 +103,7 @@ services:
     mem_limit: 384m
     mem_reservation: 128m
     # NOT-YET-IMPLEMENTED entry point — see header.
-    command: ["doppler", "run", "--", "npm", "run", "worker:finance-audit"]
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-audit']
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
@@ -115,7 +124,7 @@ services:
       - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
       - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/health || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
       interval: 60s
       timeout: 5s
       retries: 3
@@ -123,8 +132,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       aishanet:
         aliases:
@@ -145,7 +154,7 @@ services:
     mem_limit: 384m
     mem_reservation: 128m
     # NOT-YET-IMPLEMENTED entry point — see header.
-    command: ["doppler", "run", "--", "npm", "run", "worker:finance-adapter"]
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-adapter']
     environment:
       - DOPPLER_TOKEN=${DOPPLER_TOKEN}
       - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
@@ -179,7 +188,7 @@ services:
       # config is loaded per-tenant from tenant_integrations.api_credentials at
       # runtime, and only if/when provider writes are explicitly enabled.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/health || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
       interval: 60s
       timeout: 5s
       retries: 3
@@ -187,8 +196,8 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       aishanet:
         aliases:
