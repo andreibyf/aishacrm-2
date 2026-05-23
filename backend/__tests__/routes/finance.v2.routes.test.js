@@ -251,38 +251,42 @@ describe('finance.v2 routes', () => {
       }
     });
 
-    test('selects pg event store when ENABLE_FINANCE_PERSISTENT_EVENTS=true and pgPool is provided', async () => {
+    // Split-brain prevention: the domain service still maintains in-memory
+    // per-process buckets for journal entries / invoices / approvals / adapter
+    // jobs and every business read (listJournalEntries, listApprovals,
+    // getLedger, getProfitLoss, getBalanceSheet) reads from those buckets, not
+    // from the event stream. With ENABLE_FINANCE_PERSISTENT_EVENTS=true, writes
+    // would persist to Postgres while reads would still see only the current
+    // process's in-memory snapshot — restart yields empty business reads
+    // alongside a non-zero audit_events count, and two backend instances see
+    // divergent views. The route factory MUST refuse to mount in this case
+    // until projection-backed reads land (Slice 2).
+    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (with pool)', () => {
       const pool = buildSpyPool();
-      const { app, restoreEnv } = buildAppWithPool({ pool, persistent: true });
+      const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
+      process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
-        const res = await request(app)
-          .post('/api/v2/finance/draft-invoices')
-          .send({ customer_id: 'CUST-B', subtotal_cents: 200, total_cents: 200 });
-
-        assert.equal(res.status, 201);
-        // The append flowed through the pg adapter — assert by the INSERT shape.
-        const insertCalls = pool.calls.filter((c) =>
-          /^insert into finance\.audit_events/i.test(c.text),
+        assert.throws(
+          () => createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
+          /ENABLE_FINANCE_PERSISTENT_EVENTS/i,
         );
-        assert.ok(insertCalls.length >= 1, 'expected an INSERT into finance.audit_events');
-        const tenantValue = insertCalls[0].values[1];
-        assert.equal(tenantValue, TENANT_ID);
       } finally {
-        restoreEnv();
+        if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
+        else process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = previous;
       }
     });
 
-    test('falls back to in-memory event store when persistent flag is set but no pgPool is provided', async () => {
-      // Defense-in-depth: ENABLE_FINANCE_PERSISTENT_EVENTS=true with no pool
-      // must NOT throw at construction time — boot must remain safe.
-      const { app, restoreEnv } = buildAppWithPool({ pool: null, persistent: true });
+    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (no pool)', () => {
+      const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
+      process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
-        const res = await request(app)
-          .post('/api/v2/finance/draft-invoices')
-          .send({ customer_id: 'CUST-C', subtotal_cents: 300, total_cents: 300 });
-        assert.equal(res.status, 201);
+        assert.throws(
+          () => createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true }),
+          /ENABLE_FINANCE_PERSISTENT_EVENTS/i,
+        );
       } finally {
-        restoreEnv();
+        if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
+        else process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = previous;
       }
     });
   });

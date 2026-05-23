@@ -3,7 +3,6 @@ import logger from '../lib/logger.js';
 import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-db.js';
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
-import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
 
 function resolveTenantId(req) {
@@ -34,17 +33,32 @@ function sendError(res, error) {
 }
 
 export default function createFinanceV2Routes(pgPool, opts = {}) {
+  // Split-brain guard. ENABLE_FINANCE_PERSISTENT_EVENTS=true would route writes
+  // into the Postgres event store while the domain service's business reads
+  // (listJournalEntries, listApprovals, getLedger, getProfitLoss,
+  // getBalanceSheet) still hit the in-memory per-process bucket. After a
+  // restart the bucket is empty, audit_events_count is non-zero, and two
+  // backend instances see divergent views of the same tenant. Refuse to mount
+  // the route entirely — a loud boot failure under
+  // ENABLE_FINANCE_OPS=true + ENABLE_FINANCE_PERSISTENT_EVENTS=true beats
+  // silent operational corruption. Lift this check once projection-backed
+  // reads land (Slice 2). The in-memory branch below stays accurate
+  // (persistence: 'in_memory' in /runtime/status) precisely because this
+  // throw makes the persistent branch structurally unreachable.
+  if (process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true') {
+    throw new Error(
+      'ENABLE_FINANCE_PERSISTENT_EVENTS=true is not yet a supported backend mode: ' +
+        'the finance v2 routes still read business state from the in-memory domain ' +
+        'service while writes would persist to Postgres, which is split-brain. ' +
+        'Wait for projection-backed reads (Phase 3 Slice 2) before enabling this flag.',
+    );
+  }
   const router = express.Router();
-  // Task 7: Event-store DI selection. Default is the in-memory event store
-  // (safe for tests, local dev, and any environment without the gate enabled).
-  // The Postgres adapter is selected only when ENABLE_FINANCE_PERSISTENT_EVENTS=true
-  // AND a pg pool is wired in by server.js. When the flag is set but no pool is
-  // available, fall through to the in-memory default rather than throwing at boot.
-  const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
-  const eventStore =
-    opts.eventStore ||
-    (persistentEvents && pgPool ? createFinancePgEventStore({ pool: pgPool }) : undefined);
-  const service = opts.service || createFinanceDomainService(eventStore ? { eventStore } : {});
+  // Slice 1 keeps the in-memory event store as the only supported route-backed
+  // mode. opts.eventStore / opts.service injection remains for tests.
+  const service =
+    opts.service ||
+    createFinanceDomainService(opts.eventStore ? { eventStore: opts.eventStore } : {});
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
     opts.isFinanceModuleEnabled ||

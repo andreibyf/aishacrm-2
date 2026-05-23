@@ -52,13 +52,18 @@ services:
       - ENABLE_FINANCE_OPS=false
       - ENABLE_FINANCE_WORKERS=false
       - ENABLE_FINANCE_PROJECTION_WORKER=false
-      # ── Event-store persistence gate (Phase 3 Slice 1, Task 7) ──
+      # ── Event-store persistence gate (Phase 3 Slice 1) ──
       # The projection worker reads finance.audit_events via the pg event store.
-      # ENABLE_FINANCE_PERSISTENT_EVENTS must also be set to "true" on the BACKEND
-      # APP for newly-emitted events to be persisted to Postgres — without that,
-      # the in-memory event store is used and the worker has nothing to replay.
-      # FINANCE_CONTROLLED_TENANT_IDS is the optional comma-separated allow-list
-      # that scopes which tenants the worker processes; leave empty for "all".
+      # ENABLE_FINANCE_PERSISTENT_EVENTS must be set to "true" on the BACKEND
+      # APP for newly-emitted events to be persisted to Postgres. NOTE: as of
+      # Slice 1 the finance v2 route refuses to mount when this flag is true
+      # (split-brain prevention — business reads still come from the in-memory
+      # domain service); enabling persistent events end-to-end is blocked on
+      # projection-backed reads landing in Slice 2.
+      # FINANCE_CONTROLLED_TENANT_IDS is a REQUIRED comma-separated allow-list
+      # of tenant UUIDs the worker processes. Empty / unset means NO tenants
+      # are processed (the poll cycle is a no-op) — there is no implicit
+      # "process all tenants" fall-through. Tenants must be explicitly listed.
       - ENABLE_FINANCE_PERSISTENT_EVENTS=false
       - FINANCE_CONTROLLED_TENANT_IDS=
       # ── Polling / batching ──
