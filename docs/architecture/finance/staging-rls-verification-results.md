@@ -48,13 +48,13 @@ A live execution requires Dre's explicit authorization. When authorized, the pro
 
 The Phase 3-3 checks split into three timing buckets relative to the Phase 3-2 staging migration application:
 
-| Timing                         | What's true at this point                                                                                           | Checks that can run                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Before 3-2 migration apply** | `finance.*` does not exist in staging. PostgREST exposes only `public, graphql_public`. Backend route still gated.  | §4.1.a (config), §4.1.b (dashboard), §4.2 (`auth.role()`), §4.3.b (JWT claim shape), §4.5 (anonymous baseline) |
-| **After 3-2 migration apply**  | `finance.*` exists in staging. RLS enabled on all 9 finance tables per migration 171. Backend route still gated.    | §4.1.c (curl 404), §4.3.a (scratch-table rehearsal), §4.4.a (RLS catalog inspection)                           |
-| **After 3-7 route activation** | `ENABLE_FINANCE_OPS=true` in staging backend; `financeOps` module flag on the one controlled tenant; route mounted. | §4.4.b (backend tenant-mismatch spot-check — overlaps with 3-8 smoke tests; cross-reference)                   |
+| Timing                         | What's true at this point                                                                                           | Checks that can run                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Before 3-2 migration apply** | `finance.*` does not exist in staging. PostgREST exposes only `public, graphql_public`. Backend route still gated.  | §4.1.a (config), §4.1.b (dashboard), §4.2 (`auth.role()`), §4.3.b (JWT claim shape)                                          |
+| **After 3-2 migration apply**  | `finance.*` exists in staging. RLS enabled on all 9 finance tables per migration 171. Backend route still gated.    | §4.1.c (curl 404), §4.3.a (scratch-table rehearsal), §4.4.a (RLS catalog inspection), §4.5 (no direct public finance access) |
+| **After 3-7 route activation** | `ENABLE_FINANCE_OPS=true` in staging backend; `financeOps` module flag on the one controlled tenant; route mounted. | §4.4.b (backend tenant-mismatch spot-check — overlaps with 3-8 smoke tests; cross-reference)                                 |
 
-The Phase 3-3 deliverable does **not** require all checks to run before Phase 3-4. Checks that need 3-7 are explicitly scheduled in §4.4.b and cross-referenced in [`staging-smoke-test-results.md`](./staging-smoke-test-results.md) when it lands. The pre-migration checks (§4.1.a, §4.1.b, §4.2, §4.3.b, §4.5) can run immediately upon authorization without any staging schema change.
+The Phase 3-3 deliverable does **not** require all checks to run before Phase 3-4. Checks that need 3-7 are explicitly scheduled in §4.4.b and will be cross-referenced from the Phase 3-8 smoke-test results doc (per [`phase-3-staging-activation-plan.md`](./phase-3-staging-activation-plan.md) §3-8) when that doc is created. The pre-migration checks (§4.1.a, §4.1.b, §4.2, §4.3.b) can run immediately upon authorization without any staging schema change; §4.5 requires migrations 168 and 171 applied first and depends on §4.1.c.
 
 ---
 
