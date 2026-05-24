@@ -119,7 +119,11 @@ Phase 3-4 deploys the three finance worker apps per the disabled-by-default temp
 | `finance-audit-worker`      | `ENABLE_FINANCE_OPS && ENABLE_FINANCE_WORKERS && ENABLE_FINANCE_AUDIT_WORKER`                          | 3-4 (deploy disabled), 3-5 (enable for controlled tenant) |
 | `finance-adapter-worker`    | `ENABLE_FINANCE_OPS && ENABLE_FINANCE_WORKERS && ENABLE_FINANCE_ADAPTER_WORKER` + adapter safety flags | 3-9 (sandbox/draft-only only)                             |
 
-Worker placement (per decision E2 in `worker-service-topology.md`) is VPS-2 — separate Coolify worker apps, not in-process with the backend. Worker creation in Coolify is a Phase 3-4 task, not Phase 3-1.
+**Worker placement for Phase 3: VPS-1 (staging).** Per [`DEPLOY_TOPOLOGY.md`](../DEPLOY_TOPOLOGY.md) (the named source of truth in §5), app services — including background workers — deploy to **VPS-1 (staging) or Hetzner (production), never VPS-2**. VPS-2 hosts only the control plane (Coolify, Cal.com, Uptime Kuma, Gitea, OneDev). Phase 3 deploys the three finance worker apps as separate Coolify worker apps on **VPS-1**, not in-process with the backend.
+
+This resolves the unresolved tension carried in `finance-worker-deployment-config.md` §8 (lines 195-198), which referenced decision E2 ("VPS-2") but immediately noted "the actual VPS-1-vs-VPS-2 placement must be re-confirmed against DEPLOY_TOPOLOGY.md". `DEPLOY_TOPOLOGY.md` is the named source of truth and wins. Decision E2 in `worker-service-topology.md` (a Phase 2B design doc) predates the topology lockdown documented in `DEPLOY_TOPOLOGY.md` after the 2026-05-14 incidents. A follow-up edit to reconcile `finance-worker-deployment-config.md` §8 and `worker-service-topology.md` to the VPS-1-staging / Hetzner-production placement is outstanding (deferred — neither doc is in the Phase 3-1 baseline scope, and the Phase 3-4 packet operates from this doc).
+
+Worker creation in Coolify is a Phase 3-4 task, not Phase 3-1.
 
 ### 5.4 Doppler
 
@@ -161,10 +165,14 @@ If any migration application reveals a divergence from dev (e.g., a column alrea
 
 **Two flags, two scopes.** Note the distinction Phase 3 will rely on:
 
-| Flag                               | Where it's read                        | Effect                                                                                                                                                                         |
-| ---------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ENABLE_FINANCE_OPS`               | `financeRuntimeGate.js`, backend       | Mounts the `/api/v2/finance` route surface. Required for Phase 3-7. **OK to set in staging** — does not by itself grant any tenant access.                                     |
-| `ENABLE_FINANCE_PERSISTENT_EVENTS` | `routes/finance.v2.js`, finance worker | If `true`, `createFinanceV2Routes` throws. **Must stay false/unset everywhere through Phase 3.** The worker reads the flag but does nothing with it until Slice 2 wires reads. |
+| Flag                               | Where it's read                  | Effect                                                                                                                                     |
+| ---------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ENABLE_FINANCE_OPS`               | `financeRuntimeGate.js`, backend | Mounts the `/api/v2/finance` route surface. Required for Phase 3-7. **OK to set in staging** — does not by itself grant any tenant access. |
+| `ENABLE_FINANCE_PERSISTENT_EVENTS` | `routes/finance.v2.js` **only**  | If `true`, `createFinanceV2Routes` throws. **Must stay false/unset everywhere through Phase 3.**                                           |
+
+**Why the worker doesn't read this flag.** `backend/workers/financeProjectionWorker.js` does not read `ENABLE_FINANCE_PERSISTENT_EVENTS`. `buildProjectionRunner` unconditionally constructs the runner with `createFinancePgEventStore({ pool })`; the only env gates the worker reads are `ENABLE_FINANCE_OPS`, `ENABLE_FINANCE_WORKERS`, `ENABLE_FINANCE_PROJECTION_WORKER` (the three-tier enable gate at `isFinanceProjectionWorkerEnabled`), and `FINANCE_CONTROLLED_TENANT_IDS` (the controlled-tenant allow-list).
+
+The practical Phase 3 consequence — with `ENABLE_FINANCE_PERSISTENT_EVENTS=false` the **backend route** does not write events into `finance.audit_events`. The worker still reads from `finance.audit_events`; it just finds the controlled tenant's stream empty (or, post-3-2 migration application, the existing dev stream if any) and its poll cycles are no-ops. That is the expected idle Phase 3 worker behavior. The flag is a **backend-route constraint**, not a worker behavior.
 
 ---
 
