@@ -34,9 +34,16 @@
 #   The worker runs ONLY when all three are true:
 #     ENABLE_FINANCE_OPS=true  &&  ENABLE_FINANCE_WORKERS=true  &&  ENABLE_FINANCE_PROJECTION_WORKER=true
 #   All three are hard-set to "false" below. As written, this file starts a
-#   process that immediately logs "[finance-projection-worker] disabled — idling"
-#   and never opens a DB connection, polls nothing, claims nothing, calls no
-#   provider.
+#   process that boots, constructs a pg.Pool object (lazily — no TCP
+#   connection opens at construction), reaches the disabled gate, logs
+#   "[finance-projection-worker] disabled — idling", and returns an idle
+#   stub. No pool.query() is ever called, so no actual TCP connection to
+#   Supabase is opened; the worker polls nothing, claims nothing, calls no
+#   provider. Note however that FINANCE_DB_URL (or DATABASE_URL) MUST be
+#   present in the env even in the disabled state — the entry block at
+#   financeProjectionWorker.js:378-383 exits the process if neither is set,
+#   before the disabled gate at line 257 runs. See the DB-connection comment
+#   below and staging-worker-deployment-log.md §6.2.
 #
 # Tenant scope: FINANCE_CONTROLLED_TENANT_IDS is REQUIRED to be explicitly set
 # (comma-separated UUID list) before the worker processes anything. Empty/unset
@@ -85,9 +92,13 @@ services:
       # ── Three-tier enable gate — ALL three must be the literal string 'true'
       #    for the worker to start its poll loop. Any one not equal to 'true'
       #    (unset / 'TRUE' / '1' / boolean true) ⇒ the worker logs
-      #    "[finance-projection-worker] disabled — idling" and never opens a
-      #    DB connection. Enforced by isFinanceProjectionWorkerEnabled() in
-      #    backend/workers/financeProjectionWorker.js:69.
+      #    "[finance-projection-worker] disabled — idling" and returns an idle
+      #    stub. The pg.Pool object is constructed by the entry block before
+      #    this gate runs, but no pool.query() is ever called in the disabled
+      #    state, so no actual TCP connection to Supabase is opened. Enforced
+      #    by isFinanceProjectionWorkerEnabled() in
+      #    backend/workers/financeProjectionWorker.js:69. See the DB-connection
+      #    comment below for why FINANCE_DB_URL is still required at startup.
       - ENABLE_FINANCE_OPS=false
       - ENABLE_FINANCE_WORKERS=false
       - ENABLE_FINANCE_PROJECTION_WORKER=false
