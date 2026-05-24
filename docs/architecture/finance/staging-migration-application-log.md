@@ -27,7 +27,7 @@ This is the **preflight application log** for Phase 3-2 — applying finance mig
 
 ## 2. Migration inventory (verified against file contents)
 
-Reviewer note: every row below was reconciled against the actual SQL in `backend/migrations/`. Names, table counts, trigger counts, policy counts, and append-only / immutability postures all match the file as of baseline commit `83bb41d1`. Where a prior doc (including this author's own Phase 3-1 plan §6 and earlier CHANGELOG entries) misnamed migration 171 or understated its scope, the discrepancy is called out in §2.5 and superseded here.
+Reviewer note: every row below was reconciled against the actual SQL in `backend/migrations/`. Names, table counts, trigger counts, policy counts, and append-only / immutability postures all match the file as of the Phase 3 baseline commit `3c60d9ff` (per [`phase-3-staging-activation-plan.md`](./phase-3-staging-activation-plan.md) §2.1) — the migration files are byte-identical from `3c60d9ff` through the current HEAD (`d71feab5`), so this inventory remains valid against any descendant of the Phase 3 baseline. Where a prior doc (including this author's own Phase 3-1 plan §6 and earlier CHANGELOG entries) misnamed migration 171 or understated its scope, the discrepancy is called out in §2.5 and superseded here.
 
 ### 2.1 Migration 168 — `168_finance_ops_runtime_scaffold.sql`
 
@@ -140,7 +140,7 @@ The operator runs these before issuing any apply command. **Failing any check ha
 ### 5.1 Source-of-truth checks (codebase)
 
 - [ ] Branch is `feat/finance-ops-runtime` (or a descendant fork explicitly recorded in `phase-3-staging-activation-plan.md` §2.1).
-- [ ] Baseline commit at apply time is `83bb41d1` or a descendant. Re-run `git rev-parse HEAD` and compare.
+- [ ] Baseline commit at apply time is `3c60d9ff` (the Phase 3 baseline per [`phase-3-staging-activation-plan.md`](./phase-3-staging-activation-plan.md) §2.1) or a descendant. Re-run `git rev-parse HEAD` and compare.
 - [ ] Verification baseline is still green at the apply commit: `node --test backend/__tests__/lib/finance/*.test.js backend/__tests__/lib/finance/projections/*.test.js backend/__tests__/routes/finance.v2.routes.test.js backend/__tests__/workers/financeProjectionWorker.test.js` returns **278/278 pass**. A drift from 278/278 is a Phase 3 stop condition (`phase-3-staging-activation-plan.md` §2.2).
 - [ ] Lint clean: `npm run lint -- --quiet` returns no errors.
 - [ ] No uncommitted change to any file under `backend/migrations/16[8-9]_*.sql` or `backend/migrations/17[01]_*.sql`. `git status` for the four files must show clean.
