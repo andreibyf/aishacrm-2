@@ -116,9 +116,15 @@ services:
       - FINANCE_WORKER_BATCH_SIZE=${FINANCE_WORKER_BATCH_SIZE:-100}
       - FINANCE_PROJECTION_TENANT_BATCH=${FINANCE_PROJECTION_TENANT_BATCH:-25}
 
-      # ── DB connection (Doppler-injected; required only when enabled) ──
-      #    Worker entry block falls back to DATABASE_URL if FINANCE_DB_URL is
-      #    unset (backend/workers/financeProjectionWorker.js:378).
+      # ── DB connection (Doppler-injected; REQUIRED AT PROCESS STARTUP) ──
+      #    The entry block at backend/workers/financeProjectionWorker.js:378-383
+      #    resolves FINANCE_DB_URL || DATABASE_URL and exits the process if
+      #    neither is set — BEFORE the disabled gate at line 257 runs. So a
+      #    disabled-by-default deploy still needs the connection string in
+      #    Doppler stg_stg just to start the container. The pg.Pool object is
+      #    then constructed (lazily — no TCP connection opens at construction);
+      #    the disabled gate returns before any pool.query() is called, so no
+      #    actual DB connection is opened in the disabled state.
       - FINANCE_DB_URL=${FINANCE_DB_URL:-}
       - FINANCE_DB_POOL_MAX=${FINANCE_DB_POOL_MAX:-5}
       - FINANCE_DB_STATEMENT_TIMEOUT_MS=${FINANCE_DB_STATEMENT_TIMEOUT_MS:-30000}
