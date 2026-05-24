@@ -181,7 +181,7 @@ Each cycle calls `runProjectionPollCycle({ runner, eventStore, tenantIds })`. Fo
 - **No backend route activity.** `/api/v2/finance/*` returns `404` (route unmounted; Phase 3-7).
 - **No tenant-facing change.** The controlled tenant's `financeOps` module flag is still unset; even if the route were mounted, the module gate would reject every request from that tenant.
 - **No `finance.audit_events` writes.** The Slice 1 invariant holds: the backend route is the only writer in the current code, and it isn't mounted. The worker is a pure reader of that table.
-- **No `finance.projection_state` writes for events** — but the runner does write an initial first-build cursor row per `(projection, tenant)` the first time it dispatches against an empty stream, so a small number of `finance.projection_state` rows may appear with `cursor_event_id: null` / equivalent. Subsequent cycles confirm-and-skip without further writes if the stream stays empty.
+- **No `finance.projection_state` writes during 3-5 steady state.** `runProjectionPollCycle()` (`backend/workers/financeProjectionWorker.js:112-171`) only iterates events returned by `eventStore.replay(tenantId)`; with an empty `finance.audit_events` stream, the inner `for (const event of events)` body never executes, so `runner.dispatch()` is never called. The runner only persists projection-state rows inside `dispatch()` and `replay()` — there is no empty-stream bootstrap write. Expected `finance.projection_state` row count for the controlled tenant during 3-5: **zero** (assuming no pre-existing dev/seed events in `finance.audit_events`). Rows will start being written once events appear — i.e., after Slice 2 lifts the fail-closed route guard and the backend begins persisting events.
 
 ---
 
@@ -277,7 +277,7 @@ where tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46'
 order by projection_name;
 ```
 
-**Pass:** zero to four rows (one per registered projection: `ledger`, `approval_queue`, `adapter_queue`, `audit_timeline`), each with `status: 'ok'` (or whatever the first-build status maps to per [`projection-runtime.md`](./projection-runtime.md) §9). The exact set depends on whether the first cycle ran in time and whether the empty-stream first-build wrote any cursor rows. **Fail:** any row with `status: 'degraded'` (means an event made a handler throw — investigate the `degraded_reason` and the matching `runner.dispatch failed` log line).
+**Pass:** **zero rows** is the expected result for the controlled tenant when `finance.audit_events` is empty (the steady-state 3-5 condition per §6.3). `runProjectionPollCycle()` only dispatches events that exist; with an empty stream no `dispatch()` runs and no `projection_state` rows are created. If any rows do exist (e.g., from pre-existing dev/seed events in `finance.audit_events`), each should report `status = 'idle'` — the steady-state value per the `idle | replaying | degraded` contract (`projection-runtime.md` §3; `projectionStore.pg.js:256` persists `state.state ?? 'idle'`). **Fail:** any row with `status = 'degraded'` — means an event made a handler throw; investigate the `degraded_reason` and the matching `[finance-projection-worker] runner.dispatch failed` log line. A row with `status = 'replaying'` outside an operator-triggered replay is also a fail (the worker does not call `runner.replay()`; the only path to `replaying` is operator action).
 
 ### 8.6 No production action confirmation
 
