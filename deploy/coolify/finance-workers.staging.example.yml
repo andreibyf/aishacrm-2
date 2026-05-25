@@ -1,0 +1,125 @@
+# Finance Workers - Staging Example Configuration
+#
+# EXAMPLE ONLY - DO NOT USE DIRECTLY
+#
+# This is a reference configuration for finance workers on staging (VPS-1).
+# Copy and customize before actual deployment.
+#
+# Prerequisites:
+#   1. finance-projection-worker implemented in backend/workers/
+#   2. Worker startup logic added to backend/server.js
+#   3. Migrations 168 and 171 applied to staging
+#   4. FINANCE_CONTROLLED_TENANT_IDS set to specific tenant UUIDs in Doppler
+#
+# Placement: VPS-1 (staging) only. Never VPS-2.
+# Reference: docs/architecture/DEPLOY_TOPOLOGY.md
+#
+# Applies Coolify v4 quirks from staging/04-braid/docker-compose.yml:
+#   1. context: . (Coolify --project-directory artifact root)
+#   2. Service name for DNS resolution on aishanet-staging
+#   3. cgroup_parent: aishacrm.slice (VPS-1 5.5-core CPU cap)
+#   4. mem_limit/mem_reservation per container
+#   5. External network aishacrm_aishanet-staging
+#   6. Doppler stg_stg config for secrets
+#   7. healthcheck with 120s interval (internal worker)
+#   8. json-file log rotation (10m x 3)
+
+services:
+  finance-projection-worker:
+    # Uses backend image - worker runs as separate process
+    image: aishacrm-backend:coolify
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: staging-finance-projection-worker
+    restart: unless-stopped
+
+    # VPS-1 CPU cap enforcement
+    cgroup_parent: aishacrm.slice
+
+    # Memory limits
+    mem_limit: 512m
+    mem_reservation: 256m
+
+    environment:
+      # ===========================================
+      # DISABLED BY DEFAULT - BOTH FLAGS REQUIRED
+      # ===========================================
+
+      # Master switch - must be explicitly set to 'true'
+      - FINANCE_PROJECTION_WORKER_ENABLED=false
+
+      # Tenant allowlist - EMPTY = NO TENANTS = NO-OP
+      # Set to comma-separated tenant UUIDs, e.g.:
+      # FINANCE_CONTROLLED_TENANT_IDS=uuid-1,uuid-2,uuid-3
+      - FINANCE_CONTROLLED_TENANT_IDS=
+
+      # Polling interval (milliseconds)
+      - FINANCE_PROJECTION_INTERVAL_MS=60000
+
+      # Batch size per tick
+      - FINANCE_PROJECTION_BATCH_SIZE=25
+
+      # ===========================================
+      # Standard staging environment
+      # ===========================================
+      - NODE_ENV=production
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+
+      # Database (via Doppler, but can override)
+      # - SUPABASE_URL=${SUPABASE_URL}
+      # - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Redis for caching/coordination
+      - REDIS_URL=redis://redis-memory:6379
+      - REDIS_CACHE_URL=redis://redis-cache:6379
+
+    # Worker entry point - adjust when worker is implemented
+    # command: ["node", "workers/financeProjectionWorker.js"]
+    # OR if integrated into main server startup:
+    # command: ["node", "server.js"]
+
+    # Internal worker healthcheck - 120s interval (not user-facing)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 120s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+    # Log rotation to prevent disk fill
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      staging-aishanet:
+        aliases:
+          - finance-projection-worker
+
+# ===========================================
+# DEFERRED WORKERS - NOT YET IMPLEMENTED
+# ===========================================
+# The following workers are explicitly deferred and have no runtime:
+#
+# finance-audit-worker:
+#   Status: DEFERRED
+#   Prerequisite: audit_pack_requests / evidence-pack host infrastructure
+#   Do not add until prerequisite is met.
+#
+# finance-adapter-worker:
+#   Status: DEFERRED
+#   Prerequisite: Adapter Slice 2 completion
+#   Do not add until prerequisite is met.
+
+networks:
+  # External network shared with staging backend, braid, litellm
+  # Compose ref: staging-aishanet
+  # Host network name: aishacrm_aishanet-staging
+  staging-aishanet:
+    external: true
+    name: aishacrm_aishanet-staging
