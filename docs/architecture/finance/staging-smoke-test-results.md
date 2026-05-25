@@ -117,7 +117,7 @@ curl -s -w "\nHTTP %{http_code}\n" \
   https://staging-api.aishacrm.com/api/v2/finance/runtime/status
 ```
 
-**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { tenant_id: 'a11dfb63-...', mode: 'mock_read_only', persistence: 'in_memory', provider_sync: 'disabled', counts: {...} } }` per the runtime status shape at `backend/routes/finance.v2.js:92-128`. `persistence: 'in_memory'` confirms the fail-closed guard is holding (no persistent-events path).
+**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { tenant_id: 'a11dfb63-...', runtime: { mode: 'mock_read_only', persistence: 'in_memory', provider_sync: 'disabled', governance: 'enabled' }, counts: { journal_entries, invoices, approvals, audit_events, adapter_jobs } } }` per the runtime status handler at `backend/routes/finance.v2.js:92-128`. The runtime fields are **nested under `data.runtime.*`** (not top-level `data.mode` / `data.persistence`). `data.runtime.persistence === 'in_memory'` confirms the fail-closed guard is holding (no persistent-events path).
 
 **Fail:** `404` (route not mounted → Phase 3-7 didn't run or rolled back), `401` (auth issue), `403` (module flag not set for controlled tenant → Phase 3-7 §5.3 didn't run), `500` (backend error — investigate via logs per Phase 3-11 §8.8).
 
@@ -131,27 +131,29 @@ curl -s -w "\nHTTP %{http_code}\n" \
   https://staging-api.aishacrm.com/api/v2/finance/ledger
 ```
 
-**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { tenant_id: 'a11dfb63-...', accounts: [], totals: {...} } }` per `backend/routes/finance.v2.js:140-148`. `accounts` is empty (fresh in-memory state with no posted journals yet); `totals` shows zeros across all five classifications (Asset / Liability / Equity / Revenue / Expense).
+**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { accounts: [], totals: { debit_cents: 0, credit_cents: 0 } } }` per `backend/routes/finance.v2.js:140-148` calling `buildLedger()` at `backend/lib/finance/accountingEngine.js:97-120`. `accounts` is empty because `buildLedger()` only includes **posted** journal entries (`getPostedEntries(entries)` at `accountingEngine.js:100`) — and under 3-8 conditions no journal ever reaches `posted` state (see §5.7 + §5.9 below for why). `totals` is a flat `{ debit_cents, credit_cents }` pair, **NOT** broken out by five classifications. The response does **NOT** include `tenant_id`.
 
-**Fail:** non-empty `accounts` array (means pre-existing in-memory state from prior process activity — investigate, may indicate test-pollution or process didn't restart cleanly).
+**Fail:** non-empty `accounts` array (means a posted journal somehow exists in the in-memory bucket — investigate, may indicate `seedJournalEntry` was called via direct service access or pre-existing process state).
 
-**Safety property:** the read-side correctly returns the empty fresh-service shape from the in-memory bucket.
+**Safety property:** the read-side returns the raw `buildLedger()` shape from posted journals only; under 3-8 conditions (no auto-post path) this is always empty.
 
 ### 5.3 Check #3 — Draft invoice creation (`POST /draft-invoices`, controlled tenant, human actor)
 
 ```bash
+# NOTE: the service stores payload.line_items (not payload.lines) — see
+# financeDomainService.js:207. A `lines` field in the body is silently ignored.
 curl -s -w "\nHTTP %{http_code}\n" -X POST \
   -H "Authorization: Bearer <controlled-tenant-human-jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"customer_id":"test-customer-001","currency":"usd","subtotal_cents":10000,"tax_cents":0,"total_cents":10000,"balance_due_cents":10000,"lines":[{"description":"smoke test line","quantity":1,"unit_price_cents":10000,"amount_cents":10000}]}' \
+  -d '{"customer_id":"test-customer-001","currency":"usd","subtotal_cents":10000,"tax_cents":0,"total_cents":10000,"line_items":[{"description":"smoke test line","quantity":1,"unit_price_cents":10000,"amount_cents":10000}]}' \
   https://staging-api.aishacrm.com/api/v2/finance/draft-invoices
 ```
 
-**Pass:** `HTTP 201`. Body is `{ status: 'success', data: { invoice: {...}, command: {...}, decision: {...}, event: {...} } }` per `backend/routes/finance.v2.js:170-184`. The `invoice.status` is `'draft'`, `invoice.tenant_id` is `a11dfb63-...`, `decision.allowed` is `true`, `decision.risk_level` is `'low'` (draft creation is low-risk). No `provider_invoice_id` (no provider write occurred).
+**Pass:** `HTTP 201`. Body is `{ status: 'success', data: { invoice: {...}, governance_decision: {...}, approval_required: <bool> } }` per `backend/lib/finance/financeDomainService.js:231-235` (the route at `backend/routes/finance.v2.js:170-184` returns the service result directly). The `invoice.status` is `'draft'`, `invoice.tenant_id` is `a11dfb63-...`, `invoice.line_items` matches the body's `line_items`. `governance_decision.allowed` is `true`; `governance_decision.risk_level` is `'low'` for draft creation. `approval_required` is `false` (draft creation does not require approval; only posting does).
 
-**Fail:** any non-201, OR `provider_invoice_id` is non-null (would indicate a phantom provider call which can't happen because no provider client exists — but check anyway).
+**Fail:** any non-201, OR `invoice.line_items` is empty when the body provided populated `line_items` (would indicate a field-mapping regression), OR `governance_decision.allowed` is `false` (would mean governance rejected a routine draft create — investigate).
 
-**Safety property:** draft creation works; no provider write occurs (verified by null `provider_invoice_id`); governance decision was low-risk-allowed for a human actor.
+**Safety property:** draft creation works; no provider write occurs (no provider client in route runtime per §4); governance decision was low-risk-allowed for a human actor.
 
 ### 5.4 Check #4 — Balanced journal draft (`POST /journal-drafts`, controlled tenant, human actor)
 
@@ -195,9 +197,9 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST \
   https://staging-api.aishacrm.com/api/v2/finance/simulate/deal-won
 ```
 
-**Pass:** `HTTP 201`. Body is `{ status: 'success', data: { journal_entry: {...}, approval: {...}, adapter_job: {...}, events: [...] } }` per `backend/routes/finance.v2.js:219-233`. Specifically: `journal_entry.status: 'pending_approval'` (not yet posted — needs approval), `approval.status: 'pending'`, `approval.target_type: 'journal_entry'`, `adapter_job.status: 'draft'`, `adapter_job.mode: 'draft_only'`. The approval `id` is captured for check #7.
+**Pass:** `HTTP 201`. Body is `{ status: 'success', data: { journal_entry: {...}, approval: {...}, adapter_job: {...}, governance_decision: {...}, approval_required: true } }` per `backend/lib/finance/financeDomainService.js:501-507`. Specifically: `journal_entry.status: 'pending_approval'` (not yet posted — needs approval; **also will not be auto-posted by check #7's approval call — see §5.7**), `journal_entry.tenant_id: 'a11dfb63-...'`, `approval.status: 'pending'`, `approval.target_type: 'journal_entry'` (or whatever `aggregateType` is passed in by the simulate path — verify against actual response), `adapter_job.status: 'draft'`, `adapter_job.mode: 'draft_only'`, `approval_required: true`. The response does NOT include an `events` field; the events are appended to the in-memory bucket but not returned in the response body. Capture `approval.id` for check #7 and `journal_entry.id` for check #9b.
 
-**Fail:** `journal_entry.status` is `'posted'` directly (would mean approval was bypassed), `approval` missing or `approved`, `adapter_job.status` anything other than `'draft'` (would mean adapter execution path engaged).
+**Fail:** `journal_entry.status` is `'posted'` directly (would mean approval-required gate was bypassed — critical defect), `approval` missing or `approved`, `adapter_job.status` anything other than `'draft'` (would mean adapter execution path engaged).
 
 **Safety property:** the simulate orchestration creates the journal + approval + adapter-job preview in the right order; the journal does NOT go straight to `posted` (approval-required gate enforced); the adapter_job stays `draft` (no execution path).
 
@@ -212,11 +214,13 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST \
   https://staging-api.aishacrm.com/api/v2/finance/approvals/<approval-id-from-check-6>/approve
 ```
 
-**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { approval: {...}, event: {...} } }` per `backend/routes/finance.v2.js:252-266`. `approval.status` is `'approved'` (or `'executed'` if the runtime auto-executes immediately after approval — verify against actual response), `approval.approved_by` matches the test human user's id, `approval.approved_at` is a fresh ISO timestamp. The journal referenced by the approval's `target_id` moves to `posted` if the approval auto-executes.
+**Pass:** `HTTP 200`. Body is `{ status: 'success', data: { approval: {...}, governance_decision: {...} } }` per `backend/lib/finance/financeDomainService.js:641-644`. `approval.status` is `'approved'`, `approval.approved_by` matches the test human user's id, `approval.approved_at` is a fresh ISO timestamp. `governance_decision.allowed` is `true`. The response does NOT include an `event` field; the `finance.approval.approved` event is appended to the in-memory bucket but not returned in the response body.
 
-**Fail:** `HTTP 403` (governance decision rejected — check actor identity; the test user must be a session-derived `human`, not `ai_agent`), `404` (approval id not found — re-check check-6 response), `409 FINANCE_APPROVAL_DUPLICATE` (someone else already approved or attempted — investigate).
+**Important — what `approveFinanceAction()` does NOT do**: per `backend/lib/finance/financeDomainService.js:596-644`, the approval call ONLY mutates the approval row (`status`, `approved_by`, `approved_at`) and appends a `finance.approval.approved` event. It does **NOT** transition the target journal entry from `pending_approval` to `posted`. There is **no auto-execution / auto-post path** in the current in-memory runtime — the journal stays at `pending_approval` indefinitely. This is the upstream cause of check #9's DEFERRED status: there's no HTTP path from `pending_approval` to `posted`. The route tests at `backend/__tests__/routes/finance.v2.routes.test.js:101-123` work around this by calling `service.seedJournalEntry({ ..., status: 'posted' })` directly via the service handle — there is no HTTP equivalent of that.
 
-**Safety property:** human approval works through the governance chain; `approval.approved_by` is session-derived (not body-spoofed); approval is idempotent (a repeat call would return `409`).
+**Fail:** `HTTP 403` (governance decision rejected — check actor identity; the test user must be a session-derived `human`, not `ai_agent`), `404` (approval id not found — re-check check-6 response), `409 FINANCE_APPROVAL_DUPLICATE` (someone else already approved or attempted — investigate per `financeDomainService.js:87-92`).
+
+**Safety property:** human approval works through the governance chain; `approval.approved_by` is session-derived (not body-spoofed); approval is idempotent at the `(tenant + target_type + target_id)` level (a duplicate `pending` approval attempt would return `409 FINANCE_APPROVAL_DUPLICATE`).
 
 ### 5.8 Check #8 — AI approval blocked (`POST /approvals/:id/approve`, controlled tenant, ai_agent actor)
 
@@ -236,32 +240,64 @@ curl -s -w "\nHTTP %{http_code}\n" -X POST \
 
 (The `"actor_type":"human"` in the body is a deliberate spoofing attempt — `buildActor()` ignores it and derives the actor type from session, so the request still presents as `ai_agent`.)
 
-**Pass:** `HTTP 403`. Body is `{ status: 'error', message: <governance explanation> }` per the governance decision path at `financeDomainService.js:187-191` (`error.statusCode = 403`, `error.decision = decision`). The `decision` object in the response (if returned) shows `allowed: false`, `risk_level: 'high'` or `'critical'`, with a reason like `"AI actor cannot execute money movement"` or `"AI actors cannot approve finance actions"`. The approval row in the in-memory bucket is UNCHANGED — still `pending`, no `approved_by`, no `approved_at`.
+**Pass:** `HTTP 403`. Body is `{ status: 'error', message: <governance explanation>, governance_decision: {...} }` per the `sendError()` shape at `backend/routes/finance.v2.js:26-33` (which spreads `governance_decision` from `error.decision` when present) + the governance reject path at `financeDomainService.js:611-616` (`error.statusCode = 403`, `error.decision = decision`). The `governance_decision` in the response shows `allowed: false`, `risk_level: 'high'` or `'critical'`, with a reason like `"AI actor cannot execute money movement"` or `"AI actors cannot approve finance actions"`. The approval row in the in-memory bucket is UNCHANGED — still `pending`, no `approved_by`, no `approved_at` (the throw at line 615 happens BEFORE the approval mutation at lines 621-623).
 
-**Fail:** `HTTP 200` (AI was allowed to approve — **critical defect**, the governance + actor-identity contract is broken), `HTTP 403` but with the in-memory approval row mutated (would mean partial write before the throw).
+**Fail:** `HTTP 200` (AI was allowed to approve — **critical defect**, the governance + actor-identity contract is broken), `HTTP 403` but with the in-memory approval row mutated (would mean partial write before the throw — would be a critical contract violation).
 
 **Safety property:** AI actors are blocked from approval regardless of body-spoofing; the actor-identity check is session-derived; no partial state mutation on the rejected request. This is the long-standing actor-spoofing-prevention contract from commit `04a76bae` with regression coverage in `backend/__tests__/routes/finance.v2.routes.test.js`.
 
-### 5.9 Check #9 — Journal reversal (`POST /journal-entries/:id/reverse`, controlled tenant, human actor)
+### 5.9 Check #9 — Journal reversal endpoint behavior
 
-Prerequisite: check #7 must have posted a journal (the `target_id` from the approval). Capture that `journal_entry.id` from check #6's response (it's the journal that was put into `pending_approval`, then approved+posted in check #7).
+This check is split into two sub-checks because the current in-memory runtime does **not** provide an HTTP path from `pending_approval` to `posted` (see §5.7 — `approveFinanceAction()` only mutates the approval row, not the journal status). Check **#9a** verifies the route-side error handling for reversing a non-posted journal (the actually-testable case via HTTP). Check **#9b** documents the successful-reverse behavior but is marked **DEFERRED** under current-runtime constraints.
+
+#### 5.9.a Check #9a — Reverse a non-posted journal returns 409 (TESTABLE today)
+
+Use the `journal_entry.id` from check #6's response (the simulate-deal-won journal, which is in `pending_approval` after check #6 and stays there even after check #7's approval call):
 
 ```bash
-# Replace <posted-journal-id> with the journal_entry.id from check #6 that was approved in check #7.
+# Replace <pending-journal-id> with the journal_entry.id from check #6.
 curl -s -w "\nHTTP %{http_code}\n" -X POST \
   -H "Authorization: Bearer <controlled-tenant-human-jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"reason":"smoke test reversal"}' \
+  -d '{"reason":"smoke test reversal — should be rejected (journal not posted)"}' \
+  https://staging-api.aishacrm.com/api/v2/finance/journal-entries/<pending-journal-id>/reverse
+```
+
+**Pass:** `HTTP 409`. Body is `{ status: 'error', message: 'Only posted journal entries can be reversed' }` per `backend/lib/finance/financeDomainService.js:523-526` (the explicit `error.statusCode = 409` guard). The original journal is **unchanged** — still at `status: 'pending_approval'`; no reversal entry is created in the in-memory bucket.
+
+**Fail:** `HTTP 201` (the engine accepted a reverse of a non-posted journal — critical defect; the posted-only invariant is broken), any non-409, or the original journal's `status` mutated.
+
+**Safety property:** the reverse endpoint refuses to operate on non-posted journals; the original journal is preserved; the append-only / posted-as-source-of-truth posture is enforced at the service layer.
+
+**Reject-is-pass:** the 409 here is the expected outcome and the safety property; this sub-check is a positive verification of the gate, not a "we got an error" deferral.
+
+#### 5.9.b Check #9b — Reverse a posted journal returns 201 with NEW reversal entry (DEFERRED — no HTTP path to posted state in current runtime)
+
+**This sub-check is DEFERRED under 3-8 conditions and recorded as DEFERRED in §10.**
+
+Reason: the route tests at `backend/__tests__/routes/finance.v2.routes.test.js:101-123` exercise this path by calling `service.seedJournalEntry({ id: 'posted-1', tenant_id: TENANT_ID, status: 'posted', lines: [...] })` directly on the service handle — there is **no HTTP equivalent** of `seedJournalEntry`. The simulate-deal-won → approve chain (checks #6 → #7) leaves the journal at `pending_approval` because `approveFinanceAction()` only mutates the approval row, not the journal status (see §5.7's "Important — what `approveFinanceAction()` does NOT do" block). So under 3-8 HTTP-only conditions, no posted journal exists for the reverse endpoint to act on.
+
+**Documented expected behavior** (for when an HTTP path to posted state lands — likely a Slice 2 deliverable or a separate admin endpoint):
+
+```bash
+# Hypothetical — requires a posted journal that the current HTTP runtime can't produce:
+curl -s -w "\nHTTP %{http_code}\n" -X POST \
+  -H "Authorization: Bearer <controlled-tenant-human-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"memo":"smoke test reversal"}' \
   https://staging-api.aishacrm.com/api/v2/finance/journal-entries/<posted-journal-id>/reverse
 ```
 
-**Pass:** `HTTP 201`. Body contains the NEW reversal journal entry: `{ status: 'success', data: { journal_entry: {...}, approval: {...}, events: [...] } }` per `backend/routes/finance.v2.js:235-249`. The reversal journal has `status: 'draft'` or `'pending_approval'` (NOT auto-posted — reversal requires a fresh approval), `reversal_of: <original journal id>`, debits and credits inverted from the original (`accountingEngine.createReversalDraft`). The **original** journal is **unchanged** — still `status: 'posted'`. **No hard delete occurred** — both entries exist in the in-memory bucket; the no-hard-delete posture is preserved.
+Expected `HTTP 201`. Body shape per `backend/lib/finance/financeDomainService.js:587-593`: `{ status: 'success', data: { original_entry_id: <posted-id>, reversal_entry: {...}, approval: {...}, governance_decision: {...}, approval_required: <bool> } }`. The `reversal_entry` is a NEW journal with `reversal_of: <original-id>`, debits and credits inverted from the original (`accountingEngine.createReversalDraft`). The response does NOT include `journal_entry` (the field name is `reversal_entry`) or `events`. The **original** journal is **unchanged** — still `status: 'posted'`. **No hard delete occurred** — both entries exist in the in-memory bucket.
 
-**Fail:** original journal's `status` changed from `'posted'` to anything else (should be unchanged), or the original was deleted (would be a critical violation of the append-only / no-hard-delete posture), or `HTTP 200` without creating a new entry (would mean an in-place mutation rather than reversal entry).
+**Deferral remediation paths** (any of these would re-enable check #9b):
 
-**Safety property:** reversal creates a NEW journal entry rather than mutating or deleting the original; the original posted ledger truth is preserved; reversal requires its own fresh approval before posting (not auto-posted).
+1. Add an HTTP `/admin/seed-posted-journal` debug endpoint behind a separate env flag for staging-only testing (out of 3-8 scope).
+2. Add an HTTP path that auto-executes a journal-entry approval to posting (would be a service-layer change; out of 3-8 scope).
+3. Execute the reverse path via `docker exec` calling the service directly with `seedJournalEntry` then the reverse handler — this is what the route tests do, but it crosses out of "HTTP smoke" scope into "code-level testing" and would not exercise the auth + tenant + module gates that 3-8 is designed to verify.
+4. Wait for Slice 2 to land projection-backed reads + a posting/execution path that operates over the persistent event store.
 
-**If check #7 did NOT result in a posted journal** (e.g., the approval reached `approved` but the runtime doesn't auto-execute to `posted`), this check is **DEFERRED** in §10 with reason: "reversal requires a posted journal; check #7 left the journal in `approved` (not `posted`) — re-execution path needs operator step or runtime change".
+For 3-8 today, the deploy owner records §5.9.b as DEFERRED with reason "no HTTP path to posted state in current runtime; route handler verified by `backend/__tests__/routes/finance.v2.routes.test.js:101-123` which uses `seedJournalEntry`." The route-side error handling (§5.9.a) IS testable and verifies the gate.
 
 ### 5.10 Check #10 — Disabled-tenant rejection (`GET /runtime/status`, OTHER staging tenant)
 
@@ -301,9 +337,11 @@ curl -s -w "\nHTTP %{http_code}\n" \
 
 The smoke test as a whole **passes** if **all** of:
 
-- Checks #1, #2, #3, #4, #6, #7, #9 pass with the exact status codes and safety properties listed in §5.
+- Checks #1, #2, #3, #4, #6, #7 pass with the exact status codes and safety properties listed in §5.
 - Check #5 returns `HTTP 400` with `FINANCE_UNBALANCED_JOURNAL` (rejection is the pass condition).
 - Check #8 returns `HTTP 403` for the AI actor (rejection is the pass condition), OR is recorded as DEFERRED if no `ai_agent` test user is available.
+- Check #9a returns `HTTP 409` for the reverse of a non-posted journal (rejection is the pass condition).
+- Check #9b is recorded as DEFERRED with reason "no HTTP path to posted state in current runtime" (per §5.9.b — not a fail).
 - Check #10 returns `HTTP 403` for the other tenant (rejection is the pass condition), OR is recorded as DEFERRED if no other-tenant test user is available.
 - Check #11 returns `HTTP 400` or `HTTP 403` for the tenant mismatch (rejection is the pass condition), OR is recorded as DEFERRED if no test user available for it.
 - No HTTP request to the route triggered any provider HTTP write (verified by code-path inspection: no provider client is constructed in the route runtime).
@@ -321,7 +359,8 @@ The smoke test **fails** if any required check fails or the safety properties ar
 - Check #6 returns `journal_entry.status: 'posted'` directly (approval bypassed) — critical governance defect; halt.
 - Check #6 returns `adapter_job.status` anything other than `'draft'` — adapter execution path engaged when no adapter worker exists; halt and investigate.
 - Check #8 returns `HTTP 200` for the AI actor (approval allowed) — critical governance + actor-identity defect; halt; verify `buildActor()` and governance decision; re-run `backend/__tests__/routes/finance.v2.routes.test.js` actor-spoofing tests.
-- Check #9 returns a modified original journal (the original `status` changed from `'posted'`) — critical append-only / no-hard-delete violation; halt.
+- Check #9a returns `HTTP 201` (the reverse endpoint accepted a non-posted journal — critical posted-only-invariant violation; halt).
+- Check #9a returns `HTTP 409` but the in-memory journal record is mutated (would mean partial mutation before the throw at `financeDomainService.js:523-526` — would be a critical contract violation; halt).
 - Check #10 returns `HTTP 200` for the other tenant — one-tenant-only invariant violated; halt and audit `modulesettings.financeOps` for stray rows.
 - Check #11 returns `HTTP 200` for the tenant mismatch — tenant isolation broken; halt; do not proceed to any further Phase 3 activation.
 - A `finance.audit_events` row appears as a result of the smoke test — backend somehow wrote to the persistent event store despite the fail-closed guard; halt and investigate `ENABLE_FINANCE_PERSISTENT_EVENTS` setting on `staging-backend-heavy`.
