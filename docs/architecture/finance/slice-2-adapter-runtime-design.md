@@ -10,12 +10,12 @@
 [`adapter-worker-sandbox-plan.md`](./adapter-worker-sandbox-plan.md) (2C-8, sandbox-only activation plan) ·
 [`erpnext-sandbox-proof.md`](./erpnext-sandbox-proof.md) (2C-9, ERPNext proof gate — Slice 2 makes this executable) ·
 [`dead-letter-retry-verification.md`](./dead-letter-retry-verification.md) (2C-10, retry / DLQ contract) ·
-[`projection-contracts.md`](./projection-contracts.md) §7 (adapter*queue projection — already implemented in Phase 2B-10, consumes the events Slice 2 will emit) ·
+[`projection-contracts.md`](./projection-contracts.md) §7 (`adapter_queue` projection — already implemented in Phase 2B-10, consumes the events Slice 2 will emit) ·
 [`worker-service-topology.md`](./worker-service-topology.md) §3 (adapter worker topology) ·
 [`staging-worker-deployment-log.md`](./staging-worker-deployment-log.md) (3-4) ·
 [`staging-route-activation-log.md`](./staging-route-activation-log.md) (3-7) ·
 `backend/lib/finance/accountingAdapters/quickbooksCanonicalAdapter.js` (existing canonical mapper) ·
-`backend/lib/finance/projections/adapterQueueProjection.js` (already consuming `finance.adapter.sync*\*` events with no producer)
+`backend/lib/finance/projections/adapterQueueProjection.js` (already consuming `finance.adapter.sync_queued` / `sync_succeeded` / `sync_failed` events with no producer)
 
 ---
 
@@ -318,6 +318,7 @@ Both staging defaults; both must be deliberately changed to permit any provider 
   - `duration_ms` covers the adapter call only, not the full processor cycle.
 
 - **`finance.adapter.sync_failed`** (emitted at `running → failed`, both retryable and terminal):
+
   ```js
   payload: {
     job_id, provider, object_type, object_id, operation, attempts, max_attempts,
