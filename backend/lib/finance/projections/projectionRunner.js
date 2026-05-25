@@ -28,15 +28,45 @@ const INFRASTRUCTURE_EVENT_TYPES = new Set(['finance.audit.event_appended']);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Total-order position of an event: { created_at, id }. */
+/**
+ * Total-order position of an event — the persisted cursor shape.
+ *
+ * Cursor identity intentionally excludes the in-memory event store's `_seq`
+ * insertion index: `_seq` is store-local bookkeeping that is not invariant
+ * across runtimes, so propagating it into the persisted cursor would break the
+ * replay-validation harness's cross-rebuild cursor-parity invariant. Same-
+ * millisecond ordering is handled internally by `compareEvents` during replay
+ * sort — `_seq` stays out of the persisted shape.
+ */
 function positionOf(event) {
-  return { created_at: event.created_at, id: event.id };
+  return {
+    created_at: event.created_at,
+    id: event.id,
+  };
 }
 
 /** Compare two positions — created_at ASC, then id ASC (frozen Track A order). */
 function comparePosition(a, b) {
   if (a.created_at < b.created_at) return -1;
   if (a.created_at > b.created_at) return 1;
+  if (a.id < b.id) return -1;
+  if (a.id > b.id) return 1;
+  return 0;
+}
+
+/**
+ * Compare two events for replay sort. Adds the in-memory store's `_seq`
+ * insertion index as an internal tie-break between events sharing the exact
+ * same `created_at` — preserves append order for fixtures and production logs
+ * that bunch many events into the same millisecond. The `_seq` tie-break is
+ * runner-internal; it never enters the persisted cursor (see `positionOf`).
+ */
+function compareEvents(a, b) {
+  if (a.created_at < b.created_at) return -1;
+  if (a.created_at > b.created_at) return 1;
+  if (Number.isFinite(a?._seq) && Number.isFinite(b?._seq) && a._seq !== b._seq) {
+    return a._seq - b._seq;
+  }
   if (a.id < b.id) return -1;
   if (a.id > b.id) return 1;
   return 0;
@@ -316,9 +346,7 @@ export function createProjectionRunner({
       // replayed into another tenant's projection state.
       const tenantScoped = all.filter((event) => event.tenant_id === tenantId);
       // Enforce the frozen Track A order regardless of the event store backend.
-      const ordered = [...tenantScoped].sort((a, b) =>
-        comparePosition(positionOf(a), positionOf(b)),
-      );
+      const ordered = [...tenantScoped].sort(compareEvents);
       const filtered = ordered.filter((event) => workerConsumes(worker, event));
 
       const shadow = await storeProvider.createShadowStore(worker.projectionName, tenantId);

@@ -276,6 +276,7 @@ async function processSingleJob({
   attempts,
   maxAttempts,
   backoffOpts,
+  providerWritesEnabled,
 }) {
   // Step 1: Adapter lookup
   const adapter = adapters?.get?.(job.provider);
@@ -331,7 +332,13 @@ async function processSingleJob({
   // provider. The §5.3.c "draft-write proof" in 2C-9 is the only step
   // that flips this to true (against sandbox ERPNext, reverted immediately
   // after).
-  const writesEnabled = isProviderWritesEnabled();
+  // Per-call override beats process.env when explicitly passed. Production
+  // worker callers leave it unset and the env var dominates; tests pass
+  // the explicit value to avoid racing on process.env mutation.
+  const writesEnabled =
+    providerWritesEnabled === true || providerWritesEnabled === false
+      ? providerWritesEnabled
+      : isProviderWritesEnabled();
   const startedAt = Date.now();
 
   if (!writesEnabled) {
@@ -360,14 +367,10 @@ async function processSingleJob({
     // providers) and the objectType is the per-adapter doc-type lookup key
     // (e.g., 'journal_entry' → 'JournalEntry' for the ERPNext adapter).
     //
-    // If the mapping is missing, throw AdapterConfigError — the processor
-    // catches it below and classifies it as a PERMANENT failure (no retry).
-    let objectType;
-    try {
-      objectType = aggregateTypeToObjectType(job.aggregate_type);
-    } catch (mapErr) {
-      throw mapErr; // bubbles to the outer try/catch which classifies as permanent
-    }
+    // If the mapping is missing, aggregateTypeToObjectType throws
+    // AdapterConfigError — the outer try/catch in runAdapterPollCycle
+    // classifies it as a PERMANENT failure (no retry).
+    const objectType = aggregateTypeToObjectType(job.aggregate_type);
 
     // ctx shape aligns with Slice 2A's createErpnextSandboxAdapter contract:
     // ctx accepts either a bare objectType string OR { objectType, runtimePolicy }
@@ -517,6 +520,12 @@ export async function runAdapterPollCycle({
   now = defaultNow,
   buildProviderPayload = null,
   backoffOpts = null,
+  // Optional override of the FINANCE_PROVIDER_WRITES_ENABLED env-var kill
+  // switch. When null/undefined, the processor reads process.env at call
+  // time (production behavior). When true/false, the explicit value wins.
+  // Tests pass the explicit value to avoid process.env mutation, which
+  // races across sibling tests in parallel test runners.
+  providerWritesEnabled = null,
 } = {}) {
   if (!eventStore || typeof eventStore.append !== 'function') {
     const err = new Error('runAdapterPollCycle: eventStore.append is required');
@@ -584,6 +593,7 @@ export async function runAdapterPollCycle({
       now: tickNow,
       attempts,
       maxAttempts,
+      providerWritesEnabled,
       backoffOpts,
     });
 
