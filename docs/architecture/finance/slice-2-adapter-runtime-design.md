@@ -85,7 +85,30 @@ Each decision below is **frozen for Slice 2 implementation**. Sub-packets (2A–
 
 ### 4.1 `finance.adapter_jobs` lifecycle and claim/lock semantics
 
-**Lifecycle:** unchanged from [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) §3 — `queued | running | succeeded | failed | cancelled`. Slice 2 implements the existing state machine; it does not introduce new states.
+**Lifecycle (corrected per Codex P1 / P2 review):** the actual canonical state machine in code + projection contracts + migration 168 includes a `draft` pre-approval state that the [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) §3 lifecycle diagram omits (the diagram is the **runtime-side view** of jobs the processor sees; it starts at `queued`). The full DB lifecycle is:
+
+```
+draft  →  queued  →  running  →  succeeded
+   ↓        ↑         ↓
+   │        │         └→  failed  →  (retry: failed → queued)
+   │        │                    →  (terminal: failed + permanent + approvals row)
+   │        │
+   └────────┴────  approval-driven transition (see "draft → queued promoter" below)
+
+any → cancelled  (operator-only; out of Slice 2 HTTP scope)
+```
+
+`finance.adapter_jobs.status` enum per migration 168 + `simulateDealWon` (`backend/lib/finance/financeDomainService.js:471-483`) + projection-contracts.md §7 §"Adapter jobs in draft status" all agree: **`draft` is the canonical pre-approval state.** A `draft` row exists for adapter_jobs linked to approval-required journals; the row is **not** claimable by the worker and does **not** emit `finance.adapter.sync_queued`. The `sync_queued` event marks the post-approval `draft → queued` transition, and it's THAT transition that puts the job into the worker's claimable pool.
+
+**`draft → queued` transition trigger (resolves §9 Q5 — no longer deferrable):**
+
+When `approveFinanceAction()` marks an approval `approved`, the same call must — in the same transaction where possible — transition every adapter_job linked to that approval's target from `draft → queued` and emit `finance.adapter.sync_queued` for each. The "linked" relationship is structural via shared `aggregate_id`: simulateDealWon creates the approval with `aggregate_type='journal_entry', aggregate_id=<journal-id>` AND the adapter_job with the same `aggregate_type='journal_entry', aggregate_id=<journal-id>` (`financeDomainService.js:464-465, 476-477`). The promoter scope is therefore: "find all adapter_jobs WHERE tenant_id=$1 AND aggregate_id=$2 AND status='draft' and promote each to queued."
+
+This makes the dependency explicit: **Slice 2B includes the `approveFinanceAction()` modification.** Q5's previous "wait" default is wrong — without this transition, no adapter_job ever reaches `queued`, the worker has nothing to claim, and Slice 2's end-to-end flow doesn't complete. Q5 is resolved YES below in §9.
+
+**Note on the Phase 3-8 §5.7 contract** ("`approveFinanceAction` does not auto-post the journal"): that contract is preserved. The `draft → queued` adapter-job transition is **independent** of the journal `pending_approval → posted` transition. Approving the journal queues the adapter job (so the worker can sync a draft document to ERPNext); the journal itself stays at `pending_approval` until a separate journal-posting path lands in a future slice. Posting the journal is not a Slice 2 deliverable; queueing the adapter_job IS.
+
+**Claim/lock semantics — frozen (unchanged from prior wording, claims `queued` only):**
 
 **Claim/lock semantics — frozen:**
 
@@ -293,16 +316,18 @@ Both staging defaults; both must be deliberately changed to permit any provider 
 
 **Payload contracts** (frozen per `adapter-runtime-contract.md` §7):
 
-- **`finance.adapter.sync_queued`** (emitted at job enqueue):
+- **`finance.adapter.sync_queued`** (emitted at the `draft → queued` transition — see §4.1 lifecycle correction; **NOT** emitted when the row is initially inserted in `draft` state):
 
   ```js
   payload: {
     job_id, provider, object_type, object_id, operation, mode, queued_at,
-    adapter_job: { id, tenant_id, provider, aggregate_type, aggregate_id, operation, mode, status, attempts, ... }
+    adapter_job: { id, tenant_id, provider, aggregate_type, aggregate_id, operation, mode, status: 'queued', attempts: 0, ... }
   }
   ```
 
-  The `adapter_job` snapshot embedded in the payload satisfies the projection's expectation per Phase 2B-10 §3 ("Every adapter event carries the full `payload.adapter_job` snapshot").
+  The `adapter_job` snapshot embedded in the payload satisfies the projection's expectation per Phase 2B-10 §3 ("Every adapter event carries the full `payload.adapter_job` snapshot"). The `adapter_job.status` in the snapshot is `'queued'` (the post-transition state); `queued_at` is the timestamp of the `draft → queued` transition (i.e., the timestamp of the approval that promoted it).
+
+  **Producer of `sync_queued`:** the `approveFinanceAction()` modification in Slice 2B (see §5.2) emits one `sync_queued` event per promoted adapter_job in the same call that marks the approval `approved`. `simulateDealWon` does NOT emit `sync_queued`; it only inserts the `draft` row with no event.
 
 - **`finance.adapter.sync_succeeded`** (emitted at `running → succeeded`):
 
@@ -433,18 +458,24 @@ Each packet is independently committable and reviewable. The packets have **defi
 
 **Out of scope for 2A:** the job processor (2B), the worker process (2C), staging activation (2E).
 
-### 5.2 Slice 2B — adapter job processor + sync event emission
+### 5.2 Slice 2B — adapter job processor + sync event emission + approval-driven `draft → queued` promoter
 
 **Files delivered:**
 
 - `backend/lib/finance/adapterJobProcessor.js` (the §4.2 `runAdapterPollCycle()`)
-- `backend/lib/finance/adapterJobEnqueuer.js` (helper that creates a `finance.adapter_jobs` row AND emits `finance.adapter.sync_queued` atomically — replaces the in-memory-only `adapterJob` creation in `simulateDealWon`)
-- Modifications to `financeDomainService.js` `simulateDealWon` to use the new enqueuer (when running with the persistent path; defaults to in-memory when not)
+- `backend/lib/finance/adapterJobEnqueuer.js` (helper that **inserts a `finance.adapter_jobs` row with `status='draft'`** when called from `simulateDealWon`; does NOT emit `sync_queued` (the row is not yet runnable). Replaces the in-memory-only `adapterJob` creation in `simulateDealWon` while preserving the `draft` pre-approval state. Per §4.1 lifecycle correction.)
+- `backend/lib/finance/adapterJobPromoter.js` (NEW helper — handles the `draft → queued` transition per §4.1. Signature: `promoteLinkedAdapterJobs({ pool, tenantId, aggregateId, eventStore, now })` — finds all adapter_jobs WHERE `tenant_id=$1 AND aggregate_id=$2 AND status='draft'`, atomically updates each to `status='queued'`, and emits `finance.adapter.sync_queued` for each.)
+- Modifications to `financeDomainService.js` `simulateDealWon` to use the new enqueuer (when running with the persistent path; defaults to in-memory when not).
+- **Modifications to `financeDomainService.js` `approveFinanceAction` to call `promoteLinkedAdapterJobs` after marking the approval `approved`** — resolves Q5 per §4.1. The promoter call uses the approval's `aggregate_id` (which is the journal entry id under the simulateDealWon flow) as the lookup key for adapter_jobs to promote. The Phase 3-8 §5.7 "approval doesn't auto-post the journal" contract is preserved — the journal stays at `pending_approval`; only the linked adapter_jobs transition.
 - `backend/__tests__/lib/finance/adapterJobProcessor.test.js`
 - `backend/__tests__/lib/finance/adapterJobEnqueuer.test.js`
 
 **Test obligations:**
 
+- `adapterJobEnqueuer` inserts `status='draft'` (not `'queued'`); does NOT emit `sync_queued`.
+- `adapterJobPromoter` finds all `status='draft'` adapter_jobs linked by `aggregate_id` to a given approval; promotes each to `status='queued'` atomically; emits one `sync_queued` per promotion.
+- `approveFinanceAction` calls `promoteLinkedAdapterJobs` after the approval mutation; the journal entry's `status` is **NOT** modified (Phase 3-8 §5.7 contract preserved); promoter emits one `sync_queued` per linked adapter_job that was promoted.
+- `approveFinanceAction` for an approval whose target has no linked adapter_job (e.g., a future approval type) — the promoter is a no-op, no errors, no `sync_queued` emitted.
 - Optimistic-lock claim semantics verified (concurrent processors don't double-claim).
 - `assertWritePermitted` invoked first; `WriteGuardError` path tested.
 - Provider-writes-enabled code gate: `FINANCE_PROVIDER_WRITES_ENABLED=false` → HTTP call skipped, `sync_succeeded` emitted with `provider_id: null`.
@@ -454,9 +485,9 @@ Each packet is independently committable and reviewable. The packets have **defi
 - Idempotent emission — re-running the cycle on a terminal job does not emit a duplicate `sync_succeeded` or `sync_failed`.
 - All three events use `aggregate_type = 'adapter_job'`; no `object_type` / `object_id` drift.
 
-**Dependencies:** uses the `AccountingAdapter` interface from `adapter-runtime-contract.md` §2 (already defined). Can start in parallel with 2A. Final integration test (2D) needs both 2A and 2B landed.
+**Dependencies:** uses the `AccountingAdapter` interface from `adapter-runtime-contract.md` §2 (already defined). Can start in parallel with 2A and 2C — the `approveFinanceAction` modification doesn't touch the adapter or the worker shell. Final integration test (2D) needs both 2A and 2B landed.
 
-**Out of scope for 2B:** the worker process shell (2C), the ERPNext adapter (2A), staging activation (2E).
+**Out of scope for 2B:** the worker process shell (2C), the ERPNext adapter (2A), staging activation (2E). Journal-posting (`pending_approval → posted`) remains out of scope — that's a separate later slice; Phase 3-8 §5.7 explicitly documents the gap.
 
 ### 5.3 Slice 2C — `finance-adapter-worker` process shell + config
 
@@ -623,13 +654,13 @@ Acceptance for **Slice 2 implementation** (a future, separately reviewed sequenc
 
 These are items where the design needs your call before Slice 2 implementation begins. None blocks Slice 2-0 commit; all should be resolved before the matching sub-packet starts.
 
-| #   | Question                                                                                                                                                                                                                                                                                                                                             | Affects packet     | Default if no answer                                                                                                                                                       |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Should `simulateDealWon` write to BOTH the in-memory bucket AND `finance.adapter_jobs` (dual-write) under Slice 2, or should it stop writing to the in-memory bucket once Slice 2 lands? (The Slice 1 split-brain-prevention contract makes this tricky — the persistent-events route guard remains fail-closed, so the route uses in-memory reads.) | 2B                 | Dual-write — keep in-memory as-is for backward compatibility; ALSO INSERT into `finance.adapter_jobs` so the worker has something to drain.                                |
-| 2   | Should Slice 2 add a `finance-adapter-worker` to the **same** Coolify worker app as the projection worker (one container running both), or **separate** Coolify apps?                                                                                                                                                                                | 2C / 2E            | Separate Coolify apps — matches Phase 2C-5 worker-service-topology decision; clearer rollback scope; lower blast-radius per failure.                                       |
-| 3   | The sandbox `base_url` guard's allowlist patterns (§4.4) — are the listed patterns (`localhost`, `*.local`, `sandbox.*`, `FINANCE_ERPNEXT_SANDBOX_BASE_URLS`) sufficient for your sandbox setup, or do you have a specific staging ERPNext URL pattern in mind?                                                                                      | 2A                 | Use the listed patterns; require operator to add their specific sandbox FQDN to `FINANCE_ERPNEXT_SANDBOX_BASE_URLS` before 3-10.                                           |
-| 4   | The `financeWorkerCommon.js` refactor in 2C extracts shared helpers from the projection worker. Is the regression risk acceptable, or should the refactor be a separate prior commit with its own Codex review before Slice 2C uses it?                                                                                                              | 2C                 | Separate prior commit with its own review — the refactor risk is real (projection worker is enabled today via Phase 3-5); split safely.                                    |
-| 5   | Should `approveFinanceAction()` be modified in Slice 2 to also create an adapter job (transitioning the journal to `posted` AND queueing a `push_draft` adapter_job for ERPNext), or should that lifecycle wiring wait for a later Slice?                                                                                                            | 2B (modify domain) | Wait — Phase 3-8 §5.7 already noted the "approve doesn't post" contract; tying journal posting to ERPNext sync is a separate design decision with downstream implications. |
+| #   | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Affects packet     | Default if no answer                                                                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Should `simulateDealWon` write to BOTH the in-memory bucket AND `finance.adapter_jobs` (dual-write) under Slice 2, or should it stop writing to the in-memory bucket once Slice 2 lands? (The Slice 1 split-brain-prevention contract makes this tricky — the persistent-events route guard remains fail-closed, so the route uses in-memory reads.)                                                                                                                                                                                                                                                                                                                                                                                                                                      | 2B                 | Dual-write — keep in-memory as-is for backward compatibility; ALSO INSERT into `finance.adapter_jobs` so the worker has something to drain. |
+| 2   | Should Slice 2 add a `finance-adapter-worker` to the **same** Coolify worker app as the projection worker (one container running both), or **separate** Coolify apps?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 2C / 2E            | Separate Coolify apps — matches Phase 2C-5 worker-service-topology decision; clearer rollback scope; lower blast-radius per failure.        |
+| 3   | The sandbox `base_url` guard's allowlist patterns (§4.4) — are the listed patterns (`localhost`, `*.local`, `sandbox.*`, `FINANCE_ERPNEXT_SANDBOX_BASE_URLS`) sufficient for your sandbox setup, or do you have a specific staging ERPNext URL pattern in mind?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 2A                 | Use the listed patterns; require operator to add their specific sandbox FQDN to `FINANCE_ERPNEXT_SANDBOX_BASE_URLS` before 3-10.            |
+| 4   | The `financeWorkerCommon.js` refactor in 2C extracts shared helpers from the projection worker. Is the regression risk acceptable, or should the refactor be a separate prior commit with its own Codex review before Slice 2C uses it?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 2C                 | Separate prior commit with its own review — the refactor risk is real (projection worker is enabled today via Phase 3-5); split safely.     |
+| 5   | **RESOLVED YES — per §4.1 lifecycle correction (Codex P1 re-review).** Should `approveFinanceAction()` be modified in Slice 2 to transition linked adapter_jobs `draft → queued` and emit `sync_queued`? **Yes — not deferrable.** Without this transition, no adapter_job ever leaves `draft`, the worker has nothing to claim, and Slice 2's end-to-end flow doesn't complete. Slice 2B includes the `approveFinanceAction()` modification per §5.2. **Important scope note**: this resolution covers ONLY the adapter-job `draft → queued` promotion — it does NOT include transitioning the journal entry from `pending_approval → posted`. The Phase 3-8 §5.7 "approval doesn't auto-post the journal" contract is explicitly preserved. Journal posting is a separate future slice. | 2B (modify domain) | RESOLVED — Slice 2B includes the modification. The adapter-job promotion happens; the journal posting does not.                             |
 
 ---
 
