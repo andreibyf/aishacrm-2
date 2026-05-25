@@ -357,7 +357,7 @@ Both staging defaults; both must be deliberately changed to permit any provider 
 
 **Idempotency:** the event store is append-always and does not dedupe (Postgres adapter rejects duplicate primary key but doesn't merge). The job processor must check job status before emission to avoid double-emitting `sync_succeeded` for a job that already reached terminal state (§4.2 step 7 covers this).
 
-**Test obligation:** the existing `adapter_queue` projection tests at `backend/__tests__/lib/finance/projections/adapterQueueProjection.test.js` already cover the consumer side. Slice 2B and Slice 2D add producer-side tests that emit each of the three events from the actual job processor and verify the projection consumes them correctly end-to-end (the integration assertion).
+**Test obligation:** the existing `adapter_queue` projection tests at `backend/__tests__/lib/finance/projections/adapterQueueProjection.test.js` already cover the consumer side. Slice 2B and Slice 2D add producer-side tests that exercise the corrected producer split per §4.1 / §4.7: `sync_succeeded` and `sync_failed` are emitted by the job processor (`runAdapterPollCycle`); `sync_queued` is emitted by the `approveFinanceAction()` promoter (`promoteLinkedAdapterJobs`), NOT by the processor. The end-to-end integration assertion is that all three events — regardless of producer — are observed correctly by the `adapter_queue` projection (the consumer doesn't care which producer emitted them; the envelope contract is uniform per §4.7).
 
 ### 4.8 Retry / dead-letter minimum posture for Slice 2
 
