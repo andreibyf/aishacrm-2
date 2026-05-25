@@ -27,7 +27,7 @@ After Slice 2 lands all packets (2A–2E), the following becomes true that isn't
 
 - `finance-adapter-worker` exists as a deployable Coolify app process, gated by the three-tier worker enable gate.
 - An ERPNext sandbox-only adapter implements every required `AccountingAdapter` interface method per [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) §2.
-- The adapter job processor drains `finance.adapter_jobs WHERE status = 'queued'` via optimistic-lock claim, runs `assertWritePermitted` + the provider-writes-enabled code gate, calls the adapter (or skips the HTTP call when `FINANCE_PROVIDER_WRITES_ENABLED=false`), and emits canonical `finance.adapter.sync_queued` / `sync_succeeded` / `sync_failed` events.
+- The adapter job processor drains `finance.adapter_jobs WHERE status = 'queued'` via optimistic-lock claim, runs `assertWritePermitted` + the provider-writes-enabled code gate, calls the adapter (or skips the HTTP call when `FINANCE_PROVIDER_WRITES_ENABLED=false`), and emits canonical `finance.adapter.sync_succeeded` / `sync_failed` events. The companion `finance.adapter.sync_queued` event is emitted upstream by the `approveFinanceAction()` promoter (see §4.1, §4.7), not by the processor.
 - The `adapter_queue` projection (already implemented in Phase 2B-10) has actual events to consume.
 - Phase 3-9 (adapter worker staging activation) and Phase 3-10 (ERPNext sandbox proof execution) become executable because the runtime they need exists.
 
@@ -71,7 +71,7 @@ A live implementation of any 2A–2E packet requires the deploy owner's explicit
 
 - [ ] **Phase 3-1 baseline.** Branch `feat/finance-ops-runtime` at a descendant of `3c60d9ff`; 278/278 finance + projection + worker + route tests passing.
 - [ ] **Track E contract frozen.** [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) is the authoritative interface. Slice 2 implements against it without modifying it.
-- [ ] **Phase 2B-10 adapter_queue projection in place.** `backend/lib/finance/projections/adapterQueueProjection.js` already exists and consumes `finance.adapter.sync_queued` / `sync_succeeded` / `sync_failed` events. Slice 2's job processor emits the events that projection has been waiting for.
+- [ ] **Phase 2B-10 adapter_queue projection in place.** `backend/lib/finance/projections/adapterQueueProjection.js` already exists and consumes `finance.adapter.sync_queued` / `sync_succeeded` / `sync_failed` events. Slice 2's `approveFinanceAction()` promoter (§4.1, §4.7) emits `sync_queued`; Slice 2's job processor emits `sync_succeeded` / `sync_failed`. Together they produce the events that projection has been waiting for.
 - [ ] **Phase 2C-8 sandbox plan reviewed.** The two enforcement layers (config + code), the E6 metadata-stripping boundary, and the sandbox-`base_url`-only rule are non-negotiable.
 - [ ] **Phase 2C-9 ERPNext proof gate reviewed.** The §5 proof requirements bind the ERPNext adapter implementation; the §7 exit criteria become the Slice 2A acceptance test set.
 - [ ] **`ENABLE_FINANCE_PERSISTENT_EVENTS` unset on the backend.** The Slice 1 fail-closed guard at `backend/routes/finance.v2.js:48` remains structurally enforced. Slice 2 does not lift this guard.
@@ -308,7 +308,7 @@ Both staging defaults; both must be deliberately changed to permit any provider 
 
 ### 4.7 Sync event emission contract — `finance.adapter.sync_queued` / `sync_succeeded` / `sync_failed`
 
-**Producer:** Slice 2B's adapter job processor (`finance.adapter.sync_succeeded` / `sync_failed`) and Slice 2B's adapter-job creation path (`finance.adapter.sync_queued` — also emitted by the domain service's existing `simulateDealWon` and future job-create endpoints).
+**Producer:** Slice 2B's adapter job processor (`finance.adapter.sync_succeeded` / `sync_failed`) and Slice 2B's `approveFinanceAction()` promoter modification (`finance.adapter.sync_queued`, emitted at the `draft → queued` transition per §4.1). `simulateDealWon` (and any future adapter-job-creation path that targets approval-required journals) inserts the row in `status='draft'` and does NOT emit `sync_queued`; the event is exclusively the promoter's responsibility.
 
 **Consumer:** the already-implemented `adapter_queue` projection at `backend/lib/finance/projections/adapterQueueProjection.js` (Phase 2B-10). The projection has been waiting for these events since 2B-10; Slice 2 is the producer that makes it operational.
 
@@ -388,7 +388,7 @@ Both staging defaults; both must be deliberately changed to permit any provider 
 
 **What Slice 2 must verify** (in Slice 2D integration tests):
 
-1. After a `sync_queued` event is emitted by the new job processor, the projection's `queued` bucket contains the job within one runner dispatch cycle.
+1. After a `sync_queued` event is emitted by the `approveFinanceAction()` promoter (NOT by the job processor — see §4.1, §4.7), the projection's `queued` bucket contains the job within one runner dispatch cycle.
 2. After a `sync_succeeded` event is emitted, the job moves from `queued` to `completed`.
 3. After a `sync_failed` event (non-terminal), the job appears in `failed`.
 4. After a `sync_failed` event (terminal with `permanent: true`), the job remains in `failed` and the corresponding `finance.approvals` row exists.
@@ -410,10 +410,23 @@ The end-to-end flow after Slice 2 lands and Phase 3-9 + 3-10 execute:
 
 ```
 Operator runs /simulate/deal-won (controlled tenant, via Phase 3-7 mounted route)
-  → financeDomainService.simulateDealWon() creates adapter_job (in-memory bucket)
-    → also INSERT into finance.adapter_jobs (Slice 2B-modified domain service or new HTTP endpoint)
-      → finance.adapter.sync_queued event appended to finance.audit_events
-        → adapter_queue projection (Phase 3-5 projection worker) consumes → 'queued' bucket
+  → financeDomainService.simulateDealWon() creates adapter_job in-memory bucket
+    → also INSERT into finance.adapter_jobs with status='draft' (Slice 2B-modified
+      domain service via adapterJobEnqueuer helper — see §5.2)
+      → NO finance.adapter.sync_queued event (the draft row is not yet runnable)
+        → adapter_queue projection sees no event for this job yet
+        → finance.approvals row created in status='pending' for the journal entry
+          → approval_queue projection (Phase 3-5 projection worker) consumes → 'pending' bucket
+
+Approver calls POST /api/v2/finance/approvals/:id/approve (or equivalent)
+  → approveFinanceAction() marks approval row 'approved'
+    → adapterJobPromoter (Slice 2B new helper) finds all adapter_jobs WHERE
+      tenant_id=$1 AND aggregate_id=<approval target id> AND status='draft'
+      → atomically UPDATE each row status='draft' → 'queued'
+        → emit one finance.adapter.sync_queued event per promoted job
+          → adapter_queue projection (Phase 3-5 projection worker) consumes → 'queued' bucket
+  → journal entry stays at status='pending_approval' (Phase 3-8 §5.7 contract preserved;
+    journal posting is NOT a Slice 2 deliverable)
 
 Adapter worker (Phase 3-9 enabled) polls finance.adapter_jobs
   → claims the queued job via optimistic-lock UPDATE
@@ -523,11 +536,12 @@ Each packet is independently committable and reviewable. The packets have **defi
 
 **Test obligations:**
 
-- A `simulateDealWon` call through the modified domain service (2B) produces a `finance.adapter.sync_queued` event observable by the `adapter_queue` projection (already-implemented consumer).
+- A `simulateDealWon` call through the modified domain service (2B) inserts a `finance.adapter_jobs` row in `status='draft'` and emits NO `sync_queued` event; the `adapter_queue` projection has no observable change for this job yet (per the §4.1 lifecycle correction).
+- An `approveFinanceAction()` call against the approval linked to that `simulateDealWon` (2B) promotes the draft row `draft → queued` and emits one `finance.adapter.sync_queued` event; the `adapter_queue` projection (already-implemented consumer) then surfaces the job in its `queued` bucket within one runner dispatch cycle.
 - An adapter job processor run (2B) that succeeds produces a `sync_succeeded` event; projection moves the job from `queued` → `completed`.
 - A failed job (2B) produces a `sync_failed` event; projection moves to `failed`.
 - Terminal failure also creates the `finance.approvals` row visible via the existing `approval_queue` projection.
-- Replay of the full tenant event stream rebuilds both `adapter_queue` and `approval_queue` byte-identically.
+- Replay of the full tenant event stream rebuilds both `adapter_queue` and `approval_queue` byte-identically — including the absence of any `sync_queued` event for adapter_jobs that were created but never approved (the `draft` row exists in the table but contributes no event to replay).
 - All events use `aggregate_type = 'adapter_job'` per the frozen Track A vocabulary.
 
 **Dependencies:** needs both 2A and 2B landed. Can run in parallel with 2C and 2E once those land.
