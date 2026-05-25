@@ -14,6 +14,7 @@ import {
 } from './financeGovernanceDecision.js';
 import createFinanceEventStore from './financeEventStore.js';
 import { promoteLinkedAdapterJobs } from './adapterJobPromoter.js';
+import { mapJournalEntryToQuickBooksCanonical } from './accountingAdapters/quickbooksCanonicalAdapter.js';
 
 function createStore() {
   return {
@@ -469,19 +470,37 @@ export function createFinanceDomainService(opts = {}) {
         }),
       );
 
-      // Slice 2B review P1: the adapter_job must carry the canonical object
-      // snapshot so the Slice 2B processor (`runAdapterPollCycle` →
-      // `buildProviderPayload(job.payload, runtimePolicy)`) has the actual
-      // canonical data to strip + forward to the provider. Without this,
-      // the processor builds `{}` and the first sandbox-enabled push lands
-      // empty. The snapshot is taken AT CREATE TIME so the row carries the
-      // payload the approver was looking at when they queued the work — even
-      // if the journal entry mutates later (it shouldn't, but the snapshot
-      // is the durable contract).
+      // Slice 2B review P1 + follow-up P1: the adapter_job must carry the
+      // canonical object snapshot in the EXACT SHAPE the Slice 2A ERPNext
+      // adapter's `fromCanonical(canonicalObject, objectType)` consumes —
+      // i.e., the provider-neutral canonical with root-level fields like
+      // `doc_number`, `txn_date`, `private_note`, `currency`, `lines` per
+      // `ERPNEXT_PROVIDER_OBJECT_MAP['JournalEntry'].fields`. Storing the
+      // raw in-memory `draftEntry` (with fields like `entry_number`,
+      // `created_at`, `memo`) would mean `fromCanonical()` finds no
+      // recognized keys and the adapter pushes an empty body. Wrapping
+      // under a `journal_entry` key would have the same effect (fields not
+      // at root).
       //
-      // The snapshot is deep-cloned to decouple from future bucket mutations.
-      // 2A's `buildProviderPayload` will strip the 11-item internal-metadata
-      // denylist before the payload leaves the processor → adapter boundary.
+      // We resolve both by running the existing canonical mapper at the
+      // producer boundary. `mapJournalEntryToQuickBooksCanonical` (despite
+      // its name) is provider-neutral — it produces the same
+      // `{ doc_number, txn_date, private_note, currency, lines }` shape
+      // that BOTH QuickBooks and the ERPNext adapter consume. The processor
+      // then forwards this directly via `buildProviderPayload` (which
+      // strips internal metadata) into `adapter.pushDraft`.
+      //
+      // The processor maps `aggregate_type='journal_entry'` →
+      // `objectType='JournalEntry'` per `OBJECT_TYPE_MAP` in
+      // `adapterJobProcessor.js`, since the Track A envelope vocabulary
+      // (snake_case) differs from the provider object-type vocabulary
+      // (PascalCase per `ERPNEXT_PROVIDER_OBJECT_MAP` keys).
+      //
+      // The canonical is cloned implicitly by the mapper (which builds a
+      // fresh object from selected fields), so future bucket mutations
+      // cannot leak into the persisted payload.
+      const adapterJobPayload = mapJournalEntryToQuickBooksCanonical(draftEntry);
+
       const adapterJob = {
         id: `adapter_job_${generateId()}`,
         tenant_id: tenantId,
@@ -491,9 +510,7 @@ export function createFinanceDomainService(opts = {}) {
         aggregate_id: draftEntry.id,
         operation: 'push_draft',
         mode: 'draft_only',
-        payload: {
-          journal_entry: clone(draftEntry),
-        },
+        payload: adapterJobPayload,
         created_at: now(),
         updated_at: now(),
       };

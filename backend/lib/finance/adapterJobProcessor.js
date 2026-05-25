@@ -353,12 +353,28 @@ async function processSingleJob({
         `Adapter '${job.provider}' does not implement '${adapterMethod}'`,
       );
     }
+    // Map Track A's snake_case aggregate_type vocabulary to the provider's
+    // PascalCase objectType vocabulary (per AGGREGATE_TYPE_TO_OBJECT_TYPE
+    // above). The two vocabularies are intentionally separate; the
+    // aggregate_type is the event-stream entity name (stable across
+    // providers) and the objectType is the per-adapter doc-type lookup key
+    // (e.g., 'journal_entry' → 'JournalEntry' for the ERPNext adapter).
+    //
+    // If the mapping is missing, throw AdapterConfigError — the processor
+    // catches it below and classifies it as a PERMANENT failure (no retry).
+    let objectType;
+    try {
+      objectType = aggregateTypeToObjectType(job.aggregate_type);
+    } catch (mapErr) {
+      throw mapErr; // bubbles to the outer try/catch which classifies as permanent
+    }
+
     // ctx shape aligns with Slice 2A's createErpnextSandboxAdapter contract:
     // ctx accepts either a bare objectType string OR { objectType, runtimePolicy }
     // per the subagent's design call documented in the 2A report. We pass the
     // rich object form so the adapter can use mode + provider when needed.
     const result = await adapter[adapterMethod](providerPayload, {
-      objectType: job.aggregate_type,
+      objectType,
       runtimePolicy: { provider: job.provider, mode: job.mode },
       tenantId,
       jobId: job.id,
@@ -383,6 +399,22 @@ async function processSingleJob({
         attempts,
       };
     }
+    // Config errors (missing aggregate_type → objectType mapping, adapter
+    // misconfiguration like a non-sandbox base URL) are permanent too —
+    // retrying with the same job and code state will deterministically fail
+    // the same way. The named error class lives in
+    // accountingAdapters/erpnextSandboxAdapter.js (`AdapterConfigError`);
+    // we match by `code` to avoid coupling the processor to a specific
+    // adapter import.
+    if (callErr?.code === 'FINANCE_ADAPTER_CONFIG_INVALID') {
+      return {
+        outcome: 'failed',
+        permanent: true,
+        errorMessage: callErr.message,
+        errorCode: callErr.code,
+        attempts,
+      };
+    }
     // All other errors are transient and may retry.
     const isPermanent = attempts >= maxAttempts;
     const nextAttemptAt = isPermanent
@@ -397,6 +429,40 @@ async function processSingleJob({
       attempts,
     };
   }
+}
+
+/**
+ * Map the Track A `aggregate_type` vocabulary (snake_case domain entity
+ * names — see `simulateDealWon`, `createDraftInvoice`, etc.) onto the
+ * provider-facing `objectType` vocabulary (PascalCase per
+ * `ERPNEXT_PROVIDER_OBJECT_MAP` keys). The two vocabularies are intentionally
+ * separate: `aggregate_type` is the AiSHA event-stream entity name and stays
+ * stable across all providers; `objectType` is the per-adapter doc-type
+ * lookup key.
+ *
+ * Slice 2 ships `journal_entry → JournalEntry` and `account → Account`.
+ * Future entity types (invoice, customer, payment) are added here as their
+ * canonical mappers and adapter object maps land.
+ *
+ * Throws AdapterConfigError if the aggregate_type has no provider object-type
+ * mapping — caller (the processor) classifies that as a permanent failure
+ * (the job will not be retried; an operator must add the mapping).
+ */
+export const AGGREGATE_TYPE_TO_OBJECT_TYPE = Object.freeze({
+  journal_entry: 'JournalEntry',
+  account: 'Account',
+});
+
+export function aggregateTypeToObjectType(aggregateType) {
+  const mapped = AGGREGATE_TYPE_TO_OBJECT_TYPE[aggregateType];
+  if (!mapped) {
+    const err = new Error(
+      `No provider objectType mapping for aggregate_type '${aggregateType}' — add an entry to AGGREGATE_TYPE_TO_OBJECT_TYPE`,
+    );
+    err.code = 'FINANCE_ADAPTER_CONFIG_INVALID';
+    throw err;
+  }
+  return mapped;
 }
 
 function adapterMethodForOperation(operation) {

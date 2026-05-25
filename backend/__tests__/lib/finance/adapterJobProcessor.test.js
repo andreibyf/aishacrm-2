@@ -285,7 +285,10 @@ test('runAdapterPollCycle in-memory: invokes adapter and emits sync_succeeded wi
     const adapter = makeAdapter({
       pushDraft: async (_payload, ctx) => {
         adapterCalled = true;
-        assert.equal(ctx.objectType, 'journal_entry');
+        // Processor maps aggregate_type='journal_entry' (Track A vocabulary)
+        // → objectType='JournalEntry' (provider object-type vocabulary,
+        // per AGGREGATE_TYPE_TO_OBJECT_TYPE in adapterJobProcessor.js).
+        assert.equal(ctx.objectType, 'JournalEntry');
         assert.equal(ctx.runtimePolicy.provider, 'erpnext');
         assert.equal(ctx.runtimePolicy.mode, 'draft_only');
         assert.equal(ctx.tenantId, TENANT_ID);
@@ -492,8 +495,64 @@ test('runAdapterPollCycle in-memory: payload-build failure is PERMANENT (no retr
 
 import createFinanceDomainService from '../../../lib/finance/financeDomainService.js';
 import { buildProviderPayload } from '../../../lib/finance/accountingAdapters/providerPayloadBuilder.js';
+import { createErpnextSandboxAdapter } from '../../../lib/finance/accountingAdapters/erpnextSandboxAdapter.js';
+import {
+  AGGREGATE_TYPE_TO_OBJECT_TYPE,
+  aggregateTypeToObjectType,
+} from '../../../lib/finance/adapterJobProcessor.js';
 
-test('END-TO-END: simulateDealWon → approveFinanceAction → runAdapterPollCycle feeds canonical journal_entry to the adapter (review P1 fix)', async () => {
+test('aggregateTypeToObjectType maps Track A snake_case to provider PascalCase', () => {
+  assert.equal(aggregateTypeToObjectType('journal_entry'), 'JournalEntry');
+  assert.equal(aggregateTypeToObjectType('account'), 'Account');
+  assert.equal(AGGREGATE_TYPE_TO_OBJECT_TYPE.journal_entry, 'JournalEntry');
+});
+
+test('aggregateTypeToObjectType throws permanent-classified error for unknown aggregate_type', () => {
+  assert.throws(
+    () => aggregateTypeToObjectType('unknown_thing'),
+    (err) =>
+      err.code === 'FINANCE_ADAPTER_CONFIG_INVALID' &&
+      /No provider objectType mapping/.test(err.message),
+  );
+});
+
+test('runAdapterPollCycle: unknown aggregate_type → permanent failure (not retried)', async () => {
+  const originalEnv = process.env.FINANCE_PROVIDER_WRITES_ENABLED;
+  process.env.FINANCE_PROVIDER_WRITES_ENABLED = 'true';
+
+  try {
+    const job = makeQueuedJob({ aggregate_type: 'unknown_thing' });
+    const bucket = makeBucket([job]);
+    const eventStore = createFinanceEventStore();
+    const result = await runAdapterPollCycle({
+      bucket,
+      adapters: new Map([['erpnext', makeAdapter()]]),
+      tenantIds: [TENANT_ID],
+      eventStore,
+    });
+    assert.equal(result.failed_count, 1);
+    assert.equal(result.summary[0].permanent, true, 'config error is permanent (no retry)');
+  } finally {
+    if (originalEnv === undefined) delete process.env.FINANCE_PROVIDER_WRITES_ENABLED;
+    else process.env.FINANCE_PROVIDER_WRITES_ENABLED = originalEnv;
+  }
+});
+
+test('END-TO-END: simulateDealWon → approveFinanceAction → runAdapterPollCycle invokes the REAL ERPNext adapter (P1 follow-up)', async () => {
+  // This test exercises the FULL producer → consumer chain against the REAL
+  // Slice 2A `createErpnextSandboxAdapter` with a mocked httpClient. The
+  // earlier "end-to-end" test used a capturing fake adapter which proved
+  // only that the processor forwarded SOME object to SOME adapter — it
+  // could not detect the objectType vocabulary mismatch or the payload-shape
+  // mismatch that Codex flagged. This test invokes the real `pushDraft`,
+  // which:
+  //   1) requires objectType='JournalEntry' (PascalCase) — fails with
+  //      'Unsupported objectType: journal_entry' if the processor passes the
+  //      raw aggregate_type.
+  //   2) requires the canonical at root with `doc_number / txn_date /
+  //      private_note / currency / lines` — fails to map anything if the
+  //      payload is wrapped under `journal_entry`.
+  // So if either fix is missing, this test fails.
   const originalEnv = process.env.FINANCE_PROVIDER_WRITES_ENABLED;
   process.env.FINANCE_PROVIDER_WRITES_ENABLED = 'true';
 
@@ -501,41 +560,62 @@ test('END-TO-END: simulateDealWon → approveFinanceAction → runAdapterPollCyc
     const eventStore = createFinanceEventStore();
     const service = createFinanceDomainService({ eventStore });
 
-    // Step 1 — producer creates a draft adapter_job that CARRIES a payload.
+    // Step 1 — producer creates a draft adapter_job with the canonical
+    // payload shape (root-level doc_number/txn_date/lines per the
+    // mapJournalEntryToQuickBooksCanonical contract).
     const sim = await service.simulateDealWon({
       tenantId: TENANT_ID,
       actor: { id: 'user-1', type: 'human' },
       payload: { provider: 'erpnext', amount_cents: 12345 },
     });
     assert.equal(sim.adapter_job.status, 'draft');
-    assert.ok(sim.adapter_job.payload?.journal_entry, 'simulateDealWon must carry the canonical snapshot');
+    assert.ok(
+      sim.adapter_job.payload?.doc_number,
+      'simulateDealWon must persist the canonical at root (doc_number)',
+    );
+    assert.ok(
+      Array.isArray(sim.adapter_job.payload?.lines),
+      'simulateDealWon must persist the canonical at root (lines)',
+    );
+    assert.ok(
+      !('journal_entry' in sim.adapter_job.payload),
+      'no wrapper key — canonical lives at root per the ERPNext adapter contract',
+    );
 
-    // Step 2 — approver promotes draft → queued; promoter emits sync_queued.
+    // Step 2 — approver promotes draft → queued.
     const approveResult = await service.approveFinanceAction({
       tenantId: TENANT_ID,
       approvalId: sim.approval.id,
       actor: { id: 'approver-1', type: 'human' },
     });
-    assert.equal(approveResult.promoted_adapter_jobs.length, 1, 'promoter ran');
+    assert.equal(approveResult.promoted_adapter_jobs.length, 1);
 
-    // The service's returned adapter_job is a clone — the in-bucket row is
-    // mutated to status='queued' by the promoter. For the processor handoff
-    // we reconstruct a bucket holding the post-promotion job using the data
-    // from the simulateDealWon return (which carries the canonical payload
-    // per the P1 fix). The payload field is what the processor must forward
-    // to the adapter — that's the specific contract the cross-packet
-    // integration claim depends on.
     const queuedJob = { ...sim.adapter_job, status: 'queued' };
-    assert.ok(queuedJob.payload?.journal_entry, 'P1 fix: payload survives the simulateDealWon return');
 
-    // Step 3 — register a fake adapter that captures the canonical it receives.
-    let received = null;
-    const adapter = {
-      pushDraft: async (canonical, ctx) => {
-        received = { canonical, ctx };
-        return { provider_id: 'ERPNEXT-CAPTURED' };
+    // Step 3 — register the REAL ERPNext sandbox adapter with a mock
+    // httpClient that captures the HTTP body the adapter would POST to
+    // ERPNext. If the objectType or payload-shape fix is missing, the
+    // adapter throws BEFORE httpClient.post is called — captured will stay
+    // null and we'll catch it via the succeeded_count assertion.
+    let capturedBody = null;
+    let capturedPath = null;
+    const httpClient = {
+      post: async (path, body) => {
+        capturedPath = path;
+        capturedBody = body;
+        return { data: { name: 'JE-DRAFT-001', docstatus: 0 } };
       },
+      // Adapter may probe other methods at construction or pushDraft time;
+      // stubs return empty so the test stays focused on pushDraft.
+      get: async () => ({ data: {} }),
     };
+    const erpnext = createErpnextSandboxAdapter({
+      baseUrl: 'https://sandbox.example.com',
+      apiKey: 'test_key',
+      apiSecret: 'test_secret',
+      httpClient,
+      sandboxAllowlist: ['sandbox.example.com'],
+    });
 
     const bucket = {
       journalEntries: [],
@@ -547,34 +627,29 @@ test('END-TO-END: simulateDealWon → approveFinanceAction → runAdapterPollCyc
 
     const result = await runAdapterPollCycle({
       bucket,
-      adapters: new Map([['erpnext', adapter]]),
+      adapters: new Map([['erpnext', erpnext]]),
       tenantIds: [TENANT_ID],
       eventStore,
       buildProviderPayload,
     });
 
-    assert.equal(result.succeeded_count, 1);
-    assert.ok(received, 'adapter was invoked');
+    // Success means: (a) processor mapped aggregate_type → JournalEntry,
+    // (b) adapter accepted the objectType, (c) fromCanonical mapped the
+    // root-level canonical fields to ERPNext fields, (d) httpClient.post
+    // received a valid body.
+    assert.equal(result.succeeded_count, 1, 'real ERPNext adapter pushDraft succeeded end-to-end');
+    assert.ok(capturedBody, 'httpClient.post was called by the real adapter');
     assert.ok(
-      received.canonical?.journal_entry,
-      'adapter received the canonical journal_entry snapshot from simulateDealWon (P1 contract)',
+      capturedPath?.includes('/api/resource/Journal%20Entry'),
+      `path uses ERPNext docType (got: ${capturedPath})`,
     );
-    assert.equal(
-      received.canonical.journal_entry.id,
-      sim.journal_entry.id,
-      'snapshot id matches the original draft entry',
-    );
-    // Internal metadata should have been stripped by 2A's buildProviderPayload.
-    // The canonical journal entry carries fields like braid_trace_id /
-    // governance_policy_snapshot in some flows — verify the boundary did its job.
-    assert.ok(
-      !('braid_trace_id' in received.canonical.journal_entry),
-      'buildProviderPayload stripped braid_trace_id from the forwarded canonical',
-    );
-    assert.ok(
-      !('governance_policy_snapshot' in received.canonical.journal_entry),
-      'buildProviderPayload stripped governance_policy_snapshot from the forwarded canonical',
-    );
+    // ERPNext docType + docstatus invariants from §4.4
+    assert.equal(capturedBody.doctype, 'Journal Entry');
+    assert.equal(capturedBody.docstatus, 0, 'always docstatus=0 for sandbox/draft-only');
+    // Canonical-mapped ERPNext fields present
+    assert.ok(capturedBody.posting_date, 'mapped txn_date → posting_date');
+    assert.ok(Array.isArray(capturedBody.accounts), 'mapped lines → accounts array');
+    assert.ok(capturedBody.accounts.length >= 2, 'lines preserved through canonical mapping');
   } finally {
     if (originalEnv === undefined) delete process.env.FINANCE_PROVIDER_WRITES_ENABLED;
     else process.env.FINANCE_PROVIDER_WRITES_ENABLED = originalEnv;

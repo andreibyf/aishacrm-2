@@ -505,7 +505,7 @@ test('financeDomainService approveFinanceAction is idempotent on the promoter si
 // processor will forward to the provider. Without this, runAdapterPollCycle
 // builds the outbound provider payload from `job.payload || {}` and the first
 // sandbox-enabled push collapses to an empty body.
-test('financeDomainService simulateDealWon adapter_job carries a payload snapshot of the draft journal entry (P1 fix)', async () => {
+test('financeDomainService simulateDealWon adapter_job carries the CANONICAL journal entry shape (P1 follow-up: doc_number/txn_date/lines at root)', async () => {
   const service = createFinanceDomainService();
   const sim = await service.simulateDealWon({
     tenantId: TENANT_ID,
@@ -515,18 +515,33 @@ test('financeDomainService simulateDealWon adapter_job carries a payload snapsho
 
   const job = sim.adapter_job;
   assert.ok(job.payload, 'adapter_job must carry a payload field for the processor');
+
+  // The payload is the canonical journal entry per
+  // mapJournalEntryToQuickBooksCanonical — same shape consumed by
+  // ERPNext adapter's fromCanonical() (per
+  // ERPNEXT_PROVIDER_OBJECT_MAP['JournalEntry'].fields:
+  // doc_number / txn_date / private_note / currency / lines, ALL at root).
+  // Wrapping under `payload.journal_entry` was the prior bug — it meant
+  // fromCanonical() found no recognized keys.
+  assert.ok('doc_number' in job.payload, 'payload has canonical doc_number at root');
+  assert.ok('txn_date' in job.payload, 'payload has canonical txn_date at root');
+  assert.ok('private_note' in job.payload, 'payload has canonical private_note at root');
+  assert.ok('currency' in job.payload, 'payload has canonical currency at root');
+  assert.ok(Array.isArray(job.payload.lines), 'payload has canonical lines array at root');
+
+  // No wrapper key — the prior shape was payload.journal_entry.{...}; the
+  // adapter expects fields directly at root.
   assert.ok(
-    job.payload.journal_entry,
-    'adapter_job.payload must contain the canonical journal entry snapshot',
+    !('journal_entry' in job.payload),
+    'no journal_entry wrapper key — canonical fields live at root per the ERPNext adapter contract',
   );
-  assert.equal(
-    job.payload.journal_entry.id,
-    sim.journal_entry.id,
-    'payload journal entry id matches the linked draft entry',
-  );
-  // Snapshot is independent — mutating the snapshot does not affect the bucket
-  // entry (and vice versa).
-  job.payload.journal_entry.id = 'mutated';
+
+  // Currency is upper-cased per the canonical mapper.
+  assert.equal(job.payload.currency, 'USD');
+
+  // Snapshot is independent — the mapper builds a fresh object, so mutating
+  // the payload does not affect the bucket entry.
+  job.payload.doc_number = 'mutated';
   const refetch = await service.listJournalEntries(TENANT_ID);
-  assert.notEqual(refetch[0].id, 'mutated', 'snapshot is deep-cloned at create time');
+  assert.notEqual(refetch[0].entry_number, 'mutated', 'mapper produces a fresh canonical object');
 });
