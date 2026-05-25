@@ -175,7 +175,7 @@ Verified at unit-test level by Slice 2A's `erpnextSandboxAdapter.test.js` (26 te
 - `finance.adapter.sync_queued` (from the promoter inside `approveFinanceAction`)
 - `finance.adapter.sync_succeeded` (from the adapter worker's processor)
 
-All adapter events use `aggregate_type = 'adapter_job'`, `aggregate_id = <job UUID>`, no `object_type` / `object_id` drift. The `adapter_queue` projection rebuilt via `runner.replay` produces the same `completed` bucket entry the live dispatch produced — replayability is proven by the Slice 2D integration test and re-verifiable in 3-10 by running a manual `replay` against the staging projection store.
+All adapter events use the Track A envelope `aggregate_type = 'adapter_job'` + `aggregate_id = <job UUID>` (per `slice-2-adapter-runtime-design.md` §4.7); the envelope columns themselves never carry `object_type` / `object_id`. (Note: the event _payload body_ does include `object_type` / `object_id` fields by current Slice 2 design — `adapterJobProcessor.js:155-156`/`:185-186` for `sync_succeeded` / `sync_failed`, `adapterJobPromoter.js:56-57` for `sync_queued` — duplicating the envelope's aggregate vocabulary as a convenience for downstream payload consumers that do not navigate to `payload.adapter_job.aggregate_type`. The no-drift contract is envelope-level only; payload presence is intentional.) The `adapter_queue` projection rebuilt via `runner.replay` produces the same `completed` bucket entry the live dispatch produced — replayability is proven by the Slice 2D integration test and re-verifiable in 3-10 by running a manual `replay` against the staging projection store.
 
 ### 5.6 Producer split holds end-to-end (the Slice 2-0 §4.7 invariant)
 
@@ -369,7 +369,7 @@ limit 5;
 **Pass:**
 - `finance.adapter_jobs.status = 'queued'`.
 - Exactly one new `finance.adapter.sync_queued` row.
-- `aggregate_type = 'adapter_job'`, `aggregate_id = <job-uuid>` (NOT `object_type` / `object_id`).
+- Envelope columns are `aggregate_type = 'adapter_job'` + `aggregate_id = <job-uuid>` (the envelope itself never carries `object_type` / `object_id` columns — that's the Track A no-drift contract). The payload body may carry `object_type` / `object_id` as a duplicate-for-convenience pair; that's expected per the current Slice 2 design and is not a drift violation.
 
 **Fail:** any of the above wrong → halt; the promoter or the event envelope is broken.
 
@@ -527,7 +527,7 @@ limit 50;
 
 **Critical invariants to verify:**
 - **Producer split:** every `sync_queued` precedes the corresponding `sync_succeeded` for the same `aggregate_id`. The `sync_queued` row's `created_at` is within ~1 s of the `approval.approved` row (promoter ran inside the approval transaction). The `sync_succeeded` row's `created_at` is later, on a worker-poll-cycle boundary.
-- **Envelope:** every `finance.adapter.*` row has `aggregate_type = 'adapter_job'` and `aggregate_id = <job-uuid>`. NO `object_type` / `object_id` in any column or payload field. Verify with: `select payload from finance.audit_events where event_type like 'finance.adapter.%' and (payload ? 'object_type' or payload ? 'object_id')` returns zero rows.
+- **Envelope:** every `finance.adapter.*` row has envelope columns `aggregate_type = 'adapter_job'` and `aggregate_id = <job-uuid>`. The envelope itself never carries `object_type` / `object_id` columns — that's the Track A no-drift contract (`slice-2-adapter-runtime-design.md` §4.7), and the Slice 2D `ENVELOPE` test (`adapterQueueProjection.integration.test.js:485-487`) is the in-process assertion of exactly this property. **The payload body is a different matter:** by current Slice 2 design, every `finance.adapter.*` payload includes `object_type` and `object_id` as a duplicate-for-convenience pair (`adapterJobProcessor.js:155-156`/`:185-186` for `sync_succeeded` / `sync_failed`; `adapterJobPromoter.js:56-57` for `sync_queued`). That payload-side presence is **not** a drift violation; the no-drift contract is envelope-only. Operators evaluating this step should verify with a query that inspects the envelope columns directly (e.g. `select event_type, aggregate_type, aggregate_id from finance.audit_events where event_type like 'finance.adapter.%' and (aggregate_type <> 'adapter_job')` returns zero rows), not the payload body.
 - **Embedded snapshot:** every `finance.adapter.*` event payload contains an `adapter_job` snapshot matching the contemporaneous adapter_job state.
 
 ### 6.8 Final-state verification (the journal-stays-`pending_approval` contract + no production action)
@@ -585,7 +585,7 @@ Phase 3-10 passes only when every item in §6.4 through §6.8 passes, AND:
 - [ ] The adapter's `pushDraft` created an ERPNext document with `docstatus: 0`; the ERPNext document was never submitted/finalised.
 - [ ] `toCanonical` / `fromCanonical` mapping is correct end-to-end (verified by the ERPNext doc matching the canonical journal entry's fields).
 - [ ] The ERPNext-bound payload contained ZERO internal runtime metadata (`tenant_id`, `braid_trace_id`, `correlation_id`, `causation_id`, governance/policy fields, leading-underscore keys).
-- [ ] Adapter events (`sync_queued`, `sync_succeeded`) emitted with the Track A envelope (`aggregate_type='adapter_job'`, no `object_*` drift); replay reconstructs the `adapter_queue` projection identically.
+- [ ] Adapter events (`sync_queued`, `sync_succeeded`) emitted with the Track A envelope (`aggregate_type='adapter_job'`, no `object_*` columns at envelope level — payload-body `object_*` duplicates are expected per §5.5); replay reconstructs the `adapter_queue` projection identically.
 - [ ] The negative tests passed (`pushFinal` / `voidRecord` unreachable under `draft_only`; dry-run mode with `FINANCE_PROVIDER_WRITES_ENABLED=false` did not call the HTTP endpoint).
 - [ ] Producer split holds: `sync_queued` always from the promoter, `sync_succeeded` / `sync_failed` always from the processor.
 - [ ] No QuickBooks / Xero / NetSuite OAuth was configured.
@@ -682,7 +682,7 @@ Phase 3-10 stop conditions are extensive because 3-10 is the most consequential 
 - ERPNext document contains any internal AiSHA metadata (`tenant_id`, `braid_trace_id`, etc.). Halt; the `buildProviderPayload` boundary is broken.
 - `finance.audit_events` shows `finance.adapter.sync_queued` emitted by the processor (not the promoter). Halt; producer split is broken.
 - `finance.audit_events` shows `finance.adapter.sync_succeeded` or `sync_failed` emitted before approval. Halt; the processor processed an unapproved draft.
-- Any `finance.adapter.*` event has `object_type` / `object_id` columns or payload fields (must be `aggregate_type` / `aggregate_id` only). Halt; envelope drift.
+- Any `finance.adapter.*` event has `object_type` / `object_id` as *envelope columns* (the envelope must carry only `aggregate_type` / `aggregate_id` per the Track A contract). Halt; envelope drift. Payload-body `object_type` / `object_id` are expected per the current Slice 2 design and are **not** a stop condition.
 - Any journal entry transitions to `posted` during 3-10. Halt; auto-posting was introduced and must be removed.
 - Adapter worker logs `[finance-adapter-worker] poll cycle crashed` during the §6.6 window. Halt; revert the kill switch immediately, then investigate.
 - ERPNext sandbox endpoint becomes unreachable during the §6.6 window. Halt; revert the kill switch (no point waiting if the HTTP call would fail).
@@ -709,7 +709,7 @@ Phase 3-10 stop conditions are extensive because 3-10 is the most consequential 
 | **`FINANCE_ADAPTER_MODE=draft_only` preserved throughout.** Never set to anything else.                                                                                                                                                                                                                                                 | 2C-9 §5.3                               | Confirmed.                      |
 | **Producer split preserved.** `sync_queued` only from the promoter; `sync_succeeded` / `sync_failed` only from the processor. §6.7 evidence confirms.                                                                                                                                                                                  | `slice-2-adapter-runtime-design.md` §4.7 / Slice 2D | Confirmed.                      |
 | **Draft-before-approval semantics preserved.** `simulateDealWon` creates `adapter_job.status='draft'` with no `sync_queued` event. The promoter inside `approveFinanceAction` is what emits `sync_queued`.                                                                                                                              | `slice-2-adapter-runtime-design.md` §4.1 / Slice 2D | Confirmed.                      |
-| **Event envelope: `aggregate_type='adapter_job'`, no `object_*` drift.** §6.7 evidence confirms.                                                                                                                                                                                                                                        | Track A freeze / Slice 2D               | Confirmed.                      |
+| **Event envelope (columns only): `aggregate_type='adapter_job'`, no `object_*` envelope columns.** Per `slice-2-adapter-runtime-design.md` §4.7 and the Slice 2D `ENVELOPE` test (`adapterQueueProjection.integration.test.js:485-487`). The no-drift contract is envelope-level; payload-body `object_type` / `object_id` are present by current design and are not a drift violation. §6.7 evidence confirms the envelope columns. | Track A freeze / Slice 2D               | Confirmed.                      |
 | **Provider payload contains zero internal metadata.** `buildProviderPayload` boundary strips the 11-item denylist; `assertNoInternalMetadata` would assert this in tests. §6.6.d evidence confirms.                                                                                                                                     | `slice-2-adapter-runtime-design.md` §4.5 / E6 | Confirmed.                      |
 | **No `ENABLE_FINANCE_PERSISTENT_EVENTS` flip by this task.** The lift to `true` on the backend is a prerequisite (per §3) that must already be in place before 3-10 runs; 3-10 itself doesn't touch the flag.                                                                                                                          | Phase 3-1 §7 / separate later slice     | Confirmed.                      |
 | **No QuickBooks / Xero / NetSuite live integration.** Neither adapter is implemented; neither is registered.                                                                                                                                                                                                                           | E5                                      | Confirmed.                      |
@@ -735,7 +735,7 @@ This document is the Phase 3-10 deliverable when paired with the matching CHANGE
 - [x] `tenant_integrations` row procedure documented but NOT executed (§6.2)
 - [x] Backend route calls (`simulateDealWon`, `approveFinanceAction`) documented but NOT executed (§6.4, §6.5)
 - [x] Producer split end-to-end (§5.6, §6.7 with per-event-type producer attribution)
-- [x] Adapter event envelope (`aggregate_type='adapter_job'`, no `object_*` drift) verified at §5.5, §6.7, §11
+- [x] Adapter event envelope columns (`aggregate_type='adapter_job'`, no `object_*` envelope columns) verified at §5.5, §6.7, §11; payload-body `object_*` presence acknowledged as expected per the current Slice 2 design (§5.5)
 - [x] Internal metadata stripped from ERPNext-bound payload (§5.4, §6.6.d evidence capture)
 - [x] `adapter_queue` projection state expectations described for queued / completed / failed buckets (§5.5, §6.5 verification, §6.8)
 - [x] Journal stays `pending_approval` end-to-end (§5.7, §6.8 verification, §11)
