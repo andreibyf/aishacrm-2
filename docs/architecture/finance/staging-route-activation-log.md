@@ -139,7 +139,7 @@ on conflict (tenant_id, module_name) do update
 
 (If the `modulesettings` table's primary-key / unique constraint shape differs, adjust the `on conflict` clause accordingly — verify against the staging DB schema before running. The intent is "ensure exactly one row exists for this tenant + module, with `is_enabled = true`.")
 
-**Strict scope reminder:** the canonical module key is `'financeOps'` per `FINANCE_MODULE_KEYS.CANONICAL` at `backend/lib/finance/financeModuleGate.js:12`. The alias `'enterpriseFinance'` is treated as equivalent by `isFinanceOpsEnabled()` at line 29 (per R-6 deduplication logic, canonical wins on conflict). 3-7 uses the canonical key only — do not set the alias for any tenant.
+**Strict scope reminder:** the canonical module key is `'financeOps'` per `FINANCE_MODULE_KEYS.CANONICAL` at `backend/lib/finance/financeModuleGate.js:12`. The alias `'enterpriseFinance'` is treated as equivalent by `isFinanceOpsEnabled()` at line 29 (per R-6 deduplication logic, canonical wins on conflict). 3-7 sets the canonical key — do not add a new alias row for any tenant. **Note on tolerated legacy state:** if a staging tenant already carries an `enterpriseFinance` alias row from prior dev work, the runtime still behaves correctly because the gate code resolves canonical-vs-alias conflicts in favor of `financeOps`. A pre-existing alias row for the controlled tenant is tolerated; 3-7 does not require deleting it (though after 3-7 the canonical row is what governs). The §8 inventory query treats an alias row as informational, not as a 3-7 failure.
 
 **Tenant isolation reminder:** the `where` / `tenant_id` in the SQL is `a11dfb63-4b18-4eb8-872e-747af2e37c46` and nothing else. The drill must NOT touch `modulesettings.financeOps` for any other tenant. Per [`controlled-tenant-enablement.md`](./controlled-tenant-enablement.md) §2, "one tenant only" is structurally enforced by setting the flag for exactly one `tenant_id`.
 
@@ -243,14 +243,28 @@ ssh andreibyf@147.189.173.237 'docker logs --tail 100 staging-backend-heavy 2>&1
 # Expected: backend startup log lines indicating the finance route was mounted; NO log line about the
 # createFinanceV2Routes constructor throwing (which would indicate ENABLE_FINANCE_PERSISTENT_EVENTS=true).
 
-# §5.3 confirm the module flag row exists for the controlled tenant only:
+# §5.3 confirm the module flag inventory for the controlled tenant only:
 # (run from the staging Supabase SQL editor as service_role)
 select tenant_id, module_name, is_enabled
 from modulesettings
 where module_name in ('financeOps', 'enterpriseFinance')
+  and is_enabled = true
 order by tenant_id, module_name;
-# Expected: exactly one row with tenant_id = 'a11dfb63-4b18-4eb8-872e-747af2e37c46',
-# module_name = 'financeOps', is_enabled = true. No other tenant should appear.
+# Expected (pass condition):
+#   - The controlled tenant (a11dfb63-4b18-4eb8-872e-747af2e37c46) MUST have a
+#     canonical 'financeOps' row with is_enabled = true.
+#   - No other tenant_id may appear in the result — no other tenant has either
+#     'financeOps' or 'enterpriseFinance' enabled.
+# Tolerated (not a failure):
+#   - The controlled tenant may additionally have an 'enterpriseFinance' alias
+#     row with is_enabled = true from legacy dev work. The gate code at
+#     financeModuleGate.js:29 resolves canonical-vs-alias conflicts in favor of
+#     the canonical 'financeOps' row, so the runtime is unaffected.
+# Fail:
+#   - The controlled tenant is missing the canonical 'financeOps' row → access
+#     is denied; rerun §5.3 SQL.
+#   - Any other tenant appears in the result → one-tenant-only invariant
+#     violated; halt per §10 and investigate.
 
 # §5.4 controlled-tenant 200 check (curl as the controlled-tenant test user):
 curl -s -o /dev/null -w "%{http_code}\n" \
