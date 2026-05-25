@@ -458,11 +458,62 @@ if (
     statement_timeout: Number.parseInt(process.env.FINANCE_DB_STATEMENT_TIMEOUT_MS || '30000', 10),
   });
 
-  // Adapter registry — empty in the Slice 2C entry block. Phase 3-9 / later
-  // packets will register the ERPNext sandbox adapter (Slice 2A) here per
-  // the §4.4 boundary, after constructing the providerPayloadBuilder and
-  // loading per-tenant credentials from tenant_integrations.
+  // Adapter registry — populated from environment per the Slice 2A boundary.
+  // Per the Slice 2 cross-packet review P2 catch: a Slice-2C worker booted
+  // with an empty Map would skip every claimed job ("no adapter registered
+  // for provider X"), which defeats the integration claim. We register the
+  // ERPNext sandbox adapter at boot when its credentials are present in env;
+  // otherwise leave the slot empty (gracefully no-op + worker logs warn).
+  //
+  // Per-tenant credential loading from `tenant_integrations` is a future
+  // packet (the adapter takes one set of credentials per worker process
+  // today; a per-tenant credential router is a separate concern, gated on
+  // the `tenant_integrations.api_credentials` shape work tracked under
+  // Phase 3-10 §6). For Slice 2 the worker registers a single ERPNext
+  // adapter instance from env; Phase 3-10's draft-write proof runs against
+  // exactly that one sandbox configuration.
   const adapters = new Map();
+  const erpnextBaseUrl = process.env.FINANCE_ERPNEXT_BASE_URL;
+  const erpnextApiKey = process.env.FINANCE_ERPNEXT_API_KEY;
+  const erpnextApiSecret = process.env.FINANCE_ERPNEXT_API_SECRET;
+  const erpnextSandboxAllowlist = (process.env.FINANCE_ERPNEXT_SANDBOX_BASE_URLS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (erpnextBaseUrl && erpnextApiKey && erpnextApiSecret) {
+    try {
+      const { createErpnextSandboxAdapter } = await import(
+        '../lib/finance/accountingAdapters/erpnextSandboxAdapter.js'
+      );
+      const erpnextAdapter = createErpnextSandboxAdapter({
+        baseUrl: erpnextBaseUrl,
+        apiKey: erpnextApiKey,
+        apiSecret: erpnextApiSecret,
+        sandboxAllowlist: erpnextSandboxAllowlist,
+        // httpClient defaults to the adapter's internal fetch-based client;
+        // override via DI if a future Phase needs request signing / tracing.
+      });
+      adapters.set('erpnext', erpnextAdapter);
+      logger.info(
+        { provider: 'erpnext', base_url: erpnextBaseUrl },
+        '[finance-adapter-worker] registered erpnext sandbox adapter',
+      );
+    } catch (err) {
+      // Constructor throws on production-looking URLs / missing required
+      // params. Log and continue — the worker boots without erpnext
+      // registered, and the processor will skip any erpnext jobs (no
+      // attempt consumed).
+      logger.error(
+        { error: err?.message || String(err), code: err?.code || null },
+        '[finance-adapter-worker] failed to register erpnext sandbox adapter — continuing with empty registry',
+      );
+    }
+  } else {
+    logger.info(
+      '[finance-adapter-worker] erpnext credentials not configured — provider not registered (worker will skip erpnext jobs)',
+    );
+  }
 
   // eventStore wiring — lazy-imported so the test harness path stays clean.
   const { createFinancePgEventStore } = await import('../lib/finance/financeEventStore.pg.js');

@@ -500,3 +500,33 @@ test('financeDomainService approveFinanceAction is idempotent on the promoter si
     .filter((e) => e.event_type === 'finance.adapter.sync_queued').length;
   assert.equal(after, before, 'no additional sync_queued events emitted');
 });
+
+// Slice 2B review P1: the adapter_job must persist the canonical object the
+// processor will forward to the provider. Without this, runAdapterPollCycle
+// builds the outbound provider payload from `job.payload || {}` and the first
+// sandbox-enabled push collapses to an empty body.
+test('financeDomainService simulateDealWon adapter_job carries a payload snapshot of the draft journal entry (P1 fix)', async () => {
+  const service = createFinanceDomainService();
+  const sim = await service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  const job = sim.adapter_job;
+  assert.ok(job.payload, 'adapter_job must carry a payload field for the processor');
+  assert.ok(
+    job.payload.journal_entry,
+    'adapter_job.payload must contain the canonical journal entry snapshot',
+  );
+  assert.equal(
+    job.payload.journal_entry.id,
+    sim.journal_entry.id,
+    'payload journal entry id matches the linked draft entry',
+  );
+  // Snapshot is independent — mutating the snapshot does not affect the bucket
+  // entry (and vice versa).
+  job.payload.journal_entry.id = 'mutated';
+  const refetch = await service.listJournalEntries(TENANT_ID);
+  assert.notEqual(refetch[0].id, 'mutated', 'snapshot is deep-cloned at create time');
+});

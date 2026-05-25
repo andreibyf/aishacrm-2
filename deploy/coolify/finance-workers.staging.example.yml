@@ -253,6 +253,25 @@ services:
       - FINANCE_ADAPTER_MODE=draft_only
       - FINANCE_PROVIDER_WRITES_ENABLED=false
 
+      # ── ERPNext sandbox adapter credentials (Slice 2 cross-packet review P2 fix) ──
+      #    When all three FINANCE_ERPNEXT_BASE_URL / _API_KEY / _API_SECRET are
+      #    set, the worker entry block registers the Slice 2A
+      #    createErpnextSandboxAdapter under the 'erpnext' provider slot. If
+      #    any are unset, the worker boots with an empty adapter registry and
+      #    skips erpnext jobs gracefully (no attempt consumed). The adapter
+      #    constructor rejects production-looking base URLs unless explicitly
+      #    sandbox-allowed via FINANCE_ERPNEXT_SANDBOX_BASE_URLS. All three
+      #    fields are left unset by default — Phase 3-10 §6 step 6 is the only
+      #    step that wires real (sandbox) credentials, and it's a deliberate
+      #    one-time enablement reverted immediately after.
+      - FINANCE_ERPNEXT_BASE_URL=${FINANCE_ERPNEXT_BASE_URL:-}
+      - FINANCE_ERPNEXT_API_KEY=${FINANCE_ERPNEXT_API_KEY:-}
+      - FINANCE_ERPNEXT_API_SECRET=${FINANCE_ERPNEXT_API_SECRET:-}
+      # Comma-separated explicit sandbox FQDN allowlist beyond the built-in
+      # patterns (localhost / *.local / sandbox.*). Default empty — operator
+      # populates only when the sandbox endpoint sits at a non-built-in URL.
+      - FINANCE_ERPNEXT_SANDBOX_BASE_URLS=${FINANCE_ERPNEXT_SANDBOX_BASE_URLS:-}
+
       # ── Controlled-tenant allow-list — REQUIRED to be explicitly set ──
       #    Comma-separated UUIDs of tenants the worker processes. Empty/unset
       #    ⇒ NO tenants processed (poll cycle iterates zero tenants — no-op).

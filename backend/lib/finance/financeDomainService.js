@@ -469,6 +469,19 @@ export function createFinanceDomainService(opts = {}) {
         }),
       );
 
+      // Slice 2B review P1: the adapter_job must carry the canonical object
+      // snapshot so the Slice 2B processor (`runAdapterPollCycle` →
+      // `buildProviderPayload(job.payload, runtimePolicy)`) has the actual
+      // canonical data to strip + forward to the provider. Without this,
+      // the processor builds `{}` and the first sandbox-enabled push lands
+      // empty. The snapshot is taken AT CREATE TIME so the row carries the
+      // payload the approver was looking at when they queued the work — even
+      // if the journal entry mutates later (it shouldn't, but the snapshot
+      // is the durable contract).
+      //
+      // The snapshot is deep-cloned to decouple from future bucket mutations.
+      // 2A's `buildProviderPayload` will strip the 11-item internal-metadata
+      // denylist before the payload leaves the processor → adapter boundary.
       const adapterJob = {
         id: `adapter_job_${generateId()}`,
         tenant_id: tenantId,
@@ -478,6 +491,9 @@ export function createFinanceDomainService(opts = {}) {
         aggregate_id: draftEntry.id,
         operation: 'push_draft',
         mode: 'draft_only',
+        payload: {
+          journal_entry: clone(draftEntry),
+        },
         created_at: now(),
         updated_at: now(),
       };
