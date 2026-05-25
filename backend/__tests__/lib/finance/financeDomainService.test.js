@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import createFinanceDomainService from '../../../lib/finance/financeDomainService.js';
+import createFinanceEventStore from '../../../lib/finance/financeEventStore.js';
+import { promoteLinkedAdapterJobs } from '../../../lib/finance/adapterJobPromoter.js';
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000001';
 const OTHER_TENANT_ID = '00000000-0000-4000-8000-000000000002';
@@ -359,4 +361,142 @@ test('financeDomainService reversal creates a new journal entry instead of delet
   assert.equal(result.reversal_entry.reversal_of, 'journal-posted-1');
   assert.equal(entries[0].id, 'journal-posted-1');
   assert.equal(entries[1].id, result.reversal_entry.id);
+});
+
+// ---------------------------------------------------------------------------
+// Slice 2B contract — approval-driven adapter_job draft → queued promotion
+// ---------------------------------------------------------------------------
+
+// §5.4 contract: simulateDealWon inserts adapter_job in status='draft' and
+// emits NO `finance.adapter.sync_queued` event. The sync_queued event is
+// exclusively emitted by approveFinanceAction()'s promoter at the
+// draft → queued transition.
+test('financeDomainService simulateDealWon does NOT emit finance.adapter.sync_queued (Slice 2B §5.4)', async () => {
+  const eventStore = createFinanceEventStore();
+  const service = createFinanceDomainService({ eventStore });
+
+  await service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  const events = eventStore.replay(TENANT_ID);
+  const queuedEvents = events.filter((e) => e.event_type === 'finance.adapter.sync_queued');
+  assert.equal(
+    queuedEvents.length,
+    0,
+    'simulateDealWon must NOT emit sync_queued — the draft adapter_job is not yet runnable',
+  );
+});
+
+test('financeDomainService approveFinanceAction promotes linked adapter_jobs draft → queued and emits sync_queued (Slice 2B)', async () => {
+  const eventStore = createFinanceEventStore();
+  const service = createFinanceDomainService({ eventStore });
+
+  const sim = await service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  // Pre-approval state
+  assert.equal(sim.adapter_job.status, 'draft');
+
+  const approveResult = await service.approveFinanceAction({
+    tenantId: TENANT_ID,
+    approvalId: sim.approval.id,
+    actor: { id: 'approver-1', type: 'human' },
+  });
+
+  // Post-approval: approval row mutated
+  assert.equal(approveResult.approval.status, 'approved');
+  // New field surfaced by the promoter call
+  assert.ok(Array.isArray(approveResult.promoted_adapter_jobs));
+  assert.equal(approveResult.promoted_adapter_jobs.length, 1);
+  assert.equal(approveResult.promoted_adapter_jobs[0].id, sim.adapter_job.id);
+
+  // Event stream now contains finance.adapter.sync_queued
+  const events = eventStore.replay(TENANT_ID);
+  const queuedEvents = events.filter((e) => e.event_type === 'finance.adapter.sync_queued');
+  assert.equal(queuedEvents.length, 1, 'exactly one sync_queued event emitted by the promoter');
+  assert.equal(queuedEvents[0].aggregate_type, 'adapter_job');
+  assert.equal(queuedEvents[0].aggregate_id, sim.adapter_job.id);
+  assert.equal(queuedEvents[0].payload.adapter_job.status, 'queued');
+});
+
+test('financeDomainService approveFinanceAction does NOT post the journal (Phase 3-8 §5.7 contract preserved)', async () => {
+  const eventStore = createFinanceEventStore();
+  const service = createFinanceDomainService({ eventStore });
+
+  const sim = await service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  await service.approveFinanceAction({
+    tenantId: TENANT_ID,
+    approvalId: sim.approval.id,
+    actor: { id: 'approver-1', type: 'human' },
+  });
+
+  // Journal entry still pending_approval — approval does not auto-post
+  const entries = service.listJournalEntries(TENANT_ID);
+  const matching = entries.find((e) => e.id === sim.journal_entry.id);
+  assert.ok(matching, 'journal entry still exists');
+  assert.equal(
+    matching.status,
+    'pending_approval',
+    'journal stays pending_approval — Slice 2 does not implement journal posting',
+  );
+});
+
+test('financeDomainService approveFinanceAction is idempotent on the promoter side (re-approving emits no extra sync_queued)', async () => {
+  const eventStore = createFinanceEventStore();
+  const service = createFinanceDomainService({ eventStore });
+
+  const sim = await service.simulateDealWon({
+    tenantId: TENANT_ID,
+    actor: { id: 'user-1', type: 'human' },
+    payload: { amount_cents: 10000 },
+  });
+
+  await service.approveFinanceAction({
+    tenantId: TENANT_ID,
+    approvalId: sim.approval.id,
+    actor: { id: 'approver-1', type: 'human' },
+  });
+
+  // The promoter's status filter guarantees idempotency: re-calling with the
+  // same aggregate_id finds the job in status='queued' (not 'draft') and
+  // promotes nothing. Simulate by invoking the promoter directly against the
+  // already-queued adapter job.
+  const before = eventStore
+    .replay(TENANT_ID)
+    .filter((e) => e.event_type === 'finance.adapter.sync_queued').length;
+  const result = await promoteLinkedAdapterJobs({
+    bucket: {
+      adapterJobs: [
+        {
+          id: sim.adapter_job.id,
+          tenant_id: TENANT_ID,
+          aggregate_id: sim.journal_entry.id,
+          status: 'queued', // already promoted
+          provider: 'quickbooks',
+          operation: 'push_draft',
+          mode: 'draft_only',
+          aggregate_type: 'journal_entry',
+        },
+      ],
+    },
+    tenantId: TENANT_ID,
+    aggregateId: sim.journal_entry.id,
+    eventStore,
+  });
+  assert.equal(result.promoted_count, 0, 'already-queued job is not re-promoted');
+  const after = eventStore
+    .replay(TENANT_ID)
+    .filter((e) => e.event_type === 'finance.adapter.sync_queued').length;
+  assert.equal(after, before, 'no additional sync_queued events emitted');
 });

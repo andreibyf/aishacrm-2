@@ -13,6 +13,7 @@ import {
   evaluateFinanceGovernance,
 } from './financeGovernanceDecision.js';
 import createFinanceEventStore from './financeEventStore.js';
+import { promoteLinkedAdapterJobs } from './adapterJobPromoter.js';
 
 function createStore() {
   return {
@@ -638,9 +639,31 @@ export function createFinanceDomainService(opts = {}) {
         }),
       );
 
+      // Slice 2B: promote any linked adapter_jobs from `draft → queued` and
+      // emit one `finance.adapter.sync_queued` event per promoted job. The
+      // linkage is structural via shared `aggregate_id` — see §4.1 of the
+      // slice-2 adapter runtime design freeze. The promoter is a no-op for
+      // approvals whose target has no linked adapter_jobs.
+      //
+      // IMPORTANT — Phase 3-8 §5.7 contract preserved: this does NOT modify
+      // the journal entry's status. The journal stays at `pending_approval`.
+      // Only the adapter_job transitions. Journal posting is NOT a Slice 2
+      // deliverable.
+      const promotion = await promoteLinkedAdapterJobs({
+        bucket,
+        tenantId,
+        aggregateId: approval.target_id,
+        eventStore: { append: (envelope) => appendEvent(bucket, envelope) },
+        actor: normalizedActor,
+        requestId,
+        braidTraceId,
+        now,
+      });
+
       return {
         approval: clone(approval),
         governance_decision: decision,
+        promoted_adapter_jobs: promotion.promoted_jobs,
       };
     },
 
