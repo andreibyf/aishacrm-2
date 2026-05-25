@@ -12,12 +12,13 @@
 # Difference from the 2C-5 all-three-worker template
 # (deploy/coolify/finance-workers.example.yml):
 #
-#   * Projection worker only. finance-audit-worker is deferred until the audit
-#     pack request host (audit_pack_requests) and a standalone audit worker
-#     module exist. finance-adapter-worker is deferred until adapter Slice 2 +
-#     ERPNext sandbox proof (2C-9). The 2C-5 template retains the three-worker
-#     design intent; this file is the tighter subset that matches what's
-#     actually implemented in backend/workers/ today.
+#   * Projection worker AND adapter worker (the latter added by Slice 2C —
+#     the shell now exists in backend/workers/financeAdapterWorker.js, both
+#     workers are disabled by default here). finance-audit-worker is deferred
+#     until the audit pack request host (audit_pack_requests) and a
+#     standalone audit worker module exist. The 2C-5 template retains the
+#     three-worker design intent; this file matches what's actually
+#     implemented in backend/workers/ today.
 #
 #   * Healthcheck reconciled to the worker's actual heartbeat surface. The
 #     worker writes a JSON heartbeat to a file (FINANCE_PROJECTION_WORKER_HEARTBEAT_PATH,
@@ -183,6 +184,160 @@ services:
         aliases:
           - staging-finance-projection-worker
 
+  # ---------------------------------------------------------------------------
+  # finance-adapter-worker — hosts the adapter job-draining poll loop.
+  # Slice 2C deliverable (process shell + config). The actual job processor
+  # logic (runAdapterPollCycle) lands in Slice 2B; the ERPNext sandbox
+  # adapter implementation lands in Slice 2A. Until those land AND a
+  # subsequent commit registers the ERPNext adapter in the worker's entry
+  # block, the registered-adapters Map is empty and every claimed job would
+  # be skipped at the processor level (defense in depth on top of the
+  # disabled-by-default gate below).
+  #
+  # The operator would deploy this service to VPS-1 ONLY as part of Phase 3-9
+  # (staging adapter worker activation), which is not yet authorized — this
+  # block is purely the YAML template Phase 3-9's runbook will copy from. No
+  # Coolify mutation, no Doppler change, and no staging deployment occur as
+  # part of Slice 2C itself.
+  # ---------------------------------------------------------------------------
+  finance-adapter-worker:
+    image: aishacrm-backend:coolify
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: staging-finance-adapter-worker
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 512m
+    mem_reservation: 192m
+    # Matches the npm script registered in backend/package.json:
+    #   "worker:finance-adapter": "node workers/financeAdapterWorker.js"
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-adapter']
+    environment:
+      # ── Doppler — staging only ──
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+
+      # ── Three-tier enable gate — ALL three must be the literal string 'true'
+      #    for the worker to start its poll loop. Any one not equal to 'true'
+      #    (unset / 'TRUE' / '1' / boolean true) ⇒ the worker logs
+      #    "[finance-adapter-worker] disabled — idling" and returns an idle
+      #    stub. The pg.Pool object is constructed by the entry block before
+      #    this gate runs, but no pool.query() is ever called in the disabled
+      #    state, so no actual TCP connection to Supabase is opened. Enforced
+      #    by isFinanceAdapterWorkerEnabled() in
+      #    backend/workers/financeAdapterWorker.js.
+      #
+      #    All three are hard-set to 'false' here. Enabling is Phase 3-9
+      #    scope and requires a separately authorized operator action — Slice
+      #    2C does not flip these flags anywhere.
+      - ENABLE_FINANCE_OPS=false
+      - ENABLE_FINANCE_WORKERS=false
+      - ENABLE_FINANCE_ADAPTER_WORKER=false
+
+      # ── Event-store persistence gate (Slice 1 / Phase 3-1 §7) ──
+      #    Set here for env parity with the backend app. The adapter worker
+      #    does emit events via the persistent event store, but the route
+      #    fail-closed guard at backend/routes/finance.v2.js:48 is a separate
+      #    backend-only concern — lifting it is gated on a future Slice.
+      - ENABLE_FINANCE_PERSISTENT_EVENTS=false
+
+      # ── Sandbox / draft-only safety gates (slice-2-adapter-runtime-design.md §4.6) ──
+      #    Two independent layers; either alone must block a live provider
+      #    write. Both are at the safest default — leave them this way unless
+      #    Phase 3-10 §6 step 6's proof step is being executed against a
+      #    sandbox ERPNext (which is a deliberate one-time enablement,
+      #    reverted immediately after — not the default state of this file).
+      - FINANCE_ADAPTER_MODE=draft_only
+      - FINANCE_PROVIDER_WRITES_ENABLED=false
+
+      # ── Controlled-tenant allow-list — REQUIRED to be explicitly set ──
+      #    Comma-separated UUIDs of tenants the worker processes. Empty/unset
+      #    ⇒ NO tenants processed (poll cycle iterates zero tenants — no-op).
+      #    There is NO implicit "process all" fall-through; tenants must be
+      #    explicitly listed. Phase 3-9 will set this to the controlled
+      #    staging tenant once the worker activation is authorized.
+      #    Enforced by parseControlledTenantIds() in
+      #    backend/lib/finance/financeWorkerCommon.js.
+      - FINANCE_CONTROLLED_TENANT_IDS=
+
+      # ── Retry / backoff (slice-2-adapter-runtime-design.md §4.8) ──
+      #    Slice 2B's job processor reads these. Defaults match the design
+      #    freeze: 5 attempts max, 15 s base / 30 min cap, 5 min stuck-job
+      #    watchdog threshold.
+      - FINANCE_ADAPTER_MAX_ATTEMPTS=${FINANCE_ADAPTER_MAX_ATTEMPTS:-5}
+      - FINANCE_ADAPTER_BACKOFF_BASE_MS=${FINANCE_ADAPTER_BACKOFF_BASE_MS:-15000}
+      - FINANCE_ADAPTER_BACKOFF_CAP_MS=${FINANCE_ADAPTER_BACKOFF_CAP_MS:-1800000}
+      - FINANCE_ADAPTER_STUCK_JOB_MS=${FINANCE_ADAPTER_STUCK_JOB_MS:-300000}
+
+      # ── Polling cadence ──
+      #    FINANCE_ADAPTER_WORKER_POLL_MS is the worker-specific override;
+      #    FINANCE_WORKER_POLL_INTERVAL_MS is the fallback shared with the
+      #    projection worker. The adapter worker is HTTP-call-bound (per-job
+      #    provider request) where the projection worker is dispatch-bound
+      #    (in-memory), so an operator may want different cadences per
+      #    worker — leaving both knobs exposed for that.
+      - FINANCE_ADAPTER_WORKER_POLL_MS=${FINANCE_ADAPTER_WORKER_POLL_MS:-}
+      - FINANCE_WORKER_POLL_INTERVAL_MS=${FINANCE_WORKER_POLL_INTERVAL_MS:-5000}
+
+      # ── DB connection (Doppler-injected; REQUIRED AT PROCESS STARTUP) ──
+      #    The entry block at the bottom of financeAdapterWorker.js resolves
+      #    FINANCE_DB_URL || DATABASE_URL and exits the process if neither
+      #    is set — BEFORE the disabled gate runs. So a disabled-by-default
+      #    deploy still needs the connection string in Doppler stg_stg just
+      #    to start the container (same Phase 3-4 §5.1 finding that applies
+      #    to the projection worker). The pg.Pool is then constructed
+      #    lazily; no DB connection is actually opened in the disabled
+      #    state.
+      - FINANCE_DB_URL=${FINANCE_DB_URL:-}
+      - FINANCE_DB_POOL_MAX=${FINANCE_DB_POOL_MAX:-5}
+      - FINANCE_DB_STATEMENT_TIMEOUT_MS=${FINANCE_DB_STATEMENT_TIMEOUT_MS:-30000}
+
+      # ── Heartbeat / observability ──
+      #    Worker writes a JSON heartbeat to this path on every poll-cycle
+      #    completion (writeAdapterWorkerHeartbeat → financeWorkerCommon.writeWorkerHeartbeat).
+      #    Schema mirrors the projection worker but with adapter-specific
+      #    counters:
+      #      { status, updated_at, pid, tenant_count, claimed_count,
+      #        succeeded_count, failed_count, skipped_count }
+      #    Default path is /tmp/... — keep that for now; the healthcheck
+      #    below asserts existence + recency. When the worker is in the
+      #    disabled-and-idling state, no heartbeat is written, so the
+      #    healthcheck will report unhealthy in that state (same intentional
+      #    behavior as the projection worker — Coolify still shows the
+      #    container as running and the disabled state is intentional).
+      - FINANCE_ADAPTER_WORKER_HEARTBEAT_PATH=/tmp/finance-adapter-worker-heartbeat.json
+      - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
+      - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
+
+    # Heartbeat-file healthcheck. Asserts the heartbeat file exists and was
+    # written within the last 45 seconds (3× the default 15 s heartbeat
+    # interval). Same shape as the projection worker's check; same
+    # heartbeat-vs-disabled limitation per Phase 3-4 §8.2.
+    healthcheck:
+      test:
+        - 'CMD-SHELL'
+        - |
+          test -f /tmp/finance-adapter-worker-heartbeat.json && \
+          test "$(($(date +%s) - $(stat -c %Y /tmp/finance-adapter-worker-heartbeat.json 2>/dev/null || echo 0)))" -lt 45
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+    networks:
+      aishanet:
+        aliases:
+          - staging-finance-adapter-worker
+
 # ─────────────────────────────────────────────────────────────────────────────
 # NOT included in this file (deferred from Phase 3-4 — see
 # staging-worker-deployment-log.md §4):
@@ -191,21 +346,20 @@ services:
 #     Standalone audit worker module is NOT implemented. Audit-timeline
 #     projection upkeep is currently handled in-process by the projection
 #     worker (auditTimelineProjection is registered in buildProjectionRunner
-#     with includeInfrastructureEvents: true — backend/workers/financeProjectionWorker.js:194).
+#     with includeInfrastructureEvents: true — backend/workers/financeProjectionWorker.js).
 #     A standalone audit worker awaits the audit_pack_requests host (a
 #     carried-forward engineering prerequisite per production-readiness-review.md
 #     2C-15) and a separate worker-creation pass.
 #
-#   finance-adapter-worker
-#     Adapter worker module is NOT implemented. Adapter execution is gated on
-#     Phase 3 Slice 2 (adapter implementation + ERPNext sandbox proof per
-#     erpnext-sandbox-proof.md 2C-9). The 2C-8 adapter-worker sandbox plan is
-#     design-only.
-#
-# Adding either service to this file is forbidden until both the entry module
-# and the corresponding npm script exist in backend/. The 2C-5 design template
+# Adding the audit service is forbidden until both the entry module and the
+# corresponding npm script exist in backend/. The 2C-5 design template
 # (deploy/coolify/finance-workers.example.yml) retains the three-worker shape
-# for future reference and is the source of truth when those workers are built.
+# for future reference and is the source of truth when that worker is built.
+#
+# Phase 3-9 (adapter worker staging activation) is the operator-execution
+# packet that would flip the adapter worker's three-tier gate to 'true' and
+# populate FINANCE_CONTROLLED_TENANT_IDS — that work is out of scope for
+# Slice 2C, which only delivers the YAML template above.
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:

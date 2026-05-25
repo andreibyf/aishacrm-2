@@ -35,7 +35,6 @@
  */
 
 import dotenv from 'dotenv';
-import fs from 'node:fs';
 import logger from '../lib/logger.js';
 import { createProjectionRunner } from '../lib/finance/projections/projectionRunner.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
@@ -44,6 +43,16 @@ import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerP
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
 import { createAuditTimelineProjectionWorker } from '../lib/finance/projections/auditTimelineProjection.js';
+// Slice 2C: shared worker process-lifecycle helpers extracted to a common module
+// so finance-adapter-worker (and any future finance-*-worker) follows the same
+// disabled-by-default + heartbeat-file + clean-shutdown contract without
+// re-implementing it. Pure mechanical refactor — externally observable behavior
+// of this worker is unchanged. See backend/lib/finance/financeWorkerCommon.js.
+import {
+  parseControlledTenantIds as commonParseControlledTenantIds,
+  writeWorkerHeartbeat as commonWriteWorkerHeartbeat,
+  installSignalHandlers as commonInstallSignalHandlers,
+} from '../lib/finance/financeWorkerCommon.js';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -85,15 +94,11 @@ export function isFinanceProjectionWorkerEnabled(env = process.env) {
  * Returns an empty array when the env var is unset or only whitespace —
  * which causes the poll cycle to do nothing (no implicit fall-through to
  * "all tenants"; tenants must be explicitly listed).
+ *
+ * Slice 2C: implementation moved to financeWorkerCommon.parseControlledTenantIds;
+ * this re-export preserves the existing import path for callers and tests.
  */
-export function parseControlledTenantIds(env = process.env) {
-  const raw = env.FINANCE_CONTROLLED_TENANT_IDS;
-  if (!raw || typeof raw !== 'string') return [];
-  return raw
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
+export const parseControlledTenantIds = commonParseControlledTenantIds;
 
 // ── Poll cycle (the pure helper) ────────────────────────────────────────────
 
@@ -207,25 +212,17 @@ function getWorkerPollIntervalMs() {
 }
 
 function writeWorkerHeartbeat(extra = {}) {
-  const heartbeat = {
-    status: 'ok',
-    updated_at: new Date().toISOString(),
-    pid: process.pid,
-    ...extra,
-  };
-
-  try {
-    // codeql[js/insecure-temporary-file] — fixed, well-known path for non-sensitive process heartbeat metadata
-    fs.writeFileSync(HEARTBEAT_PATH, JSON.stringify(heartbeat));
-  } catch (error) {
-    logger.warn(
-      {
-        path: HEARTBEAT_PATH,
-        error: error?.message || String(error),
-      },
-      '[finance-projection-worker] failed to write heartbeat',
-    );
-  }
+  // Slice 2C: delegate to the shared helper so both workers write byte-identical
+  // heartbeat JSON. The shared helper accepts a `log` interface and the
+  // `workerName` for the warn-on-failure log message, so the existing operator
+  // log-scraping ("[finance-projection-worker] failed to write heartbeat")
+  // continues to match the same message text.
+  commonWriteWorkerHeartbeat({
+    path: HEARTBEAT_PATH,
+    workerName: 'finance-projection-worker',
+    extra,
+    log: logger,
+  });
 }
 
 let workerStarted = false;
@@ -401,16 +398,17 @@ if (
 
   const worker = startFinanceProjectionWorker({ runner, eventStore, tenantIds });
 
-  const shutdown = async () => {
-    worker.stop();
-    try {
-      await pool.end();
-    } catch (_err) {
-      // Pool may already be closing; nothing to do.
-    }
-    setTimeout(() => process.exit(0), 50);
-  };
-
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  // Slice 2C: signal-handler installation delegated to the shared helper so the
+  // same SIGINT/SIGTERM + pool.end() + delayed exit(0) shape is reused by
+  // finance-adapter-worker. Behavior matches the prior inline implementation:
+  // stop() → pool.end() (best-effort) → setTimeout(exit(0), 50).
+  commonInstallSignalHandlers(() => worker.stop(), {
+    onAfterStop: async () => {
+      try {
+        await pool.end();
+      } catch (_err) {
+        // Pool may already be closing; nothing to do.
+      }
+    },
+  });
 }
