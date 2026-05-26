@@ -59,12 +59,20 @@ vi.mock('@/components/shared/tenantContext', () => ({
 
 const mockFinance = {
   getRuntimeStatus: vi.fn(),
+  getJournalEntries: vi.fn(),
+  getLedger: vi.fn(),
+  getProfitLoss: vi.fn(),
+  getBalanceSheet: vi.fn(),
 };
 vi.mock('@/api/finance', async () => {
   const actual = await vi.importActual('@/api/finance');
   return {
     ...actual,
     getRuntimeStatus: (...args) => mockFinance.getRuntimeStatus(...args),
+    getJournalEntries: (...args) => mockFinance.getJournalEntries(...args),
+    getLedger: (...args) => mockFinance.getLedger(...args),
+    getProfitLoss: (...args) => mockFinance.getProfitLoss(...args),
+    getBalanceSheet: (...args) => mockFinance.getBalanceSheet(...args),
   };
 });
 
@@ -90,8 +98,12 @@ const HEALTHY_STATUS = {
 beforeEach(() => {
   setMockSearch('');
   mockTenant.selectedTenantId = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
-  mockFinance.getRuntimeStatus.mockReset();
+  for (const fn of Object.values(mockFinance)) fn.mockReset();
   mockFinance.getRuntimeStatus.mockResolvedValue(HEALTHY_STATUS);
+  mockFinance.getJournalEntries.mockResolvedValue({ journal_entries: [] });
+  mockFinance.getLedger.mockResolvedValue({});
+  mockFinance.getProfitLoss.mockResolvedValue({});
+  mockFinance.getBalanceSheet.mockResolvedValue({});
   if (typeof window !== 'undefined') {
     try {
       window.sessionStorage?.clear();
@@ -147,18 +159,30 @@ describe('FinanceOps — happy path (healthy runtime status)', () => {
     expect(screen.getByTestId('finance-runtime-overview')).toBeInTheDocument();
   });
 
-  it('every non-runtime tab has a corresponding placeholder for UI-1C to replace', async () => {
+  it('every non-runtime tab renders its UI-1C panel', async () => {
     // Radix Tabs.Content only mounts the active tab's content. Render the
-    // page once per tab with the URL pre-set so the placeholder for that
-    // specific tab is the one materialised in the DOM. This proves UI-1B
-    // ships a placeholder for every non-runtime tab without relying on a
-    // click-driven state update inside a single render.
+    // page once per tab with the URL pre-set so the panel for that specific
+    // tab is the one materialised in the DOM.
+    const TAB_TO_PANEL_TESTID = {
+      ledger: 'finance-ledger-summary',
+      invoices: 'finance-draft-invoices-panel',
+      'journal-drafts': 'finance-journal-drafts-panel',
+      'journal-entries': 'finance-journal-entries',
+      approvals: 'finance-approval-queue-panel',
+      'adapter-queue': 'finance-adapter-queue-panel',
+      audit: 'finance-audit-timeline-panel',
+      projection: 'finance-projection-status-panel',
+      'sandbox-adapter': 'finance-sandbox-adapter-panel',
+      evidence: 'finance-evidence-placeholder',
+    };
     for (const tab of FINANCE_OPS_TABS) {
       if (tab.id === 'runtime-overview') continue;
       setMockSearch(`tab=${tab.id}`);
       const { unmount } = render(<FinanceOpsPage />);
+      const expectedTestId = TAB_TO_PANEL_TESTID[tab.id];
+      expect(expectedTestId, `missing test mapping for ${tab.id}`).toBeDefined();
       await waitFor(() => {
-        expect(screen.getByTestId(`finance-tab-content-placeholder-${tab.id}`)).toBeInTheDocument();
+        expect(screen.getByTestId(expectedTestId)).toBeInTheDocument();
       });
       unmount();
     }
@@ -236,7 +260,7 @@ describe('FinanceOps — tab routing via query param', () => {
     setMockSearch('tab=ledger');
     render(<FinanceOpsPage />);
     await waitFor(() => {
-      expect(screen.getByTestId('finance-tab-content-placeholder-ledger')).toBeInTheDocument();
+      expect(screen.getByTestId('finance-ledger-summary')).toBeInTheDocument();
     });
   });
 

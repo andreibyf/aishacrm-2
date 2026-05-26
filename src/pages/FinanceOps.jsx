@@ -46,6 +46,16 @@ import { useTenant } from '@/components/shared/tenantContext';
 import * as finance from '@/api/finance';
 import GuardrailBanners from '@/components/finance/GuardrailBanners';
 import RuntimeOverview from '@/components/finance/RuntimeOverview';
+import LedgerSummary from '@/components/finance/LedgerSummary';
+import JournalEntriesList from '@/components/finance/JournalEntriesList';
+import DraftInvoicesPanel from '@/components/finance/DraftInvoicesPanel';
+import JournalDraftsPanel from '@/components/finance/JournalDraftsPanel';
+import ApprovalQueuePanel from '@/components/finance/ApprovalQueuePanel';
+import AdapterQueuePanel from '@/components/finance/AdapterQueuePanel';
+import AuditTimelinePanel from '@/components/finance/AuditTimelinePanel';
+import ProjectionStatusPanel from '@/components/finance/ProjectionStatusPanel';
+import SandboxAdapterPanel from '@/components/finance/SandboxAdapterPanel';
+import EvidencePlaceholder from '@/components/finance/EvidencePlaceholder';
 
 // Tab inventory frozen by design freeze §6.2. UI-1B renders the full tab
 // strip; UI-1C fills the content for tabs 2-11. Keeping the list here means
@@ -178,28 +188,6 @@ function GenericErrorState({ error, onRetry }) {
         >
           Retry
         </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Placeholder rendered inside every UI-1C tab. UI-1B ships these so the tab
- * strip is wired and clickable end-to-end before UI-1C lands. UI-1C replaces
- * each placeholder with the matching read-only panel.
- */
-function TabPlaceholder({ tabId, label }) {
-  return (
-    <Card
-      data-testid={`finance-tab-content-placeholder-${tabId}`}
-      className="border-dashed border-slate-700/60 bg-slate-900/40"
-    >
-      <CardHeader>
-        <CardTitle className="text-sm text-slate-300">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-xs text-slate-500">
-        This panel is delivered by UI-1C (read-only finance data panels). UI-1B reserves the tab so
-        navigation works end-to-end before the data panels land.
       </CardContent>
     </Card>
   );
@@ -346,11 +334,36 @@ export default function FinanceOpsPage() {
           />
         </TabsContent>
 
-        {FINANCE_OPS_TABS.filter((tab) => tab.id !== 'runtime-overview').map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="m-0">
-            <TabPlaceholder tabId={tab.id} label={tab.label} />
-          </TabsContent>
-        ))}
+        <TabsContent value="ledger" className="m-0">
+          <LedgerSummary tenantId={selectedTenantId} />
+        </TabsContent>
+        <TabsContent value="invoices" className="m-0">
+          <DraftInvoicesPanel />
+        </TabsContent>
+        <TabsContent value="journal-drafts" className="m-0">
+          <JournalDraftsPanel />
+        </TabsContent>
+        <TabsContent value="journal-entries" className="m-0">
+          <JournalEntriesList tenantId={selectedTenantId} />
+        </TabsContent>
+        <TabsContent value="approvals" className="m-0">
+          <ApprovalQueuePanel />
+        </TabsContent>
+        <TabsContent value="adapter-queue" className="m-0">
+          <AdapterQueuePanel />
+        </TabsContent>
+        <TabsContent value="audit" className="m-0">
+          <AuditTimelinePanel />
+        </TabsContent>
+        <TabsContent value="projection" className="m-0">
+          <ProjectionStatusPanel status={status} />
+        </TabsContent>
+        <TabsContent value="sandbox-adapter" className="m-0">
+          <SandboxAdapterPanel status={status} />
+        </TabsContent>
+        <TabsContent value="evidence" className="m-0">
+          <EvidencePlaceholder />
+        </TabsContent>
       </Tabs>
     </div>
   );
