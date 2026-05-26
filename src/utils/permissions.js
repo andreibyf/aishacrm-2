@@ -361,8 +361,19 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
 
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const acceptableNames = [requiredModuleId, ...(moduleAliases[requiredModuleId] || [])];
-    const moduleSetting = moduleSettings.find((m) => acceptableNames.includes(m.module_name));
+    // Canonical-wins resolution. Mirrors the backend's R-6 rule at
+    // backend/lib/finance/financeModuleGate.js:40-48: when both the canonical
+    // row and a legacy alias row exist with conflicting `is_enabled` values,
+    // the canonical row wins. The earlier flat `find(acceptableNames)` was
+    // order-dependent — Supabase does not guarantee row order — so a
+    // conflicting alias row could land first and flip the gate's verdict.
+    // Resolve in two passes: canonical first, then alias only when canonical
+    // is absent.
+    const aliasList = moduleAliases[requiredModuleId] || [];
+    let moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
+    if (!moduleSetting && aliasList.length > 0) {
+      moduleSetting = moduleSettings.find((m) => aliasList.includes(m.module_name));
+    }
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 

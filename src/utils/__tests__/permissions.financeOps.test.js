@@ -72,6 +72,50 @@ describe('hasPageAccess(FinanceOps) — backend alias parity', () => {
     ).toBe(false);
   });
 
+  // Codex re-review of a6996c69 (Slack TS 1779826966.071559) flagged a
+  // remaining P2: the earlier flat `find(acceptableNames)` was order-dependent
+  // and could pick an alias row over a canonical row when both existed with
+  // conflicting `is_enabled` values. Backend isFinanceOpsEnabled() resolves
+  // canonical-wins (financeModuleGate.js:40-48). These two cases lock the
+  // resolution order regardless of how Supabase returns the rows.
+  describe('canonical-wins resolution when both rows exist with conflicts', () => {
+    it('alias first, canonical second: canonical=true wins, access granted', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'enterpriseFinance', is_enabled: false },
+          { module_name: 'financeOps', is_enabled: true },
+        ]),
+      ).toBe(true);
+    });
+
+    it('canonical first, alias second: canonical=true wins, access granted', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: true },
+          { module_name: 'enterpriseFinance', is_enabled: false },
+        ]),
+      ).toBe(true);
+    });
+
+    it('alias first, canonical second: canonical=false wins, access denied', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'enterpriseFinance', is_enabled: true },
+          { module_name: 'financeOps', is_enabled: false },
+        ]),
+      ).toBe(false);
+    });
+
+    it('canonical first, alias second: canonical=false wins, access denied', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false },
+          { module_name: 'enterpriseFinance', is_enabled: true },
+        ]),
+      ).toBe(false);
+    });
+  });
+
   it('does NOT extend the alias to unrelated modules', () => {
     // Confirm the alias resolution is scoped to financeOps only. A disabled
     // 'enterpriseFinance' row should NOT incidentally disable an unrelated
