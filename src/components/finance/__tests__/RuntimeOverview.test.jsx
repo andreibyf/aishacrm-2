@@ -47,6 +47,24 @@ describe('RuntimeOverview — posture rendering', () => {
     expect(screen.getByTestId('runtime-overview-count-adapter-jobs')).toHaveTextContent('0');
   });
 
+  it('annotates the mode row when the value is the mock_read_only placeholder (§8.2.9)', () => {
+    render(<RuntimeOverview status={HEALTHY} loading={false} />);
+    const note = screen.getByTestId('runtime-overview-mode-placeholder-note');
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveAttribute('data-design-ref', '§8.2.9');
+    expect(note).toHaveTextContent(/placeholder/i);
+  });
+
+  it('hides the mode placeholder note once mode is no longer mock_read_only', () => {
+    render(
+      <RuntimeOverview
+        status={{ ...HEALTHY, runtime: { ...HEALTHY.runtime, mode: 'persistent' } }}
+        loading={false}
+      />,
+    );
+    expect(screen.queryByTestId('runtime-overview-mode-placeholder-note')).not.toBeInTheDocument();
+  });
+
   it('renders all-zero counts when status payload counts are all 0', () => {
     const empty = {
       ...HEALTHY,

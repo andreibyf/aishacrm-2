@@ -237,7 +237,7 @@ describe('finance API client -- AbortController integration', () => {
 });
 
 describe('finance API client -- API gap registry (design freeze §8.2)', () => {
-  it('exposes all 8 known gaps with required descriptor fields', () => {
+  it('exposes all 9 known gaps with required descriptor fields', () => {
     const expectedKeys = [
       'draftInvoices',
       'journalDrafts',
@@ -247,6 +247,7 @@ describe('finance API client -- API gap registry (design freeze §8.2)', () => {
       'projectionCursors',
       'registeredAdapters',
       'evidencePacks',
+      'runtimeMode',
     ];
 
     expect(Object.keys(finance.FINANCE_API_GAPS).sort()).toEqual([...expectedKeys].sort());
@@ -255,12 +256,21 @@ describe('finance API client -- API gap registry (design freeze §8.2)', () => {
       const entry = finance.FINANCE_API_GAPS[key];
       expect(entry).toBeDefined();
       expect(typeof entry.endpoint).toBe('string');
+      // Most gaps name a missing GET endpoint; the runtime-mode gap names an
+      // existing endpoint's field that is a hard-coded placeholder.
       expect(entry.endpoint).toMatch(/^GET \/api\/v2\/finance\//);
       expect(typeof entry.designRef).toBe('string');
       expect(entry.designRef).toMatch(/^§8\.2\./);
       expect(typeof entry.naturalBackingSource).toBe('string');
       expect(typeof entry.affectedScreen).toBe('string');
     }
+  });
+
+  it('runtimeMode gap names §8.2.9 and points at the runtime-overview screen', () => {
+    const g = finance.FINANCE_API_GAPS.runtimeMode;
+    expect(g.designRef).toBe('§8.2.9');
+    expect(g.affectedScreen).toMatch(/Runtime overview/);
+    expect(g.naturalBackingSource).toMatch(/authoritative mode/);
   });
 
   it('FINANCE_API_GAPS is frozen (immutable from caller-side)', () => {

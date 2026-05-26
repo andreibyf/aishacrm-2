@@ -78,14 +78,22 @@ export const FINANCE_OPS_TABS = Object.freeze([
 
 const DEFAULT_TAB = 'runtime-overview';
 
+// Exact message returned by the per-tenant financeOps module gate at
+// backend/routes/finance.v2.js:78-82. This is the ONLY 403 path that means
+// "tenant not enrolled". The other 403 paths on the route stack come from
+// validateTenantAccess (backend/middleware/validateTenant.js:138-163) and
+// signal different remediation:
+//   - "User not assigned to any tenant. Contact administrator."     (auth)
+//   - "Access denied: You do not have permission to access this tenant's data."  (wrong tenant)
+// Collapsing all 403s into "tenant not enrolled" misrenders those two states
+// as a module-enrollment problem and points the operator at the wrong fix,
+// so they are explicitly NOT treated as the not-enrolled state below.
+const FINANCE_OPS_NOT_ENABLED_MESSAGE = 'Finance Ops is not enabled for this tenant';
+
 function isTenantNotEnrolledError(err) {
   if (!err) return false;
   if (err.status !== 403) return false;
-  // Backend returns this exact message from finance.v2.js:78-82. Matching on
-  // the message is a soft signal; the 403 status alone is treated as
-  // "tenant not enrolled" because the route's only 403 path is the module
-  // gate.
-  return true;
+  return err.message === FINANCE_OPS_NOT_ENABLED_MESSAGE;
 }
 
 function isRouteDisabledError(err) {

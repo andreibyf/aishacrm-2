@@ -349,9 +349,20 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     ClientRequirements: null,
   };
 
+  // Module aliases — when checking access for a canonical module name, also
+  // accept any listed alias as an equivalent enrolment. Mirrors the backend
+  // gate (backend/lib/finance/financeModuleGate.js:7-16,29-48) which accepts
+  // 'enterpriseFinance' as a legacy alias for 'financeOps'. Without this
+  // table, a tenant enrolled via the alias would clear the backend gate but
+  // be hidden in the frontend nav — frontend/backend access drift.
+  const moduleAliases = {
+    financeOps: ['enterpriseFinance'],
+  };
+
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
+    const acceptableNames = [requiredModuleId, ...(moduleAliases[requiredModuleId] || [])];
+    const moduleSetting = moduleSettings.find((m) => acceptableNames.includes(m.module_name));
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 

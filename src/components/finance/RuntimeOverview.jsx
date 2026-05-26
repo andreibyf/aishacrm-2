@@ -20,6 +20,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
+import { FINANCE_API_GAPS } from '@/api/finance';
+
+// The backend currently returns this exact string as `runtime.mode` for every
+// tenant (backend/routes/finance.v2.js:110). It is NOT an authoritative
+// representation of the running mode — see FINANCE_API_GAPS.runtimeMode
+// (design freeze §8.2.9). Surface this so the placeholder is not mistaken
+// for live signal.
+const MODE_PLACEHOLDER = 'mock_read_only';
 
 const COUNT_TILES = [
   { key: 'journal_entries', label: 'Journal entries' },
@@ -127,6 +135,16 @@ export default function RuntimeOverview({
             dataTestKey="tenant"
           />
           <PostureRow label="Mode" value={runtime.mode} dataTestKey="mode" />
+          {runtime.mode === MODE_PLACEHOLDER ? (
+            <p
+              className="-mt-1 pb-2 text-[10px] text-amber-300/80"
+              data-testid="runtime-overview-mode-placeholder-note"
+              data-design-ref={FINANCE_API_GAPS.runtimeMode.designRef}
+            >
+              The {`"${MODE_PLACEHOLDER}"`} value is a backend placeholder, not an authoritative
+              mode signal — see gap {FINANCE_API_GAPS.runtimeMode.designRef}.
+            </p>
+          ) : null}
           <PostureRow label="Persistence" value={runtime.persistence} dataTestKey="persistence" />
           <PostureRow
             label="Provider sync"

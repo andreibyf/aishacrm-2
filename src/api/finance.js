@@ -255,6 +255,20 @@ export const FINANCE_API_GAPS = Object.freeze({
       'backend/lib/finance/auditEvidenceBuilder.js (runtime exists; no HTTP surface yet)',
     affectedScreen: 'Evidence / audit pack placeholder (§7.11)',
   }),
+  // §8.2.9 — accuracy concern flagged by the design freeze: the runtime.mode
+  // field on /runtime/status is currently a hard-coded 'mock_read_only'
+  // placeholder (backend/routes/finance.v2.js:110). It is NOT an authoritative
+  // representation of the running mode (e.g. in_memory_draft_only, persistent)
+  // until a real mode signal is published by the domain service. Slice 1
+  // surfaces this limitation via the runtime overview annotation rather than
+  // rendering the placeholder as authoritative.
+  runtimeMode: Object.freeze({
+    endpoint: 'GET /api/v2/finance/runtime/status (runtime.mode field)',
+    designRef: '§8.2.9',
+    naturalBackingSource:
+      'domain service should publish an authoritative mode value (e.g. in_memory_draft_only / persistent) instead of the hard-coded mock_read_only string at backend/routes/finance.v2.js:110',
+    affectedScreen: 'Runtime overview (§7.1) — mode row',
+  }),
 });
 
 /**

@@ -203,7 +203,7 @@ describe('FinanceOps — top-level error states', () => {
     expect(screen.queryByTestId('finance-ops-tabs-list')).not.toBeInTheDocument();
   });
 
-  it('shows the "Tenant not enrolled" state when getRuntimeStatus returns 403', async () => {
+  it('shows the "Tenant not enrolled" state only when the 403 message is the financeOps module-gate message', async () => {
     mockFinance.getRuntimeStatus.mockRejectedValueOnce(
       Object.assign(new Error('Finance Ops is not enabled for this tenant'), {
         status: 403,
@@ -215,6 +215,38 @@ describe('FinanceOps — top-level error states', () => {
     await waitFor(() => {
       expect(screen.getByTestId('finance-ops-tenant-not-enrolled')).toBeInTheDocument();
     });
+  });
+
+  it('does NOT collapse a validateTenantAccess 403 ("Access denied: ...") into tenant-not-enrolled', async () => {
+    mockFinance.getRuntimeStatus.mockRejectedValueOnce(
+      Object.assign(
+        new Error("Access denied: You do not have permission to access this tenant's data."),
+        { status: 403, code: null },
+      ),
+    );
+    render(<FinanceOpsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('finance-ops-generic-error')).toBeInTheDocument();
+    });
+    // Crucially, the wrong-tenant 403 must NOT be misrendered as a module-
+    // enrolment problem (would point the operator at the wrong fix path).
+    expect(screen.queryByTestId('finance-ops-tenant-not-enrolled')).not.toBeInTheDocument();
+  });
+
+  it('does NOT collapse a "User not assigned to any tenant" 403 into tenant-not-enrolled', async () => {
+    mockFinance.getRuntimeStatus.mockRejectedValueOnce(
+      Object.assign(new Error('User not assigned to any tenant. Contact administrator.'), {
+        status: 403,
+        code: null,
+      }),
+    );
+    render(<FinanceOpsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('finance-ops-generic-error')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('finance-ops-tenant-not-enrolled')).not.toBeInTheDocument();
   });
 
   it('shows the "No tenant selected" state when selectedTenantId is null', () => {

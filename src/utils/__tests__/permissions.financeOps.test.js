@@ -1,0 +1,86 @@
+/**
+ * Permissions — hasPageAccess for FinanceOps with backend alias parity.
+ *
+ * Codex review of UI-1A/UI-1B/UI-1C (Slack TS 1779825355.550989) flagged
+ * P2 frontend/backend access drift: backend financeModuleGate.js accepts
+ * 'financeOps' (canonical) AND 'enterpriseFinance' (legacy alias), but
+ * the frontend originally only recognised the canonical key. A tenant
+ * enrolled via the alias would clear the backend gate but be hidden in
+ * the frontend nav.
+ *
+ * These tests lock in the alias-aware lookup so the drift doesn't return.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { hasPageAccess } from '../permissions';
+
+const TENANT = 'tenant-uuid-1';
+// Admin role so we bypass the role-based default permissions fallback at
+// the bottom of hasPageAccess — the tests below are specifically locking
+// in the alias-aware module-gate behavior, not the role default table.
+// The whole point of the P2 fix is that no admin/superadmin frontend gate
+// is enforced for FinanceOps, so any authenticated enrolled-tenant user
+// gets access; tests use admin only to keep the role-default fallback out
+// of the picture.
+const ADMIN_USER = {
+  id: 'u1',
+  email: 'admin@example.com',
+  role: 'admin',
+  tenant_id: TENANT,
+  crm_access: true,
+  navigation_permissions: { FinanceOps: true, CashFlow: true },
+};
+
+describe('hasPageAccess(FinanceOps) — backend alias parity', () => {
+  it('grants access when an enabled financeOps row exists (canonical key)', () => {
+    expect(
+      hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: true },
+      ]),
+    ).toBe(true);
+  });
+
+  it('grants access when an enabled enterpriseFinance row exists (legacy alias)', () => {
+    // Without alias-aware lookup, this would return true ONLY because
+    // hasPageAccess defaults to "allow if no row matches the canonical
+    // key" — which is the wrong reason. The real protection is that any
+    // explicit disabled state is detected through either key (see next test).
+    expect(
+      hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'enterpriseFinance', is_enabled: true },
+      ]),
+    ).toBe(true);
+  });
+
+  it('denies access when an explicit disabled enterpriseFinance alias row exists', () => {
+    // This is the regression the alias-aware lookup actually catches. Prior
+    // to the fix, a disabled `enterpriseFinance` row would NOT cause the
+    // frontend to hide the page (backend would deny via the canonical-wins
+    // gate but the frontend would still show the nav entry).
+    expect(
+      hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'enterpriseFinance', is_enabled: false },
+      ]),
+    ).toBe(false);
+  });
+
+  it('denies access when an explicit disabled financeOps canonical row exists', () => {
+    expect(
+      hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: false },
+      ]),
+    ).toBe(false);
+  });
+
+  it('does NOT extend the alias to unrelated modules', () => {
+    // Confirm the alias resolution is scoped to financeOps only. A disabled
+    // 'enterpriseFinance' row should NOT incidentally disable an unrelated
+    // page whose moduleMapping value happens to be a different key.
+    expect(
+      hasPageAccess(ADMIN_USER, 'CashFlow', TENANT, [
+        { module_name: 'enterpriseFinance', is_enabled: false },
+        { module_name: 'Cash Flow Management', is_enabled: true },
+      ]),
+    ).toBe(true);
+  });
+});
