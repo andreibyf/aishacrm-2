@@ -33,6 +33,7 @@ export const navItems = [
   { href: 'Integrations', label: 'Integrations' },
   { href: 'Workflows', label: 'Workflows' },
   { href: 'PaymentPortal', label: 'Payment Portal' },
+  { href: 'FinanceOps', label: 'Finance Operations' },
   { href: 'Utilities', label: 'Utilities' },
   { href: 'ClientOnboarding', label: 'Client Onboarding' },
 ];
@@ -69,6 +70,11 @@ export const moduleMapping = {
   Reports: 'Analytics & Reports',
   Integrations: 'Integrations',
   PaymentPortal: 'Payment Portal',
+  // Finance Ops uses the backend canonical module key directly (no display-label
+  // translation): backend gate at financeModuleGate.js recognises 'financeOps'
+  // (canonical) and 'enterpriseFinance' (legacy alias). The modulesettings row
+  // for an enrolled tenant must use one of these exact strings.
+  FinanceOps: 'financeOps',
   AICampaigns: 'AI Campaigns',
   AISuggestions: 'AI Suggestions',
   DeveloperAI: 'Developer AI',

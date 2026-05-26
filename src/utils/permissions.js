@@ -325,6 +325,10 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     Reports: 'Analytics & Reports',
     Integrations: 'Integrations',
     PaymentPortal: 'Payment Portal',
+    // Finance Ops uses the backend canonical module key directly. See
+    // navigationConfig.js for the same mapping + backend financeModuleGate.js
+    // for the canonical 'financeOps' / alias 'enterpriseFinance' keys.
+    FinanceOps: 'financeOps',
     AICampaigns: 'AI Campaigns',
     AISuggestions: 'AI Suggestions',
     DeveloperAI: 'Developer AI',
