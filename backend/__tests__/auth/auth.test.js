@@ -8,6 +8,7 @@
 
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { createClient } from '@supabase/supabase-js';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const RATE_LIMIT_DELAY = 100; // ms between requests to avoid rate limiting
@@ -240,14 +241,49 @@ describe('BUG-AUTH-002: Login Authentication', () => {
  * These require a test user to be set up in the database
  */
 describe('BUG-AUTH-002: Complete Login Flow', () => {
-  // Test user credentials - must exist in test database
-  const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL || 'test@aishacrm.test';
+  // Test user credentials
+  // Priority:
+  // 1) Explicit TEST_USER_EMAIL (caller-controlled fixture)
+  // 2) Auto-discovered tenant user email via Supabase service role credentials
+  let TEST_USER_EMAIL = process.env.TEST_USER_EMAIL || null;
   const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD || 'testpass123';
+  const TEST_TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 
-  // Skip these tests if test credentials are not configured
-  const testRunner = process.env.TEST_USER_EMAIL ? it : it.skip;
+  before(async () => {
+    if (TEST_USER_EMAIL) return;
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return;
 
-  testRunner('should successfully login with valid credentials', async () => {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const findEmail = async (table, includeTenantFilter = true) => {
+      let query = supabase.from(table).select('email');
+      if (includeTenantFilter) query = query.eq('tenant_id', TEST_TENANT_ID);
+      query = query.not('email', 'is', null).limit(25);
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return null;
+      const row = data.find((r) => typeof r.email === 'string' && r.email.trim().length > 0);
+      return row?.email || null;
+    };
+
+    // Prefer tenant-scoped identities first, then any available login-capable user.
+    TEST_USER_EMAIL =
+      (await findEmail('users', true)) ||
+      (await findEmail('employees', true)) ||
+      (await findEmail('users', false)) ||
+      (await findEmail('employees', false));
+  });
+
+  it('should successfully login with valid credentials', async (t) => {
+    if (!TEST_USER_EMAIL) {
+      t.skip(
+        'No TEST_USER_EMAIL configured and no fallback user email discoverable via Supabase service role',
+      );
+      return;
+    }
     const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -269,8 +305,13 @@ describe('BUG-AUTH-002: Complete Login Flow', () => {
     assert.match(cookies, /aisha_access/);
     assert.match(cookies, /aisha_refresh/);
   });
-
-  testRunner('should be able to access /me after login', async () => {
+  it('should be able to access /me after login', async (t) => {
+    if (!TEST_USER_EMAIL) {
+      t.skip(
+        'No TEST_USER_EMAIL configured and no fallback user email discoverable via Supabase service role',
+      );
+      return;
+    }
     // First login
     const loginResponse = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',

@@ -45,15 +45,6 @@ function positionOf(event) {
   };
 }
 
-/** Compare two positions — created_at ASC, then id ASC (frozen Track A order). */
-function comparePosition(a, b) {
-  if (a.created_at < b.created_at) return -1;
-  if (a.created_at > b.created_at) return 1;
-  if (a.id < b.id) return -1;
-  if (a.id > b.id) return 1;
-  return 0;
-}
-
 /**
  * Compare two events for replay sort. Adds the in-memory store's `_seq`
  * insertion index as an internal tie-break between events sharing the exact
@@ -72,10 +63,20 @@ function compareEvents(a, b) {
   return 0;
 }
 
-/** Is this event strictly after the cursor? (null cursor = nothing applied yet) */
+/**
+ * Is this event strictly after the cursor? (null cursor = nothing applied yet)
+ *
+ * Dispatch cursoring intentionally avoids UUID lexical ordering for same-
+ * millisecond events: event IDs are non-monotonic, so `(created_at, id)` can
+ * classify a later sibling event as "older" and incorrectly skip it. We only
+ * treat an event as duplicate at the same timestamp when both `created_at`
+ * and `id` match the cursor.
+ */
 function isAfterCursor(event, cursor) {
   if (!cursor) return true;
-  return comparePosition(positionOf(event), cursor) > 0;
+  if (event.created_at > cursor.created_at) return true;
+  if (event.created_at < cursor.created_at) return false;
+  return event.id !== cursor.id;
 }
 
 function defaultState(schemaVersion) {

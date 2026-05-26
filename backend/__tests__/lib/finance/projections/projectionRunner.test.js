@@ -154,6 +154,21 @@ test('dispatch skips an event at or below the cursor (out-of-order / duplicate)'
   assert.deepEqual(provider.getLiveStore('p', TENANT_A).get('events'), ['e2']);
 });
 
+test('dispatch applies same-millisecond sibling events even when id order is descending', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  const t = '2026-05-21T02:00:00.000Z';
+  await runner.dispatch(evt('z-last', { createdAt: t }));
+  await runner.dispatch(evt('a-next', { createdAt: t }));
+
+  assert.deepEqual(provider.getLiveStore('p', TENANT_A).get('events'), ['z-last', 'a-next']);
+  assert.deepEqual((await runner.status('p', TENANT_A)).cursor, {
+    created_at: t,
+    id: 'a-next',
+  });
+});
 test('dispatch only routes events a worker consumes', async () => {
   const provider = createMemoryProjectionStoreProvider();
   const runner = makeRunner({ storeProvider: provider });

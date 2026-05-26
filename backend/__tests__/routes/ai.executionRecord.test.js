@@ -39,12 +39,27 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
   }
 
   // Helper to find execution_record entry
-  function findExecutionRecord(entries) {
-    return entries.find((e) => e.nodeId === 'ai:chat:execution_record');
+  function findExecutionRecord(entries, taskId = null) {
+    return entries.find(
+      (e) => e.nodeId === 'ai:chat:execution_record' && (!taskId || e.taskId === taskId),
+    );
+  }
+
+  // Helper to wait for a task-correlated execution_record (avoids cross-test contamination)
+  async function waitForExecutionRecord({ taskId, timeoutMs = 5000, pollMs = 200 }) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const entries = await getLLMActivity();
+      const execRecord = findExecutionRecord(entries, taskId);
+      if (execRecord) return execRecord;
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return null;
   }
 
   test('POST /api/ai/chat emits execution_record on success', async () => {
     await clearLLMActivity();
+    const conversationId = `test-conv-success-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     // Send a simple chat request
     const res = await fetch(`${BASE_URL}/api/ai/chat`, {
@@ -56,7 +71,7 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({
         tenant_id: TENANT_ID,
         messages: [{ role: 'user', content: 'Hello, what is 2+2?' }],
-        conversation_id: 'test-conv-123',
+        conversation_id: conversationId,
         session_entities: [],
       }),
     });
@@ -74,15 +89,8 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
       const json = await res.json();
       assert.equal(json.status, 'success', 'chat response should indicate success');
 
-      // Give a moment for async logging to complete
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Fetch LLM activity log
-      const entries = await getLLMActivity();
-      assert.ok(entries.length > 0, 'should have at least one LLM activity entry');
-
-      // Find the execution_record entry
-      const execRecord = findExecutionRecord(entries);
+      // Fetch task-correlated execution_record (retry briefly for async logging)
+      const execRecord = await waitForExecutionRecord({ taskId: conversationId });
       assert.ok(execRecord, 'should have an ai:chat:execution_record entry');
 
       // Verify contract-required fields (per AI_RUNTIME_CONTRACT.md)
@@ -99,7 +107,7 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
       assert.ok(execRecord.durationMs >= 0, 'durationMs should be non-negative');
 
       // taskId should match conversation_id (per contract: "conversation_id is the session-level correlation key")
-      assert.equal(execRecord.taskId, 'test-conv-123', 'taskId should match conversation_id');
+      assert.equal(execRecord.taskId, conversationId, 'taskId should match conversation_id');
 
       // requestId should be present and follow format: "req_<timestamp>_<random>"
       assert.ok(execRecord.requestId, 'requestId should be present');
@@ -126,6 +134,7 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
 
   test('POST /api/ai/chat emits execution_record on error', async () => {
     await clearLLMActivity();
+    const conversationId = `test-conv-error-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     // Send a malformed request to trigger error path
     const res = await fetch(`${BASE_URL}/api/ai/chat`, {
@@ -137,33 +146,23 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({
         tenant_id: TENANT_ID,
         messages: [], // Empty messages array should trigger validation error
-        conversation_id: 'test-conv-error-456',
+        conversation_id: conversationId,
       }),
     });
 
     // Should return error
     assert.ok([400, 422, 500].includes(res.status), `expected error response, got ${res.status}`);
 
-    // Give a moment for async logging to complete
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Fetch LLM activity log
-    const entries = await getLLMActivity();
-
     // For validation errors (400/422), execution_record may not be emitted
     // since the error occurs before the try block
     // For runtime errors (500), execution_record should be emitted with status='error'
     if (res.status === 500) {
-      const execRecord = findExecutionRecord(entries);
+      const execRecord = await waitForExecutionRecord({ taskId: conversationId });
       if (execRecord) {
         // If execution_record was emitted, verify error fields
         assert.equal(execRecord.status, 'error', 'status should be error');
         assert.ok(execRecord.error, 'error message should be present');
-        assert.equal(
-          execRecord.taskId,
-          'test-conv-error-456',
-          'taskId should match conversation_id',
-        );
+        assert.equal(execRecord.taskId, conversationId, 'taskId should match conversation_id');
         assert.ok(execRecord.requestId, 'requestId should be present');
       }
     }
@@ -189,10 +188,7 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
     });
 
     if (res.status === 200) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const entries = await getLLMActivity();
-      const execRecord = findExecutionRecord(entries);
+      const execRecord = await waitForExecutionRecord({ taskId: conversationId });
 
       if (execRecord) {
         // Verify taskId is set to conversation_id
@@ -221,6 +217,7 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
 
   test('execution_record captures intent when classified', async () => {
     await clearLLMActivity();
+    const conversationId = `test-conv-intent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     // Use a message that should trigger intent classification
     // (e.g., "show me my leads" might classify to LEAD_LIST)
@@ -233,16 +230,13 @@ describe('AI Execution Record Telemetry', { skip: !SHOULD_RUN }, () => {
       body: JSON.stringify({
         tenant_id: TENANT_ID,
         messages: [{ role: 'user', content: 'show me all my leads from this week' }],
-        conversation_id: 'test-conv-intent',
+        conversation_id: conversationId,
         session_entities: [],
       }),
     });
 
     if (res.status === 200) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const entries = await getLLMActivity();
-      const execRecord = findExecutionRecord(entries);
+      const execRecord = await waitForExecutionRecord({ taskId: conversationId });
 
       if (execRecord) {
         // Intent should either be a string (classified) or null (unclassified)
