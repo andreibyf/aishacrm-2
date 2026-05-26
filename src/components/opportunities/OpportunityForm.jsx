@@ -107,28 +107,45 @@ export default function OpportunityForm({
     }
   }, [opportunity, customFields]);
 
-  // Filter stage options based on card visibility and apply custom labels
-  // Keep hidden stages if the current opportunity has them
+  // Filter stage options based on card visibility and apply custom labels.
+  // Keep hidden stages if the current opportunity has them.
+  //
+  // 4VD-63: values MUST be the canonical strings stored in
+  // `opportunities.stage` (see backend/config/constants.js STATUS.OPPORTUNITY).
+  // Previously this form wrote the legacy short forms `won` / `lost`, which
+  // did not match the canonical `closed_won` / `closed_lost` used by stat
+  // cards, the Kanban board and every server-side filter — so clicking
+  // "Closed Won" returned zero records even when the count was non-zero.
   const filteredStageOptions = useMemo(() => {
     const stageCardMap = {
       prospecting: 'opportunity_prospecting',
       qualification: 'opportunity_qualification',
       proposal: 'opportunity_proposal',
       negotiation: 'opportunity_negotiation',
-      won: 'opportunity_won',
-      lost: 'opportunity_lost',
+      closed_won: 'opportunity_won',
+      closed_lost: 'opportunity_lost',
     };
+
+    // Treat legacy values on existing records as their canonical equivalents
+    // so the dropdown still shows the right selection when editing rows that
+    // pre-date the 4VD-63 migration.
+    const canonicalCurrent =
+      formData.stage === 'won'
+        ? 'closed_won'
+        : formData.stage === 'lost'
+          ? 'closed_lost'
+          : formData.stage;
 
     return [
       { value: 'prospecting', label: 'Prospecting' },
       { value: 'qualification', label: 'Qualification' },
       { value: 'proposal', label: 'Proposal' },
       { value: 'negotiation', label: 'Negotiation' },
-      { value: 'won', label: 'Won' },
-      { value: 'lost', label: 'Lost' },
+      { value: 'closed_won', label: 'Won' },
+      { value: 'closed_lost', label: 'Lost' },
     ]
       .filter(
-        (option) => isCardVisible(stageCardMap[option.value]) || formData.stage === option.value,
+        (option) => isCardVisible(stageCardMap[option.value]) || canonicalCurrent === option.value,
       )
       .map((option) => ({
         ...option,
@@ -189,13 +206,20 @@ export default function OpportunityForm({
   // Load opportunity data if editing
   useEffect(() => {
     if (opportunity) {
+      // 4VD-63: existing rows may carry the legacy short forms `won`/`lost`.
+      // Coerce to the canonical values so (a) the dropdown shows the right
+      // selection and (b) saving the form re-persists the row with the
+      // canonical value, healing legacy data passively on next edit.
+      const rawStage = opportunity.stage || 'prospecting';
+      const canonicalStage =
+        rawStage === 'won' ? 'closed_won' : rawStage === 'lost' ? 'closed_lost' : rawStage;
       setFormData({
         name: opportunity.name || '',
         account_id: opportunity.account_id || '',
         contact_id: opportunity.contact_id || '',
         assigned_to: opportunity.assigned_to || '',
         assigned_to_team: opportunity.assigned_to_team || '',
-        stage: opportunity.stage || 'prospecting',
+        stage: canonicalStage,
         amount: opportunity.amount || '',
         close_date: opportunity.close_date || '',
         lead_source: opportunity.lead_source || 'website',

@@ -3,6 +3,7 @@ import { validateTenantAccess, enforceEmployeeDataScope } from '../middleware/va
 import { cacheList, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { toNullableString, toNumeric, toInteger } from '../lib/typeConversions.js';
+import { expandStageFilter, canonicalizeStage } from '../lib/opportunityStageNormalizer.js';
 
 export default function createOpportunityRoutes(_pgPool) {
   const router = express.Router();
@@ -325,8 +326,11 @@ export default function createOpportunityRoutes(_pgPool) {
         .eq('tenant_id', tenant_id);
 
       // Stage filter (ignore 'all', 'any', '', 'undefined' as they mean no filter)
+      // 4VD-63: expand legacy↔canonical aliases (`won`↔`closed_won`,
+      // `lost`↔`closed_lost`) so historical rows remain visible.
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
-        q = q.eq('stage', stage.toLowerCase());
+        const stageValues = expandStageFilter(stage);
+        if (stageValues) q = q.in('stage', stageValues);
       }
 
       // Handle filter for assigned_to and dynamic search
@@ -568,8 +572,12 @@ export default function createOpportunityRoutes(_pgPool) {
       const nowIso = new Date().toISOString();
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
       const supabase = getSupabaseClient();
+      // 4VD-63: canonicalize legacy `won`/`lost` to `closed_won`/`closed_lost`
+      // on create so newly inserted rows never carry the legacy short forms.
       const normalizedStage =
-        typeof stage === 'string' && stage.trim() ? stage.trim().toLowerCase() : 'prospecting';
+        typeof stage === 'string' && stage.trim()
+          ? canonicalizeStage(stage.trim().toLowerCase())
+          : 'prospecting';
       const parsedAmount = toNumeric(amount);
       const parsedProbability = clampProbability(probability);
       const opportunityPayload = {
@@ -674,7 +682,9 @@ export default function createOpportunityRoutes(_pgPool) {
         otherFields,
         metadataExtras,
       );
-      const normalizedStage = typeof stage === 'string' ? stage.trim().toLowerCase() : null;
+      // 4VD-63: canonicalize legacy stage values on update too.
+      const normalizedStage =
+        typeof stage === 'string' ? canonicalizeStage(stage.trim().toLowerCase()) : null;
 
       const payload = { metadata: updatedMetadata, updated_at: new Date().toISOString() };
       if (name !== undefined) payload.name = name?.trim?.() || null;
