@@ -35,7 +35,7 @@ After UI Slice 1 lands all packets (UI-1A…UI-1F), the following becomes true t
 **Scope boundary — what UI Slice 1 does NOT do:**
 
 - **No mutating controls.** No approve button, no reject button, no reverse button, no replay button, no adapter retry button, no adapter cancel button, no provider sync trigger, no route-flip button for `ENABLE_FINANCE_PERSISTENT_EVENTS`, no provider-writes-enable button, no production-activation button. Enumerated exhaustively in §13.
-- **No frontend execution of `POST /api/v2/finance/*`.** The five mutating endpoints (`POST /draft-invoices`, `PATCH /draft-invoices/:id`, `POST /journal-drafts`, `POST /simulate/deal-won`, `POST /journal-entries/:id/reverse`, `POST /approvals/:id/approve`) are out of scope. The API client must not even import them.
+- **No frontend execution of `POST /api/v2/finance/*`.** The six mutating endpoints (`POST /draft-invoices`, `PATCH /draft-invoices/:id`, `POST /journal-drafts`, `POST /simulate/deal-won`, `POST /journal-entries/:id/reverse`, `POST /approvals/:id/approve`) are out of scope. The API client must not even import them.
 - **No new backend endpoints.** UI Slice 1 consumes only the **5 existing GET routes** in `backend/routes/finance.v2.js` (§8.1). Every read the UI cannot satisfy from those five today is **flagged as an API gap** in §8.2 and deferred to the appropriate backend slice (UI-1F bundles the gap inventory; backend slices that close them are out of UI Slice 1 scope).
 - **No persistent-events route activation.** `ENABLE_FINANCE_PERSISTENT_EVENTS` stays unset / fail-closed at `backend/routes/finance.v2.js:48`. The UI **observes** the fail-closed posture (via `/runtime/status.runtime.persistence === 'in_memory'` and a persistent banner — §10) but does not flip it.
 - **No provider writes.** `FINANCE_PROVIDER_WRITES_ENABLED` stays `false` by default. The UI **observes** the disabled posture (via `/runtime/status.runtime.provider_sync === 'disabled'` and a persistent banner — §10) but does not toggle it.
@@ -92,7 +92,7 @@ Slice 1 names three personas. They are deliberately operator / admin facing; no 
 
 ### 4.1 Finance admin (primary persona)
 
-- **Who:** An internal tenant user with the `admin` or `superadmin` role and `crm_access = true`. In production usage, this is the customer's finance lead (CFO / controller / finance ops manager) for a tenant enrolled in `financeOps`.
+- **Who:** An internal tenant user with `crm_access = true`, in a tenant enrolled in `financeOps`. In production usage, this is the customer's finance lead (CFO / controller / finance ops manager). The actual Finance v2 backend authorization contract today is exactly: authenticated session + `validateTenantAccess` (tenant match) + per-tenant `financeOps` module gate (`backend/routes/finance.v2.js:67-85`). There is **no backend role check** — restricting the nav entry to admin/superadmin would be a frontend-only product-policy decision introduced by Slice 1, not a reflection of the backend contract; that decision is deferred to a later product/UX slice per §11.3.
 - **Trust level:** High. Authorized to see all finance state for their tenant. Not authorized to mutate anything in Slice 1; mutation paths are deferred to a later UI slice and gated separately.
 - **Mental model:** "Show me what's happening with my finance data — what's pending, what's posted, what's queued, what failed, what's pending approval." Wants a single page to glance at and a confidence signal that the system is healthy / degraded / blocked.
 - **Decision authority in Slice 1:** None binding — the UI is read-only. Out-of-band escalation: contact the deploy owner if something looks wrong.
@@ -149,7 +149,7 @@ The console mounts as a **single new primary-nav entry** in the existing left si
 - **Proposed position:** between `Reports` and `Integrations` (analytics-adjacent, settings-adjacent). UI-1A confirms on review.
 - **Secondary nav entry:** no. The console is operationally important enough to be primary-nav when enabled.
 - **`pagesAllowedWithoutCRM` set:** no — finance ops requires CRM access by definition.
-- **`systemPages` set:** no in Slice 1 — finance admins (per §4.1) are tenant-side admins, not platform super-admins. The `RouteGuard` already checks `admin`/`superadmin` role independently. UI-1A may move it later if it turns out to be operator-only in practice, but Slice 1 designs for the tenant-side admin path.
+- **`systemPages` set:** no in Slice 1. Per §11.3, the Slice 1 access model matches the real Finance v2 backend contract — authenticated tenant + `financeOps` enabled, no role gate — so adding `FinanceOps` to `systemPages` (which is a superadmin / platform-side restriction) would over-narrow the access surface beyond what the backend enforces. A later product/UX slice may add a role gate as a deliberate product-policy decision; if it does, the corresponding backend role check must land in the same slice so the rule is enforced at both layers.
 
 ### 6.2 In-page navigation (tabs / subroutes)
 
@@ -441,10 +441,18 @@ Top → bottom on the page header: 10.1 → 10.2 → 10.3 → 10.4. They stack r
 - The nav entry itself (§6.1) **does not appear** in the sidebar when the tenant is not enrolled in `financeOps`. Implementation packet UI-1A wires the module check via the existing `ModuleSettings` entity import already in `Layout.jsx:73`.
 - **Open question for UI-1A:** the existing `moduleMapping` table uses display labels (`'Cash Flow Management'`, etc.). The finance module gate uses canonical keys (`'financeOps'` / `'enterpriseFinance'`). UI-1A must reconcile this — see §6.1 open question.
 
-### 11.3 Role-based (`admin` / `superadmin`) — frontend posture
+### 11.3 Role-based access — backend contract vs. Slice 1 frontend posture
 
-- Slice 1 surfaces the Finance Operations nav entry to `admin` and `superadmin` only. Regular users do not see the entry; if they navigate to `/FinanceOps` directly, `RouteGuard` redirects to Dashboard.
-- This is intentionally conservative for Slice 1 — finance state is operationally sensitive and the personas (§4) are all admin / operator / engineer. A later slice can widen this if a customer requests a read-only finance-viewer role.
+**Backend contract (today, factual):** the Finance v2 route module enforces exactly two access checks — `validateTenantAccess` (authenticated tenant match) and the per-tenant `financeOps` module gate (`backend/routes/finance.v2.js:67-85`). There is **no backend role check.** Any authenticated user of a tenant enrolled in `financeOps` can hit `GET /api/v2/finance/*` and get a 200; admins, regular users, and AI agents are all on the same footing at the route boundary.
+
+**Slice 1 frontend posture:** the access model adopted at the route boundary is therefore "authenticated tenant + `financeOps` enabled" — the same as the backend. The nav entry and the `/FinanceOps` page are surfaced to any user of an enrolled tenant in Slice 1.
+
+**Role-as-product-policy (deferred to a later slice, NOT Slice 1):** restricting the nav entry / page to `admin` / `superadmin` is a _product-policy_ question (who should see operational finance state?), not a security boundary. It is a defensible choice — finance state is operationally sensitive and the personas in §4 are admin / operator / engineer — but it is a **new** rule introduced by the frontend, not a reflection of any backend enforcement that exists today. Slice 1 deliberately does NOT adopt this restriction so that:
+
+1. The Slice 1 access model matches the real backend contract honestly (no stricter-than-server frontend rule that could hide a legitimate read for an enrolled tenant user).
+2. The product/UX decision about who should see operational finance state is made deliberately in a later slice — with explicit acceptance criteria, a corresponding backend role check (so the rule is enforced at both layers, not just hidden in the UI), and a migration path for tenants whose finance leads are not platform admins.
+
+A later slice may add the role gate; if it does, it must add the corresponding backend role check at the same time so the UI never enforces a rule the API would otherwise allow.
 
 ### 11.4 Tenant impersonation — frontend posture
 
