@@ -85,7 +85,7 @@ Each decision below is **frozen for Slice 2 implementation**. Sub-packets (2A–
 
 ### 4.1 `finance.adapter_jobs` lifecycle and claim/lock semantics
 
-**Lifecycle (corrected per Codex P1 / P2 review):** the actual canonical state machine in code + projection contracts + migration 168 includes a `draft` pre-approval state that the [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) §3 lifecycle diagram omits (the diagram is the **runtime-side view** of jobs the processor sees; it starts at `queued`). The full DB lifecycle is:
+**Lifecycle (corrected per Codex P1 / P2 review):** the actual canonical state machine in code + projection contracts + migration 172 includes a `draft` pre-approval state that the [`adapter-runtime-contract.md`](./adapter-runtime-contract.md) §3 lifecycle diagram omits (the diagram is the **runtime-side view** of jobs the processor sees; it starts at `queued`). The full DB lifecycle is:
 
 ```
 draft  →  queued  →  running  →  succeeded
@@ -98,7 +98,7 @@ draft  →  queued  →  running  →  succeeded
 any → cancelled  (operator-only; out of Slice 2 HTTP scope)
 ```
 
-`finance.adapter_jobs.status` enum per migration 168 + `simulateDealWon` (`backend/lib/finance/financeDomainService.js:471-483`) + projection-contracts.md §7 §"Adapter jobs in draft status" all agree: **`draft` is the canonical pre-approval state.** A `draft` row exists for adapter_jobs linked to approval-required journals; the row is **not** claimable by the worker and does **not** emit `finance.adapter.sync_queued`. The `sync_queued` event marks the post-approval `draft → queued` transition, and it's THAT transition that puts the job into the worker's claimable pool.
+`finance.adapter_jobs.status` enum per migration 172 + `simulateDealWon` (`backend/lib/finance/financeDomainService.js:471-483`) + projection-contracts.md §7 §"Adapter jobs in draft status" all agree: **`draft` is the canonical pre-approval state.** A `draft` row exists for adapter_jobs linked to approval-required journals; the row is **not** claimable by the worker and does **not** emit `finance.adapter.sync_queued`. The `sync_queued` event marks the post-approval `draft → queued` transition, and it's THAT transition that puts the job into the worker's claimable pool.
 
 **`draft → queued` transition trigger (resolves §9 Q5 — no longer deferrable):**
 

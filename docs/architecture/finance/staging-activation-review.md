@@ -29,7 +29,7 @@ Each item maps to the Phase 2C deliverable that satisfies it.
 | RLS reviewed                        | `phase-2c-rls-application-plan.md` (2C-1) — final tenant expression, `service_role` policies finalize-able now, `authenticated` SELECT policies DRAFT pending the staging JWT check | ✅ Documented                                                  |
 | PostgREST isolation verified        | `postgrest-isolation-verification.md` (2C-2) — `finance` absent from `config.toml` exposed schemas; stop condition not triggered                                                    | ✅ Documented (repo); staging re-check pending                 |
 | `service_role` behavior understood  | `service-role-tenant-claim-verification.md` (2C-3) — bypass behavior explicit; RLS framed as defense-in-depth, not the primary control                                              | ✅ Documented; staging `auth.role()` check pending             |
-| Persistent projection store decided | `persistent-projection-store-plan.md` (2C-4) + migration `170` (DRAFT)                                                                                                              | ✅ Documented                                                  |
+| Persistent projection store decided | `persistent-projection-store-plan.md` (2C-4) + migration `174` (DRAFT)                                                                                                              | ✅ Documented                                                  |
 | Worker configs disabled-by-default  | `finance-worker-deployment-config.md` (2C-5) + `deploy/coolify/finance-workers.example.yml` — three-tier gate, every flag `false`                                                   | ✅ Documented                                                  |
 | Projection worker staging plan      | `projection-worker-staging-plan.md` (2C-6) — no semantic change; `replay`-based catch-up; degraded pause                                                                            | ✅ Documented                                                  |
 | Audit/evidence worker staging plan  | `audit-worker-staging-plan.md` (2C-7) — read-only, deterministic packs, explicit infra-event opt-in                                                                                 | ✅ Documented                                                  |
@@ -73,7 +73,7 @@ flip `ENABLE_FINANCE_OPS`, deploy a worker, or contact a provider.
 The following remain as **operator execution steps**, each with its procedure
 already written:
 
-1. Apply migrations 168 / 169 / 170 + the companion RLS migration to staging
+1. Apply migrations 172 / 173 / 174 + the companion RLS migration to staging
    (gated — 2C-1 §7).
 2. Run the staging environment-dependent verifications — PostgREST exclusion
    re-check (2C-2 §3.2), `auth.role()` (2C-3 §3), JWT tenant-claim path

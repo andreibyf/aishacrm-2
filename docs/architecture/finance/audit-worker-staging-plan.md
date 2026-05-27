@@ -46,7 +46,7 @@ capability. The worker adds scheduling and a health surface; it adds no mutation
 The audit worker reads `finance.audit_events` and never writes it:
 
 - `finance.audit_events` is append-only and immutable at the DB layer — migration
-  169 installs `BEFORE` triggers blocking `UPDATE` / `DELETE` / `TRUNCATE` for
+  173 installs `BEFORE` triggers blocking `UPDATE` / `DELETE` / `TRUNCATE` for
   **every** role, including `service_role` (`audit-evidence-layer.md` §2.1).
   Even a defective worker physically cannot mutate a source event.
 - `auditEvidenceBuilder.js` operates on **deep-cloned, sorted** event sets; it

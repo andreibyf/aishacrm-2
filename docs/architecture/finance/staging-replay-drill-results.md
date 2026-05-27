@@ -50,7 +50,7 @@ A live execution requires the deploy owner's explicit authorization. When author
 ## 3. Prerequisites
 
 - [ ] **Phase 3-1 baseline.** Branch `feat/finance-ops-runtime` at a descendant of `3c60d9ff`; 278/278 finance + projection + worker + route tests passing.
-- [ ] **Phase 3-2 migrations applied.** At minimum 168 (`finance.audit_events` exists) + 169 (append-only triggers) + 170 (`finance.projection_state` exists, the target of replay writes) + 171 (RLS policies + no-hard-delete triggers).
+- [ ] **Phase 3-2 migrations applied.** At minimum 172 (`finance.audit_events` exists) + 173 (append-only triggers) + 174 (`finance.projection_state` exists, the target of replay writes) + 175 (RLS policies + no-hard-delete triggers).
 - [ ] **Phase 3-3 RLS verification PASS.** §4.1 / §4.2 / §4.3.a / §4.4.a all PASS (so the worker's `service_role` reads/writes work and the drill's `finance.projection_state` writes succeed).
 - [ ] **Phase 3-4 worker app exists on VPS-1.** `staging-finance-projection-worker` Coolify app deployed. (Whether enabled or disabled — Phase 3-5 status — doesn't change the drill itself, but matters for the "during drill, will the poll loop also be running?" interaction note in §5.3.)
 - [ ] **Doppler `stg_stg` secrets available.** `FINANCE_DB_URL` (or `DATABASE_URL`) for the staging Supabase, `DOPPLER_TOKEN` for whichever account executes the drill.
@@ -263,7 +263,7 @@ ssh andreibyf@147.189.173.237 'docker exec staging-backend-heavy doppler run --c
        where tenant_id = '\''a11dfb63-4b18-4eb8-872e-747af2e37c46'\'';"'
 ```
 
-All commands are read-only against `finance.audit_events` (the source of truth, immutable per migration 169). The replayAll call writes to `finance.projection_state` (the rebuildable cache) — the only mutation in the entire drill.
+All commands are read-only against `finance.audit_events` (the source of truth, immutable per migration 173). The replayAll call writes to `finance.projection_state` (the rebuildable cache) — the only mutation in the entire drill.
 
 ---
 
@@ -309,7 +309,7 @@ Replay against the event stream is a **pure function** of `finance.audit_events`
 - **Restore from §5.2 snapshot.** Write the pre-drill `finance.projection_state` rows back for the tenant — returns projections to the exact pre-drill state. Useful when the drill's rebuilt state is suspect and the pre-drill state was known-good.
 - **Restore by re-replay.** Re-run §5.3. Replay is deterministic over the unchanged event stream, so the second run reconstructs the same state as the first. Useful when the first run was the suspect one.
 - **Truncate-and-rebuild.** Delete the tenant's `finance.projection_state` rows entirely, then re-run §5.3 — a clean rebuild from the event stream. Safe because the event stream is immutable and the projection_state is a rebuildable cache.
-- **No `finance.audit_events` rollback exists or is needed.** The table is immutable at the DB layer (migration 169 triggers block UPDATE / DELETE / TRUNCATE for every role including `service_role`).
+- **No `finance.audit_events` rollback exists or is needed.** The table is immutable at the DB layer (migration 173 triggers block UPDATE / DELETE / TRUNCATE for every role including `service_role`).
 
 The drill never touches `finance.audit_events`; it only reads from it. The only mutation is the replay's writes to `finance.projection_state`, and those are fully reversible by any of the above three paths.
 

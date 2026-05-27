@@ -1,10 +1,10 @@
 -- Finance Ops Phase 3 — companion RLS migration
--- Migration 171. Dev-only DRAFT. Do NOT apply to staging/production until the
+-- Migration 175. Dev-only DRAFT. Do NOT apply to staging/production until the
 -- Phase 3-2 staging-readiness review clears (docs/architecture/finance/
 -- phase-2c-rls-application-plan.md Section 7).
 --
 -- Enables Row-Level Security on all 9 finance tables (the 8 created in
--- migration 168 plus finance.projection_state created in migration 170) and
+-- migration 172 plus finance.projection_state created in migration 174) and
 -- installs the finalized RLS policy set and the no-hard-delete ledger triggers.
 --
 -- Policy model (security-rls-hardening.md Section 2, finalized tenant
@@ -291,6 +291,6 @@ create trigger trg_no_delete_approvals
 -- (false) DELETE policies but no no-hard-delete trigger: a service_role delete
 -- on these operational records is acceptable (security-rls-hardening.md §3.1).
 -- finance.audit_events UPDATE/DELETE/TRUNCATE is additionally guarded by the
--- append-only triggers installed in migration 169.
+-- append-only triggers installed in migration 173.
 -- finance.projection_state is a rebuildable cache — intentionally no
 -- no-hard-delete trigger and no DELETE policy.

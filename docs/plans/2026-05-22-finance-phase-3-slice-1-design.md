@@ -32,10 +32,10 @@ the domain service's own (Phase-1, in-memory) state model.
   presence, injected via DI.
 - `auditTimelineProjection.js` — the 4th projection worker.
 - `projectionStore.pg.js` — a Postgres `ProjectionStoreProvider` backing
-  `finance.projection_state` (migration 170).
+  `finance.projection_state` (migration 174).
 - `projectionRunner.js` — `await` the store-provider seam (async-provider support).
 - `backend/workers/financeProjectionWorker.js` — the projection worker process.
-- Migration `171_finance_rls_policies.sql` — the companion RLS migration.
+- Migration `175_finance_rls_policies.sql` — the companion RLS migration.
 
 ### Out of scope (Slice 2 / later / deferred)
 
@@ -114,7 +114,7 @@ others.
 `createPgProjectionStoreProvider({ pool })` — implements the **same provider
 interface** as `projectionStore.memory.js`: `getLiveStore`, `createShadowStore`,
 `promoteShadow`, `discardShadow`, `getState`, `setState`. Backed by
-`finance.projection_state` (migration 170).
+`finance.projection_state` (migration 174).
 
 It must preserve the existing in-memory behavioral semantics exactly
 (constraint 3):
@@ -147,12 +147,12 @@ call-sites so an async provider is supported.
   semantics, replay semantics, degraded-state semantics, dispatch sequencing all
   stay in the runner. The provider only persists; the worker only schedules.
 
-### E. Migration `171_finance_rls_policies.sql`
+### E. Migration `175_finance_rls_policies.sql`
 
 The companion RLS migration from `phase-2c-rls-application-plan.md` §7:
 
-- `ENABLE ROW LEVEL SECURITY` on all 9 finance tables (the 8 from migration 168
-  plus `finance.projection_state` from 170).
+- `ENABLE ROW LEVEL SECURITY` on all 9 finance tables (the 8 from migration 172
+  plus `finance.projection_state` from 174).
 - `service_role` policies (active) and `authenticated` `tenant_match` SELECT
   policies (active — fail-closed: a wrong/absent JWT claim yields zero rows, no
   leak).
@@ -251,7 +251,7 @@ backend/lib/finance/projections/auditTimelineProjection.js        (NEW)
 backend/lib/finance/projections/projectionStore.pg.js             (NEW)
 backend/lib/finance/projections/projectionRunner.js               (MODIFIED — await seam)
 backend/workers/financeProjectionWorker.js                        (NEW)
-backend/migrations/171_finance_rls_policies.sql                   (NEW — dev-only, gated)
+backend/migrations/175_finance_rls_policies.sql                   (NEW — dev-only, gated)
 backend/lib/finance/financeDomainService.js                       (MODIFIED — injectable event store)
 backend/routes/finance.v2.js                                      (MODIFIED — event-store selection)
 backend/package.json                                              (MODIFIED — worker script, test globs)

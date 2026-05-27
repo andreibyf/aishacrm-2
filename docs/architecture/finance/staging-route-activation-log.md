@@ -58,7 +58,7 @@ A live execution requires the deploy owner's explicit authorization. When author
 ## 3. Prerequisites — what must be true before 3-7 runs
 
 - [ ] **Phase 3-1 baseline.** Branch `feat/finance-ops-runtime` at a descendant of `3c60d9ff`; 278/278 finance + projection + worker + route tests passing.
-- [ ] **Phase 3-2 migrations applied to staging.** At minimum 168 + 169 + 170 + 171.
+- [ ] **Phase 3-2 migrations applied to staging.** At minimum 172 + 173 + 174 + 175.
 - [ ] **Phase 3-3 RLS verification PASS** in staging.
 - [ ] **Phase 3-4 worker app exists on VPS-1** (`staging-finance-projection-worker`), at minimum in disabled state. Whether Phase 3-5 has activated the worker doesn't matter for 3-7 — the route and worker are independent surfaces.
 - [ ] **Phase 3-6 drill plan committed** as the operational replay contract — execution can occur after 3-7 or in parallel; not a hard prereq for 3-7.
@@ -315,7 +315,7 @@ Effect: the entire `/api/v2/finance/*` surface unmounts. Express returns `404` f
 ### 9.3 Rollback is config / module-toggle only
 
 - **No code revert required.** All Phase 3 activation is environment-variable + module-flag driven on top of code already merged and verified at the Phase 3 baseline `3c60d9ff`. A Phase 3-7 rollback does not require reverting any commit.
-- **No schema rollback required.** No migration was applied by 3-7; rolling back the route or the module flag doesn't roll back migrations 168/169/170/171 (which 3-2 applied).
+- **No schema rollback required.** No migration was applied by 3-7; rolling back the route or the module flag doesn't roll back migrations 172/173/174/175 (which 3-2 applied).
 - **No customer impact.** The controlled tenant is staging-only; no production tenant ever had access; rollback affects only the controlled staging tenant's access to the staging route.
 
 ---

@@ -72,7 +72,7 @@ const STATUS_BUCKET = {
  * — `aggregate_type` / `aggregate_id` / `operation` / `mode`, reusing the
  * Track A event-envelope vocabulary. That shape is reconciled across all three
  * Phase-1 sources: the `simulateDealWon` draft adapter-job object in
- * `financeDomainService.js`, the `finance.adapter_jobs` table (migration 168),
+ * `financeDomainService.js`, the `finance.adapter_jobs` table (migration 172),
  * and projection-contracts.md §7. An adapter job missing those identity fields
  * surfaces them as `null` rather than degrading.
  */

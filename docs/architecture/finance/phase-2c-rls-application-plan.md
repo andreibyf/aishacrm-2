@@ -30,7 +30,7 @@ and enabling `ENABLE_FINANCE_OPS`.
 
 ### Hard constraints in force
 
-- Migrations 168, 169, and the companion RLS migration are **dev/local-only**
+- Migrations 172, 173, and the companion RLS migration are **dev/local-only**
   until this gate clears.
 - No finance schema exposure through PostgREST is introduced (see
   [`postgrest-isolation-verification.md`](./postgrest-isolation-verification.md)).
@@ -148,7 +148,7 @@ finalizes the _decision_; that document remains the source of the SQL.
 
 ## 4. Tables Requiring RLS
 
-All eight finance tables created by migration 168 require RLS. There is no
+All eight finance tables created by migration 172 require RLS. There is no
 finance table that is exempt.
 
 | Table                     | RLS required | SELECT         | INSERT / UPDATE              | DELETE | Immediate posture |
@@ -227,7 +227,7 @@ Documented in full in
   Section 2.1. RLS exists to fail-close the _direct PostgREST_ path and to give
   a second barrier if the schema is ever exposed.
 - The append-only guarantee for `finance.audit_events` does **not** depend on
-  RLS — migration 169's `BEFORE` triggers block `UPDATE`/`DELETE`/`TRUNCATE`
+  RLS — migration 173's `BEFORE` triggers block `UPDATE`/`DELETE`/`TRUNCATE`
   even for `service_role`.
 
 ---
@@ -236,18 +236,18 @@ Documented in full in
 
 ### 7.1 Migration sequencing
 
-Finance RLS is **not** part of migration 168 or 169 (both leave RLS disabled by
-design — 168 lines 184–192 are commented placeholders; 169 states RLS is
+Finance RLS is **not** part of migration 172 or 173 (both leave RLS disabled by
+design — 172 lines 184–192 are commented placeholders; 173 states RLS is
 finalized separately). The application order is:
 
-1. **Migration 168** — `finance` schema + 8 tables (RLS placeholders only).
-2. **Migration 169** — `finance.audit_events` append-only triggers + replay
+1. **Migration 172** — `finance` schema + 8 tables (RLS placeholders only).
+2. **Migration 173** — `finance.audit_events` append-only triggers + replay
    index.
 3. **Companion RLS migration (new, DRAFT)** — `ENABLE ROW LEVEL SECURITY` on all
    8 tables; `service_role` policies finalized; `authenticated` `tenant_match`
    SELECT policies included **only after** the 2C-3 staging JWT-claim check
    passes; no-hard-delete ledger triggers from `security-rls-hardening.md` §3–§4.
-4. Resolve the migration-168 schema blockers in `security-rls-hardening.md` §6
+4. Resolve the migration-172 schema blockers in `security-rls-hardening.md` §6
    (`entry_number` generation — Appendix A/F1; `journal_lines` indexing;
    `finance.accounts` vs `public.accounts` qualification; `adapter_jobs` FK
    posture).
@@ -264,7 +264,7 @@ later decision (see [`production-readiness-review.md`](./production-readiness-re
 - [ ] JWT `tenant_id` claim path confirmed against a staging `authenticated`
       session — or the `authenticated` SELECT policies are kept DRAFT and only
       the `service_role` policies are applied (2C-3 §5).
-- [ ] Migration-168 schema blockers (`security-rls-hardening.md` §6) resolved or
+- [ ] Migration-172 schema blockers (`security-rls-hardening.md` §6) resolved or
       explicitly accepted.
 - [ ] No-hard-delete ledger triggers reviewed, packaged, and tested on dev
       Postgres against both `authenticated` and `service_role` connections.

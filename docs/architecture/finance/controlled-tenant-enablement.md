@@ -61,7 +61,7 @@ Run in order, in the **staging** environment only.
 ### Step 1 — Preconditions
 
 - The staging-readiness gate (`phase-2c-rls-application-plan.md` §7) has cleared.
-- Migrations 168, 169, 170, and the companion RLS migration are applied to
+- Migrations 172, 173, 174, and the companion RLS migration are applied to
   staging (gated; 2C-1 §7).
 - Observability is in place ([`observability-alerting.md`](./observability-alerting.md), 2C-11).
 - The controlled `tenant_id` is selected (§3).

@@ -543,7 +543,7 @@ correlation_id, causation_id }` — `status` is derived from the event type and
 > one of `draft` / `queued` / `running` / `succeeded` / `failed`. That shape
 > is now reconciled across all three Phase-1 sources: the `simulateDealWon`
 > draft adapter-job object in `financeDomainService.js`, the
-> `finance.adapter_jobs` table (migration 168), and this §7 contract all agree
+> `finance.adapter_jobs` table (migration 172), and this §7 contract all agree
 > on it, so the `sync_*` emitter can be built directly against it. The
 > adapter-job record reuses the Track A `aggregate_type` / `aggregate_id`
 > envelope vocabulary (also used by `finance.audit_events` and

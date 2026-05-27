@@ -21,7 +21,7 @@ The audit layer is not a logging side-effect. It is a first-class part of the Fi
 The `finance.audit_events` table stores one row per finance event. The row maps directly from the finance event envelope produced by `financeEventEnvelope.js`.
 
 ```sql
--- finance.audit_events (from migration 168, with additions specified here)
+-- finance.audit_events (from migration 172, with additions specified here)
 create table finance.audit_events (
   -- Identity
   id              uuid primary key default gen_random_uuid(),  -- bare v4 UUID; never evt_-prefixed (M-1)
@@ -966,7 +966,7 @@ where ae.created_at >= '2025-12-01' and ae.created_at < '2026-01-01'
 
 ## Appendix: Index Recommendations
 
-In addition to the index on `(tenant_id, created_at desc)` from migration 168:
+In addition to the index on `(tenant_id, created_at desc)` from migration 172:
 
 ```sql
 -- For correlation_id and causation_id chain traversal
@@ -1127,7 +1127,7 @@ but the §6.2 code sample did not show as top-level keys:
 
 | ID  | Topic                       | Decision                                                                                                                                                                                                                                                                                                                                                                |
 | --- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | `audit_events` schema shape | **Use migration 168 payload-centered shape.** The scaffold doc described `before_state`/`after_state` columns — these do not exist in migration 168. State is captured inside `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. All interface specs in this document follow migration 168. |
+| D1  | `audit_events` schema shape | **Use migration 172 payload-centered shape.** The scaffold doc described `before_state`/`after_state` columns — these do not exist in migration 172. State is captured inside `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. All interface specs in this document follow migration 172. |
 
 ---
 

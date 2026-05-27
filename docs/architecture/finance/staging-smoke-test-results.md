@@ -71,7 +71,7 @@ A live execution requires the deploy owner's explicit authorization. When author
 ## 3. Prerequisites — what must be true before 3-8 runs
 
 - [ ] **Phase 3-1 baseline.** Branch `feat/finance-ops-runtime` at a descendant of `3c60d9ff`; 278/278 finance + projection + worker + route tests passing.
-- [ ] **Phase 3-2 migrations applied to staging.** At minimum 168 + 169 + 170 + 171.
+- [ ] **Phase 3-2 migrations applied to staging.** At minimum 172 + 173 + 174 + 175.
 - [ ] **Phase 3-3 RLS verification PASS** in staging.
 - [ ] **Phase 3-7 route activation complete.** `ENABLE_FINANCE_OPS=true` on `staging-backend-heavy` and the route surface is mounted (verified by Phase 3-7 §5.4 returning `200` for the controlled tenant). `modulesettings.financeOps.is_enabled = true` for `a11dfb63-4b18-4eb8-872e-747af2e37c46` only.
 - [ ] **A staging test user belonging to the controlled tenant** is available with a valid Supabase auth JWT. At minimum one `human` actor; ideally also one `ai_agent` actor (for check #8 AI approval block). If only `human` test users exist, check #8 must be DEFERRED with reason.

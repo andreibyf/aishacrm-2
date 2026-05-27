@@ -2,7 +2,7 @@
 
 **Phase 2C-4 — Staging-Readiness Gate.**
 **Branch:** `feat/finance-ops-runtime`
-**Status:** Decision finalized. Migration `170_finance_projection_state_draft.sql` is a DRAFT — not applied to any environment.
+**Status:** Decision finalized. Migration `174_finance_projection_state_draft.sql` is a DRAFT — not applied to any environment.
 **Date:** 2026-05-22
 **Related:** [`projection-runtime.md`](./projection-runtime.md) §3 · [`event-store-persistence.md`](./event-store-persistence.md) · [`worker-service-topology.md`](./worker-service-topology.md) §2 · [`projection-worker-staging-plan.md`](./projection-worker-staging-plan.md) (2C-6)
 
@@ -116,7 +116,7 @@ Notes:
 - **`updated_at` is trigger-maintained.** `default now()` only covers INSERT; a
   `BEFORE UPDATE` trigger stamps `updated_at = now()` on every UPDATE, so the
   column is an authoritative last-mutation timestamp the projection store
-  provider cannot forget to set. Migration 170 installs the trigger
+  provider cannot forget to set. Migration 174 installs the trigger
   (`finance.set_projection_state_updated_at`).
 
 ---
@@ -125,13 +125,13 @@ Notes:
 
 ### 4.1 The draft migration
 
-`backend/migrations/170_finance_projection_state_draft.sql` (next number after 169) creates `finance.projection_state` per Section 3. It is:
+`backend/migrations/174_finance_projection_state_draft.sql` (next number after 173) creates `finance.projection_state` per Section 3. It is:
 
 - **Additive only** — creates one new `finance.*` table and its indexes; touches
   no existing table, no `public.*` object.
 - **Idempotent** — `create table if not exists`, `create index if not exists`.
 - **RLS-deferred** — RLS is intentionally left disabled, consistent with
-  migrations 168 and 169. Finance RLS is finalized in the single companion RLS
+  migrations 172 and 173. Finance RLS is finalized in the single companion RLS
   migration described in `phase-2c-rls-application-plan.md` §7, which will also
   cover `finance.projection_state` (`tenant_match` SELECT, `service_only` writes;
   this table is mutable so no DELETE `DENY` beyond the standard policy).
@@ -140,9 +140,9 @@ Notes:
 
 ### 4.2 Application gating
 
-Migration 170 is gated on the same staging-readiness checklist as 168/169
+Migration 174 is gated on the same staging-readiness checklist as 172/173
 (`phase-2c-rls-application-plan.md` §7, `staging-rls-validation.md` §6). It is
-applied to staging **only** alongside 168/169 and the companion RLS migration,
+applied to staging **only** alongside 172/173 and the companion RLS migration,
 after that gate clears. Production application is a separate, later decision
 ([`production-readiness-review.md`](./production-readiness-review.md)).
 
@@ -213,7 +213,7 @@ defense-in-depth; the worker's queries are always explicitly
 | 2C-4 acceptance criterion                    | Status                                                                                                              |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Persistent projection strategy selected      | ✅ Section 2 — Option A, Postgres `finance.projection_state`.                                                       |
-| Migration is draft-only until staging review | ✅ Section 4 — `170_finance_projection_state_draft.sql`, `_draft` suffix, gated, not applied.                       |
+| Migration is draft-only until staging review | ✅ Section 4 — `174_finance_projection_state_draft.sql`, `_draft` suffix, gated, not applied.                       |
 | Projection state remains tenant-scoped       | ✅ Sections 3 + 6 — `tenant_id` on every row; PK `(projection_name, tenant_id)`.                                    |
 | Replay can rebuild from event stream         | ✅ Section 5.2 — replay still reads `finance.audit_events`; the snapshot is a durable cache, not a source of truth. |
 | Degraded status can persist                  | ✅ Sections 3 + 5.3 — `status` + `degraded_reason` columns; durable across restarts.                                |

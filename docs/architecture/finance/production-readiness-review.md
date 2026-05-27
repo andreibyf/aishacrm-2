@@ -23,7 +23,7 @@ a deliberate, separate decision and never a drift from staging activation.
   stays that way. The `/api/v2/finance` route surface does not exist in
   production.
 - No finance worker is deployed or enabled in production.
-- No finance migration (168 / 169 / 170 / the companion RLS migration) is
+- No finance migration (172 / 173 / 174 / the companion RLS migration) is
   applied to the production database.
 - No provider connection — sandbox or live — exists for any production tenant.
 - The `financeOps` module flag is not set for any production tenant.

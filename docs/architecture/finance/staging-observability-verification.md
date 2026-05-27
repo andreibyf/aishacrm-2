@@ -50,7 +50,7 @@ A live execution requires the deploy owner's explicit authorization. When author
 ## 3. Prerequisites
 
 - [ ] **Phase 3-1 baseline.** Branch `feat/finance-ops-runtime` at a descendant of `3c60d9ff`.
-- [ ] **Phase 3-2 migrations applied.** At minimum 168 + 169 + 170 + 171 (signal 4 reads `finance.projection_state` which 170 creates; signal 8 / 9 depend on the route surface that 3-7 mounts).
+- [ ] **Phase 3-2 migrations applied.** At minimum 172 + 173 + 174 + 175 (signal 4 reads `finance.projection_state` which 174 creates; signal 8 / 9 depend on the route surface that 3-7 mounts).
 - [ ] **Phase 3-4 worker app exists on VPS-1.** Whether enabled or disabled, the heartbeat-file healthcheck behavior described in §6 is reachable.
 - [ ] **Doppler `stg_stg` secrets** available for any DB-side checks.
 - [ ] **Optional but useful for full verification: Phase 3-5 worker activated + Phase 3-7 route mounted.** Some signals (signal 1 healthy state, signal 9 route auth/module spikes) only meaningfully fire when those activations have occurred. The 3-11 plan documents how to verify each signal _whether or not_ those activations are live.

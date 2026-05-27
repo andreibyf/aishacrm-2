@@ -142,10 +142,10 @@ Phase 3 packets that need secrets read them via `doppler run --` against the **s
 
 | Migration                                    | What it does                                                                                                         | Status at baseline | Phase 3 packet that may apply it                         |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------- |
-| `168_finance_ops_runtime_scaffold.sql`       | Creates the `finance` schema and its core tables (journal entries, invoices, approvals, adapter jobs, audit events). | Dev-only draft     | Phase 3-2 (staging only)                                 |
-| `169_finance_event_store_append_only.sql`    | Hardens `finance.audit_events` with append-only immutability trigger + `(tenant_id, created_at, id)` replay index.   | Dev-only draft     | Phase 3-2 (staging only)                                 |
-| `170_finance_projection_state_draft.sql`     | Creates `finance.projection_state` with the `BEFORE UPDATE` trigger that maintains `updated_at`.                     | Dev-only draft     | Phase 3-2 (staging only)                                 |
-| `171_finance_projection_state_rls_draft.sql` | Companion RLS for `finance.projection_state`. Dev-only draft, applied to nothing.                                    | Dev-only draft     | Phase 3-2 (staging only — gated by 3-3 RLS verification) |
+| `172_finance_ops_runtime_scaffold.sql`       | Creates the `finance` schema and its core tables (journal entries, invoices, approvals, adapter jobs, audit events). | Dev-only draft     | Phase 3-2 (staging only)                                 |
+| `173_finance_event_store_append_only.sql`    | Hardens `finance.audit_events` with append-only immutability trigger + `(tenant_id, created_at, id)` replay index.   | Dev-only draft     | Phase 3-2 (staging only)                                 |
+| `174_finance_projection_state_draft.sql`     | Creates `finance.projection_state` with the `BEFORE UPDATE` trigger that maintains `updated_at`.                     | Dev-only draft     | Phase 3-2 (staging only)                                 |
+| `175_finance_projection_state_rls_draft.sql` | Companion RLS for `finance.projection_state`. Dev-only draft, applied to nothing.                                    | Dev-only draft     | Phase 3-2 (staging only — gated by 3-3 RLS verification) |
 
 **Phase 3-1 applies no migration.** Migration application is Phase 3-2 and is **staging only** — never production. The migration files keep their dev-only-draft posture until Phase 3-2 runs them against the staging Supabase project (Doppler config `stg_stg`).
 
@@ -221,7 +221,7 @@ Phase 3 rollback is **a single config change** that requires no code deployment,
 | 3-7 (route activation via `ENABLE_FINANCE_OPS=true`) | Unset `ENABLE_FINANCE_OPS` (or set to anything other than the literal string `'true'`) in `staging-backend-heavy` Coolify env and redeploy.                                                                                             | Route surface unmounts; `/api/v2/finance/*` returns 404 across all tenants.                |
 | 3-4 / 3-5 (worker enablement)                        | Set any of `ENABLE_FINANCE_OPS`, `ENABLE_FINANCE_WORKERS`, or the per-worker flag to anything other than `'true'` in the worker app's Coolify env.                                                                                      | Worker logs "finance ops disabled — worker idling" and returns to no-op state immediately. |
 | 3-9 (adapter worker)                                 | Same per-worker rollback as above. Independently, `FINANCE_PROVIDER_WRITES_ENABLED=false` is the dominant kill switch.                                                                                                                  | Adapter ceases polling; no provider writes possible.                                       |
-| 3-2 (migrations applied to staging)                  | Migrations are additive and reversible-by-design (170 has the `BEFORE UPDATE` trigger that is safely droppable; 169's append-only trigger is droppable). Migration rollback is **last resort** — disable the runtime flags above first. | No staging-tenant data loss; finance tables empty until re-enabled.                        |
+| 3-2 (migrations applied to staging)                  | Migrations are additive and reversible-by-design (174 has the `BEFORE UPDATE` trigger that is safely droppable; 173's append-only trigger is droppable). Migration rollback is **last resort** — disable the runtime flags above first. | No staging-tenant data loss; finance tables empty until re-enabled.                        |
 
 ### 10.2 Rollback non-requirements
 
@@ -259,7 +259,7 @@ This document is the Phase 3-1 deliverable. Phase 3-1 is complete when:
 - [x] Deploy owner named (§4 — Dre)
 - [x] Rollback owner named (§4 — Dre)
 - [x] Staging environment assumptions recorded (§5)
-- [x] Migrations that may later be applied listed (§6 — 168/169/170/171, staging only)
+- [x] Migrations that may later be applied listed (§6 — 172/173/174/175, staging only)
 - [x] `ENABLE_FINANCE_PERSISTENT_EVENTS` constraint stated explicitly (§7)
 - [x] Persistent-events route block stated until Slice 2 (§7)
 - [x] No production activation stated explicitly (§8)

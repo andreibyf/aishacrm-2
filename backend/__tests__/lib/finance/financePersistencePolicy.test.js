@@ -5,7 +5,7 @@
  *
  * Regression guard for the APPLICATION-LAYER no-hard-delete / append-only
  * posture of the Finance Ops event store. These assertions are testable
- * without a database; the DB-layer trigger guards (migration 169) are verified
+ * without a database; the DB-layer trigger guards (migration 173) are verified
  * separately on a dev Postgres — see
  * docs/architecture/finance/staging-rls-validation.md Section 5.
  *

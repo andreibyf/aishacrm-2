@@ -3,7 +3,7 @@
  *
  * Phase 3 Slice 1 — Postgres-backed ProjectionStoreProvider for the Finance
  * Ops Projection Runtime. Backing table: `finance.projection_state`
- * (migration 170). One row per (projection_name, tenant_id) holds the
+ * (migration 174). One row per (projection_name, tenant_id) holds the
  * serialized read model (`state_json`) plus the runtime ProjectionState
  * metadata (cursor, status, schema_version, last_rebuilt_at, degraded_reason).
  *
@@ -36,7 +36,7 @@
 
 const PROJECTION_STATE_TABLE = 'finance.projection_state';
 
-// INSERT column order. `updated_at` is intentionally absent — migration 170
+// INSERT column order. `updated_at` is intentionally absent — migration 174
 // installs a BEFORE UPDATE trigger that stamps it on every mutation, and the
 // column default `now()` fills it on INSERT. Naming it here would fight the
 // trigger and risk drift.

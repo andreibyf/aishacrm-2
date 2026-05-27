@@ -75,7 +75,7 @@ configuration.
 
 ### 3.2 Runtime verification against the staging project
 
-Before migration 168 is applied to staging, and again after, run these checks
+Before migration 172 is applied to staging, and again after, run these checks
 against the **staging** Supabase project.
 
 **(a) Confirm the exposed-schemas setting (SQL editor):**
@@ -93,7 +93,7 @@ contain `finance`**.
 Supabase Dashboard → **Project Settings → API → Exposed schemas**. The list must
 not contain `finance`.
 
-**(c) Confirm a direct REST call to a finance table fails (after 168 is
+**(c) Confirm a direct REST call to a finance table fails (after 172 is
 applied to staging):**
 
 ```bash

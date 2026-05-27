@@ -3,7 +3,7 @@
 **Track F — AiSHA Finance Ops Architecture**
 **Status:** Draft — dev-only. RLS policies are ready to apply once the migration readiness checklist in Section 6 is cleared.
 **Branch:** `feat/finance-ops-runtime`
-**Migration:** `backend/migrations/168_finance_ops_runtime_scaffold.sql`
+**Migration:** `backend/migrations/172_finance_ops_runtime_scaffold.sql`
 
 ---
 
@@ -32,9 +32,9 @@ Finance tables use `tenant_id uuid` — identical to the CRM tables that already
 
 This expression is used verbatim in the RLS policies in Section 2. No modifications needed.
 
-### 1.3 Why RLS Is Commented Out in Migration 168
+### 1.3 Why RLS Is Commented Out in Migration 172
 
-RLS is commented out because migration 168 is dev-only until the full migration readiness checklist (Section 6) is cleared. The expression itself is not the blocker — the remaining blockers are the `entry_number` nullable+unique constraint and the migration sequencing review (see Section 6).
+RLS is commented out because migration 172 is dev-only until the full migration readiness checklist (Section 6) is cleared. The expression itself is not the blocker — the remaining blockers are the `entry_number` nullable+unique constraint and the migration sequencing review (see Section 6).
 
 ### 1.4 service_role Bypass Confirmation
 
@@ -423,17 +423,17 @@ The `resolveTenantId` function in `finance.v2.js` reads tenant_id from `req.tena
 
 ## 6. Migration Readiness Checklist
 
-The following items must all be true before `backend/migrations/168_finance_ops_runtime_scaffold.sql` (and the companion RLS migration) can be applied to staging.
+The following items must all be true before `backend/migrations/172_finance_ops_runtime_scaffold.sql` (and the companion RLS migration) can be applied to staging.
 
-### Schema Creation (Migration 168 itself)
+### Schema Creation (Migration 172 itself)
 
 - [ ] **`finance` schema creation is idempotent.** `CREATE SCHEMA IF NOT EXISTS finance` is safe to run on staging — confirmed no existing `finance` schema in staging Supabase project.
 - [ ] **Table creation is idempotent.** All `CREATE TABLE IF NOT EXISTS` statements are safe to re-run.
 - [ ] **Index creation is idempotent.** All `CREATE INDEX IF NOT EXISTS` statements are safe to re-run.
-- [ ] **No existing CRM tables are touched.** Migration 168 only creates objects in `finance.*` — verify by reading the migration: no `ALTER TABLE public.*` or `DROP TABLE` statements are present. Confirmed: migration 168 is additive only.
+- [ ] **No existing CRM tables are touched.** Migration 172 only creates objects in `finance.*` — verify by reading the migration: no `ALTER TABLE public.*` or `DROP TABLE` statements are present. Confirmed: migration 172 is additive only.
 - [ ] **`NOTIFY pgrst, 'reload schema'` is NOT required for the new schema.** PostgREST only needs a reload when columns that are already in its cached schema change. Since the `finance` schema is not in PostgREST's `schemas` list (see Section 7), adding it does not require a pgrst reload for any existing CRM functionality. However, if `finance` is later added to the exposed schemas list, a reload will be required at that point.
 
-### RLS Policies (Separate Migration — do not include in 168)
+### RLS Policies (Separate Migration — do not include in 172)
 
 - [x] **JWT claim format confirmed.** All tenant IDs are UUIDs. The canonical expression `(SELECT (auth.jwt() ->> 'tenant_id')::uuid)` is already in production use on CRM tables (migrations 120, 131). No further verification needed.
 - [ ] **Service role bypass confirmed.** Run a query on a finance table from the backend service role connection and confirm `(select auth.role()) = 'service_role'` evaluates to true, granting unrestricted access.
@@ -441,10 +441,10 @@ The following items must all be true before `backend/migrations/168_finance_ops_
 - [ ] **`audit_events` immutability trigger tested.** The trigger in Section 4.1 has been tested: UPDATE on `audit_events` raises `P0002`, DELETE raises `P0002`.
 - [ ] **`finance` schema NOT in PostgREST exposed schemas.** Verify the Supabase `schemas` config in the Supabase dashboard under API settings. The `finance` schema must not appear in the exposed schemas list until Section 7's readiness criteria are met.
 - [ ] **Parallel agent coordination.** Per `docs/contributing/PARALLEL_AGENTS.md`, confirm no other agent has pushed changes to `feat/finance-ops-runtime` since this session fetched the branch. Verify `git fetch github` and check for divergence before pushing.
-- [ ] **CHANGELOG.md updated** with migration 168 changes before committing.
+- [ ] **CHANGELOG.md updated** with migration 172 changes before committing.
 - [ ] **Regression tests pass.** `docker exec aishacrm-backend npm test` runs clean with 0 failures after migration is applied to dev Docker environment.
 
-### Additional Blockers Identified from Reading Migration 168
+### Additional Blockers Identified from Reading Migration 172
 
 - [ ] **`entry_number` unique constraint on `journal_entries`** — `unique (tenant_id, entry_number)` will fail on INSERT if `entry_number` is null for multiple rows of the same tenant. The column is nullable (`entry_number text` with no `not null`). The service layer must either generate entry numbers or accept that this constraint only applies when a value is provided. Confirm the service layer behavior before applying to staging.
 - [ ] **`journal_lines` has no `tenant_id` index** — the only index on `journal_lines` is `idx_finance_journal_lines_entry_id` (on `journal_entry_id`). Tenant isolation on `journal_lines` is inherited via the join to `journal_entries`. RLS on `journal_lines` will need to either JOIN to `journal_entries` for the tenant check or trust that tenant_id is always correctly denormalized. The current schema denormalizes `tenant_id` onto `journal_lines`, which is correct — but confirm the index `idx_finance_journal_lines_entry_id` is sufficient for expected query patterns.
@@ -587,7 +587,7 @@ const auditEvent = {
 | F1  | `entry_number` nullable+unique      | **Generate before insert.** The domain service must generate an entry number (e.g., `JE-<timestamp>-<random>`) before INSERT so the unique constraint is always satisfied. Fix in `financeDomainService.js` before staging migration.                                     |
 | F2  | `finance` schema PostgREST exposure | **Excluded by default.** `finance` must not appear in Supabase exposed schemas. Confirmed posture: Section 7 stands. Verify in Supabase Dashboard → API → Exposed schemas before staging.                                                                                 |
 | F3  | service_role bypass                 | **Verify in staging.** Run a backend query against a finance table in the staging environment and confirm `(SELECT auth.role()) = 'service_role'` grants unrestricted access. This is a pre-staging confirmation step, not a code change.                                 |
-| D1  | audit_events shape                  | **Use migration 168 payload-centered shape.** `before_state`/`after_state` columns from the scaffold doc are dropped. State is captured in `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. |
+| D1  | audit_events shape                  | **Use migration 172 payload-centered shape.** `before_state`/`after_state` columns from the scaffold doc are dropped. State is captured in `payload` as full aggregate snapshots. This is the shape implemented in `financeEventStore.js` and the current domain service. |
 
 ---
 
@@ -595,7 +595,7 @@ const auditEvent = {
 
 | File                                                      | Purpose                                                           |
 | --------------------------------------------------------- | ----------------------------------------------------------------- |
-| `backend/migrations/168_finance_ops_runtime_scaffold.sql` | Finance schema and table creation (dev draft)                     |
+| `backend/migrations/172_finance_ops_runtime_scaffold.sql` | Finance schema and table creation (dev draft)                     |
 | `backend/migrations/058_consolidate_rls_contacts.sql`     | Live CRM RLS pattern — reference for claim expression             |
 | `backend/migrations/080_ai_suggestions_table.sql`         | Alternative `current_setting` claim pattern                       |
 | `backend/routes/finance.v2.js`                            | Finance API routes — actor identity, no DELETE routes             |

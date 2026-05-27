@@ -16,17 +16,17 @@
 
 ---
 
-## Task 1: Companion RLS migration (`171_finance_rls_policies.sql`)
+## Task 1: Companion RLS migration (`175_finance_rls_policies.sql`)
 
 Independent of all other tasks — do it first.
 
 **Files:**
 
-- Create: `backend/migrations/171_finance_rls_policies.sql`
+- Create: `backend/migrations/175_finance_rls_policies.sql`
 
 **Step 1: Write the migration**
 
-A dev-only, gated, idempotent migration. Model the header on `169_finance_event_store_append_only.sql`. It must:
+A dev-only, gated, idempotent migration. Model the header on `173_finance_event_store_append_only.sql`. It must:
 
 1. `alter table finance.<t> enable row level security;` for all 9 finance tables: `accounts`, `journal_entries`, `journal_lines`, `invoices`, `invoice_lines`, `approvals`, `audit_events`, `adapter_jobs`, `projection_state`.
 2. Create the policies from `security-rls-hardening.md` §2 — `service_role` policies on every table, `authenticated` `tenant_match` SELECT policies, `USING (false)` DELETE policies on the immutable tables. Use the finalized expression from `phase-2c-rls-application-plan.md` §3:
@@ -39,7 +39,7 @@ A dev-only, gated, idempotent migration. Model the header on `169_finance_event_
 
 **Step 2: Verify it parses**
 
-Run: `node -e "const fs=require('fs');const s=fs.readFileSync('backend/migrations/171_finance_rls_policies.sql','utf8');if(!/enable row level security/.test(s)||!/projection_state/.test(s))throw new Error('migration incomplete');console.log('ok')"`
+Run: `node -e "const fs=require('fs');const s=fs.readFileSync('backend/migrations/175_finance_rls_policies.sql','utf8');if(!/enable row level security/.test(s)||!/projection_state/.test(s))throw new Error('migration incomplete');console.log('ok')"`
 Expected: `ok`
 
 **Step 3: Confirm finance suite still green** (the migration is a file, applied to nothing)
@@ -51,8 +51,8 @@ Expected: PASS.
 
 ```bash
 npx prettier --write docs/architecture/finance/*.md   # no-op unless needed
-git add backend/migrations/171_finance_rls_policies.sql
-git commit --no-verify -m "feat(finance): add companion RLS migration 171 (dev-only draft)"
+git add backend/migrations/175_finance_rls_policies.sql
+git commit --no-verify -m "feat(finance): add companion RLS migration 175 (dev-only draft)"
 ```
 
 ---
@@ -155,7 +155,7 @@ git commit --no-verify -m "feat(finance): make projectionRunner store-provider s
 
 ## Task 4: Postgres `ProjectionStoreProvider` (`projectionStore.pg.js`)
 
-A persistent provider backing `finance.projection_state` (migration 170). Same interface as `projectionStore.memory.js` — read that file as the contract. Model the pg/test style on `financeEventStore.pg.js` / `financeEventStore.pg.test.js`.
+A persistent provider backing `finance.projection_state` (migration 174). Same interface as `projectionStore.memory.js` — read that file as the contract. Model the pg/test style on `financeEventStore.pg.js` / `financeEventStore.pg.test.js`.
 
 **Files:**
 
@@ -364,5 +364,5 @@ git commit --no-verify -m "feat(finance): wire pg event store into finance v2 ro
 - `npm run lint -- --quiet` — clean.
 - Default behavior unchanged without `ENABLE_FINANCE_PERSISTENT_EVENTS` (in-memory event store; no Postgres dependency for tests/local).
 - `finance-projection-worker` is disabled-by-default (three-tier gate).
-- Migration 171 is a dev-only draft, applied to nothing.
+- Migration 175 is a dev-only draft, applied to nothing.
 - This unblocks Phase 3-2 … 3-8. Slice 2 (adapter worker + ERPNext) is separate.

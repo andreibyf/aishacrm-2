@@ -5,14 +5,14 @@
 **Branch:** `feat/finance-ops-runtime`
 **Status:** Validation checklist — dev-only. No migration applied. RLS policies remain DRAFT.
 **Scope:** Pre-staging verification only. Documentation; no migration, no SQL run against any database, no Finance Ops enablement.
-**Covers:** `backend/migrations/168_finance_ops_runtime_scaffold.sql` · `backend/migrations/169_finance_event_store_append_only.sql` · `backend/lib/finance/financeEventStore.js` · `backend/lib/finance/financeEventStore.pg.js`
+**Covers:** `backend/migrations/172_finance_ops_runtime_scaffold.sql` · `backend/migrations/173_finance_event_store_append_only.sql` · `backend/lib/finance/financeEventStore.js` · `backend/lib/finance/financeEventStore.pg.js`
 
 ---
 
 ## 1. Overview
 
 This document is the **pre-staging validation checklist** for applying the Finance
-Ops schema (migrations 168 and 169) and its Row-Level Security (RLS) posture to a
+Ops schema (migrations 172 and 173) and its Row-Level Security (RLS) posture to a
 staging environment. It complements — and does not contradict —
 [`security-rls-hardening.md`](./security-rls-hardening.md) (Track F), which owns
 the RLS policy _design_. This document owns the _verification gate_ that must
@@ -20,7 +20,7 @@ clear before that design is applied anywhere beyond dev/local.
 
 Hard constraints in force for the current phase:
 
-- **Migrations 168 and 169 are dev/local-only.** Nothing in this phase is applied
+- **Migrations 172 and 173 are dev/local-only.** Nothing in this phase is applied
   to staging or production.
 - **No provider writes, no OAuth.** Finance adapters remain read/draft-only by
   contract; no external system is touched.
@@ -28,7 +28,7 @@ Hard constraints in force for the current phase:
   of scope; this document does not change any feature flag.
 - **Track A envelope is preserved.** The `aggregate_type` / `aggregate_id` event
   envelope and the approval linkage (`target_type` / `target_id` — represented in
-  migration 168's `finance.approvals` as `aggregate_type` / `aggregate_id`) are
+  migration 172's `finance.approvals` as `aggregate_type` / `aggregate_id`) are
   frozen and unchanged by this work.
 
 The remainder of this document enumerates the checks. Each check states the exact
@@ -69,7 +69,7 @@ Exposed schemas.** The `finance` schema must not appear in that list.
 
 ### 2.2 Check — confirm a direct REST call to a finance table fails
 
-After migration 168 is applied to staging (gated — see Section 6), confirm a
+After migration 172 is applied to staging (gated — see Section 6), confirm a
 direct PostgREST call returns 404 / "schema not exposed":
 
 ```bash
@@ -208,7 +208,7 @@ the posture lives and what must be reviewed before staging.
 
 ### 5.1 Database layer — triggers and grants
 
-- **Migration 169** installs `finance.audit_events_immutable()` and the
+- **Migration 173** installs `finance.audit_events_immutable()` and the
   `trg_audit_events_no_update` / `trg_audit_events_no_delete` /
   `trg_audit_events_no_truncate` triggers. These `BEFORE` triggers raise
   `restrict_violation` on any `UPDATE`, `DELETE`, or `TRUNCATE` of
@@ -279,19 +279,19 @@ trigger in the current design.
 
 ## 6. Migration Gating
 
-**Migrations 168 and 169 are dev/local-only. Neither has been applied to staging
+**Migrations 172 and 173 are dev/local-only. Neither has been applied to staging
 or production, and neither will be until every item in the checklist below
 clears.** This restates and consolidates `security-rls-hardening.md` Section 6
 and `event-store-persistence.md` Section 9 — those documents are authoritative
 for the policy/persistence design; this checklist is the staging gate.
 
-The following must all be true before migrations 168 and 169 (and the companion
+The following must all be true before migrations 172 and 173 (and the companion
 RLS policy migration) may be applied to staging:
 
 - [ ] **PostgREST exclusion confirmed.** Section 2.1 — `current_setting('pgrst.db_schemas')`
       and the Dashboard exposed-schemas list both confirm `finance` is excluded.
 - [ ] **Direct REST call to a finance table returns 404.** Section 2.2 —
-      verified after 168 is applied to a dev/staging project.
+      verified after 172 is applied to a dev/staging project.
 - [ ] **`service_role` behavior verified.** Section 3 — `select auth.role()`
       from the backend connection returns `service_role`, and the scratch-table
       rehearsal confirms bypass-with-RLS-enabled behaves as designed.
@@ -302,16 +302,16 @@ RLS policy migration) may be applied to staging:
 - [ ] **RLS policies finalized from DRAFT.** The policy SQL in
       `security-rls-hardening.md` Section 2 is moved out of DRAFT only after the
       three checks above pass, and is packaged as a **separate** migration — RLS
-      is intentionally not part of 168 or 169.
+      is intentionally not part of 172 or 173.
 - [ ] **No-hard-delete triggers and grants reviewed.** Section 5 — migration
-      169's `audit_events` triggers are tested on a dev Postgres
+      173's `audit_events` triggers are tested on a dev Postgres
       (`UPDATE`/`DELETE`/`TRUNCATE` raise `restrict_violation`); the broader
       ledger-table triggers from `security-rls-hardening.md` Sections 3–4 are
       reviewed, packaged into a migration, and tested against both
       `authenticated` and `service_role` connections.
-- [ ] **Migration-168 schema blockers cleared.** The additional blockers in
+- [ ] **Migration-172 schema blockers cleared.** The additional blockers in
       `security-rls-hardening.md` Section 6 ("Additional Blockers Identified from
-      Reading Migration 168") — `entry_number` nullable+unique handling,
+      Reading Migration 172") — `entry_number` nullable+unique handling,
       `journal_lines` indexing, the `finance.accounts` vs `public.accounts` name
       collision, `adapter_jobs` FK posture — are each resolved or explicitly
       accepted.
@@ -346,9 +346,9 @@ Until every box above is checked, the staging gate is **closed**.
   `financeEventStore.pg.js` issues only `INSERT ... RETURNING *` and `SELECT`,
   exposes no mutation method, and reports duplicate-id conflicts rather than
   upserting.
-- **Migration 169 installs the `audit_events` append-only triggers** — UPDATE /
+- **Migration 173 installs the `audit_events` append-only triggers** — UPDATE /
   DELETE / TRUNCATE are blocked at the DB layer, including for `service_role`.
-- **Migrations 168 and 169 are additive and dev-only** — they create only
+- **Migrations 172 and 173 are additive and dev-only** — they create only
   `finance.*` objects, touch no `public.*` object, and are idempotent.
 - **The Track A envelope and approval linkage are preserved** —
   `aggregate_type` / `aggregate_id` and the `finance.approvals` linkage columns
@@ -366,15 +366,15 @@ Until every box above is checked, the staging gate is **closed**.
   `security-rls-hardening.md` Section 2 is not finalized and not packaged as a
   migration.
 - **The broader ledger-table no-hard-delete triggers are DRAFT.** Only migration
-  169's `audit_events` triggers exist; the `journal_entries` / `journal_lines` /
+  173's `audit_events` triggers exist; the `journal_entries` / `journal_lines` /
   `invoices` / `approvals` delete-guard triggers from `security-rls-hardening.md`
   Sections 3–4 are specified but not migrated or tested.
-- **Migration-168 schema blockers are open** — `entry_number` nullable+unique
+- **Migration-172 schema blockers are open** — `entry_number` nullable+unique
   handling and the other items in `security-rls-hardening.md` Section 6.
 
 ### The gate
 
-**Staging application of migrations 168 and 169 is BLOCKED** until the three
+**Staging application of migrations 172 and 173 is BLOCKED** until the three
 environment-dependent checks — PostgREST exclusion, `service_role` behavior, and
 the JWT tenant claim path — are verified against the staging environment, the
 RLS policies and ledger no-hard-delete triggers are finalized from DRAFT into a

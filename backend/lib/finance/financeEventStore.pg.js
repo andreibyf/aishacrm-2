@@ -3,8 +3,8 @@
  *
  * Phase 2B — Postgres persistence adapter for the Finance Ops event store.
  *
- * Backing table: finance.audit_events (created in migration 168, hardened
- * append-only in migration 169). This table IS the Phase 2B persistent event
+ * Backing table: finance.audit_events (created in migration 172, hardened
+ * append-only in migration 173). This table IS the Phase 2B persistent event
  * store — the canonical Postgres-backed finance event stream, not merely an
  * audit side table. It remains the event backbone until/unless a dedicated
  * event bus (Kafka/NATS) is adopted later.
@@ -72,9 +72,7 @@ function assertCanonicalEventType(eventType) {
     );
   }
   if (!/^finance\./.test(eventType)) {
-    throw invalid(
-      `event_type must use the canonical finance.* taxonomy: "${eventType}"`,
-    );
+    throw invalid(`event_type must use the canonical finance.* taxonomy: "${eventType}"`);
   }
 }
 

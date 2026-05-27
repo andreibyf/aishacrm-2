@@ -53,7 +53,7 @@ the persistent store, and a recorded result.
 
 - The controlled staging tenant is selected
   ([`controlled-tenant-enablement.md`](./controlled-tenant-enablement.md), 2C-13).
-- The persistent projection store exists — migration 170 applied to staging
+- The persistent projection store exists — migration 174 applied to staging
   ([`persistent-projection-store-plan.md`](./persistent-projection-store-plan.md),
   2C-4) — so a before/after snapshot of `finance.projection_state` is meaningful.
 - The projection worker is available with its operator `replay` / `replayAll`
@@ -177,7 +177,7 @@ The projection store is a **rebuildable cache**; the event stream
   reconstructs correct state. Truncating the tenant's `finance.projection_state`
   rows and replaying is a complete, safe reset.
 - The drill **never mutates `finance.audit_events`** — it is append-only and
-  immutable at the DB layer (migration 169). The drill is read-only with respect
+  immutable at the DB layer (migration 173). The drill is read-only with respect
   to financial truth; only the derived cache is touched, and the cache is always
   recoverable.
 

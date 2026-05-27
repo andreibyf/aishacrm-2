@@ -3,7 +3,7 @@
 **Branch:** `feat/finance-ops-runtime`
 **Status:** Phase 2B — implemented (pg adapter + migration draft). Not wired into the runtime; migration is dev-only.
 **Date:** 2026-05-20
-**Covers:** `backend/lib/finance/financeEventStore.pg.js` · `backend/migrations/169_finance_event_store_append_only.sql`
+**Covers:** `backend/lib/finance/financeEventStore.pg.js` · `backend/migrations/173_finance_event_store_append_only.sql`
 
 ---
 
@@ -21,7 +21,7 @@ switch the runtime over — see [Non-goals](#9-non-goals).
 
 ## 2. The backing table — `finance.audit_events`
 
-`finance.audit_events` (created in migration 168) **is** the Phase 2B persistent
+`finance.audit_events` (created in migration 172) **is** the Phase 2B persistent
 event store. It is the canonical Postgres-backed finance event stream — **not merely
 an audit side table**. It remains the event backbone until/unless a dedicated event
 bus (Kafka / NATS) becomes the primary backbone in a later phase.
@@ -46,9 +46,9 @@ architecture docs agree on a single canonical event table.
 Two interchangeable implementations expose the **same interface**
 (`append`, `query`, `replay`, `getCount`):
 
-| Store                      | File                        | Role                                            |
-| -------------------------- | --------------------------- | ----------------------------------------------- |
-| In-memory event store      | `financeEventStore.js`      | Default for tests and local fallback. Synchronous. |
+| Store                        | File                      | Role                                               |
+| ---------------------------- | ------------------------- | -------------------------------------------------- |
+| In-memory event store        | `financeEventStore.js`    | Default for tests and local fallback. Synchronous. |
 | Postgres persistence adapter | `financeEventStore.pg.js` | Durable persistence. Asynchronous (Promise-based). |
 
 Because the interfaces match, the pg adapter is a drop-in replacement for the
@@ -69,12 +69,12 @@ The factory requires a `pool` (anything exposing `query(text, params)`); it thro
 `FinanceEventStoreError` (`FINANCE_EVENT_STORE_INVALID`) otherwise. The pool is
 dependency-injected — the adapter never creates its own connection.
 
-| Method                  | Returns                    | Notes                                                            |
-| ----------------------- | -------------------------- | ---------------------------------------------------------------- |
-| `append(eventPartial)`  | `Promise<event>` (frozen)  | Inserts exactly one row. Returns the DB row, frozen.             |
-| `query(opts)`           | `Promise<event[]>`         | Tenant-scoped; optional `event_type` / `aggregate_type` / `aggregate_id` / `limit`. |
-| `replay(tenantId)`      | `Promise<event[]>`         | Full tenant stream, `created_at ASC, id ASC`.                    |
-| `getCount(tenantId)`    | `Promise<number>`          | Tenant-scoped event count.                                       |
+| Method                 | Returns                   | Notes                                                                               |
+| ---------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| `append(eventPartial)` | `Promise<event>` (frozen) | Inserts exactly one row. Returns the DB row, frozen.                                |
+| `query(opts)`          | `Promise<event[]>`        | Tenant-scoped; optional `event_type` / `aggregate_type` / `aggregate_id` / `limit`. |
+| `replay(tenantId)`     | `Promise<event[]>`        | Full tenant stream, `created_at ASC, id ASC`.                                       |
+| `getCount(tenantId)`   | `Promise<number>`         | Tenant-scoped event count.                                                          |
 
 There is **no** `update`, `delete`, `upsert`, `clear`, or `truncate` method. The
 adapter is insert-only by construction.
@@ -121,7 +121,7 @@ Append-only is enforced at **two independent layers**:
    path that issues `UPDATE`, `DELETE`, or `ON CONFLICT`/upsert against
    `finance.audit_events`. A DB failure surfaces as `FinanceEventStoreError`
    (`FINANCE_EVENT_STORE_DB_ERROR`); the adapter never silently retries or upserts.
-2. **Database layer** — migration 169 installs `finance.audit_events_immutable()`,
+2. **Database layer** — migration 173 installs `finance.audit_events_immutable()`,
    a `BEFORE` trigger that raises `restrict_violation` on any `UPDATE`, `DELETE`,
    or `TRUNCATE`. This holds even for the `service_role` connection the backend
    uses (which bypasses RLS).
@@ -149,9 +149,9 @@ scaffold.
 
 ---
 
-## 9. Migration 169
+## 9. Migration 173
 
-`backend/migrations/169_finance_event_store_append_only.sql` — **dev-only draft.**
+`backend/migrations/173_finance_event_store_append_only.sql` — **dev-only draft.**
 
 - Installs the `finance.audit_events_immutable()` trigger function and the
   `trg_audit_events_no_update` / `_no_delete` / `_no_truncate` triggers.
@@ -187,7 +187,7 @@ Out of scope for Phase 2B (unchanged by this work):
   bare UUID, DB-assigned `created_at`, replay ordering + UUID tie-break,
   `tenant_id` required, canonical-`finance.*` enforcement, command-name rejection,
   no mutation API, append-always duplicates, and DB-error wrapping.
-- **DB trigger** — verified by applying migration 169 to a local/dev Postgres and
+- **DB trigger** — verified by applying migration 173 to a local/dev Postgres and
   confirming `UPDATE` / `DELETE` / `TRUNCATE` on `finance.audit_events` raise
   `restrict_violation`. This is a dev-environment check; it is not part of the CI
   test suite (no live DB in CI).

@@ -82,7 +82,7 @@ cursor)`) is required before the projection worker runs at production event
   `replay`-based interim plan when the worker is implemented.
 
 The worker does **not** read or mutate `finance.audit_events` for any other
-purpose. That table is append-only and immutable at the DB layer (migration 169
+purpose. That table is append-only and immutable at the DB layer (migration 173
 triggers); the projection worker is a pure reader of it.
 
 ---
@@ -101,9 +101,9 @@ the Postgres store decided in [`persistent-projection-store-plan.md`](./persiste
 - Because cursors are durable, a worker restart or staging redeploy resumes
   strictly after the last applied event — no cold rebuild storm.
 
-Until migration 170 is applied to staging, the worker may run against the
+Until migration 174 is applied to staging, the worker may run against the
 in-memory store provider for a first dry pass; the persistent store is the
-intended staging configuration and is gated with 168/169 (2C-4 §4.2).
+intended staging configuration and is gated with 172/173 (2C-4 §4.2).
 
 ---
 
@@ -112,7 +112,7 @@ intended staging configuration and is gated with 168/169 (2C-4 §4.2).
 The worker changes nothing about ordering. The Runner consumes events in the
 **frozen Track A total order** — `created_at` ASC, event `id` (bare UUID) as the
 deterministic tie-break (`projection-runtime.md` §8). The event store returns
-that order directly (`finance.audit_events` replay index, migration 169:
+that order directly (`finance.audit_events` replay index, migration 173:
 `(tenant_id, created_at, id)`); the Runner does not re-sort, and the worker does
 not re-order. Live dispatch and replay use the identical order, so a
 live-updated projection and a replayed one converge to the same state.
@@ -159,7 +159,7 @@ filtering of its own and cannot override it.
 ### 8.1 Preconditions
 
 - The staging-readiness gate (`phase-2c-rls-application-plan.md` §7) has cleared:
-  migrations 168, 169, 170, and the companion RLS migration are applied to
+  migrations 172, 173, 174, and the companion RLS migration are applied to
   staging.
 - The controlled staging tenant is selected ([`controlled-tenant-enablement.md`](./controlled-tenant-enablement.md), 2C-13).
 - Observability is in place ([`observability-alerting.md`](./observability-alerting.md), 2C-11).

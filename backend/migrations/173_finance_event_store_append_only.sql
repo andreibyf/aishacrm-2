@@ -1,9 +1,9 @@
 -- Finance Ops Phase 2B — persistent event store append-only hardening
--- Migration 169. Dev-only draft. Do NOT apply to staging/production until the
+-- Migration 173. Dev-only draft. Do NOT apply to staging/production until the
 -- Track F migration readiness checklist (docs/architecture/finance/
 -- security-rls-hardening.md, Section 6) clears.
 --
--- finance.audit_events (created in migration 168) is the Phase 2B persistent
+-- finance.audit_events (created in migration 172) is the Phase 2B persistent
 -- event store: the canonical Postgres-backed finance event stream, not merely
 -- an audit side table. This migration makes that table append-only and adds a
 -- replay-ordering index.
