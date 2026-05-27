@@ -147,6 +147,56 @@ describe('[CRM] OpportunityForm — payload shaping (PR #527 regression)', () =>
   });
 });
 
+/**
+ * Reference implementations of the legacy↔canonical stage coercion used in
+ * OpportunityForm. Mirrors the production logic so any drift becomes a
+ * code-review-visible test failure (same pattern as buildOpportunityPayload).
+ *
+ * 4VD-63: existing data carries the legacy short forms `won`/`lost` while
+ * stat cards, Kanban columns and every server-side filter use the canonical
+ * `closed_won`/`closed_lost`. The form must (a) offer the canonical values
+ * as Select option values and (b) coerce legacy values on edit so save
+ * persists the canonical form.
+ */
+function getStageOptionValues() {
+  return ['prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
+}
+
+function coerceStageOnLoad(rawStage) {
+  const stage = rawStage || 'prospecting';
+  if (stage === 'won') return 'closed_won';
+  if (stage === 'lost') return 'closed_lost';
+  return stage;
+}
+
+describe('[CRM] OpportunityForm — stage canonicalization (4VD-63)', () => {
+  it('stage Select options use canonical values, never legacy short forms', () => {
+    const values = getStageOptionValues();
+    expect(values).toContain('closed_won');
+    expect(values).toContain('closed_lost');
+    expect(values).not.toContain('won');
+    expect(values).not.toContain('lost');
+  });
+
+  it('legacy `won` on a loaded opportunity is coerced to `closed_won` for the form', () => {
+    expect(coerceStageOnLoad('won')).toBe('closed_won');
+    expect(coerceStageOnLoad('lost')).toBe('closed_lost');
+  });
+
+  it('canonical stages pass through coerceStageOnLoad unchanged', () => {
+    expect(coerceStageOnLoad('closed_won')).toBe('closed_won');
+    expect(coerceStageOnLoad('closed_lost')).toBe('closed_lost');
+    expect(coerceStageOnLoad('prospecting')).toBe('prospecting');
+    expect(coerceStageOnLoad('negotiation')).toBe('negotiation');
+  });
+
+  it('coerceStageOnLoad defaults missing stage to prospecting', () => {
+    expect(coerceStageOnLoad(undefined)).toBe('prospecting');
+    expect(coerceStageOnLoad(null)).toBe('prospecting');
+    expect(coerceStageOnLoad('')).toBe('prospecting');
+  });
+});
+
 describe.skip('[CRM] OpportunityForm — render-based regressions', () => {
   // SKIPPED: JSDOM + Radix UI in vmForks singleFork pool hangs on render of
   // OpportunityForm (multiple Radix Select primitives). Same constraint as

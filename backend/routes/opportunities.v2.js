@@ -6,6 +6,7 @@ import { getVisibilityScope, getAccessLevel, isNotesOnlyUpdate } from '../lib/te
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
 import { sanitizeUuidInput } from '../lib/uuidValidator.js';
+import { expandStageFilter, canonicalizeStage } from '../lib/opportunityStageNormalizer.js';
 
 // NOTE: v2 opportunities router for Phase 4.2 internal pilot.
 // This implementation is dev-focused and gated by FEATURE_OPPORTUNITIES_V2.
@@ -354,8 +355,11 @@ export default function createOpportunityV2Routes(_pgPool) {
         q = q.eq('assigned_to_team', assigned_to_team);
       }
 
+      // 4VD-63: expand the stage filter so legacy rows (stage='won'/'lost')
+      // still match when the UI sends the canonical 'closed_won'/'closed_lost'.
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
-        q = q.eq('stage', stage.toLowerCase());
+        const stageValues = expandStageFilter(stage);
+        if (stageValues) q = q.in('stage', stageValues);
       }
 
       if (is_test_data !== undefined) {
@@ -513,10 +517,18 @@ export default function createOpportunityV2Routes(_pgPool) {
         q = q.eq('assigned_to_team', assigned_to_team);
       }
 
-      // Handle stage filter
+      // Handle stage filter — 4VD-63: expand legacy↔canonical aliases so
+      // rows persisted with `won`/`lost` are still returned when the UI
+      // requests `closed_won`/`closed_lost` (and vice versa).
       if (stage && stage !== 'all' && stage !== 'any' && stage !== '' && stage !== 'undefined') {
-        logger.debug('[V2 Opportunities] Applying stage filter from query param:', stage);
-        q = q.eq('stage', stage.toLowerCase());
+        const stageValues = expandStageFilter(stage);
+        logger.debug(
+          '[V2 Opportunities] Applying stage filter from query param:',
+          stage,
+          '→',
+          stageValues,
+        );
+        if (stageValues) q = q.in('stage', stageValues);
       }
 
       // Handle account_id filter (filter opportunities by account)
@@ -957,6 +969,12 @@ export default function createOpportunityV2Routes(_pgPool) {
         }
       });
 
+      // 4VD-63: canonicalize legacy stage values (`won`/`lost`) before insert
+      // so no new row reintroduces the divergence the migration cleans up.
+      if (cleanedPayload.stage !== undefined && cleanedPayload.stage !== null) {
+        cleanedPayload.stage = canonicalizeStage(cleanedPayload.stage);
+      }
+
       const insertPayload = {
         tenant_id,
         ...cleanedPayload,
@@ -1134,6 +1152,11 @@ export default function createOpportunityV2Routes(_pgPool) {
           cleanedPayload[dateField] = null;
         }
       });
+
+      // 4VD-63: canonicalize legacy stage values on update too.
+      if (cleanedPayload.stage !== undefined && cleanedPayload.stage !== null) {
+        cleanedPayload.stage = canonicalizeStage(cleanedPayload.stage);
+      }
 
       const updatePayload = {
         ...cleanedPayload,
