@@ -59,7 +59,7 @@ const BANNER_DEFS = [
     designRef: '§10.4',
     icon: AlertTriangle,
     title: 'Production activation is not authorized',
-    body: 'This tenant is in the staging / pilot-planning posture per Phase 3-14. Any production write attempt would be blocked structurally at the adapter URL guard. Pilot activation is gated separately by Phase 4-19.',
+    body: 'This tenant is in the staging / pilot-planning posture per Phase 3-14. Any production write attempt would be blocked structurally at the adapter URL guard. Pilot activation is gated separately by Phase 4-20.',
     isActive: () => true,
   },
 ];

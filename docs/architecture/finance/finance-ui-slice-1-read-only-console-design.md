@@ -416,7 +416,7 @@ Banners are persistent, dismissible-per-session, and rendered above the tab stri
 
 ### 10.4 Production activation not authorized banner
 
-- **Condition:** always rendered as long as the tenant is not the named production-pilot tenant. **Slice 1 has no signal to detect this** server-side, so the banner is rendered unconditionally for all tenants in Slice 1 — a deliberately conservative default. A later backend slice can return a `production_authorization` field on `/runtime/status` to suppress this banner once a tenant is genuinely production-pilot-authorized (Phase 4-19+).
+- **Condition:** always rendered as long as the tenant is not the named production-pilot tenant. **Slice 1 has no signal to detect this** server-side, so the banner is rendered unconditionally for all tenants in Slice 1 — a deliberately conservative default. A later backend slice can return a `production_authorization` field on `/runtime/status` to suppress this banner once a tenant is genuinely production-pilot-authorized (Phase 4-20+).
 - **Copy:** "Production activation is not authorized. This tenant is in the staging / pilot-planning posture per Phase 3-14. Any production write attempt would be blocked structurally at the adapter URL guard."
 - **Severity:** informational.
 - **Action affordance:** none.
@@ -545,7 +545,7 @@ This list is exhaustive. Slice 1 does NOT expose any of these. Each item names t
 | Generate an audit evidence pack         | (no HTTP endpoint today — runtime only)                            | Backend slice required first; out of Slice 1.                                                                                                    |
 | Run replay drill                        | (no `backend/scripts/finance-replay-drill.js` per Phase 3-13 §8.4) | Out of Slice 1; deferred separately.                                                                                                             |
 | Enable `financeOps` for a tenant        | `modulesettings` row                                               | Out of Finance Operations page entirely — lives in Tenant module settings (existing UI surface).                                                 |
-| Promote a tenant to production pilot    | (no automated path — Phase 4-19 is a decision packet)              | Out of every UI slice.                                                                                                                           |
+| Promote a tenant to production pilot    | (no automated path — Phase 4-20 is a decision packet)              | Out of every UI slice.                                                                                                                           |
 
 ---
 

@@ -1,5 +1,5 @@
 -- Finance Ops Phase 2C-4 — persistent projection store
--- Migration 170. Dev-only DRAFT. Do NOT apply to staging/production until the
+-- Migration 174. Dev-only DRAFT. Do NOT apply to staging/production until the
 -- staging-readiness gate clears (docs/architecture/finance/
 -- phase-2c-rls-application-plan.md Section 7; staging-rls-validation.md Section 6).
 --
