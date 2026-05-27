@@ -54,7 +54,7 @@ The pilot tenant in production will have ERPNext credentials (sandbox-first, per
 - Insert any credential row.
 - Choose a specific cloud KMS provider as a hard requirement (the §5 design accommodates multiple key sources; the implementation packet picks one).
 - Migrate plaintext credentials that exist today (the existing plain-JSONB rows are staging-only and acceptable to be left in place until the staging cycle naturally clears them; production never gets plaintext credentials).
-- Apply the migration to production. Production apply is gated behind Phase 4-19 / Phase 4-6 (production migration runbook).
+- Apply the migration to production. Production apply is gated behind Phase 4-20 / Phase 4-8 (production migration runbook).
 
 ---
 
@@ -91,7 +91,7 @@ The migration is a single forward-only migration file that adds:
 - **Does NOT encrypt existing plaintext rows.** Existing staging rows stay plaintext. Implementation packet documents how to flip individual rows from plaintext → encrypted manually (operator action; not part of the migration).
 - **Does NOT add a CHECK constraint requiring `api_credentials_encrypted IS NOT NULL`.** That would break existing plaintext rows. A constraint of that shape is a later forward-only step after every active row has been re-encrypted.
 
-**Why a forward-only migration shape**: production migrations must be PITR-snapshot-protected (Phase 3-2 / Phase 4-6 pattern); a forward-only migration with explicit rollback documentation (§8) is the safest posture. The implementation packet provides a documented manual rollback that operators may execute under PITR-snapshot protection.
+**Why a forward-only migration shape**: production migrations must be PITR-snapshot-protected (Phase 3-2 / Phase 4-8 pattern); a forward-only migration with explicit rollback documentation (§8) is the safest posture. The implementation packet provides a documented manual rollback that operators may execute under PITR-snapshot protection.
 
 ---
 
@@ -144,7 +144,7 @@ Phase 4-2 router.lookup(tenant_id):
         consider re-encrypting per Phase 4-3 rotation runbook"
       - (This branch only executes for legacy staging rows during the transition. Production
         rows MUST have api_credentials_encrypted populated; the implementation packet's
-        production migration runbook (Phase 4-6) verifies no plaintext row exists before
+        production migration runbook (Phase 4-8) verifies no plaintext row exists before
         production apply.)
     - Else:
       - Throw "malformed credentials" per Phase 4-2 §8.
@@ -157,7 +157,7 @@ Phase 4-2 router.lookup(tenant_id):
 
 ## 7. Rotation
 
-Key rotation is a planned operational event, not an emergency response. Phase 4-3 freezes the rotation contract; the operational runbook for actually rotating a key lives in Phase 4-16 (rollback/operations) or a dedicated rotation runbook downstream.
+Key rotation is a planned operational event, not an emergency response. Phase 4-3 freezes the rotation contract; the operational runbook for actually rotating a key lives in the operational rollback runbook downstream of Phase 4-5 design (rollback/operations) or a dedicated rotation runbook downstream.
 
 **Rotation contract:**
 
@@ -182,7 +182,7 @@ If the migration must be reverted (e.g., a critical bug surfaces post-apply), th
 2. Issues `ALTER TABLE tenant_integrations DROP COLUMN api_credentials_encrypted, DROP COLUMN api_credentials_key_version, DROP COLUMN api_credentials_encrypted_at;` under a transaction.
 3. Starts the backend with the prior-version image (which doesn't reference the new columns).
 
-PITR-snapshot protection (per Phase 3-2 / Phase 4-6 pattern) makes this safe: a snapshot taken pre-migration provides the alternative rollback path.
+PITR-snapshot protection (per Phase 3-2 / Phase 4-8 pattern) makes this safe: a snapshot taken pre-migration provides the alternative rollback path.
 
 **Per-row rollback** (a single row's encryption needs to be reverted):
 
@@ -244,7 +244,7 @@ The implementation packet must include the test rows below before Codex can clea
 | **Define audit logging requirements for credential access without leaking secrets.**                                                                  | Slack directive                                  | §9 + §10 row 11.                                                                                                                                                           |
 | **No code yet.**                                                                                                                                      | Slack directive                                  | Confirmed.                                                                                                                                                                 |
 | **No migration applied anywhere.**                                                                                                                    | Slack directive                                  | Confirmed.                                                                                                                                                                 |
-| **No store-side fallback that would re-introduce plaintext as a long-term posture.**                                                                  | Codex Gate C                                     | §6 plaintext branch is transitional only with mandatory warning; Phase 4-6 production migration runbook verifies no active production row references the plaintext column. |
+| **No store-side fallback that would re-introduce plaintext as a long-term posture.**                                                                  | Codex Gate C                                     | §6 plaintext branch is transitional only with mandatory warning; Phase 4-8 production migration runbook verifies no active production row references the plaintext column. |
 | **No log / error / response ever contains credential or key value.**                                                                                  | Codex Gate C + §9 + §10 row 11                   | Confirmed.                                                                                                                                                                 |
 | **No rollback procedure depends on destructive data deletion.**                                                                                       | Slack directive (Phase 4-5 hard constraint) + §8 | Confirmed — column-drop rollback is non-destructive; per-row rollback preserves plaintext recovery.                                                                        |
 | **Pair with Phase 4-2 — implementation cadence enforced (Phase 4-2 implementation gated on Phase 4-3 design at minimum; preferably ships together).** | Phase 4-0 §7 implementation cadence              | §1 + §6.                                                                                                                                                                   |

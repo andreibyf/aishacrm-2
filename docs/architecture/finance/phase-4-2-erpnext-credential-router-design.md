@@ -173,9 +173,9 @@ Phase 4 pilot scope is ERPNext-sandbox-or-local-first (Phase 4-0 §6). The route
 
 **Hard rule:** the router does **not** maintain its own URL allow-list. The sandbox-only enforcement remains exactly where it lives today (`erpnextSandboxAdapter.js:89-128`), and Phase 4-2 cannot weaken or duplicate it. Per-tenant credential rows store whatever base URL the operator inserted; the adapter constructor rejects production-looking URLs at the existing guard.
 
-**Operator-side hard constraint** (recorded here as design contract — enforced by the Phase 4-19 row 3 / row 10 gate verifications in Phase 4-0):
+**Operator-side hard constraint** (recorded here as design contract — enforced by the Phase 4-20 row 3 / row 10 gate verifications in Phase 4-0):
 
-- **No `tenant_integrations` row may store a production-tier ERPNext URL until Phase 4-14 has executed its sandbox-first progression** and a sub-decision authorises the production-ERPNext flip. Phase 4-2 implementation packet does not insert any row; the row-insertion path is operator-side and gated by Phase 4-14.
+- **No `tenant_integrations` row may store a production-tier ERPNext URL until Phase 4-17 has executed its sandbox-first progression** and a sub-decision authorises the production-ERPNext flip. Phase 4-2 implementation packet does not insert any row; the row-insertion path is operator-side and gated by Phase 4-17.
 
 ---
 
@@ -291,7 +291,7 @@ The implementation packet must include the test rows below before Codex can clea
 | **Define sandbox/local-only routing for pilot planning.**                                       | Slack directive                      | §6.                                                                                                                                                      |
 | **Define adapter worker provider-config selection per tenant.**                                 | Slack directive                      | §7.                                                                                                                                                      |
 | **Define fallback/stop behavior on missing/invalid credentials.**                               | Slack directive                      | §8.                                                                                                                                                      |
-| **Explicitly defer live provider writes until Phase 4 activation gates.**                       | Slack directive                      | §1 + §7 + §8 — `FINANCE_PROVIDER_WRITES_ENABLED=false` posture preserved; activation is Phase 4-19/4-14 gated.                                           |
+| **Explicitly defer live provider writes until Phase 4 activation gates.**                       | Slack directive                      | §1 + §7 + §8 — `FINANCE_PROVIDER_WRITES_ENABLED=false` posture preserved; activation is Phase 4-20/4-14 gated.                                           |
 | **No code yet.**                                                                                | Slack directive                      | Confirmed.                                                                                                                                               |
 | **No migrations applied; no row inserted.**                                                     | Slack directive + §3                 | Confirmed.                                                                                                                                               |
 | **Credentials never logged or surfaced.**                                                       | Codex Gate B + §5 + §9 + §10 row 8   | Confirmed.                                                                                                                                               |
