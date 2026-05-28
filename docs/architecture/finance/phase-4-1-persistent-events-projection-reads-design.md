@@ -197,7 +197,7 @@ interface FinanceReadAdapter {
 ```
 
 - **`InMemoryFinanceReadAdapter`** — wraps the existing `financeDomainService` calls. Used when `ENABLE_FINANCE_PERSISTENT_EVENTS` is false/unset. Behaviour identical to today's route handlers. Zero behavioural change for the default posture.
-- **`ProjectionBackedFinanceReadAdapter`** — wraps the Postgres-backed projection store + a direct `audit_events` query path for journal entries (per §4). Used when `ENABLE_FINANCE_PERSISTENT_EVENTS=true`. Implements §6 no-silent-fallback.
+- **`ProjectionBackedFinanceReadAdapter`** — wraps the Postgres-backed projection store. Read sources per §4: `GET /runtime/status` composes `audit_events` count (per-tenant `SELECT count(*)`) + per-projection cursor from `projection_state`; `GET /journal-entries` reads from the new `journal_entries` projection snapshot introduced by §4 (full status set: `draft` / `pending_approval` / `posted` / `reversed`) — **NOT** a direct `audit_events` query filtered to posted/reversed events; `GET /ledger` / `GET /profit-loss` / `GET /balance-sheet` read from the `ledgerProjection` snapshot. The earlier P2 #2 fix on Phase 4-0 made the projection-backed path mandatory for `/journal-entries`; this §8 row mirrors that contract so the implementation packet cannot land a direct-event-store path for journal entries. Used when `ENABLE_FINANCE_PERSISTENT_EVENTS=true`. Implements §6 no-silent-fallback.
 
 Route construction picks one adapter at construction time per §5 sequence. Route handlers call `adapter.method(tenantId)`. The adapter selection is invisible to the handler.
 
