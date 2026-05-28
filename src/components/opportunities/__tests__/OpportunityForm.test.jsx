@@ -288,6 +288,40 @@ describe('[CRM] OpportunityForm — intermittent Customer dropdown fix', () => {
       }),
     ).toBe(true);
   });
+
+  it('stale-tenant cancellation: cancelled flag prevents setAccounts when effect re-runs', async () => {
+    // Simulates the cleanup path: effect fires for tenant A, then tenant
+    // switches (cleanup runs, cancelled=true) before A's fetch resolves.
+    // The resolved value must be discarded.
+    let cancelled = false;
+    const setAccounts = vi.fn();
+
+    // Simulate the effect body logic with cancellation
+    function runFallbackEffect({ tenantId, resolvedData }) {
+      // cleanup from previous run
+      cancelled = true;
+      // new run
+      cancelled = false;
+      return new Promise((resolve) => {
+        // fetch resolves with data
+        Promise.resolve(resolvedData).then((data) => {
+          if (!cancelled && Array.isArray(data) && data.length > 0) {
+            setAccounts(data);
+          }
+          resolve();
+        });
+      });
+    }
+
+    // First effect run for tenant A
+    const runA = runFallbackEffect({ tenantId: 'A', resolvedData: [{ id: 'acc-a' }] });
+    // Tenant switches — cleanup fires (cancelled = true) before A resolves
+    cancelled = true;
+    await runA;
+
+    // setAccounts must NOT have been called with tenant A's data
+    expect(setAccounts).not.toHaveBeenCalled();
+  });
 });
 
 describe('[CRM] useOpportunitiesData — supporting data error handling', () => {

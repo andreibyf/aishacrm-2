@@ -184,33 +184,32 @@ export default function OpportunityForm({
     hydrateTenantAndEmployees();
   }, [selectedTenantId, currentUser]);
 
-  // Update local state when props change
+  // Sync parent accounts — only apply when parent has real data to avoid
+  // wiping a successful fallback fetch when the parent later errors to [].
   useEffect(() => {
-    if (Array.isArray(propAccounts)) {
+    if (Array.isArray(propAccounts) && propAccounts.length > 0) {
       setAccounts(propAccounts);
     }
   }, [propAccounts]);
 
-  // Self-healing fallback: if the parent's supporting data hasn't loaded yet
-  // (race condition: form opened before useOpportunitiesData finished fetching)
-  // or was permanently locked at [] by a prior API error, fetch accounts
-  // directly so the Customer dropdown is never silently empty.
-  // The existing propAccounts sync effect above will override this with parent
-  // data if/when it arrives, so there is no conflict.
+  // Self-healing fallback: fetch accounts directly when propAccounts is empty
+  // (race on form open, or parent permanently locked at [] after an API error).
+  // cancelled flag prevents a stale tenant's response from overwriting state
+  // after the tenant picker switches mid-flight.
   useEffect(() => {
     if (Array.isArray(propAccounts) && propAccounts.length > 0) return;
     if (!currentUser) return;
     const tenantId = selectedTenantId || currentUser.tenant_id;
     if (!tenantId) return;
+    let cancelled = false;
     Account.filter({ tenant_id: tenantId })
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
           setAccounts(data);
         }
       })
-      .catch(() => {
-        // silent — parent prop sync is the primary path; this is best-effort
-      });
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [propAccounts, currentUser, selectedTenantId]);
 
   useEffect(() => {

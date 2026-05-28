@@ -195,11 +195,8 @@ export function useOpportunitiesData({
         setContacts([]);
         setLeads([]);
         setUsers([user]);
-        // Do NOT set supportingDataLoaded.current = true here — an API failure
-        // should not permanently lock accounts at [] for the page lifetime.
-        // The next dependency change (tenant switch, filter change, etc.) will
-        // trigger a retry. OpportunityForm's fallback fetch provides immediate
-        // relief if the user opens the form before the retry fires.
+        // Do NOT set supportingDataLoaded.current = true on error — would
+        // permanently prevent retries for the page lifetime.
         setSupportingDataReady(true);
       }
     };
