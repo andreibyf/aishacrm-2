@@ -230,6 +230,7 @@ export default defineConfig({
             'src/lib/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/api/__tests__/billing.test.{js,jsx,ts,tsx}',
             'src/api/__tests__/finance.test.{js,jsx,ts,tsx}',
+            'src/api/__tests__/finance.preview-fixtures.test.{js,jsx,ts,tsx}',
             'src/components/finance/**/*.test.{js,jsx,ts,tsx}',
             'src/components/finance/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/__tests__/package-validation.test.js',
