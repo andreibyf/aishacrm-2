@@ -150,7 +150,14 @@ create table if not exists finance.adapter_jobs (
   provider text not null,
   aggregate_type text not null,
   aggregate_id uuid,
-  operation text not null check (operation in ('pull', 'push_draft', 'sync_status', 'void', 'reconcile')),
+  -- operation enum: matches the runtime vocabulary at
+  -- backend/lib/finance/adapterJobProcessor.js:93-110 (assertWritePermitted)
+  -- — `pull_status` / `sync_status` / `reconcile` are read-only ops permitted
+  -- in every mode; `push_draft` is permitted in every mode; `push_final` and
+  -- `void_record` are gated by `assertWritePermitted` to non-draft modes and
+  -- further gated by the FINANCE_PROVIDER_WRITES_ENABLED kill switch. Legacy
+  -- `pull` and `void` retained so any pre-existing job row stays accepted.
+  operation text not null check (operation in ('pull', 'pull_status', 'push_draft', 'push_final', 'sync_status', 'void', 'void_record', 'reconcile')),
   mode text not null check (mode in ('read_only', 'draft_only', 'approval_required_write')),
   status text not null default 'draft' check (status in ('draft', 'queued', 'running', 'succeeded', 'failed')),
   -- attempts: incremented on each claim by adapterJobProcessor.claimPersistent;
@@ -190,6 +197,14 @@ create index if not exists idx_finance_audit_events_tenant_created_at
 
 create index if not exists idx_finance_adapter_jobs_tenant_status
   on finance.adapter_jobs (tenant_id, status);
+
+-- Composite index matching the claimPersistent query at
+-- backend/lib/finance/adapterJobProcessor.js:213-220
+-- (WHERE tenant_id = $1 AND status = 'queued'
+--    AND (next_attempt_at IS NULL OR next_attempt_at <= $2))
+-- so the queue-claim scan is index-only.
+create index if not exists idx_finance_adapter_jobs_tenant_status_next_attempt
+  on finance.adapter_jobs (tenant_id, status, next_attempt_at);
 
 -- RLS placeholders only. Claim format must be confirmed before finalizing policies.
 -- alter table finance.accounts enable row level security;
