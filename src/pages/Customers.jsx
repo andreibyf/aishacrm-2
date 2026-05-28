@@ -501,11 +501,12 @@ export default function CustomersPage() {
   }, [users, employees]);
 
   const handleSave = async () => {
+    const wasEdit = !!editingAccount;
     setIsFormOpen(false);
     setEditingAccount(null);
     clearCacheByKey('Account');
     await Promise.all([loadAccounts(), loadTotalStats()]);
-    toast.success(editingAccount ? 'Account updated successfully' : 'Account created successfully');
+    toast.success(wasEdit ? 'Account updated successfully' : 'Account created successfully');
   };
 
   const handleDelete = async (id) => {
@@ -893,7 +894,7 @@ export default function CustomersPage() {
               </DialogTitle>
             </DialogHeader>
             <CustomerForm
-              account={editingAccount}
+              initialData={editingAccount}
               // AccountForm now handles Account.create/update internally, just handle refresh
               onSubmit={async (result) => {
                 console.log('[Accounts] Account saved:', result);

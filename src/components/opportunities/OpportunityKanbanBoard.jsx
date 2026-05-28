@@ -267,11 +267,12 @@ export default function OpportunityKanbanBoard({
           </DialogHeader>
           <OpportunityForm
             opportunity={editingOpportunity}
-            onSave={handleSave}
+            onSubmit={handleSave}
             onCancel={() => setIsFormOpen(false)}
             contacts={contacts}
             accounts={accounts}
             users={users}
+            leads={leads}
           />
         </DialogContent>
       </Dialog>

@@ -195,7 +195,8 @@ export function useOpportunitiesData({
         setContacts([]);
         setLeads([]);
         setUsers([user]);
-        supportingDataLoaded.current = true;
+        // Do NOT set supportingDataLoaded.current = true on error — would
+        // permanently prevent retries for the page lifetime.
         setSupportingDataReady(true);
       }
     };

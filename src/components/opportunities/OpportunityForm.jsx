@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch'; // Added import for Switch
-import { Tenant, Employee, Opportunity } from '@/api/entities';
+import { Tenant, Employee, Opportunity, Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '../shared/tenantContext';
 import { Plus } from 'lucide-react';
@@ -184,12 +184,33 @@ export default function OpportunityForm({
     hydrateTenantAndEmployees();
   }, [selectedTenantId, currentUser]);
 
-  // Update local state when props change
+  // Sync parent accounts — only apply when parent has real data to avoid
+  // wiping a successful fallback fetch when the parent later errors to [].
   useEffect(() => {
-    if (Array.isArray(propAccounts)) {
+    if (Array.isArray(propAccounts) && propAccounts.length > 0) {
       setAccounts(propAccounts);
     }
   }, [propAccounts]);
+
+  // Self-healing fallback: fetch accounts directly when propAccounts is empty
+  // (race on form open, or parent permanently locked at [] after an API error).
+  // cancelled flag prevents a stale tenant's response from overwriting state
+  // after the tenant picker switches mid-flight.
+  useEffect(() => {
+    if (Array.isArray(propAccounts) && propAccounts.length > 0) return;
+    if (!currentUser) return;
+    const tenantId = selectedTenantId || currentUser.tenant_id;
+    if (!tenantId) return;
+    let cancelled = false;
+    Account.filter({ tenant_id: tenantId })
+      .then((data) => {
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setAccounts(data);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [propAccounts, currentUser, selectedTenantId]);
 
   useEffect(() => {
     if (Array.isArray(propContacts)) {

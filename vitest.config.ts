@@ -153,6 +153,8 @@ export default defineConfig({
             'src/components/employees/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/components/signing/**/*.test.{js,jsx,ts,tsx}',
             'src/components/signing/**/__tests__/**/*.{js,jsx,ts,tsx}',
+            'src/components/customers/**/*.test.{js,jsx,ts,tsx}',
+            'src/components/customers/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/pages/__tests__/*.smoke.test.{jsx,tsx}',
             'src/api/entities.test.js',
           ],
