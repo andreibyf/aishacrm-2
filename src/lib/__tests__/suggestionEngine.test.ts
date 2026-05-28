@@ -51,7 +51,7 @@ describe('[AISHA_CHAT] suggestionEngine', () => {
   it('history chip labels use the raw query text, not entity+date', () => {
     const now = new Date().toISOString();
     addHistoryEntry({ intent: 'query', entity: 'general', rawText: 'Show me all active leads', timestamp: now, origin: 'text' });
-    addHistoryEntry({ intent: 'query', entity: 'lead', rawText: 'List my hottest leads from last week', timestamp: now, origin: 'text' });
+    addHistoryEntry({ intent: 'query', entity: 'leads', rawText: 'List my hottest leads from last week', timestamp: now, origin: 'text' });
 
     const context: SuggestionContext = { tenantId: 't1', entity: 'general' };
     const history = getRecentHistory();

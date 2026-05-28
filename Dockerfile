@@ -40,7 +40,7 @@ RUN rm -rf dist/
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN echo "Building with VITE_CALCOM_URL=$VITE_CALCOM_URL" && \
     npm run build:ci && \
-    if grep -R -n --include='*.js' --include='*.html' --include='*.css' "localhost:3002" dist/assets dist/index.html; then \
+    if grep -R -n "localhost:3002" dist/assets dist/index.html; then \
       echo "ERROR: production dist contains localhost:3002. Set VITE_CALCOM_URL to a production scheduler URL."; \
       exit 1; \
     fi

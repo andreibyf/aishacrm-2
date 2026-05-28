@@ -33,6 +33,7 @@ const PAGES = {
   AISuggestions: lazy(() => import('./AISuggestions')),
   DocumentProcessing: lazy(() => import('./DocumentProcessing')),
   CashFlow: lazy(() => import('./CashFlow')),
+  FinanceOps: lazy(() => import('./FinanceOps')),
   PaymentPortal: lazy(() => import('./PaymentPortal')),
   DocumentManagement: lazy(() => import('./DocumentManagement')),
   DocumentTemplates: lazy(() => import('./DocumentTemplates')),
@@ -165,6 +166,7 @@ function PagesContent() {
                 <Route path="/AISuggestions" element={<PAGES.AISuggestions />} />
                 <Route path="/DocumentProcessing" element={<PAGES.DocumentProcessing />} />
                 <Route path="/CashFlow" element={<PAGES.CashFlow />} />
+                <Route path="/FinanceOps" element={<PAGES.FinanceOps />} />
                 <Route path="/PaymentPortal" element={<PAGES.PaymentPortal />} />
                 <Route path="/DocumentManagement" element={<PAGES.DocumentManagement />} />
                 <Route path="/DocumentTemplates" element={<PAGES.DocumentTemplates />} />

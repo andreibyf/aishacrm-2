@@ -3,6 +3,7 @@
 **Updated:** 2026-05-02
 **Audience:** Admins and senior engineers operating the AiSHA CRM deploy pipeline.
 **Scope:** End-to-end push-to-deploy mechanics: laptop -> Gitea -> Coolify -> VPS containers, plus the GitHub mirror loop and the `@claude` PR review path.
+**Quick reference:** `docs/admin-guides/DEPLOYMENT_PIPELINE_FLOW_QUICK_REFERENCE.md`
 
 ---
 

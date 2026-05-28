@@ -225,6 +225,8 @@ import createCommunicationsV2Routes from './routes/communications.v2.js';
 import createWorkflowTemplateRoutes from './routes/workflow-templates.js';
 import createEmailTemplateRoutes from './routes/email-templates.v2.js';
 import createTemplatesV2Routes from './routes/templates.v2.js';
+import createFinanceV2Routes from './routes/finance.v2.js';
+import { isFinanceRuntimeEnabled } from './lib/finance/financeRuntimeGate.js';
 import createNotificationRoutes from './routes/notifications.js';
 import createSystemLogRoutes from './routes/system-logs.js';
 import createAuditLogRoutes from './routes/audit-logs.js';
@@ -526,6 +528,21 @@ app.use(
   validateTenantAccess,
   createTemplatesV2Routes(measuredPgPool),
 );
+// Finance Ops v2 — gated by ENABLE_FINANCE_OPS env flag.
+// Routes are entirely absent (404) when the flag is not set to "true".
+// Per-tenant enrollment is checked inside the router via financeModuleGate.js.
+if (isFinanceRuntimeEnabled()) {
+  logger.info('[FinanceOps] Finance v2 routes mounted (/api/v2/finance)');
+  app.use(
+    '/api/v2/finance',
+    defaultLimiter,
+    authenticateRequest,
+    createFinanceV2Routes(measuredPgPool),
+  );
+} else {
+  logger.info('[FinanceOps] Finance v2 routes disabled (ENABLE_FINANCE_OPS != true)');
+}
+
 app.use('/api/notifications', defaultLimiter, createNotificationRoutes(measuredPgPool));
 app.use('/api/system-logs', defaultLimiter, createSystemLogRoutes(measuredPgPool));
 app.use(

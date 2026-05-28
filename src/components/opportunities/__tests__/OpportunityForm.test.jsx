@@ -159,14 +159,7 @@ describe('[CRM] OpportunityForm — payload shaping (PR #527 regression)', () =>
  * persists the canonical form.
  */
 function getStageOptionValues() {
-  return [
-    'prospecting',
-    'qualification',
-    'proposal',
-    'negotiation',
-    'closed_won',
-    'closed_lost',
-  ];
+  return ['prospecting', 'qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
 }
 
 function coerceStageOnLoad(rawStage) {

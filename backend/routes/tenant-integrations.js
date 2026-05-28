@@ -496,10 +496,14 @@ function resolveTenantId(req) {
   return { error: 'tenant_id is required' };
 }
 
-export default function createTenantIntegrationRoutes({
-  supabaseClient = supabase,
-  validateTenantAccessMw = validateTenantAccess,
-} = {}) {
+export default function createTenantIntegrationRoutes(opts) {
+  // Destructure with explicit null guard: `= {}` default only fires for undefined,
+  // not null. server.js passes measuredPgPool which is null when no DB is configured.
+  const {
+    supabaseClient = supabase,
+    validateTenantAccessMw = validateTenantAccess,
+  } = opts || {};
+
   const router = express.Router();
 
   // Apply tenant validation to all routes

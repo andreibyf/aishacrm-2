@@ -12,7 +12,54 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL?.includes('supabase') ? { rejectUnauthorized: false } : false,
 });
 
-const TENANT_ID = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+const TENANT_ID = process.env.TEST_TENANT_ID || 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
+
+async function ensureActiveCalcomIntegration(client, tenantId) {
+  const existing = await client.query(
+    `SELECT id, is_active, integration_name
+       FROM tenant_integrations
+      WHERE tenant_id = $1
+        AND integration_type = 'calcom'
+      ORDER BY is_active DESC, updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+      LIMIT 1`,
+    [tenantId],
+  );
+
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    await client.query(
+      `UPDATE tenant_integrations
+          SET is_active = true,
+              integration_name = COALESCE(integration_name, 'Cal.com (test fixture)'),
+              api_credentials = COALESCE(api_credentials, '{}'::jsonb),
+              config = COALESCE(config, '{}'::jsonb),
+              sync_status = COALESCE(sync_status, 'pending')
+        WHERE id = $1`,
+      [row.id],
+    );
+    console.log(
+      `✅ Activated existing Cal.com tenant integration (${row.integration_name || 'unnamed'})`,
+    );
+    return row.id;
+  }
+
+  const inserted = await client.query(
+    `INSERT INTO tenant_integrations (
+        tenant_id,
+        integration_type,
+        integration_name,
+        is_active,
+        api_credentials,
+        config,
+        sync_status
+      )
+      VALUES ($1, 'calcom', 'Cal.com (test fixture)', true, '{}'::jsonb, '{}'::jsonb, 'pending')
+      RETURNING id`,
+    [tenantId],
+  );
+  console.log('✅ Created active Cal.com tenant integration fixture');
+  return inserted.rows[0]?.id;
+}
 
 async function seedTestData() {
   const client = await pool.connect();
@@ -32,6 +79,9 @@ async function seedTestData() {
 
     const tenantUUID = tenantResult.rows[0].id;
     console.log('✅ Found tenant UUID:', tenantUUID);
+
+    console.log('\n🗓️ Ensuring active Cal.com tenant integration...');
+    await ensureActiveCalcomIntegration(client, TENANT_ID);
 
     // Seed Contacts
     console.log('\n📇 Creating test contacts...');

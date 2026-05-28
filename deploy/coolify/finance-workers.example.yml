@@ -1,0 +1,214 @@
+# =============================================================================
+# Finance Ops — Worker Services (EXAMPLE / TEMPLATE — NOT A LIVE DEPLOYMENT)
+# =============================================================================
+# Phase 2C-5 deliverable. See docs/architecture/finance/finance-worker-deployment-config.md
+# and docs/architecture/finance/worker-service-topology.md (2B-13).
+#
+# THIS FILE IS A REVIEWED TEMPLATE. It is intentionally NOT referenced by any
+# Coolify app, CI job, or docker-compose invocation. Copying it into a live
+# Coolify app and flipping the enable flags is gated by the staging activation
+# review (docs/architecture/finance/staging-activation-review.md).
+#
+# Disabled-by-default posture (finance-worker-deployment-config.md Section 3.1):
+#   A worker runs ONLY when all three are true:
+#     ENABLE_FINANCE_OPS=true  &&  ENABLE_FINANCE_WORKERS=true  &&  <per-worker flag>=true
+#   Every flag below is hard-set to "false". As written, this file starts three
+#   processes that immediately log "finance ops disabled — worker idling" and
+#   idle. They poll nothing, claim nothing, and call no provider.
+#
+# NOT-YET-IMPLEMENTED: the worker entry points (npm run worker:finance-*) do not
+# exist yet — worker-service-topology.md Section 11 records this. The `command`
+# lines below are the INTENDED shape; the npm scripts and entry modules are
+# Phase 3 implementation work. This template documents the deployment contract,
+# it is not runnable today.
+#
+# Placement: intended as separate Coolify worker apps on VPS-2 (decision E2).
+# Re-confirm against docs/architecture/DEPLOY_TOPOLOGY.md before any deploy.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # finance-projection-worker — hosts the Projection Runtime Runner.
+  # See projection-worker-staging-plan.md (2C-6).
+  # ---------------------------------------------------------------------------
+  finance-projection-worker:
+    image: aishacrm-backend:coolify
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: finance-projection-worker
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 512m
+    mem_reservation: 192m
+    # NOT-YET-IMPLEMENTED entry point — see header.
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-projection']
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+      # ── Three-tier enable gate — ALL must be true for the worker to run ──
+      - ENABLE_FINANCE_OPS=false
+      - ENABLE_FINANCE_WORKERS=false
+      - ENABLE_FINANCE_PROJECTION_WORKER=false
+      # ── Event-store persistence gate (Phase 3 Slice 1) ──
+      # The projection worker reads finance.audit_events via the pg event store.
+      # ENABLE_FINANCE_PERSISTENT_EVENTS must be set to "true" on the BACKEND
+      # APP for newly-emitted events to be persisted to Postgres. NOTE: as of
+      # Slice 1 the finance v2 route refuses to mount when this flag is true
+      # (split-brain prevention — business reads still come from the in-memory
+      # domain service); enabling persistent events end-to-end is blocked on
+      # projection-backed reads landing in Slice 2.
+      # FINANCE_CONTROLLED_TENANT_IDS is a REQUIRED comma-separated allow-list
+      # of tenant UUIDs the worker processes. Empty / unset means NO tenants
+      # are processed (the poll cycle is a no-op) — there is no implicit
+      # "process all tenants" fall-through. Tenants must be explicitly listed.
+      - ENABLE_FINANCE_PERSISTENT_EVENTS=false
+      - FINANCE_CONTROLLED_TENANT_IDS=
+      # ── Polling / batching ──
+      - FINANCE_WORKER_POLL_INTERVAL_MS=${FINANCE_WORKER_POLL_INTERVAL_MS:-5000}
+      - FINANCE_WORKER_BATCH_SIZE=${FINANCE_WORKER_BATCH_SIZE:-100}
+      - FINANCE_PROJECTION_TENANT_BATCH=${FINANCE_PROJECTION_TENANT_BATCH:-25}
+      # ── DB connection (Doppler-injected; required only when enabled) ──
+      - FINANCE_DB_URL=${FINANCE_DB_URL:-}
+      - FINANCE_DB_POOL_MAX=${FINANCE_DB_POOL_MAX:-5}
+      # ── Health / observability ──
+      - FINANCE_WORKER_HEALTH_PORT=9090
+      - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
+      - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      aishanet:
+        aliases:
+          - finance-projection-worker
+
+  # ---------------------------------------------------------------------------
+  # finance-audit-worker — audit_timeline upkeep + evidence-pack generation.
+  # See audit-worker-staging-plan.md (2C-7).
+  # ---------------------------------------------------------------------------
+  finance-audit-worker:
+    image: aishacrm-backend:coolify
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: finance-audit-worker
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 384m
+    mem_reservation: 128m
+    # NOT-YET-IMPLEMENTED entry point — see header.
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-audit']
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+      # ── Three-tier enable gate — ALL must be true for the worker to run ──
+      - ENABLE_FINANCE_OPS=false
+      - ENABLE_FINANCE_WORKERS=false
+      - ENABLE_FINANCE_AUDIT_WORKER=false
+      # ── Polling / batching ──
+      - FINANCE_WORKER_POLL_INTERVAL_MS=${FINANCE_WORKER_POLL_INTERVAL_MS:-5000}
+      - FINANCE_WORKER_BATCH_SIZE=${FINANCE_WORKER_BATCH_SIZE:-100}
+      # ── DB connection (Doppler-injected; required only when enabled) ──
+      - FINANCE_DB_URL=${FINANCE_DB_URL:-}
+      - FINANCE_DB_POOL_MAX=${FINANCE_DB_POOL_MAX:-5}
+      # ── Health / observability ──
+      - FINANCE_WORKER_HEALTH_PORT=9090
+      - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
+      - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      aishanet:
+        aliases:
+          - finance-audit-worker
+
+  # ---------------------------------------------------------------------------
+  # finance-adapter-worker — adapter job processor. SANDBOX / DRAFT-ONLY.
+  # See adapter-worker-sandbox-plan.md (2C-8). No live provider writes.
+  # ---------------------------------------------------------------------------
+  finance-adapter-worker:
+    image: aishacrm-backend:coolify
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: finance-adapter-worker
+    restart: unless-stopped
+    cgroup_parent: aishacrm.slice
+    mem_limit: 384m
+    mem_reservation: 128m
+    # NOT-YET-IMPLEMENTED entry point — see header.
+    command: ['doppler', 'run', '--', 'npm', 'run', 'worker:finance-adapter']
+    environment:
+      - DOPPLER_TOKEN=${DOPPLER_TOKEN}
+      - DOPPLER_PROJECT=${DOPPLER_PROJECT:-aishacrm}
+      - DOPPLER_CONFIG=${DOPPLER_CONFIG:-stg_stg}
+      - NODE_ENV=production
+      # ── Three-tier enable gate — ALL must be true for the worker to run ──
+      - ENABLE_FINANCE_OPS=false
+      - ENABLE_FINANCE_WORKERS=false
+      - ENABLE_FINANCE_ADAPTER_WORKER=false
+      # ── Adapter safety flags — sandbox/draft-only, no provider writes ──
+      #    FINANCE_PROVIDER_WRITES_ENABLED=false is the dominant kill switch:
+      #    no provider HTTP write occurs while it is false, regardless of mode.
+      - FINANCE_ADAPTER_MODE=draft_only
+      - FINANCE_PROVIDER_WRITES_ENABLED=false
+      # ── Polling / batching ──
+      - FINANCE_WORKER_POLL_INTERVAL_MS=${FINANCE_WORKER_POLL_INTERVAL_MS:-5000}
+      - FINANCE_WORKER_BATCH_SIZE=${FINANCE_WORKER_BATCH_SIZE:-100}
+      # ── Retry / back-off (adapter-runtime-contract.md) ──
+      - FINANCE_ADAPTER_MAX_ATTEMPTS=${FINANCE_ADAPTER_MAX_ATTEMPTS:-5}
+      - FINANCE_ADAPTER_BACKOFF_BASE_MS=${FINANCE_ADAPTER_BACKOFF_BASE_MS:-15000}
+      - FINANCE_ADAPTER_BACKOFF_CAP_MS=${FINANCE_ADAPTER_BACKOFF_CAP_MS:-1800000}
+      - FINANCE_ADAPTER_STUCK_JOB_MS=${FINANCE_ADAPTER_STUCK_JOB_MS:-300000}
+      # ── DB connection (Doppler-injected; required only when enabled) ──
+      - FINANCE_DB_URL=${FINANCE_DB_URL:-}
+      - FINANCE_DB_POOL_MAX=${FINANCE_DB_POOL_MAX:-5}
+      # ── Health / observability ──
+      - FINANCE_WORKER_HEALTH_PORT=9090
+      - FINANCE_WORKER_LOG_LEVEL=${FINANCE_WORKER_LOG_LEVEL:-info}
+      - FINANCE_WORKER_HEARTBEAT_MS=${FINANCE_WORKER_HEARTBEAT_MS:-15000}
+      # NOTE: no provider OAuth/API credentials appear here. Provider connection
+      # config is loaded per-tenant from tenant_integrations.api_credentials at
+      # runtime, and only if/when provider writes are explicitly enabled.
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9090/health || exit 1']
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    networks:
+      aishanet:
+        aliases:
+          - finance-adapter-worker
+
+networks:
+  aishanet:
+    external: true
+    name: aishanet

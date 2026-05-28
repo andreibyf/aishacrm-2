@@ -8,7 +8,9 @@ import logger from './logger.js';
 import { initMemoryClient, appendEvent, disconnectMemoryClient } from './memoryClient.js';
 import { getAccessSecret } from './jwtSecret.js';
 
-const supabase = getSupabaseAdmin();
+// supabase client is initialized lazily inside init() so that importing this
+// module at startup does not throw when SUPABASE_URL is absent from the env
+// (e.g. during local dev without backend/.env Supabase credentials).
 
 /**
  * WebSocket Server for Real-Time Activity Feed
@@ -68,6 +70,17 @@ export function init(httpServer) {
     return io;
   }
 
+  // Lazy-initialize: only runs when the HTTP server is actually starting.
+  // Gracefully degrade when Supabase credentials are absent (local dev without
+  // backend/.env Supabase vars). WebSocket server starts but will reject all
+  // authenticated connections with a clear error rather than crashing the process.
+  let supabase = null;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    logger.warn('[WebSocket] Supabase not configured — socket connections will be rejected: ' + err.message);
+  }
+
   io = new Server(httpServer, {
     cors: {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -103,6 +116,11 @@ export function init(httpServer) {
 
       if (!socketUserId) {
         return next(new Error('Invalid token: missing userId'));
+      }
+
+      // Reject connections when Supabase isn't configured (local dev without credentials)
+      if (!supabase) {
+        return next(new Error('WebSocket auth unavailable: Supabase not configured'));
       }
 
       // Fetch user from database (includes tenant_id, role, permissions)

@@ -77,6 +77,7 @@ export default defineConfig({
         entryFileNames: 'assets/entry-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
         manualChunks: (id) => {
+          if (id.includes('node_modules/recharts')) return 'recharts';
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
@@ -86,9 +87,22 @@ export default defineConfig({
             return 'react-core';
           }
           if (id.includes('node_modules/react-router')) return 'react-router';
+          if (id.includes('node_modules/@tanstack/react-query')) return 'react-query';
+          if (id.includes('node_modules/react-hook-form') || id.includes('node_modules/@hookform/')) {
+            return 'forms';
+          }
+          if (id.includes('node_modules/lucide-react')) return 'icons';
+          if (id.includes('node_modules/framer-motion')) return 'motion';
           if (id.includes('node_modules/@supabase')) return 'supabase';
+          if (id.includes('node_modules/socket.io-client')) return 'realtime';
+          if (
+            id.includes('node_modules/react-markdown') ||
+            id.includes('node_modules/pdfjs-dist')
+          ) {
+            return 'docs-viewer';
+          }
           if (id.includes('node_modules/date-fns')) return 'date-utils';
-          if (id.includes('node_modules/recharts')) return 'recharts';
+          if (id.includes('node_modules/')) return 'vendor';
         },
       },
     },

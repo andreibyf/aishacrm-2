@@ -33,6 +33,7 @@ export const navItems = [
   { href: 'Integrations', label: 'Integrations' },
   { href: 'Workflows', label: 'Workflows' },
   { href: 'PaymentPortal', label: 'Payment Portal' },
+  { href: 'FinanceOps', label: 'Finance Operations' },
   { href: 'Utilities', label: 'Utilities' },
   { href: 'ClientOnboarding', label: 'Client Onboarding' },
 ];
@@ -69,6 +70,12 @@ export const moduleMapping = {
   Reports: 'Analytics & Reports',
   Integrations: 'Integrations',
   PaymentPortal: 'Payment Portal',
+  // Finance Ops uses the backend canonical module key directly (no display-label
+  // translation): backend gate at financeModuleGate.js recognises 'financeOps'
+  // (canonical) and 'enterpriseFinance' (legacy alias). The modulesettings row
+  // for an enrolled tenant must use one of these exact strings. Alias
+  // resolution lives in MODULE_ALIASES below.
+  FinanceOps: 'financeOps',
   AICampaigns: 'AI Campaigns',
   AISuggestions: 'AI Suggestions',
   DeveloperAI: 'Developer AI',
@@ -87,6 +94,19 @@ export const moduleMapping = {
   UnitTests: null,
   ClientRequirements: null,
   CareWorkflows: 'CARE Workflows',
+};
+
+/**
+ * Module key aliases — when checking access for a canonical module name,
+ * any listed alias is treated as equivalent. Mirrors the backend gate at
+ * backend/lib/finance/financeModuleGate.js which accepts 'enterpriseFinance'
+ * as a legacy alias for 'financeOps'. Consumers should resolve a required
+ * module name against both the canonical key and any aliases listed here
+ * before deciding access — otherwise a tenant enrolled via the alias clears
+ * the backend gate but is hidden in the frontend (access drift).
+ */
+export const MODULE_ALIASES = {
+  financeOps: ['enterpriseFinance'],
 };
 
 /**

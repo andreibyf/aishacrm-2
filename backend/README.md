@@ -310,6 +310,37 @@ Watch mode with auto-reload:
 npm run dev
 ```
 
+## ✅ Testing
+
+Run the full backend suite:
+
+```bash
+npm test
+```
+
+When running inside the backend container (for example `docker exec aishacrm-backend npm test`), a subset of skips is expected and does not indicate regression by itself.
+
+Common expected skip categories in containerized runs:
+
+- **Repo-root assertions not mounted in backend container**
+  - Workflow and infra file checks that need paths outside `/app/backend` (for example `.github/workflows/*`, systemd slice files).
+- **Host-only scripts excluded from image**
+  - Example: `scripts/install-coolify-drift-guard.ps1` checks are skipped because the file is excluded by `.dockerignore` in the backend image.
+- **Credential/flag-gated auth integration tests**
+  - Some tests intentionally skip unless specific env vars are present (for example `TEST_USER_EMAIL`, `RUN_IMPERSONATION_TESTS`, `CI_BACKEND_TESTS`, `JWT_SECRET`).
+- **Explicit TODO integration tests**
+  - A few tests are intentionally marked `it.skip(...)` until dependent E2E test fixtures are available.
+
+### When skips require action
+
+Treat skips as actionable when:
+
+- The skip count increases unexpectedly in the same execution profile.
+- A previously passing, non-gated test starts skipping.
+- A skip reason changes from environment-gated to behavior-related/runtime-error.
+
+For release confidence, run host/CI profiles in addition to backend-container runs so repo-root assertions are exercised.
+
 ## 🔒 Security
 
 - Helmet.js for security headers

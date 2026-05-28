@@ -125,6 +125,7 @@ const primaryNavIconMap = {
   Workers: Users,
   BizDevSources: Database,
   CashFlow: DollarSign,
+  FinanceOps: BarChart3,
   DocumentProcessing: FileText,
   DocumentManagement: FolderOpen,
   DocumentTemplates: FileText,

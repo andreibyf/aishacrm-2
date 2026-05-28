@@ -325,6 +325,10 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     Reports: 'Analytics & Reports',
     Integrations: 'Integrations',
     PaymentPortal: 'Payment Portal',
+    // Finance Ops uses the backend canonical module key directly. See
+    // navigationConfig.js for the same mapping + backend financeModuleGate.js
+    // for the canonical 'financeOps' / alias 'enterpriseFinance' keys.
+    FinanceOps: 'financeOps',
     AICampaigns: 'AI Campaigns',
     AISuggestions: 'AI Suggestions',
     DeveloperAI: 'Developer AI',
@@ -345,9 +349,31 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     ClientRequirements: null,
   };
 
+  // Module aliases — when checking access for a canonical module name, also
+  // accept any listed alias as an equivalent enrolment. Mirrors the backend
+  // gate (backend/lib/finance/financeModuleGate.js:7-16,29-48) which accepts
+  // 'enterpriseFinance' as a legacy alias for 'financeOps'. Without this
+  // table, a tenant enrolled via the alias would clear the backend gate but
+  // be hidden in the frontend nav — frontend/backend access drift.
+  const moduleAliases = {
+    financeOps: ['enterpriseFinance'],
+  };
+
   const requiredModuleId = moduleMapping[pageName];
   if (requiredModuleId && moduleSettings.length > 0) {
-    const moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
+    // Canonical-wins resolution. Mirrors the backend's R-6 rule at
+    // backend/lib/finance/financeModuleGate.js:40-48: when both the canonical
+    // row and a legacy alias row exist with conflicting `is_enabled` values,
+    // the canonical row wins. The earlier flat `find(acceptableNames)` was
+    // order-dependent — Supabase does not guarantee row order — so a
+    // conflicting alias row could land first and flip the gate's verdict.
+    // Resolve in two passes: canonical first, then alias only when canonical
+    // is absent.
+    const aliasList = moduleAliases[requiredModuleId] || [];
+    let moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
+    if (!moduleSetting && aliasList.length > 0) {
+      moduleSetting = moduleSettings.find((m) => aliasList.includes(m.module_name));
+    }
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }
 
