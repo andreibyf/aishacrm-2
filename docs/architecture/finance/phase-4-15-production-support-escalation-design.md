@@ -219,7 +219,7 @@ The Slack directive names four security-incident categories explicitly: **tenant
 
 ### 6.4 Audit-log integrity concern
 
-**Definition:** evidence that `audit_events` rows are missing, duplicated unexpectedly, or that the immutability triggers (migration 169) have been bypassed. This category is rare — the immutability triggers + append-only design + RLS make integrity-violation hard. Indicators: replay-validation failure that cannot be reconciled (Phase 4-4 signal 7), unexpected gap in `audit_events.seq`, projection state diverging from event-store-derived state.
+**Definition:** evidence that `audit_events` rows are missing, duplicated unexpectedly, or that the immutability triggers (migration 173) have been bypassed. This category is rare — the immutability triggers + append-only design + RLS make integrity-violation hard. Indicators: replay-validation failure that cannot be reconciled (Phase 4-4 signal 7), unexpected gap in `audit_events.seq`, projection state diverging from event-store-derived state.
 
 | Step                                     | Owner                                                                                                                                                                                                                                                                        |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
