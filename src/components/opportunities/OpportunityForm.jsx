@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch'; // Added import for Switch
-import { Tenant, Employee, Opportunity } from '@/api/entities';
+import { Tenant, Employee, Opportunity, Account } from '@/api/entities';
 import { useUser } from '@/components/shared/useUser.js';
 import { useTenant } from '../shared/tenantContext';
 import { Plus } from 'lucide-react';
@@ -190,6 +190,28 @@ export default function OpportunityForm({
       setAccounts(propAccounts);
     }
   }, [propAccounts]);
+
+  // Self-healing fallback: if the parent's supporting data hasn't loaded yet
+  // (race condition: form opened before useOpportunitiesData finished fetching)
+  // or was permanently locked at [] by a prior API error, fetch accounts
+  // directly so the Customer dropdown is never silently empty.
+  // The existing propAccounts sync effect above will override this with parent
+  // data if/when it arrives, so there is no conflict.
+  useEffect(() => {
+    if (Array.isArray(propAccounts) && propAccounts.length > 0) return;
+    if (!currentUser) return;
+    const tenantId = selectedTenantId || currentUser.tenant_id;
+    if (!tenantId) return;
+    Account.filter({ tenant_id: tenantId })
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAccounts(data);
+        }
+      })
+      .catch(() => {
+        // silent — parent prop sync is the primary path; this is best-effort
+      });
+  }, [propAccounts, currentUser, selectedTenantId]);
 
   useEffect(() => {
     if (Array.isArray(propContacts)) {
