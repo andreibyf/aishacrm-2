@@ -153,6 +153,16 @@ create table if not exists finance.adapter_jobs (
   operation text not null check (operation in ('pull', 'push_draft', 'sync_status', 'void', 'reconcile')),
   mode text not null check (mode in ('read_only', 'draft_only', 'approval_required_write')),
   status text not null default 'draft' check (status in ('draft', 'queued', 'running', 'succeeded', 'failed')),
+  -- attempts: incremented on each claim by adapterJobProcessor.claimPersistent;
+  -- compared against retry policy in applyTerminalPersistent.
+  attempts integer not null default 0,
+  -- next_attempt_at: nullable; when set, claimPersistent only picks the row if
+  -- next_attempt_at <= now. Used by the retry backoff logic.
+  next_attempt_at timestamptz,
+  -- payload: canonical job payload consumed by adapterJobProcessor (line 309)
+  -- via buildProviderPayload. Mirrors the in-memory adapter-job shape so a
+  -- persistent claim returns the same field name the processor reads.
+  payload jsonb not null default '{}'::jsonb,
   request_payload jsonb not null default '{}'::jsonb,
   response_payload jsonb not null default '{}'::jsonb,
   error_payload jsonb not null default '{}'::jsonb,
