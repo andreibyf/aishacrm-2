@@ -182,9 +182,9 @@ async function cascadeDeleteTenant(supabase, tenantId) {
 /**
  * Default modules that should be initialized for every new tenant.
  * These match the modules defined in frontend's ModuleManager.jsx
- * All modules are enabled by default.
+ * All modules in this list are ENABLED by default.
  */
-const DEFAULT_MODULES = [
+export const DEFAULT_MODULES = [
   'Dashboard',
   'Contact Management',
   'Account Management',
@@ -206,6 +206,45 @@ const DEFAULT_MODULES = [
   'Realtime Voice',
   'Workflows',
 ];
+
+/**
+ * Default modules that get a seeded row but stay DISABLED for new tenants.
+ *
+ * Finance Ops is a controlled-rollout module: every new tenant should get a
+ * modulesettings row (so the Finance v2 gate has something to read and the
+ * module is visible/toggleable in Module Settings), but it must default OFF so
+ * the per-tenant gate stays meaningful — an admin/superadmin enables it
+ * explicitly per tenant. The key is the canonical 'financeOps' the backend
+ * gate matches (backend/lib/finance/financeModuleGate.js). The process-level
+ * ENABLE_FINANCE_OPS env remains a separate master switch that mounts the
+ * route at all; this row is the second, per-tenant gate.
+ */
+export const DEFAULT_DISABLED_MODULES = ['financeOps'];
+
+/**
+ * Pure builder for the modulesettings rows a new tenant should be seeded with.
+ * Enabled defaults + disabled defaults, one row each. Kept side-effect-free so
+ * the seeding contract is unit-testable without a Supabase round-trip.
+ *
+ * @param {string} tenantId  UUID of the newly created tenant.
+ * @returns {Array<{tenant_id: string, module_name: string, settings: object, is_enabled: boolean}>}
+ */
+export function buildDefaultModuleRows(tenantId) {
+  return [
+    ...DEFAULT_MODULES.map((moduleName) => ({
+      tenant_id: tenantId,
+      module_name: moduleName,
+      settings: {},
+      is_enabled: true,
+    })),
+    ...DEFAULT_DISABLED_MODULES.map((moduleName) => ({
+      tenant_id: tenantId,
+      module_name: moduleName,
+      settings: {},
+      is_enabled: false,
+    })),
+  ];
+}
 
 // NOTE: tenant_id is now auto-populated by database trigger (mirror_tenant_id_from_id)
 // The old generateUniqueTenantId slug-based function has been removed.
@@ -892,12 +931,7 @@ async function seedIndustryPlaybooks(tenantId, industry) {
  */
 async function initializeModuleSettingsForTenant(supabase, tenantId) {
   try {
-    const moduleRows = DEFAULT_MODULES.map((moduleName) => ({
-      tenant_id: tenantId,
-      module_name: moduleName,
-      settings: {},
-      is_enabled: true,
-    }));
+    const moduleRows = buildDefaultModuleRows(tenantId);
 
     const { data, error } = await supabase.from('modulesettings').insert(moduleRows).select();
 

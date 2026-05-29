@@ -105,10 +105,10 @@ npm run dev
 cd backend && npm run dev
 ```
 
-Operator-side prerequisites (these are existing config, not changed by this slice):
+Operator-side prerequisites:
 
-- `ENABLE_FINANCE_OPS=true` must be set for the backend env so the route surface mounts (otherwise the console correctly shows the "Route disabled" state — itself a representative state worth evaluating).
-- The selected tenant must be enrolled: a `modulesettings` row with `module_name = 'financeOps'` and `is_enabled = true` (otherwise the console correctly shows "Tenant not enrolled").
+- `ENABLE_FINANCE_OPS=true` must be set for the backend env so the route surface mounts (otherwise the console correctly shows the "Route disabled" state — itself a representative state worth evaluating). This is a process-level master switch and is unchanged by this work.
+- The selected tenant must be enrolled: a `modulesettings` row with `module_name = 'financeOps'` and `is_enabled = true` (otherwise the console correctly shows "Tenant not enrolled"). **Enable it the supported way:** Settings → Module Management → **Finance Operations** toggle (admin/superadmin only; writes the row via the existing auth-gated `/api/modulesettings` API — no backend gate bypass). New tenants are seeded a `financeOps` row that defaults **disabled** (controlled rollout), so this toggle is the normal enablement path. Direct SQL/`db:exec` upsert remains an alternative for headless dev, but the toggle is preferred.
 
 In live mode the five live screens show real tenant data (which may be empty on a fresh tenant) and the gap screens show their honest gap cards. Use `finance.previewFixtures.js` as the reference for the representative states the live data may not naturally exhibit (e.g. a reversed journal entry).
 

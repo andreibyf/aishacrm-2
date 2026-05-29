@@ -451,6 +451,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       Calendar: true,
       BizDevSources: true,
       CashFlow: true,
+      FinanceOps: true, // visible by default; gated by the per-tenant financeOps module row (design §11.3 — no frontend role gate)
       DocumentProcessing: true,
       DocumentManagement: true,
       DocumentTemplates: true,
@@ -488,6 +489,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       Calendar: true,
       BizDevSources: true,
       CashFlow: true,
+      FinanceOps: true, // visible by default; gated by the per-tenant financeOps module row (design §11.3 — no frontend role gate)
       DocumentProcessing: true,
       DocumentManagement: true,
       DocumentTemplates: true,
@@ -524,6 +526,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       Calendar: true,
       BizDevSources: true,
       CashFlow: true,
+      FinanceOps: true, // visible by default; gated by the per-tenant financeOps module row (design §11.3 — no frontend role gate)
       DocumentProcessing: true,
       DocumentManagement: true,
       DocumentTemplates: true,
@@ -557,6 +560,7 @@ export function getDefaultNavigationPermissions(role, navItems = [], secondaryNa
       Activities: true,
       Communications: true,
       Calendar: true,
+      FinanceOps: true, // visible by default; gated by the per-tenant financeOps module row (design §11.3 — no frontend role gate)
       Documentation: true,
       Settings: true, // All users need access to their profile settings
       ClientOnboarding: false,

@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 // Navigation items that can be toggled
 // moduleName: matches modulesettings table module_name for disabling when module is off
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   {
     key: 'Dashboard',
     label: 'Dashboard',
@@ -73,6 +73,15 @@ const NAV_ITEMS = [
     description: 'Financial forecasting',
     default: false,
     moduleName: 'Cash Flow Management',
+  },
+  {
+    key: 'FinanceOps',
+    label: 'Finance Operations',
+    description: 'Read-only Finance Ops console',
+    default: false,
+    // Canonical Finance v2 module key (financeModuleGate.js) — matches the
+    // modulesettings.module_name the Module Settings toggle writes.
+    moduleName: 'financeOps',
   },
   {
     key: 'DocumentProcessing',

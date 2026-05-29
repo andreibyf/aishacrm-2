@@ -7,6 +7,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+// Single source of truth for the default module catalog — the same rows new
+// tenants are seeded with (backend/routes/tenants.js). Importing it keeps this
+// maintenance script from drifting (e.g. missing financeOps).
+import { buildDefaultModuleRows } from '../../routes/tenants.js';
 
 dotenv.config();
 
@@ -21,32 +25,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
-
-/**
- * Default modules - must match the list in tenants.js and ModuleManager.jsx
- */
-const DEFAULT_MODULES = [
-  'Dashboard',
-  'Contact Management',
-  'Account Management',
-  'Lead Management',
-  'Opportunities',
-  'Activity Tracking',
-  'Calendar',
-  'BizDev Sources',
-  'Cash Flow Management',
-  'Document Processing & Management',
-  'AI Campaigns',
-  'Analytics & Reports',
-  'Employee Management',
-  'Integrations',
-  'Payment Portal',
-  'Utilities',
-  'Client Onboarding',
-  'AI Agent',
-  'Realtime Voice',
-  'Workflows',
-];
 
 async function backfillModuleSettings() {
   console.log('Starting module settings backfill...\n');
@@ -78,22 +56,20 @@ async function backfillModuleSettings() {
     }
 
     const existingModuleNames = new Set(existingSettings.map((s) => s.module_name));
-    const missingModules = DEFAULT_MODULES.filter((m) => !existingModuleNames.has(m));
+    // Build the full default row set (incl. financeOps seeded disabled), then
+    // insert only the ones this tenant is missing — preserving each row's
+    // is_enabled from the shared seeding contract.
+    const defaultRows = buildDefaultModuleRows(tenant.id);
+    const newSettings = defaultRows.filter((r) => !existingModuleNames.has(r.module_name));
 
-    if (missingModules.length === 0) {
-      console.log(`  ✓ Already has all ${DEFAULT_MODULES.length} modules`);
+    if (newSettings.length === 0) {
+      console.log(`  ✓ Already has all ${defaultRows.length} modules`);
       continue;
     }
 
-    console.log(`  Missing ${missingModules.length} modules: ${missingModules.join(', ')}`);
-
-    // Create missing module settings
-    const newSettings = missingModules.map((moduleName) => ({
-      tenant_id: tenant.id,
-      module_name: moduleName,
-      settings: {},
-      is_enabled: true,
-    }));
+    console.log(
+      `  Missing ${newSettings.length} modules: ${newSettings.map((r) => r.module_name).join(', ')}`,
+    );
 
     const { data: inserted, error: insertError } = await supabase
       .from('modulesettings')

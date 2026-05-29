@@ -32,7 +32,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 
-const defaultModules = [
+export const defaultModules = [
   {
     id: 'dashboard',
     name: 'Dashboard',
@@ -361,7 +361,44 @@ const defaultModules = [
       'Project Assignments',
     ],
   },
+  {
+    // Finance Operations (read-only Finance Ops console). Keyed by the canonical
+    // backend module key `financeOps` (via moduleKey), NOT the display name, so
+    // the Module Settings toggle writes the exact modulesettings.module_name the
+    // Finance v2 gate reads (backend/lib/finance/financeModuleGate.js) and the
+    // nav/permissions mapping expects (src/utils/navigationConfig.js,
+    // src/utils/permissions.js). Defaults DISABLED: every tenant gets a row so
+    // the module is visible/toggleable, but Finance Ops stays gated until an
+    // admin/superadmin enables it per tenant (controlled rollout). The
+    // process-level ENABLE_FINANCE_OPS env is a separate master switch that
+    // mounts the route at all.
+    id: 'financeOps',
+    name: 'Finance Operations',
+    moduleKey: 'financeOps',
+    defaultEnabled: false,
+    description:
+      'Read-only Finance Operations console: runtime status, ledger, journal entries, approvals, adapter queue, and guardrail banners. No mutating actions.',
+    icon: DollarSign,
+    features: [
+      'Runtime & Guardrail Overview',
+      'Ledger / P&L / Balance Sheet',
+      'Journal Entries',
+      'Approval & Adapter Queues (read-only)',
+      'Audit Timeline',
+    ],
+  },
 ];
+
+/**
+ * Canonical modulesettings key for a module definition. Most modules use their
+ * human display `name` as the stored `module_name` (legacy convention), but some
+ * — Finance Ops — must store a specific backend key that differs from the label.
+ * Such entries set an explicit `moduleKey`; everything else falls back to `name`.
+ * This is the single place the frontend resolves a module to its DB key.
+ */
+export function moduleKeyOf(module) {
+  return module?.moduleKey || module?.name;
+}
 
 export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
@@ -411,14 +448,18 @@ export default function ModuleManager() {
 
       // Initialize default settings for modules that don't exist FOR THIS TENANT
       const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
-      const missingModules = defaultModules.filter((m) => !existingModuleNames.includes(m.name));
+      const missingModules = defaultModules.filter(
+        (m) => !existingModuleNames.includes(moduleKeyOf(m)),
+      );
 
       if (missingModules.length > 0 && effectiveTenantId) {
         try {
           const newModuleRecords = missingModules.map((module) => ({
             tenant_id: effectiveTenantId, // Use effective tenant, not user.tenant_id
-            module_name: module.name,
-            is_enabled: true,
+            module_name: moduleKeyOf(module),
+            // Most modules default enabled; controlled-rollout modules (e.g.
+            // Finance Ops) set defaultEnabled:false so they seed disabled.
+            is_enabled: module.defaultEnabled !== false,
           }));
           await ModuleSettings.bulkCreate(newModuleRecords);
 
@@ -459,7 +500,7 @@ export default function ModuleManager() {
       const module = defaultModules.find((m) => m.id === moduleId);
       // CRITICAL: Find setting for the current effective tenant only
       const setting = moduleSettings.find(
-        (s) => s.module_name === module?.name && s.tenant_id === effectiveTenantId,
+        (s) => s.module_name === moduleKeyOf(module) && s.tenant_id === effectiveTenantId,
       );
       const newStatus = !currentStatus;
 
@@ -473,7 +514,7 @@ export default function ModuleManager() {
         // Update local state
         setModuleSettings((prev) =>
           prev.map((s) =>
-            s.module_name === module?.name && s.tenant_id === effectiveTenantId
+            s.module_name === moduleKeyOf(module) && s.tenant_id === effectiveTenantId
               ? { ...s, is_enabled: newStatus }
               : s,
           ),
@@ -482,7 +523,7 @@ export default function ModuleManager() {
         // Create new setting if none exists
         const newSetting = await ModuleSettings.create({
           tenant_id: effectiveTenantId,
-          module_name: module?.name,
+          module_name: moduleKeyOf(module),
           is_enabled: newStatus,
         });
 
@@ -513,9 +554,11 @@ export default function ModuleManager() {
     const module = defaultModules.find((m) => m.id === moduleId);
     // CRITICAL: Find setting for the current effective tenant only
     const setting = moduleSettings.find(
-      (s) => s.module_name === module?.name && s.tenant_id === effectiveTenantId,
+      (s) => s.module_name === moduleKeyOf(module) && s.tenant_id === effectiveTenantId,
     );
-    return setting?.is_enabled ?? true;
+    // No row yet: fall back to the module's own default (most are enabled;
+    // controlled-rollout modules like Finance Ops set defaultEnabled:false).
+    return setting?.is_enabled ?? module?.defaultEnabled !== false;
   };
 
   // Admin-only: List currently disabled modules for the selected tenant
