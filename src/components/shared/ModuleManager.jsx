@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { MODULE_ALIASES } from '@/utils/navigationConfig';
 
 export const defaultModules = [
   {
@@ -400,6 +401,31 @@ export function moduleKeyOf(module) {
   return module?.moduleKey || module?.name;
 }
 
+/**
+ * Codex P1: alias-aware missing-module filter for the auto-create-on-load path.
+ * A tenant currently enrolled via a legacy alias (e.g. `enterpriseFinance`) must
+ * NOT have a disabled canonical `financeOps` row silently inserted — under
+ * canonical-wins resolution (`financeModuleGate.js`, `permissions.js`) that
+ * would clobber the alias-enabled access. Treat the presence of EITHER the
+ * canonical key OR any registered alias as "module already configured."
+ *
+ * @param {Object} opts
+ * @param {Array}  opts.modules
+ * @param {Iterable<string>} opts.existingNames  module_names already on the tenant
+ * @param {Record<string,string[]>} [opts.moduleAliases=MODULE_ALIASES]
+ * @returns {Array} modules that are truly missing
+ */
+export function computeMissingModules({ modules, existingNames, moduleAliases = MODULE_ALIASES }) {
+  const existing = new Set(existingNames);
+  return modules.filter((m) => {
+    const key = moduleKeyOf(m);
+    if (existing.has(key)) return false;
+    const aliases = moduleAliases?.[key] || [];
+    if (aliases.some((a) => existing.has(a))) return false;
+    return true;
+  });
+}
+
 export default function ModuleManager() {
   const [moduleSettings, setModuleSettings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -448,9 +474,10 @@ export default function ModuleManager() {
 
       // Initialize default settings for modules that don't exist FOR THIS TENANT
       const existingModuleNames = currentModuleSettings.map((s) => s.module_name);
-      const missingModules = defaultModules.filter(
-        (m) => !existingModuleNames.includes(moduleKeyOf(m)),
-      );
+      const missingModules = computeMissingModules({
+        modules: defaultModules,
+        existingNames: existingModuleNames,
+      });
 
       if (missingModules.length > 0 && effectiveTenantId) {
         try {
@@ -552,10 +579,23 @@ export default function ModuleManager() {
 
   const getModuleStatus = (moduleId) => {
     const module = defaultModules.find((m) => m.id === moduleId);
-    // CRITICAL: Find setting for the current effective tenant only
-    const setting = moduleSettings.find(
-      (s) => s.module_name === moduleKeyOf(module) && s.tenant_id === effectiveTenantId,
+    const key = moduleKeyOf(module);
+    // CRITICAL: Find setting for the current effective tenant only.
+    let setting = moduleSettings.find(
+      (s) => s.module_name === key && s.tenant_id === effectiveTenantId,
     );
+    // Codex P1 — alias-aware fallback: a tenant enrolled via a legacy alias
+    // (e.g. `enterpriseFinance`) is effectively enrolled in the canonical
+    // module. Without this, the toggle would show OFF for an alias-enrolled
+    // tenant, misleading the admin and risking a misclick that disables them.
+    if (!setting) {
+      const aliases = MODULE_ALIASES?.[key] || [];
+      if (aliases.length > 0) {
+        setting = moduleSettings.find(
+          (s) => aliases.includes(s.module_name) && s.tenant_id === effectiveTenantId,
+        );
+      }
+    }
     // No row yet: fall back to the module's own default (most are enabled;
     // controlled-rollout modules like Finance Ops set defaultEnabled:false).
     return setting?.is_enabled ?? module?.defaultEnabled !== false;

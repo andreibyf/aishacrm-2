@@ -46,16 +46,20 @@ export default function SandboxAdapterPanel({ status }) {
               {providerSync || <span className="text-slate-500">unknown</span>}
             </span>
           </div>
-          <p
+          <div
             className="rounded-md border border-slate-700/40 bg-slate-800/30 px-3 py-2 text-xs text-slate-300"
             data-testid="finance-sandbox-adapter-posture-note"
           >
-            ERPNext sandbox adapter is the only configured adapter (adapter-runtime-contract.md).
-            Sandbox-only enforcement is structural at{' '}
-            <code className="rounded bg-slate-900/60 px-1">erpnextSandboxAdapter.js:89-128</code> —
-            production endpoints are blocked at the URL guard regardless of any UI state.
-            FINANCE_PROVIDER_WRITES_ENABLED default-closed posture is preserved.
-          </p>
+            Provider sync is disabled. This preview can only describe sandbox adapter status and
+            cannot send data to ERPNext or any production provider.
+            <span className="mt-1 block text-[10px] leading-relaxed text-slate-400">
+              Technical: ERPNext sandbox is the only configured adapter; sandbox-only enforcement is
+              structural at{' '}
+              <code className="rounded bg-slate-900/60 px-1">erpnextSandboxAdapter.js:89-128</code>{' '}
+              — production endpoints are blocked at the URL guard regardless of any UI state.
+              FINANCE_PROVIDER_WRITES_ENABLED default-closed posture is preserved.
+            </span>
+          </div>
         </CardContent>
       </Card>
 

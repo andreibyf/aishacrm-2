@@ -49,15 +49,19 @@ export default function ProjectionStatusPanel({ status }) {
             </span>
           </div>
           {isDegradedFromInMemory ? (
-            <p
+            <div
               className="rounded-md border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-100"
               data-testid="finance-projection-status-degraded-note"
             >
-              In-memory persistence is the only supported Slice 1 backend mode.
-              ENABLE_FINANCE_PERSISTENT_EVENTS is fail-closed at the route level
-              (backend/routes/finance.v2.js:48). Persistent-events activation requires a separate
-              route lift coordinated with backend Phase 4 planning.
-            </p>
+              This tenant is currently using temporary in-memory finance data. Persistent projection
+              history is not enabled yet.
+              <span className="mt-1 block text-[10px] leading-relaxed text-amber-200/70">
+                Technical: in-memory is the only supported Slice 1 mode;
+                ENABLE_FINANCE_PERSISTENT_EVENTS is fail-closed at the route level
+                (backend/routes/finance.v2.js:48). Persistent-events activation requires a separate
+                route lift coordinated with backend Phase 4 planning.
+              </span>
+            </div>
           ) : (
             <p
               className="rounded-md border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 text-xs text-emerald-100"

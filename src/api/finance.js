@@ -206,6 +206,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'financeDomainService.bucket.invoices (in-memory today; persistent invoices projection later)',
     affectedScreen: 'Draft invoices (§7.3)',
+    operatorSummary:
+      'Draft invoice data is not available in this preview yet. This section will show read-only draft invoices once the backend read endpoint is added.',
   }),
   journalDrafts: Object.freeze({
     endpoint: 'GET /api/v2/finance/journal-drafts',
@@ -213,6 +215,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'domain service journal-draft state (currently merged into listJournalEntries for posted only)',
     affectedScreen: 'Journal drafts (§7.4)',
+    operatorSummary:
+      'Journal draft records are not available in this preview yet. This section will show draft journal entries once the read-only backend endpoint is added.',
   }),
   approvals: Object.freeze({
     endpoint: 'GET /api/v2/finance/approvals',
@@ -220,6 +224,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'financeDomainService.listApprovals(tenantId) + future approval_queue projection',
     affectedScreen: 'Approval queue (§7.6)',
+    operatorSummary:
+      'Approval queue data is not available in this preview yet. No approval actions are available in this read-only slice.',
   }),
   adapterJobs: Object.freeze({
     endpoint: 'GET /api/v2/finance/adapter-jobs',
@@ -227,6 +233,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'adapterQueueProjection per projection-contracts.md §7; backed by finance.adapter_jobs once persistent',
     affectedScreen: 'Adapter queue (§7.7)',
+    operatorSummary:
+      'Adapter job history is not available in this preview yet. No retry, cancel, or provider-sync actions are available in this read-only view.',
   }),
   auditEvents: Object.freeze({
     endpoint: 'GET /api/v2/finance/audit-events',
@@ -234,12 +242,16 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'financeDomainService.listAuditEvents(tenantId) + auditTimelineProjection',
     affectedScreen: 'Audit timeline (§7.8)',
+    operatorSummary:
+      'Audit event history is not available in this preview yet. This section will show read-only finance activity once the audit-events endpoint is added.',
   }),
   projectionCursors: Object.freeze({
     endpoint: 'GET /api/v2/finance/projection/cursors',
     designRef: '§8.2.6',
     naturalBackingSource: 'projectionStore.{memory,pg}.js cursors per projection per tenant',
     affectedScreen: 'Projection / degraded status (§7.9)',
+    operatorSummary:
+      'Detailed projection status (cursors and lag) is not available in this preview yet. This section will show read-only projection health once the backend read endpoint is added.',
   }),
   registeredAdapters: Object.freeze({
     endpoint: 'GET /api/v2/finance/adapters',
@@ -247,6 +259,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'adapter registry constructed inside financeAdapterWorker.js / adapterJobProcessor.js',
     affectedScreen: 'Sandbox adapter status (§7.10)',
+    operatorSummary:
+      'The registered-adapter list and capabilities are not available in this preview yet. This section will show read-only sandbox adapter details once the backend read endpoint is added.',
   }),
   evidencePacks: Object.freeze({
     endpoint: 'GET /api/v2/finance/evidence-packs',
@@ -254,6 +268,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     naturalBackingSource:
       'backend/lib/finance/auditEvidenceBuilder.js (runtime exists; no HTTP surface yet)',
     affectedScreen: 'Evidence / audit pack placeholder (§7.11)',
+    operatorSummary:
+      'Evidence packs are not available in this preview yet. This section will show read-only audit evidence once the backend read endpoint is added.',
   }),
   // §8.2.9 — accuracy concern flagged by the design freeze: the runtime.mode
   // field on /runtime/status is currently a hard-coded 'mock_read_only'

@@ -220,33 +220,53 @@ export const journalEntriesFixture = deepFreeze({
 export const emptyJournalEntriesFixture = deepFreeze({ journal_entries: [] });
 
 /**
- * GET /ledger, /profit-loss, /balance-sheet fixtures. These are opaque objects
- * rendered as generic key/value tables by LedgerSummary, so the shape is
- * intentionally flat and human-readable for usability evaluation.
+ * GET /ledger, /profit-loss, /balance-sheet fixtures. Shapes mirror the REAL
+ * backend accountingEngine output (integer cents + account arrays), so the
+ * operator-facing LedgerSummary panel formats them exactly as it would live
+ * data. See backend/lib/finance/accountingEngine.js (buildLedger /
+ * buildProfitAndLoss / buildBalanceSheet).
  */
 export const ledgerFixture = deepFreeze({
-  currency: 'USD',
-  total_debits: 12030.5,
-  total_credits: 12030.5,
-  open_period: '2026-05',
-  last_entry_at: '2026-05-27T14:05:00.000Z',
+  accounts: [
+    {
+      account_name: 'Accounts Receivable',
+      classification: 'Asset',
+      debit_cents: 540000,
+      credit_cents: 0,
+      balance_cents: 540000,
+    },
+    {
+      account_name: 'Sales Revenue',
+      classification: 'Revenue',
+      debit_cents: 0,
+      credit_cents: 660000,
+      balance_cents: -660000,
+    },
+    {
+      account_name: 'Cost of Goods Sold',
+      classification: 'Expense',
+      debit_cents: 87550,
+      credit_cents: 0,
+      balance_cents: 87550,
+    },
+  ],
+  totals: { debit_cents: 627550, credit_cents: 660000 },
 });
 
 export const profitLossFixture = deepFreeze({
-  currency: 'USD',
-  revenue: 6600.0,
-  cost_of_goods_sold: 875.5,
-  operating_expenses: 430.0,
-  net_income: 5294.5,
-  period: '2026-05',
+  revenue_accounts: [{ account_name: 'Sales Revenue', amount_cents: 660000 }],
+  expense_accounts: [
+    { account_name: 'Cost of Goods Sold', amount_cents: 87550 },
+    { account_name: 'Operating Expenses', amount_cents: 43000 },
+  ],
+  totals: { revenue_cents: 660000, expense_cents: 130550, net_income_cents: 529450 },
 });
 
 export const balanceSheetFixture = deepFreeze({
-  currency: 'USD',
-  assets: 5400.0,
-  liabilities: 0.0,
-  equity: 5400.0,
-  as_of: '2026-05-27',
+  assets: [{ account_name: 'Accounts Receivable', amount_cents: 540000 }],
+  liabilities: [],
+  equity: [{ account_name: 'Retained Earnings', amount_cents: 540000 }],
+  totals: { assets_cents: 540000, liabilities_cents: 0, equity_cents: 540000, is_balanced: true },
 });
 
 export const emptyLedgerFixture = deepFreeze({});

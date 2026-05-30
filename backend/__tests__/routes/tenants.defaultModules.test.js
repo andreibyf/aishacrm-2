@@ -24,6 +24,8 @@ import {
   DEFAULT_MODULES,
   DEFAULT_DISABLED_MODULES,
   buildDefaultModuleRows,
+  selectMissingDefaultRows,
+  MODULESETTINGS_ALIASES,
 } from '../../routes/tenants.js';
 import { FINANCE_MODULE_KEYS } from '../../lib/finance/financeModuleGate.js';
 
@@ -71,5 +73,58 @@ describe('tenant default module seeding — financeOps parity', () => {
     const rows = buildDefaultModuleRows('t1');
     const names = rows.map((r) => r.module_name);
     assert.equal(names.length, new Set(names).size, 'duplicate module_name in seed rows');
+  });
+});
+
+describe('selectMissingDefaultRows — alias-aware filter (Codex P1)', () => {
+  // Backfill / auto-seed regression: a legacy tenant enrolled via the
+  // enterpriseFinance alias must NOT have a disabled financeOps row inserted
+  // by the auto-seed path, because canonical-wins (financeModuleGate.js:40-48)
+  // would then override the alias-enabled access and silently lock the tenant
+  // out of Finance Ops.
+
+  test('exposes financeOps -> [enterpriseFinance] alias mapping', () => {
+    assert.deepEqual(MODULESETTINGS_ALIASES[FINANCE_MODULE_KEYS.CANONICAL], [
+      FINANCE_MODULE_KEYS.ALIAS,
+    ]);
+  });
+
+  test('treats a row as already-configured if its canonical key is present', () => {
+    const rows = buildDefaultModuleRows('t1');
+    const missing = selectMissingDefaultRows(rows, [FINANCE_MODULE_KEYS.CANONICAL]);
+    assert.ok(
+      !missing.some((r) => r.module_name === FINANCE_MODULE_KEYS.CANONICAL),
+      'financeOps must not be missing when the canonical row already exists',
+    );
+  });
+
+  test('treats a row as already-configured if ONLY a legacy alias row exists (no clobber)', () => {
+    const rows = buildDefaultModuleRows('t1');
+    const missing = selectMissingDefaultRows(rows, [FINANCE_MODULE_KEYS.ALIAS]);
+    // The P1 bug: backfill saw financeOps as missing here and would insert
+    // is_enabled=false, clobbering the alias-enabled tenant via canonical-wins.
+    assert.ok(
+      !missing.some((r) => r.module_name === FINANCE_MODULE_KEYS.CANONICAL),
+      'financeOps must NOT be inserted when only enterpriseFinance alias exists',
+    );
+  });
+
+  test('still returns the canonical row when neither key nor any alias is present', () => {
+    const rows = buildDefaultModuleRows('t1');
+    const missing = selectMissingDefaultRows(rows, ['SomeOtherModule']);
+    assert.ok(
+      missing.some(
+        (r) => r.module_name === FINANCE_MODULE_KEYS.CANONICAL && r.is_enabled === false,
+      ),
+      'financeOps row should be missing (and seeded disabled) when no canonical or alias exists',
+    );
+  });
+
+  test('non-aliased default modules are unaffected by the alias logic', () => {
+    const rows = buildDefaultModuleRows('t1');
+    const missing = selectMissingDefaultRows(rows, ['Dashboard']);
+    assert.ok(!missing.some((r) => r.module_name === 'Dashboard'));
+    // Other defaults are still missing — alias logic shouldn't swallow them.
+    assert.ok(missing.some((r) => r.module_name === 'Contact Management'));
   });
 });

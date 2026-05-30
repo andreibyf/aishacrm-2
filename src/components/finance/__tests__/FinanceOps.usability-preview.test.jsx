@@ -216,9 +216,13 @@ describe('FinanceOps usability preview — live ledger summary', () => {
     await waitFor(() => {
       expect(screen.getByTestId('finance-ledger-summary')).toBeInTheDocument();
     });
-    // Field keys forwarded as-is from the fixtures.
-    expect(screen.getByText('total_debits')).toBeInTheDocument();
-    expect(screen.getByText('net_income')).toBeInTheDocument();
+    // Operator-friendly formatted figures + readable labels — NOT raw cents
+    // field names dumped from the API shape.
+    const pl = screen.getByTestId('finance-ledger-summary-section-pl');
+    expect(pl).toHaveTextContent('Net income');
+    expect(pl).toHaveTextContent('$5,294.50');
+    expect(screen.queryByText('total_debits')).not.toBeInTheDocument();
+    expect(screen.queryByText('net_income_cents')).not.toBeInTheDocument();
     // Empty-state copy must NOT appear when fixtures are populated.
     expect(screen.queryByTestId('ledger-section-empty')).not.toBeInTheDocument();
   });

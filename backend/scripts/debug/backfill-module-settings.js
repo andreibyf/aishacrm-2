@@ -9,8 +9,11 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 // Single source of truth for the default module catalog — the same rows new
 // tenants are seeded with (backend/routes/tenants.js). Importing it keeps this
-// maintenance script from drifting (e.g. missing financeOps).
-import { buildDefaultModuleRows } from '../../routes/tenants.js';
+// maintenance script from drifting (e.g. missing financeOps). The alias-aware
+// selectMissingDefaultRows ensures a legacy alias-enrolled tenant is not
+// silently locked out by inserting a disabled canonical row that would
+// override the alias via canonical-wins.
+import { buildDefaultModuleRows, selectMissingDefaultRows } from '../../routes/tenants.js';
 
 dotenv.config();
 
@@ -55,12 +58,14 @@ async function backfillModuleSettings() {
       continue;
     }
 
-    const existingModuleNames = new Set(existingSettings.map((s) => s.module_name));
+    const existingModuleNames = existingSettings.map((s) => s.module_name);
     // Build the full default row set (incl. financeOps seeded disabled), then
-    // insert only the ones this tenant is missing — preserving each row's
-    // is_enabled from the shared seeding contract.
+    // insert only the rows this tenant is truly missing. The alias-aware
+    // filter treats a legacy enterpriseFinance row as equivalent to the
+    // canonical financeOps key, so we do NOT insert a disabled canonical row
+    // that would silently override an alias-enabled tenant (canonical-wins).
     const defaultRows = buildDefaultModuleRows(tenant.id);
-    const newSettings = defaultRows.filter((r) => !existingModuleNames.has(r.module_name));
+    const newSettings = selectMissingDefaultRows(defaultRows, existingModuleNames);
 
     if (newSettings.length === 0) {
       console.log(`  ✓ Already has all ${defaultRows.length} modules`);
