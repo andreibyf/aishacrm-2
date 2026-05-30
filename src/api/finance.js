@@ -101,6 +101,24 @@ async function request(path, { tenantId, signal } = {}) {
   return json.data;
 }
 
+/**
+ * Append query params to a path, omitting null / undefined / empty values so
+ * the backend's optional-filter + pagination defaults apply cleanly.
+ *
+ * @param {string} path   base path under FINANCE_BASE_PATH
+ * @param {Object} params plain object of param name -> value
+ * @returns {string} path with a `?a=1&b=2` suffix, or the bare path if none
+ */
+function withQuery(path, params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') continue;
+    search.append(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 // ============================================================================
 // 5 existing Finance v2 GET endpoints (design freeze §8.1)
 // ============================================================================
@@ -188,6 +206,92 @@ export function getBalanceSheet(tenantId, { signal } = {}) {
 }
 
 // ============================================================================
+// Read API Slice 1 — newly implemented read-only GET endpoints.
+//
+// These replace the matching FINANCE_API_GAPS entries (removed below) with
+// real backend reads. All remain GET-only; no mutating companion is added.
+// Contracts: docs/architecture/finance/finance-ui-slice-1-api-gaps-design.md §6.
+// ============================================================================
+
+/**
+ * GET /api/v2/finance/draft-invoices (§6.1) — draft invoices for the tenant.
+ * @returns {Promise<{ invoices: Array<Object>, total: number, source: Object }>}
+ */
+export function getDraftInvoices(tenantId, { customerId, limit, offset, signal } = {}) {
+  return request(withQuery('/draft-invoices', { customer_id: customerId, limit, offset }), {
+    tenantId,
+    signal,
+  });
+}
+
+/**
+ * GET /api/v2/finance/journal-drafts (§6.2) — draft + pending-approval journal
+ * entries (the non-posted slice of /journal-entries).
+ * @returns {Promise<{ journal_drafts: Array<Object>, total: number, source: Object }>}
+ */
+export function getJournalDrafts(tenantId, { aggregateId, limit, offset, signal } = {}) {
+  return request(withQuery('/journal-drafts', { aggregate_id: aggregateId, limit, offset }), {
+    tenantId,
+    signal,
+  });
+}
+
+/**
+ * GET /api/v2/finance/approvals (§6.3) — approval queue. `status` defaults to
+ * pending server-side; pass 'all' for every status.
+ * @returns {Promise<{ approvals: Array<Object>, total: number, source: Object }>}
+ */
+export function getApprovals(tenantId, { status, limit, offset, signal } = {}) {
+  return request(withQuery('/approvals', { status, limit, offset }), { tenantId, signal });
+}
+
+/**
+ * GET /api/v2/finance/adapter-jobs (§6.4) — adapter job queue (read-only; no
+ * retry/cancel companion).
+ * @returns {Promise<{ adapter_jobs: Array<Object>, total: number, source: Object }>}
+ */
+export function getAdapterJobs(tenantId, { status, operation, limit, offset, signal } = {}) {
+  return request(withQuery('/adapter-jobs', { status, operation, limit, offset }), {
+    tenantId,
+    signal,
+  });
+}
+
+/**
+ * GET /api/v2/finance/audit-events (§6.5) — cursor-paginated audit timeline,
+ * newest first. Pass the returned `next_cursor` to page.
+ * @returns {Promise<{ events: Array<Object>, next_cursor: string|null, source: Object }>}
+ */
+export function getAuditEvents(tenantId, { cursor, eventType, limit, signal } = {}) {
+  return request(withQuery('/audit-events', { cursor, event_type: eventType, limit }), {
+    tenantId,
+    signal,
+  });
+}
+
+/**
+ * GET /api/v2/finance/adapters (§6.7) — read-only declarative metadata for the
+ * known accounting adapters (capability / status / posture discovery only).
+ * @returns {Promise<{ adapters: Array<Object>, source: Object }>}
+ */
+export function getAdapters(tenantId, { signal } = {}) {
+  return request('/adapters', { tenantId, signal });
+}
+
+/**
+ * GET /api/v2/finance/evidence-packs (§6.8) — builds a single tamper-evident
+ * evidence pack on demand from the tenant event stream and returns metadata +
+ * integrity hashes. Singular: no historical list/registry exists.
+ * @returns {Promise<{ pack: Object, source: Object }>}
+ */
+export function getEvidencePack(tenantId, { from, to, targetId, signal } = {}) {
+  return request(withQuery('/evidence-packs', { from, to, target_id: targetId }), {
+    tenantId,
+    signal,
+  });
+}
+
+// ============================================================================
 // API gap registry (design freeze §8.2)
 //
 // Each entry describes a read-side endpoint Slice 1 cannot satisfy honestly
@@ -200,60 +304,15 @@ export function getBalanceSheet(tenantId, { signal } = {}) {
 // ============================================================================
 
 export const FINANCE_API_GAPS = Object.freeze({
-  draftInvoices: Object.freeze({
-    endpoint: 'GET /api/v2/finance/draft-invoices',
-    designRef: '§8.2.1',
-    naturalBackingSource:
-      'financeDomainService.bucket.invoices (in-memory today; persistent invoices projection later)',
-    affectedScreen: 'Draft invoices (§7.3)',
-  }),
-  journalDrafts: Object.freeze({
-    endpoint: 'GET /api/v2/finance/journal-drafts',
-    designRef: '§8.2.2',
-    naturalBackingSource:
-      'domain service journal-draft state (currently merged into listJournalEntries for posted only)',
-    affectedScreen: 'Journal drafts (§7.4)',
-  }),
-  approvals: Object.freeze({
-    endpoint: 'GET /api/v2/finance/approvals',
-    designRef: '§8.2.3',
-    naturalBackingSource:
-      'financeDomainService.listApprovals(tenantId) + future approval_queue projection',
-    affectedScreen: 'Approval queue (§7.6)',
-  }),
-  adapterJobs: Object.freeze({
-    endpoint: 'GET /api/v2/finance/adapter-jobs',
-    designRef: '§8.2.4',
-    naturalBackingSource:
-      'adapterQueueProjection per projection-contracts.md §7; backed by finance.adapter_jobs once persistent',
-    affectedScreen: 'Adapter queue (§7.7)',
-  }),
-  auditEvents: Object.freeze({
-    endpoint: 'GET /api/v2/finance/audit-events',
-    designRef: '§8.2.5',
-    naturalBackingSource:
-      'financeDomainService.listAuditEvents(tenantId) + auditTimelineProjection',
-    affectedScreen: 'Audit timeline (§7.8)',
-  }),
+  // Read API Slice 1 retired these gaps by implementing their GET endpoints:
+  // draftInvoices (§8.2.1), journalDrafts (§8.2.2), approvals (§8.2.3),
+  // adapterJobs (§8.2.4), auditEvents (§8.2.5), registeredAdapters (§8.2.7),
+  // evidencePacks (§8.2.8). Their `get*` wrappers are above. Two gaps remain.
   projectionCursors: Object.freeze({
     endpoint: 'GET /api/v2/finance/projection/cursors',
     designRef: '§8.2.6',
     naturalBackingSource: 'projectionStore.{memory,pg}.js cursors per projection per tenant',
     affectedScreen: 'Projection / degraded status (§7.9)',
-  }),
-  registeredAdapters: Object.freeze({
-    endpoint: 'GET /api/v2/finance/adapters',
-    designRef: '§8.2.7',
-    naturalBackingSource:
-      'adapter registry constructed inside financeAdapterWorker.js / adapterJobProcessor.js',
-    affectedScreen: 'Sandbox adapter status (§7.10)',
-  }),
-  evidencePacks: Object.freeze({
-    endpoint: 'GET /api/v2/finance/evidence-packs',
-    designRef: '§8.2.8',
-    naturalBackingSource:
-      'backend/lib/finance/auditEvidenceBuilder.js (runtime exists; no HTTP surface yet)',
-    affectedScreen: 'Evidence / audit pack placeholder (§7.11)',
   }),
   // §8.2.9 — accuracy concern flagged by the design freeze: the runtime.mode
   // field on /runtime/status is currently a hard-coded 'mock_read_only'
