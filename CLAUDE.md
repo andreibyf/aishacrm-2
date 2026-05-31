@@ -12,16 +12,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Architecture
 
-| Component      | Technology                                                |
-| -------------- | --------------------------------------------------------- |
-| **Frontend**   | React 18 + Vite, TailwindCSS, shadcn/ui                   |
-| **Backend**    | Node.js 22 + Express, 210+ API endpoints                  |
-| **Database**   | PostgreSQL 17+ on Supabase, 88 tables with RLS            |
-| **AI Tools**   | Braid DSL (126 tools across 24 files in `braid-llm-kit/`) |
-| **AI Engine**  | Multi-provider failover: OpenAI, Anthropic, Groq, Local   |
-| **Secrets**    | Doppler for production, `.env` for local                  |
-| **Caching**    | Redis (memory layer + cache layer)                        |
-| **Containers** | Docker Compose with health checks                         |
+| Component           | Technology                                                          |
+| ------------------- | ------------------------------------------------------------------- |
+| **Frontend**        | React 18 + Vite, TailwindCSS, shadcn/ui                             |
+| **Backend**         | Node.js 22 + Express, 210+ API endpoints                            |
+| **Database**        | PostgreSQL 17+ on Supabase, 88 tables with RLS                      |
+| **AI Tools**        | Braid DSL (126 tools across 24 files in `braid-llm-kit/`)           |
+| **AI Engine**       | Multi-provider failover: OpenAI, Anthropic, Groq, Local             |
+| **Secrets**         | Doppler for production, `.env` for local                            |
+| **Caching**         | Redis (memory layer + cache layer)                                  |
+| **Containers**      | Docker Compose with health checks                                   |
+| **AI Cloud Server** | HP Omen 35L, Ubuntu 24.04, RTX 5070 Ti 16GB, vLLM + Qwen2.5-14B-AWQ |
 
 ---
 
@@ -199,6 +200,23 @@ npm run db:check:idx
 # Examples:
 npm run db:check:idx:leads
 npm run db:show:idx:leads
+```
+
+### AI Cloud Server
+
+```bash
+# Check vLLM service status
+ssh aisha@192.168.7.200 "sudo systemctl status vllm"
+
+# Check inference is responding
+curl http://192.168.7.200:8000/v1/models \
+  -H "Authorization: Bearer $LOCAL_LLM_API_KEY"
+
+# View vLLM logs
+ssh aisha@192.168.7.200 "sudo journalctl -u vllm -n 50 --no-pager"
+
+# Restart vLLM
+ssh aisha@192.168.7.200 "sudo systemctl restart vllm"
 ```
 
 ---

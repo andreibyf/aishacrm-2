@@ -13,18 +13,18 @@ model_list:
       model: groq/*
       api_key: "os.environ/GROQ_API_KEY"
 
-  # Local models via Ollama (VPS-2: http://147.189.168.164:11434)
-  # Models available on VPS-2: llama3.1:8b
-  - model_name: ollama/*
+  # AI Cloud Server — Qwen2.5-14B via vLLM (Tailscale: 100.81.132.118)
+  - model_name: local/*
     litellm_params:
-      model: ollama/*
-      api_base: "http://147.189.168.164:11434"
+      model: openai/*
+      api_base: "os.environ/LOCAL_LLM_BASE_URL"
+      api_key: "os.environ/LOCAL_LLM_API_KEY"
 
-  # Named local model aliases for direct capability mapping
-  - model_name: local/llama3.1:8b
+  - model_name: local/qwen2.5-14b
     litellm_params:
-      model: ollama/llama3.1:8b
-      api_base: "http://147.189.168.164:11434"
+      model: "openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ"
+      api_base: "os.environ/LOCAL_LLM_BASE_URL"
+      api_key: "os.environ/LOCAL_LLM_API_KEY"
 
 router_settings:
   num_retries: 2

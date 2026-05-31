@@ -313,6 +313,8 @@ export const FINANCE_API_GAPS = Object.freeze({
     designRef: '§8.2.6',
     naturalBackingSource: 'projectionStore.{memory,pg}.js cursors per projection per tenant',
     affectedScreen: 'Projection / degraded status (§7.9)',
+    operatorSummary:
+      'Detailed projection status (cursors and lag) is not available in this preview yet. This section will show read-only projection health once the backend read endpoint is added.',
   }),
   // §8.2.9 — accuracy concern flagged by the design freeze: the runtime.mode
   // field on /runtime/status is currently a hard-coded 'mock_read_only'
