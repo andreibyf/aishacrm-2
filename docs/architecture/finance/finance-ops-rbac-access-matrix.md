@@ -64,7 +64,7 @@ All 16 Phase 3-13 §7 safety guardrails are preserved end-to-end by this packet.
   2. `validateTenantAccess` middleware (`backend/middleware/validateTenant.js`) — authenticated tenant + tenant match. Superadmin reads pass for any tenant.
   3. Per-tenant `financeOps` module gate (`backend/lib/finance/financeModuleGate.js`) — checks the `modulesettings` row. Canonical-wins resolution between `financeOps` and the legacy `enterpriseFinance` alias at `financeModuleGate.js:40-48`.
   - **Separate split-brain guard (not an access gate) — `ENABLE_FINANCE_PERSISTENT_EVENTS`** (`backend/routes/finance.v2.js:108-116`): when the router is being constructed (only happens under `ENABLE_FINANCE_OPS=true`), `createFinanceV2Routes` **throws at startup** if `ENABLE_FINANCE_PERSISTENT_EVENTS === 'true'`. This is a loud **boot-time failure, not a request-time 404**, and exists because writes would persist to Postgres while reads still hit the in-memory bucket. Lifted when projection-backed reads land (Slice 2).
-- Frontend `hasPageAccess` mirror (`src/utils/permissions.js`) — three checks: `crm_access`, `moduleSettings` matching via `moduleMapping` + `moduleAliases`, then a role-default table. The mirror does not invent enforcement; it hides what the backend would deny anyway.
+- Frontend `hasPageAccess` mirror (`src/utils/permissions.js`) — three checks: `crm_access`, `moduleSettings` matching via `moduleMapping` + `moduleAliases`, then a role-default table. The module-gate and role-default checks mirror the backend. **The `crm_access === false` check is frontend-only, though** (`permissions.js:306` — `FinanceOps` is not in `pagesAllowedWithoutCRM`): the backend stack (`validateTenantAccess` + the `financeOps` module gate) **never inspects `crm_access`** (it appears nowhere in `finance.v2.js` / `validateTenant.js` / `financeModuleGate.js`). So for a `crm_access:false` user the mirror is _stricter_ than the backend — it hides the nav entry, but that user can still call `/api/v2/finance/*` directly and the backend will serve them. The divergence is fail-closed on the frontend (safe for UX), but the backend, not the mirror, is the real access boundary. See §7.6.
 - The UI / nav / seed additions originally authored on `feat/finance-ops-ux-preview` are **now on `main`** (merged via #624, `4487acec`):
   - `src/utils/permissions.js` role defaults include `FinanceOps: true` for all four roles (`:473`, `:511`, `:548`, `:582` — the Codex UI-1D P1 fix).
   - `src/components/settings/UserFormWizard.jsx` `NAV_MODULES` / `DEFAULT_NAV_PERMISSIONS` include `FinanceOps` (`:151`, `:275`) so admins can grant / revoke per user.
@@ -173,7 +173,7 @@ Rows = roles. Columns = surfaces. Cells use four legends:
 | Per-tenant gate — alias-aware **auto-seed**                         | Impl #624 (`tenants.js:247` `selectMissingDefaultRows`) | Impl #624                           | Impl #624                                                                | Impl #624           | Impl #624                   | Impl #624                                     |
 | Frontend nav visibility (no tenant selected)                        | Impl (`permissions.js:291` superadmin global)           | N/A (admins are scoped to a tenant) | N/A                                                                      | N/A                 | N/A                         | Impl (when `NODE_ENV=development`)            |
 | Frontend nav visibility (tenant selected)                           | Impl #624 (role-default + module-gate mirror)           | Impl #624                           | Impl #624                                                                | Impl #624           | Impl #624                   | Impl #624                                     |
-| `crm_access` precondition                                           | Impl (`permissions.js:306`)                             | Impl                                | Impl                                                                     | Impl                | Impl                        | Impl                                          |
+| `crm_access` precondition (**frontend-only** ²)                     | FE-only (`permissions.js:306`)                          | FE-only                             | FE-only                                                                  | FE-only             | FE-only                     | FE-only                                       |
 | Page render (`/FinanceOps`) — runtime overview                      | Impl                                                    | Impl                                | Impl                                                                     | Impl                | Impl                        | Impl                                          |
 | Ledger summary read (`/ledger`/`/profit-loss`/`/balance-sheet`)     | Impl                                                    | Impl                                | Impl                                                                     | Impl                | Impl                        | Impl                                          |
 | Journal entries read (`/journal-entries`)                           | Impl                                                    | Impl                                | Impl                                                                     | Impl                | Impl                        | Impl                                          |
@@ -196,6 +196,8 @@ Rows = roles. Columns = surfaces. Cells use four legends:
 
 ¹ **No role-differentiated authorization exists at the route layer for the six existing write routes.** They share the exact gate stack as the reads above (`router.use(validateTenantAccess)` then the `financeOps` module gate, `finance.v2.js:127-145`); `buildActor(req)` derives the actor identity for audit / AI-governance only — it does not authorize. Any caller who clears those two gates can reach create / reverse / approve, including a finance _viewer_ or a non-finance _employee_ of an enrolled tenant. "Impl (dev)" marks that in `NODE_ENV=development` the dev-mock superadmin clears `validateTenantAccess` the same way. The finance-admin vs finance-viewer split (§8.1) must **retrofit** a role check onto these existing routes — not merely gate new ones — and back it with route tests that assert a viewer/employee is denied.
 
+² **The `crm_access` precondition is enforced only in the frontend** (`permissions.js:306`; `FinanceOps` is absent from `pagesAllowedWithoutCRM`, so a `crm_access:false` user is denied the nav entry — coverage in `permissions.financeOps.test.js:229-234`). The backend Finance Ops stack never inspects `crm_access`, so that same user can still call `/api/v2/finance/*` directly and be served. The cell is therefore `FE-only`, not `Impl`: it is a UX-only, fail-closed mirror with **no backend enforcement behind it**. A future role-gate packet that wants `crm_access` to actually block API access must add a backend check (§7.6, §8.2).
+
 Notes on the matrix:
 
 - The alias-aware auto-seed and tenant-selected nav-visibility cells (previously "Impl on-branch") **merged to `main` via #624** (`4487acec`) and are now **Impl**; the `feat/finance-ops-ux-preview` branch was abandoned after the reconciliation. No matrix cell is "on-branch" any more.
@@ -209,8 +211,9 @@ Notes on the matrix:
 
 ### 7.1 No frontend role gate that diverges from the backend
 
-- The backend route stack has no finance-specific role check today. The frontend `hasPageAccess` mirror does not invent one either.
-- Slice 1 §11.3 binds this rule: any future role gate must land at the backend route layer before any frontend mirror.
+- The backend route stack has no finance-specific role check today. The frontend `hasPageAccess` mirror does not invent a finance _role_ gate either.
+- One non-role precondition does diverge: the frontend `crm_access` check has no backend counterpart (§7.6). It is fail-closed (the frontend denies more than the backend), so it cannot grant what the backend denies — but it is documented so it is not mistaken for server-side enforcement.
+- Slice 1 §11.3 binds this rule: any future role gate (or a real `crm_access` block) must land at the backend route layer before any frontend mirror.
 
 ### 7.2 Canonical-wins resolution parity
 
@@ -228,6 +231,12 @@ Notes on the matrix:
 ### 7.5 Mirror everything; enforce nothing in the mirror
 
 - The frontend mirror exists to avoid a confusing UX (showing a nav entry that the backend would 403). It is not an enforcement boundary. Removing the mirror would weaken UX, not security; weakening the backend stack would weaken security regardless of any mirror.
+
+### 7.6 The `crm_access` gate is frontend-only (a fail-closed divergence)
+
+- `hasPageAccess` denies `FinanceOps` to any `crm_access:false` user (`permissions.js:306`), but the backend Finance Ops stack (`validateTenantAccess` + the `financeOps` module gate) **does not check `crm_access`**. The mirror is therefore _stricter_ than the backend for this case — a divergence from the §7.1 "no diverging frontend gate" rule, but a **fail-closed** one: the frontend hides more than the backend blocks, so it cannot grant access the backend would deny.
+- The risk is the inverse: a `crm_access:false` user who bypasses the nav (curl / devtools / direct URL) **will be served** by `/api/v2/finance/*`, because the backend never consulted `crm_access`. Today every Finance Ops route is read-only, so this exposes reads only — but it must be recorded here so future role-gate/audit work does not assume `crm_access` is enforced server-side.
+- To make `crm_access` a real access boundary, add the check at the backend route layer first (per §8.2), then keep the existing frontend mirror. Until then, this matrix labels the `crm_access` cell `FE-only` (§6 ²), not `Impl`.
 
 ---
 
