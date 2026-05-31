@@ -74,14 +74,14 @@ Per Slice 1 §7 + UI-1D usability plan §4, the ten read-only screens + one plac
 1. Runtime overview (§6.1)
 2. Ledger summary (§6.2)
 3. Journal entries (§6.3)
-4. Draft invoices — gap (§6.4)
-5. Journal drafts — gap (§6.5)
-6. Approval queue — gap (§6.6)
-7. Adapter queue — gap (§6.7)
-8. Audit timeline — gap (§6.8)
-9. Projection / degraded status — partial (§6.9)
-10. Sandbox adapter status — partial (§6.10)
-11. Evidence / audit pack placeholder (§6.11)
+4. Draft invoices — live read-only (§6.4)
+5. Journal drafts — live read-only (§6.5)
+6. Approval queue — live read-only (§6.6)
+7. Adapter queue — live read-only (§6.7)
+8. Audit timeline — live read-only (§6.8)
+9. Projection / degraded status — partial / remaining gap (§6.9)
+10. Sandbox adapter status — live read-only metadata (§6.10)
+11. Evidence / audit pack — live read-only, on-demand build (§6.11)
 12. Four guardrail banners (§6.12)
 13. Three top-level error states — route-disabled, tenant-not-enrolled, generic-error (§6.13)
 
@@ -231,31 +231,38 @@ Each subsection gives the engineering baseline (current `main` strings) and the 
   - Status pills: "Draft", "Pending approval", "Posted", "Reversed" (no underscores).
 - **Engineering provenance:** Phase 4-1 design freeze locks the full-status contract.
 
-### 6.4 Draft invoices (gap)
+> **Status update (post #623/#624):** §6.4–§6.8, §6.10, and §6.11 are now **live read-only** screens — the Read API Slice 1 implemented their endpoints and the panels fetch real data (no `GapStateCard`). The §5.2 "unsupported / API-gap" copy rule now applies **only** to the one remaining gap, §6.9 (projection cursors). Do **not** regress these screens back to gap copy.
 
-- **Engineering baseline (`src/components/finance/GapStateCard.jsx` consumed by `DraftInvoicesPanel.jsx`):** "Read-API not yet implemented (design freeze §8.2.1). Missing endpoint `GET /api/v2/finance/draft-invoices`. Natural backing source (backend follow-up): financeDomainService.bucket.invoices …". The summary references `src/api/finance.js` and "client wrapper".
-- **Operator copy (already on the ux-preview branch as `gap.operatorSummary`):** "Draft invoice data is not available in this preview yet. This section will show read-only draft invoices once the backend read endpoint is added."
-- **Engineering provenance** (in the demoted "Technical details (engineering)" block): the design-ref `§8.2.1`, the endpoint `GET /api/v2/finance/draft-invoices`, the natural backing source, the `src/api/finance.js` follow-up paragraph.
+### 6.4 Draft invoices (live read-only)
 
-### 6.5 Journal drafts (gap)
+- **State:** Live read-only list via `GET /api/v2/finance/draft-invoices` (`DraftInvoicesPanel` → `FinanceTablePanel`). No create / edit / send affordance.
+- **Operator copy — populated:** plain-language column headers (ID, Status, Customer, Currency, Amount, Created, Updated); the amount is shown as a formatted figure, never the raw `amount_cents`/`total_cents` token. A Refresh control is the only action.
+- **Operator copy — empty:** "No draft invoices for this tenant yet."
+- **Engineering provenance** (Technical details only): endpoint `GET /api/v2/finance/draft-invoices`; read-API design §6.1.
 
-- **Operator copy:** "Journal draft records are not available in this preview yet. This section will show draft journal entries once the read-only backend endpoint is added."
-- **Engineering provenance:** `§8.2.2`, `GET /api/v2/finance/journal-drafts`, the natural backing source.
+### 6.5 Journal drafts (live read-only)
 
-### 6.6 Approval queue (gap)
+- **State:** Live via `GET /api/v2/finance/journal-drafts` (the draft + pending-approval slice of journal entries). No create / post / approve affordance.
+- **Operator copy — empty:** "No journal drafts for this tenant yet."
+- **Engineering provenance:** `GET /api/v2/finance/journal-drafts`; read-API design §6.2.
 
-- **Operator copy:** "Approval queue data is not available in this preview yet. No approval actions are available in this read-only slice."
-- **Engineering provenance:** `§8.2.3`, `GET /api/v2/finance/approvals`, the natural backing source.
+### 6.6 Approval queue (live read-only)
 
-### 6.7 Adapter queue (gap)
+- **State:** Live via `GET /api/v2/finance/approvals` (pending by default). Read-only — **no approve / reject / claim** affordance.
+- **Operator copy — empty:** "No pending approvals for this tenant."
+- **Engineering provenance:** `GET /api/v2/finance/approvals`; read-API design §6.3.
 
-- **Operator copy:** "Provider task history is not available in this preview yet. No retry, cancel, or provider-sync actions are available in this read-only view."
-- **Engineering provenance:** `§8.2.4`, `GET /api/v2/finance/adapter-jobs`, the natural backing source, the migration-172 operation CHECK enum reference.
+### 6.7 Adapter queue (live read-only)
 
-### 6.8 Audit timeline (gap)
+- **State:** Live via `GET /api/v2/finance/adapter-jobs`. Read-only — **no retry / cancel / provider-sync** affordance.
+- **Operator copy — empty:** "No adapter jobs for this tenant yet."
+- **Engineering provenance:** `GET /api/v2/finance/adapter-jobs`; read-API design §6.4.
 
-- **Operator copy:** "Activity history is not available in this preview yet. This section will show read-only finance activity once the backend endpoint is added."
-- **Engineering provenance:** `§8.2.5`, `GET /api/v2/finance/audit-events`, the natural backing source.
+### 6.8 Audit timeline (live read-only)
+
+- **State:** Live via `GET /api/v2/finance/audit-events` — cursor-paginated, newest first, with a "Load more" control. No export / mutation.
+- **Operator copy — empty:** "No audit events for this tenant yet."
+- **Engineering provenance:** `GET /api/v2/finance/audit-events`; read-API design §6.5.
 
 ### 6.9 Projection / degraded status (partial-live panel)
 
@@ -266,18 +273,22 @@ Each subsection gives the engineering baseline (current `main` strings) and the 
   - Operator phrasing for the persistence row label: "Where the data lives" (not "Persistence").
 - **Engineering provenance:** as above.
 
-### 6.10 Sandbox adapter status (partial-live panel)
+### 6.10 Sandbox adapter status (live read-only metadata)
 
-- **Engineering baseline (`src/components/finance/SandboxAdapterPanel.jsx`):** Posture note reads "ERPNext sandbox adapter is the only configured adapter (adapter-runtime-contract.md). Sandbox-only enforcement is structural at `erpnextSandboxAdapter.js:89-128` — production endpoints are blocked at the URL guard regardless of any UI state. FINANCE_PROVIDER_WRITES_ENABLED default-closed posture is preserved."
-- **Operator copy (already on the ux-preview branch):**
-  - Leading posture line: "Provider sync is disabled. This preview can only describe sandbox adapter status and cannot send data to ERPNext or any production provider."
-  - Demoted technical sub-line: "Technical: ERPNext sandbox is the only configured adapter; sandbox-only enforcement is structural at `erpnextSandboxAdapter.js:89-128` — production endpoints are blocked at the URL guard regardless of any UI state. FINANCE_PROVIDER_WRITES_ENABLED default-closed posture is preserved."
-  - Operator phrasing for the provider-sync row label: "Provider sync" (token-as-label is acceptable here because it is the same noun in both vocabularies). The value reads "Off" / "On (sandbox only)" rather than `disabled` / `enabled`.
+- **State:** Live via `GET /api/v2/finance/adapters` — a read-only declarative metadata registry (capability / status / posture discovery only). **No** provider-sync / retry / cancel / credential / connection-test affordance; it never sends data to any provider.
+- **Operator copy:**
+  - Provider-sync row label: "Provider sync"; value reads "Off" / "On (sandbox only)" rather than `disabled` / `enabled`.
+  - Per-adapter rows show the adapter name, mode (draft-only), declared capabilities, provider-writes (Disabled), and production-allowed (No) — in plain language; no credential material is shown (`credentials_resolved` is a boolean only).
+  - Leading posture line retained: "Provider sync is disabled — this console can only describe sandbox adapter status and cannot send data to ERPNext or any production provider."
+  - Demoted technical sub-line: sandbox-only enforcement is structural at `erpnextSandboxAdapter.js:89-128`; `FINANCE_PROVIDER_WRITES_ENABLED` default-closed posture preserved.
+- **Engineering provenance:** `GET /api/v2/finance/adapters`; read-API design §6.7; registry module `backend/lib/finance/financeAdapterRegistry.js`.
 
-### 6.11 Evidence / audit pack placeholder
+### 6.11 Evidence / audit pack (live read-only, on-demand build)
 
-- **Operator copy:** "Audit packs are not available in this preview yet. This section will show read-only audit evidence once the backend read endpoint is added."
-- **Engineering provenance:** `§8.2.8`, `GET /api/v2/finance/evidence-packs`, `backend/lib/finance/auditEvidenceBuilder.js`.
+- **State:** Live via `GET /api/v2/finance/evidence-packs` — builds a single tamper-evident evidence pack on demand from the tenant's event stream and shows its metadata + integrity hashes. Building a pack is a pure read; **no** generate / download / share mutation, and there is no stored pack registry.
+- **Operator copy — populated:** plain-language rows (Pack ID, Generated at, Artifact count, integrity hashes); a Refresh control rebuilds for the current scope.
+- **Operator copy — empty scope:** an honest empty pack (artifact count 0), e.g. "No finance activity to package for this range yet."
+- **Engineering provenance:** `GET /api/v2/finance/evidence-packs`; read-API design §6.8; builder `backend/lib/finance/auditEvidenceBuilder.js`.
 
 ### 6.12 Guardrail banners
 
