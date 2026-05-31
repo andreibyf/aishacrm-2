@@ -63,6 +63,14 @@ const mockFinance = {
   getLedger: vi.fn(),
   getProfitLoss: vi.fn(),
   getBalanceSheet: vi.fn(),
+  // Read API Slice 1 — the panels now fetch these on mount.
+  getDraftInvoices: vi.fn(),
+  getJournalDrafts: vi.fn(),
+  getApprovals: vi.fn(),
+  getAdapterJobs: vi.fn(),
+  getAuditEvents: vi.fn(),
+  getAdapters: vi.fn(),
+  getEvidencePack: vi.fn(),
 };
 vi.mock('@/api/finance', async () => {
   const actual = await vi.importActual('@/api/finance');
@@ -73,6 +81,13 @@ vi.mock('@/api/finance', async () => {
     getLedger: (...args) => mockFinance.getLedger(...args),
     getProfitLoss: (...args) => mockFinance.getProfitLoss(...args),
     getBalanceSheet: (...args) => mockFinance.getBalanceSheet(...args),
+    getDraftInvoices: (...args) => mockFinance.getDraftInvoices(...args),
+    getJournalDrafts: (...args) => mockFinance.getJournalDrafts(...args),
+    getApprovals: (...args) => mockFinance.getApprovals(...args),
+    getAdapterJobs: (...args) => mockFinance.getAdapterJobs(...args),
+    getAuditEvents: (...args) => mockFinance.getAuditEvents(...args),
+    getAdapters: (...args) => mockFinance.getAdapters(...args),
+    getEvidencePack: (...args) => mockFinance.getEvidencePack(...args),
   };
 });
 
@@ -104,6 +119,13 @@ beforeEach(() => {
   mockFinance.getLedger.mockResolvedValue({});
   mockFinance.getProfitLoss.mockResolvedValue({});
   mockFinance.getBalanceSheet.mockResolvedValue({});
+  mockFinance.getDraftInvoices.mockResolvedValue({ invoices: [], total: 0 });
+  mockFinance.getJournalDrafts.mockResolvedValue({ journal_drafts: [], total: 0 });
+  mockFinance.getApprovals.mockResolvedValue({ approvals: [], total: 0 });
+  mockFinance.getAdapterJobs.mockResolvedValue({ adapter_jobs: [], total: 0 });
+  mockFinance.getAuditEvents.mockResolvedValue({ events: [], next_cursor: null });
+  mockFinance.getAdapters.mockResolvedValue({ adapters: [] });
+  mockFinance.getEvidencePack.mockResolvedValue({ pack: null });
   if (typeof window !== 'undefined') {
     try {
       window.sessionStorage?.clear();

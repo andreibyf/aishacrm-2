@@ -97,7 +97,7 @@ const BUILTIN_SANDBOX_HOST_PATTERNS = [
   /-sandbox\./i,
 ];
 
-function isSandboxBaseUrl(baseUrl, explicitAllowlist) {
+export function isSandboxBaseUrl(baseUrl, explicitAllowlist) {
   let parsed;
   try {
     parsed = new URL(baseUrl);

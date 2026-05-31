@@ -1,19 +1,39 @@
 /**
- * DraftInvoicesPanel (UI Slice 1 / UI-1C)
+ * DraftInvoicesPanel (Finance Read API Slice 1 / UI-1C)
  *
- * §7.3 Draft invoices tab — gap state only. No GET /draft-invoices endpoint
- * exists today (§8.2.1). Slice 1 deliberately does NOT call POST
- * /draft-invoices or PATCH /draft-invoices/:id; those mutating endpoints
- * are excluded from src/api/finance.js per design freeze §1.
+ * §7.3 Draft invoices tab — now live via GET /api/v2/finance/draft-invoices
+ * (design freeze §6.1). Read-only: lists draft invoices for the tenant. No
+ * create / edit / send affordance (the POST/PATCH endpoints remain absent
+ * from src/api/finance.js).
  */
 
-import { FINANCE_API_GAPS } from '@/api/finance';
-import GapStateCard from './GapStateCard';
+import * as finance from '@/api/finance';
+import FinanceTablePanel from './FinanceTablePanel';
 
-export default function DraftInvoicesPanel() {
+const COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'status', label: 'Status' },
+  { key: 'customer_id', label: 'Customer ID' },
+  { key: 'customer_name', label: 'Customer Name' },
+  { key: 'currency', label: 'Currency' },
+  { key: 'amount_cents', label: 'Amount (cents)' },
+  { key: 'created_at', label: 'Created' },
+  { key: 'updated_at', label: 'Updated' },
+];
+
+export default function DraftInvoicesPanel({ tenantId }) {
   return (
     <div data-testid="finance-draft-invoices-panel">
-      <GapStateCard title="Draft invoices" gap={FINANCE_API_GAPS.draftInvoices} />
+      <FinanceTablePanel
+        tenantId={tenantId}
+        testId="finance-draft-invoices"
+        title="Draft invoices"
+        description="Read-only list of draft invoices for this tenant. Create and edit actions are deferred to a later slice."
+        emptyText="No draft invoices for this tenant yet."
+        columns={COLUMNS}
+        fetcher={finance.getDraftInvoices}
+        selectRows={(data) => (Array.isArray(data?.invoices) ? data.invoices : [])}
+      />
     </div>
   );
 }

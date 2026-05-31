@@ -236,19 +236,99 @@ describe('finance API client -- AbortController integration', () => {
   });
 });
 
+describe('finance API client -- read endpoints (Read API Slice 1)', () => {
+  it('getDraftInvoices GETs /draft-invoices, forwards customer_id + pagination, unwraps data', async () => {
+    const body = { invoices: [], total: 0, source: { mode: 'in_memory' } };
+    const fetchMock = mockFetch({ body: { status: 'success', data: body } });
+
+    const result = await finance.getDraftInvoices(TENANT_ID, {
+      customerId: 'CUST-1',
+      limit: 25,
+      offset: 10,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `${BACKEND}/api/v2/finance/draft-invoices?customer_id=CUST-1&limit=25&offset=10`,
+    );
+    expect(init.method).toBe('GET');
+    expect(init.headers['x-tenant-id']).toBe(TENANT_ID);
+    expect(result).toEqual(body);
+  });
+
+  it('getJournalDrafts GETs /journal-drafts and forwards aggregate_id', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { journal_drafts: [], total: 0 } },
+    });
+    await finance.getJournalDrafts(TENANT_ID, { aggregateId: 'journal_9' });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/journal-drafts?aggregate_id=journal_9`);
+  });
+
+  it('getApprovals GETs /approvals and forwards status', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { approvals: [], total: 0 } },
+    });
+    await finance.getApprovals(TENANT_ID, { status: 'all' });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/approvals?status=all`);
+  });
+
+  it('getAdapterJobs GETs /adapter-jobs and forwards status + operation', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { adapter_jobs: [], total: 0 } },
+    });
+    await finance.getAdapterJobs(TENANT_ID, { status: 'failed', operation: 'push_draft' });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/adapter-jobs?status=failed&operation=push_draft`);
+  });
+
+  it('getAuditEvents GETs /audit-events and forwards cursor + event_type', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { events: [], next_cursor: null } },
+    });
+    await finance.getAuditEvents(TENANT_ID, { cursor: 'abc', eventType: 'finance.journal.' });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `${BACKEND}/api/v2/finance/audit-events?cursor=abc&event_type=finance.journal.`,
+    );
+  });
+
+  it('getAdapters GETs /adapters with no params', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { adapters: [] } },
+    });
+    await finance.getAdapters(TENANT_ID);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/adapters`);
+  });
+
+  it('getEvidencePack GETs /evidence-packs and forwards from/to/target_id', async () => {
+    const fetchMock = mockFetch({
+      body: { status: 'success', data: { pack: { artifact_count: 0 } } },
+    });
+    await finance.getEvidencePack(TENANT_ID, {
+      from: '2026-01-01',
+      to: '2026-02-01',
+      targetId: 'journal_1',
+    });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      `${BACKEND}/api/v2/finance/evidence-packs?from=2026-01-01&to=2026-02-01&target_id=journal_1`,
+    );
+  });
+
+  it('omits null/undefined/empty query params', async () => {
+    const fetchMock = mockFetch({ body: { status: 'success', data: {} } });
+    await finance.getApprovals(TENANT_ID, { status: undefined });
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/approvals`);
+  });
+});
+
 describe('finance API client -- API gap registry (design freeze §8.2)', () => {
-  it('exposes all 9 known gaps with required descriptor fields', () => {
-    const expectedKeys = [
-      'draftInvoices',
-      'journalDrafts',
-      'approvals',
-      'adapterJobs',
-      'auditEvents',
-      'projectionCursors',
-      'registeredAdapters',
-      'evidencePacks',
-      'runtimeMode',
-    ];
+  it('exposes the 2 remaining known gaps with required descriptor fields', () => {
+    const expectedKeys = ['projectionCursors', 'runtimeMode'];
 
     expect(Object.keys(finance.FINANCE_API_GAPS).sort()).toEqual([...expectedKeys].sort());
 
@@ -275,16 +355,20 @@ describe('finance API client -- API gap registry (design freeze §8.2)', () => {
 
   it('FINANCE_API_GAPS is frozen (immutable from caller-side)', () => {
     expect(Object.isFrozen(finance.FINANCE_API_GAPS)).toBe(true);
-    expect(Object.isFrozen(finance.FINANCE_API_GAPS.draftInvoices)).toBe(true);
+    expect(Object.isFrozen(finance.FINANCE_API_GAPS.projectionCursors)).toBe(true);
     expect(() => {
-      finance.FINANCE_API_GAPS.draftInvoices.endpoint = 'tampered';
+      finance.FINANCE_API_GAPS.projectionCursors.endpoint = 'tampered';
     }).toThrow();
   });
 
   it('getFinanceApiGap returns the descriptor for known keys and null for unknown', () => {
-    expect(finance.getFinanceApiGap('draftInvoices')).toBe(finance.FINANCE_API_GAPS.draftInvoices);
-    expect(finance.getFinanceApiGap('approvals')).toBe(finance.FINANCE_API_GAPS.approvals);
-    expect(finance.getFinanceApiGap('runtimeStatus')).toBeNull();
+    expect(finance.getFinanceApiGap('projectionCursors')).toBe(
+      finance.FINANCE_API_GAPS.projectionCursors,
+    );
+    expect(finance.getFinanceApiGap('runtimeMode')).toBe(finance.FINANCE_API_GAPS.runtimeMode);
+    // Retired gaps now resolve to null — their endpoints are implemented.
+    expect(finance.getFinanceApiGap('approvals')).toBeNull();
+    expect(finance.getFinanceApiGap('draftInvoices')).toBeNull();
     expect(finance.getFinanceApiGap('nonsense')).toBeNull();
   });
 
@@ -305,6 +389,14 @@ describe('finance API client -- read-only safety (no mutating exports)', () => {
       'getLedger',
       'getProfitLoss',
       'getBalanceSheet',
+      // Read API Slice 1 — newly implemented read-only GET wrappers.
+      'getDraftInvoices',
+      'getJournalDrafts',
+      'getApprovals',
+      'getAdapterJobs',
+      'getAuditEvents',
+      'getAdapters',
+      'getEvidencePack',
       'FINANCE_API_GAPS',
       'getFinanceApiGap',
     ];
