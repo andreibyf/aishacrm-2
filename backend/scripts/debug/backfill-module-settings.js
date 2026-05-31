@@ -7,6 +7,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+// Single source of truth for the default module catalog — the same rows new
+// tenants are seeded with (backend/routes/tenants.js). Importing it keeps this
+// maintenance script from drifting (e.g. missing financeOps). The alias-aware
+// selectMissingDefaultRows ensures a legacy alias-enrolled tenant is not
+// silently locked out by inserting a disabled canonical row that would
+// override the alias via canonical-wins.
+import { buildDefaultModuleRows, selectMissingDefaultRows } from '../../routes/tenants.js';
 
 dotenv.config();
 
@@ -21,32 +28,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
-
-/**
- * Default modules - must match the list in tenants.js and ModuleManager.jsx
- */
-const DEFAULT_MODULES = [
-  'Dashboard',
-  'Contact Management',
-  'Account Management',
-  'Lead Management',
-  'Opportunities',
-  'Activity Tracking',
-  'Calendar',
-  'BizDev Sources',
-  'Cash Flow Management',
-  'Document Processing & Management',
-  'AI Campaigns',
-  'Analytics & Reports',
-  'Employee Management',
-  'Integrations',
-  'Payment Portal',
-  'Utilities',
-  'Client Onboarding',
-  'AI Agent',
-  'Realtime Voice',
-  'Workflows',
-];
 
 async function backfillModuleSettings() {
   console.log('Starting module settings backfill...\n');
@@ -77,23 +58,23 @@ async function backfillModuleSettings() {
       continue;
     }
 
-    const existingModuleNames = new Set(existingSettings.map((s) => s.module_name));
-    const missingModules = DEFAULT_MODULES.filter((m) => !existingModuleNames.has(m));
+    const existingModuleNames = existingSettings.map((s) => s.module_name);
+    // Build the full default row set (incl. financeOps seeded disabled), then
+    // insert only the rows this tenant is truly missing. The alias-aware
+    // filter treats a legacy enterpriseFinance row as equivalent to the
+    // canonical financeOps key, so we do NOT insert a disabled canonical row
+    // that would silently override an alias-enabled tenant (canonical-wins).
+    const defaultRows = buildDefaultModuleRows(tenant.id);
+    const newSettings = selectMissingDefaultRows(defaultRows, existingModuleNames);
 
-    if (missingModules.length === 0) {
-      console.log(`  ✓ Already has all ${DEFAULT_MODULES.length} modules`);
+    if (newSettings.length === 0) {
+      console.log(`  ✓ Already has all ${defaultRows.length} modules`);
       continue;
     }
 
-    console.log(`  Missing ${missingModules.length} modules: ${missingModules.join(', ')}`);
-
-    // Create missing module settings
-    const newSettings = missingModules.map((moduleName) => ({
-      tenant_id: tenant.id,
-      module_name: moduleName,
-      settings: {},
-      is_enabled: true,
-    }));
+    console.log(
+      `  Missing ${newSettings.length} modules: ${newSettings.map((r) => r.module_name).join(', ')}`,
+    );
 
     const { data: inserted, error: insertError } = await supabase
       .from('modulesettings')

@@ -77,6 +77,29 @@ describe('JournalEntriesList', () => {
     await waitFor(() => expect(mockFinance.getJournalEntries).toHaveBeenCalledTimes(2));
   });
 
+  it('describes all journal statuses in the header (not posted-only)', async () => {
+    // Codex P2/P3: the header must not imply posted-only semantics — the route
+    // surfaces draft / pending_approval / posted / reversed.
+    render(<JournalEntriesList tenantId={TENANT_ID} />);
+    await waitFor(() => expect(screen.getByTestId('finance-journal-entries')).toBeInTheDocument());
+    const card = screen.getByTestId('finance-journal-entries');
+    expect(card).toHaveTextContent(/draft/i);
+    expect(card).toHaveTextContent(/pending approval/i);
+    expect(card).toHaveTextContent(/posted/i);
+    expect(card).toHaveTextContent(/reversed/i);
+    expect(card).not.toHaveTextContent(/list of posted journal entries/i);
+  });
+
+  it('uses status-neutral empty-state copy', async () => {
+    render(<JournalEntriesList tenantId={TENANT_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('finance-journal-entries-empty')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('finance-journal-entries-empty')).toHaveTextContent(
+      'No journal entries are available for this tenant yet.',
+    );
+  });
+
   it('exposes no mutating-style button (only Refresh)', async () => {
     mockFinance.getJournalEntries.mockResolvedValue({
       journal_entries: [{ id: 'je_1', aggregate_id: 'agg', status: 'posted', created_at: 'now' }],

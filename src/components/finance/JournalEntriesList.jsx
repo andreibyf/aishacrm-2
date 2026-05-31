@@ -70,8 +70,9 @@ export default function JournalEntriesList({ tenantId }) {
         <div>
           <CardTitle className="text-base font-semibold text-slate-100">Journal entries</CardTitle>
           <p className="mt-1 text-xs text-slate-400">
-            Read-only list of posted journal entries for this tenant. Newest first. Row-level detail
-            and reverse actions are deferred to a later slice.
+            Read-only list of journal entries for this tenant across draft, pending approval,
+            posted, and reversed states. Newest first. Row-level detail and reverse actions are
+            deferred to a later slice.
           </p>
         </div>
         <Button
@@ -108,7 +109,7 @@ export default function JournalEntriesList({ tenantId }) {
           </p>
         ) : state.entries.length === 0 ? (
           <p className="text-xs text-slate-400" data-testid="finance-journal-entries-empty">
-            No journal entries posted for this tenant yet.
+            No journal entries are available for this tenant yet.
           </p>
         ) : (
           <table className="w-full text-xs" data-testid="finance-journal-entries-table">
