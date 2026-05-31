@@ -107,6 +107,11 @@ function hasPageAccess(user, pageName) {
     Calendar: true,
     BizDevSources: true,
     CashFlow: true,
+    // Visible by default for CRM roles; actual access is gated by the per-tenant
+    // financeOps module row at the nav (src/utils/permissions.js) + backend layer.
+    // Keeps RouteGuard in sync with permissions.js role defaults so the nav item
+    // doesn't render "Access Denied" for manager/power-user (Codex PR #624).
+    FinanceOps: true,
     DocumentProcessing: true,
     DocumentManagement: true,
     Employees: true,
@@ -152,6 +157,9 @@ function hasPageAccess(user, pageName) {
       WorkflowGuide: true,
       ConstructionProjects: true,
       Workers: true,
+      // Mirrors permissions.js employee role default; gated by the per-tenant
+      // financeOps module row at the nav/backend layer (Codex PR #624).
+      FinanceOps: true,
     },
     // Legacy role aliases
     'power-user': { ...allCrmPages },

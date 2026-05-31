@@ -259,3 +259,6 @@ doppler-mcp/test_set_secrets.py
 cloudflared-config-vps1.yml
 docker-compose.hetzner-cloudflared.yml
 docker-compose.staging.yml
+
+# Codex agent worktree / environment artifacts (per-machine tooling, not portable)
+.codex/

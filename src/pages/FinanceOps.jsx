@@ -346,31 +346,31 @@ export default function FinanceOpsPage() {
           <LedgerSummary tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="invoices" className="m-0">
-          <DraftInvoicesPanel />
+          <DraftInvoicesPanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="journal-drafts" className="m-0">
-          <JournalDraftsPanel />
+          <JournalDraftsPanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="journal-entries" className="m-0">
           <JournalEntriesList tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="approvals" className="m-0">
-          <ApprovalQueuePanel />
+          <ApprovalQueuePanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="adapter-queue" className="m-0">
-          <AdapterQueuePanel />
+          <AdapterQueuePanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="audit" className="m-0">
-          <AuditTimelinePanel />
+          <AuditTimelinePanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="projection" className="m-0">
           <ProjectionStatusPanel status={status} />
         </TabsContent>
         <TabsContent value="sandbox-adapter" className="m-0">
-          <SandboxAdapterPanel status={status} />
+          <SandboxAdapterPanel status={status} tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="evidence" className="m-0">
-          <EvidencePlaceholder />
+          <EvidencePlaceholder tenantId={selectedTenantId} />
         </TabsContent>
       </Tabs>
     </div>

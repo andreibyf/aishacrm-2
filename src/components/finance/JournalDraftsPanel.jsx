@@ -1,18 +1,37 @@
 /**
- * JournalDraftsPanel (UI Slice 1 / UI-1C)
+ * JournalDraftsPanel (Finance Read API Slice 1 / UI-1C)
  *
- * §7.4 Journal drafts tab — gap state only. No GET /journal-drafts endpoint
- * exists today (§8.2.2). Slice 1 deliberately does NOT call POST
- * /journal-drafts; that mutating endpoint is excluded from finance.js.
+ * §7.4 Journal drafts tab — now live via GET /api/v2/finance/journal-drafts
+ * (design freeze §6.2): the draft + pending_approval slice of journal entries.
+ * Read-only: no create / post / approve affordance.
  */
 
-import { FINANCE_API_GAPS } from '@/api/finance';
-import GapStateCard from './GapStateCard';
+import * as finance from '@/api/finance';
+import FinanceTablePanel from './FinanceTablePanel';
 
-export default function JournalDraftsPanel() {
+const COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'aggregate_id', label: 'Aggregate ID' },
+  { key: 'status', label: 'Status' },
+  { key: 'account_code', label: 'Account Code' },
+  { key: 'amount_cents', label: 'Amount (cents)' },
+  { key: 'currency', label: 'Currency' },
+  { key: 'created_at', label: 'Created' },
+];
+
+export default function JournalDraftsPanel({ tenantId }) {
   return (
     <div data-testid="finance-journal-drafts-panel">
-      <GapStateCard title="Journal drafts" gap={FINANCE_API_GAPS.journalDrafts} />
+      <FinanceTablePanel
+        tenantId={tenantId}
+        testId="finance-journal-drafts"
+        title="Journal drafts"
+        description="Read-only list of draft and pending-approval journal entries for this tenant."
+        emptyText="No journal drafts for this tenant yet."
+        columns={COLUMNS}
+        fetcher={finance.getJournalDrafts}
+        selectRows={(data) => (Array.isArray(data?.journal_drafts) ? data.journal_drafts : [])}
+      />
     </div>
   );
 }

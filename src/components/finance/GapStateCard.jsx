@@ -31,30 +31,51 @@ export default function GapStateCard({ title, gap }) {
         <Info className="mt-1 h-4 w-4 flex-shrink-0 text-sky-400" aria-hidden="true" />
         <div className="flex-1">
           <CardTitle className="text-sm font-semibold text-slate-100">{title}</CardTitle>
-          <p className="mt-1 text-xs text-slate-400">
-            Read-API not yet implemented (design freeze {gap.designRef}).
+          {/* Operator-facing, plain-language summary leads the card (Codex P3). */}
+          <p
+            className="mt-1 text-xs leading-relaxed text-slate-300"
+            data-testid="finance-gap-card-operator-summary"
+          >
+            {gap.operatorSummary ||
+              'This data is not available in this preview yet. It will appear once the backend read endpoint is added.'}
           </p>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 text-xs text-slate-300">
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-slate-500">Missing endpoint</div>
-          <code className="mt-1 block rounded bg-slate-800/60 px-2 py-1 text-xs text-slate-200">
-            {gap.endpoint}
-          </code>
-        </div>
-        <div>
+      <CardContent className="text-xs text-slate-300">
+        {/* Engineering traceability is preserved but de-emphasized below the
+            operator copy — kept so devs can still find the missing endpoint. */}
+        <div
+          className="rounded border border-slate-700/40 bg-slate-900/30 p-2"
+          data-testid="finance-gap-card-technical"
+        >
           <div className="text-[10px] uppercase tracking-wide text-slate-500">
-            Natural backing source (backend follow-up)
+            Technical details (engineering)
           </div>
-          <p className="mt-1 leading-relaxed text-slate-300">{gap.naturalBackingSource}</p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Read-API not yet implemented (design freeze {gap.designRef}).
+          </p>
+          <div className="mt-2">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+              Missing endpoint
+            </div>
+            <code className="mt-1 block rounded bg-slate-800/60 px-2 py-1 text-xs text-slate-200">
+              {gap.endpoint}
+            </code>
+          </div>
+          <div className="mt-2">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+              Natural backing source (backend follow-up)
+            </div>
+            <p className="mt-1 leading-relaxed text-slate-400">{gap.naturalBackingSource}</p>
+          </div>
+          <p className="mt-2 border-t border-slate-700/40 pt-2 text-[11px] leading-relaxed text-slate-500">
+            UI Slice 1 deliberately does not invent frontend data sources for unimplemented
+            endpoints. The backend follow-up slice that closes this gap will land the GET route plus
+            the matching client wrapper in{' '}
+            <code className="rounded bg-slate-800/60 px-1">src/api/finance.js</code>, and this panel
+            will be replaced with a live data view in the same commit.
+          </p>
         </div>
-        <p className="border-t border-slate-700/40 pt-3 text-[11px] leading-relaxed text-slate-400">
-          UI Slice 1 deliberately does not invent frontend data sources for unimplemented endpoints.
-          The backend follow-up slice that closes this gap will land the GET route plus the matching
-          client wrapper in <code className="rounded bg-slate-800/60 px-1">src/api/finance.js</code>
-          , and this panel will be replaced with a live data view in the same commit.
-        </p>
       </CardContent>
     </Card>
   );

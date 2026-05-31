@@ -141,6 +141,16 @@ export function createFinanceDomainService(opts = {}) {
       return clone(bucket.approvals);
     },
 
+    listInvoices(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return clone(bucket.invoices);
+    },
+
+    listAdapterJobs(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return clone(bucket.adapterJobs);
+    },
+
     async listAuditEvents(tenantId) {
       return await eventStore.query({ tenant_id: tenantId });
     },
@@ -713,6 +723,22 @@ export function createFinanceDomainService(opts = {}) {
       const bucket = getTenantBucket(store, approval?.tenant_id);
       bucket.approvals.push(clone(approval));
       return clone(approval);
+    },
+
+    // Testing: seed a pre-existing invoice / adapter-job directly into the bucket
+    // so read-route tests can assert filtering and field-mapping across statuses
+    // that the create flows do not produce on their own (e.g. running / failed
+    // adapter jobs, non-draft invoices). Mirrors seedJournalEntry / seedApproval.
+    seedInvoice(invoice) {
+      const bucket = getTenantBucket(store, invoice?.tenant_id);
+      bucket.invoices.push(clone(invoice));
+      return clone(invoice);
+    },
+
+    seedAdapterJob(job) {
+      const bucket = getTenantBucket(store, job?.tenant_id);
+      bucket.adapterJobs.push(clone(job));
+      return clone(job);
     },
 
     async getState(tenantId) {

@@ -20,11 +20,12 @@ function toLabel(key) {
     WorkflowGuide: 'Workflow Guide',
     ClientRequirements: 'Client Requirements',
     CareWorkflows: 'CARE Workflows',
+    FinanceOps: 'Finance Operations',
   };
   return map[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 }
 
-const ORDER = [
+export const ORDER = [
   'Dashboard',
   'Contacts',
   'Accounts',
@@ -34,6 +35,7 @@ const ORDER = [
   'Calendar',
   'BizDevSources',
   'CashFlow',
+  'FinanceOps',
   'DocumentProcessing',
   'DocumentManagement',
   'DocumentTemplates',

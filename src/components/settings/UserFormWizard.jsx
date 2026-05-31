@@ -78,7 +78,7 @@ const ACCESS_LEVELS = [
 
 // Navigation modules that can be toggled
 // These should match the navItems in Layout.jsx
-const NAV_MODULES = [
+export const NAV_MODULES = [
   // Primary navigation
   {
     key: 'Dashboard',
@@ -146,6 +146,12 @@ const NAV_MODULES = [
     label: 'Cash Flow',
     icon: BarChart3,
     description: 'Financial cash flow tracking',
+  },
+  {
+    key: 'FinanceOps',
+    label: 'Finance Operations',
+    icon: BarChart3,
+    description: 'Read-only Finance Ops console (gated by the financeOps tenant module)',
   },
   {
     key: 'DocumentProcessing',
@@ -249,7 +255,7 @@ const NAV_MODULES = [
 
 // Default nav permissions - most things enabled by default
 // Keys must match the href values in Layout.jsx navItems
-const DEFAULT_NAV_PERMISSIONS = {
+export const DEFAULT_NAV_PERMISSIONS = {
   // Core CRM modules - on by default
   Dashboard: true,
   Contacts: true,
@@ -264,6 +270,9 @@ const DEFAULT_NAV_PERMISSIONS = {
   ConstructionProjects: true,
   Workers: true,
   CashFlow: true,
+  // Default on; actual access is still gated by the per-tenant financeOps
+  // module row (default disabled). Admins can revoke per user here.
+  FinanceOps: true,
   DocumentProcessing: true,
   DocumentManagement: true,
   // Document Templates (eSign) — preview is open to all roles with the
