@@ -370,9 +370,28 @@ export function hasPageAccess(user, pageName, selectedTenantId, moduleSettings =
     // Resolve in two passes: canonical first, then alias only when canonical
     // is absent.
     const aliasList = moduleAliases[requiredModuleId] || [];
-    let moduleSetting = moduleSettings.find((m) => m.module_name === requiredModuleId);
+
+    // Tenant scoping (Codex P1, PR #624). For admin/superadmin sessions Layout
+    // loads EVERY tenant's module rows via ModuleSettings.list() (Layout.jsx
+    // ~1233), so an unrelated tenant's row — e.g. the new default-disabled
+    // `financeOps` seed — must NOT shadow the selected tenant's setting.
+    // Restrict resolution to the selected tenant's rows plus any global default
+    // rows (no tenant_id), and prefer the tenant-specific row over a global
+    // default. Mirrors the tenant-then-default resolution used elsewhere in
+    // this file (e.g. lines ~444-450).
+    const scopedSettings = selectedTenantId
+      ? moduleSettings.filter((m) => m.tenant_id === selectedTenantId || m.tenant_id == null)
+      : moduleSettings;
+    const findRow = (name) =>
+      scopedSettings.find((m) => m.module_name === name && m.tenant_id === selectedTenantId) ||
+      scopedSettings.find((m) => m.module_name === name);
+
+    let moduleSetting = findRow(requiredModuleId);
     if (!moduleSetting && aliasList.length > 0) {
-      moduleSetting = moduleSettings.find((m) => aliasList.includes(m.module_name));
+      for (const alias of aliasList) {
+        moduleSetting = findRow(alias);
+        if (moduleSetting) break;
+      }
     }
     if (moduleSetting && moduleSetting.is_enabled === false) return false;
   }

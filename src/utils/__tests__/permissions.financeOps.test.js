@@ -116,6 +116,52 @@ describe('hasPageAccess(FinanceOps) — backend alias parity', () => {
     });
   });
 
+  // Codex P1 (PR #624): in an admin/superadmin session Layout loads EVERY
+  // tenant's module rows (ModuleSettings.list()). The default-disabled
+  // `financeOps` seed for unrelated tenants must not shadow the selected
+  // tenant's setting — resolution must be scoped to selectedTenantId.
+  describe('tenant-scoped resolution (multi-tenant admin session)', () => {
+    const OTHER = 'tenant-uuid-2';
+
+    it('grants access for the selected tenant despite another tenant having a disabled row', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false, tenant_id: OTHER },
+          { module_name: 'financeOps', is_enabled: true, tenant_id: TENANT },
+        ]),
+      ).toBe(true);
+    });
+
+    it("denies access when the selected tenant's row is disabled, ignoring another tenant's enabled row", () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: true, tenant_id: OTHER },
+          { module_name: 'financeOps', is_enabled: false, tenant_id: TENANT },
+        ]),
+      ).toBe(false);
+    });
+
+    it('prefers the selected tenant row over a global default row (enabled tenant row wins)', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false }, // global default, no tenant_id
+          { module_name: 'financeOps', is_enabled: true, tenant_id: TENANT },
+        ]),
+      ).toBe(true);
+    });
+
+    it('an unrelated tenant disabled row alone does not shadow access for the selected tenant', () => {
+      // Selected tenant has no row at all; only another tenant's disabled row
+      // exists. It must be ignored (no false shadow); access falls through to
+      // the role/nav default (granted here).
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false, tenant_id: OTHER },
+        ]),
+      ).toBe(true);
+    });
+  });
+
   it('does NOT extend the alias to unrelated modules', () => {
     // Confirm the alias resolution is scoped to financeOps only. A disabled
     // 'enterpriseFinance' row should NOT incidentally disable an unrelated
