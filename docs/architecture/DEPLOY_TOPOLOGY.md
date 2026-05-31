@@ -79,13 +79,21 @@ This is the table that comes up most often. The Coolify app names look like they
 | `staging-braid.aishacrm.com`\*   | `staging-braid`         | `tw8zmua5jyzwnhh1oxw15kkm` | Distributed Braid MCP server |
 | `staging-litellm.aishacrm.com`\* | `staging-litellm`       | `zsy5fsbw9hccxvoznkbpy1il` | LiteLLM router               |
 
+**Production FQDNs (Hetzner, tunnel `aishacrm-prod-hetzner`, id `a5dcbb7d-672c-447f-b2a5-9aea581b13cb`):**
+
+| Public FQDN          | Container                | What it is                   |
+| -------------------- | ------------------------ | ---------------------------- |
+| `app.aishacrm.com`   | `aishacrm-frontend:3000` | Frontend (Vite/React)        |
+| `api.aishacrm.com`   | `aishacrm-backend:3001`  | Backend (Node/Express)       |
+| `braid.aishacrm.com` | `braid-mcp-server:8000`  | Distributed Braid MCP server |
+
+Health endpoint: `https://braid.aishacrm.com/health` — use this in Uptime Kuma (not `localhost:8000`, which is Uptime Kuma's own UI on VPS-2).
+
 \*Internal-only or not always exposed; check Cloudflare DNS if uncertain.
 
 **There is no `staging-backend.aishacrm.com` hostname.** If you `nslookup` it, Cloudflare returns no addresses — looks like a tunnel-detached error but is really just "this hostname doesn't exist." When verifying a staging deploy, hit `staging-api.aishacrm.com`.
 
 **Cross-app dependency:** `staging-app-fast` contains BOTH the `frontend` AND `aisha-comms` services (the latter uses the backend image with a different `command:`). When the backend image is rebuilt, BOTH `staging-backend-heavy` AND `staging-app-fast` must redeploy. The CI deploy step in `.github/workflows/deploy-staging.yml` handles the fan-out and de-dup.
-
-Production presumably mirrors this pattern (`app.aishacrm.com` + `api.aishacrm.com`); verify when prod work resumes.
 
 ---
 
