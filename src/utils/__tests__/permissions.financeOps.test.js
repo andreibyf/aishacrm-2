@@ -116,6 +116,52 @@ describe('hasPageAccess(FinanceOps) — backend alias parity', () => {
     });
   });
 
+  // Codex P1 (PR #624): in an admin/superadmin session Layout loads EVERY
+  // tenant's module rows (ModuleSettings.list()). The default-disabled
+  // `financeOps` seed for unrelated tenants must not shadow the selected
+  // tenant's setting — resolution must be scoped to selectedTenantId.
+  describe('tenant-scoped resolution (multi-tenant admin session)', () => {
+    const OTHER = 'tenant-uuid-2';
+
+    it('grants access for the selected tenant despite another tenant having a disabled row', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false, tenant_id: OTHER },
+          { module_name: 'financeOps', is_enabled: true, tenant_id: TENANT },
+        ]),
+      ).toBe(true);
+    });
+
+    it("denies access when the selected tenant's row is disabled, ignoring another tenant's enabled row", () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: true, tenant_id: OTHER },
+          { module_name: 'financeOps', is_enabled: false, tenant_id: TENANT },
+        ]),
+      ).toBe(false);
+    });
+
+    it('prefers the selected tenant row over a global default row (enabled tenant row wins)', () => {
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false }, // global default, no tenant_id
+          { module_name: 'financeOps', is_enabled: true, tenant_id: TENANT },
+        ]),
+      ).toBe(true);
+    });
+
+    it('an unrelated tenant disabled row alone does not shadow access for the selected tenant', () => {
+      // Selected tenant has no row at all; only another tenant's disabled row
+      // exists. It must be ignored (no false shadow); access falls through to
+      // the role/nav default (granted here).
+      expect(
+        hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+          { module_name: 'financeOps', is_enabled: false, tenant_id: OTHER },
+        ]),
+      ).toBe(true);
+    });
+  });
+
   it('does NOT extend the alias to unrelated modules', () => {
     // Confirm the alias resolution is scoped to financeOps only. A disabled
     // 'enterpriseFinance' row should NOT incidentally disable an unrelated
@@ -127,4 +173,107 @@ describe('hasPageAccess(FinanceOps) — backend alias parity', () => {
       ]),
     ).toBe(true);
   });
+});
+
+/**
+ * UI-1D access-enablement: superadmin + crm_access semantics for FinanceOps.
+ *
+ * Andrei's dev-container finding asked for an explicit, tested access path for
+ * the user and superadmin to reach Finance Operations WITHOUT bypassing the
+ * backend per-tenant module gate. These lock in:
+ *   - superadmin sees the page in global view (no tenant), but
+ *   - superadmin still respects a disabled per-tenant financeOps row when a
+ *     tenant is selected (the Module Settings toggle does NOT become a bypass);
+ *   - crm_access is required; and
+ *   - enabling the financeOps row is what grants access (the real path).
+ */
+const SUPERADMIN_USER = {
+  id: 'sa1',
+  email: 'sa@example.com',
+  role: 'superadmin',
+  is_superadmin: true,
+  crm_access: true,
+  navigation_permissions: { FinanceOps: true },
+};
+
+const NO_CRM_USER = {
+  id: 'u2',
+  email: 'nocrm@example.com',
+  role: 'admin',
+  tenant_id: TENANT,
+  crm_access: false,
+  navigation_permissions: { FinanceOps: true },
+};
+
+describe('hasPageAccess(FinanceOps) — superadmin + crm_access access path', () => {
+  it('superadmin sees FinanceOps in global view (no tenant selected), regardless of rows', () => {
+    expect(hasPageAccess(SUPERADMIN_USER, 'FinanceOps', null, [])).toBe(true);
+  });
+
+  it('superadmin still respects a disabled financeOps row when a tenant is selected (no bypass)', () => {
+    expect(
+      hasPageAccess(SUPERADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: false },
+      ]),
+    ).toBe(false);
+  });
+
+  it('superadmin reaches FinanceOps for a tenant once the financeOps row is enabled', () => {
+    expect(
+      hasPageAccess(SUPERADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: true },
+      ]),
+    ).toBe(true);
+  });
+
+  it('a user without crm_access cannot reach FinanceOps even if the module is enabled', () => {
+    expect(
+      hasPageAccess(NO_CRM_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: true },
+      ]),
+    ).toBe(false);
+  });
+
+  it('an enrolled user with crm_access reaches FinanceOps once financeOps is enabled', () => {
+    expect(
+      hasPageAccess(ADMIN_USER, 'FinanceOps', TENANT, [
+        { module_name: 'financeOps', is_enabled: true },
+      ]),
+    ).toBe(true);
+  });
+});
+
+/**
+ * Codex P1 (UI-1D access enablement): enabling the financeOps module row must
+ * actually surface FinanceOps in the nav for users who rely on ROLE DEFAULTS
+ * (no explicit navigation_permissions.FinanceOps). Previously hasPageAccess
+ * fell through to getDefaultNavigationPermissions(), which omitted FinanceOps,
+ * so a tenant-selected admin/superadmin still had the page hidden even after
+ * toggling the module on. The backend gate has no role check (design §11.3 —
+ * surfaced to any user of an enrolled tenant), so all roles default to visible,
+ * gated solely by the per-tenant module row.
+ */
+const roleDefaultUser = (role) => ({
+  id: `def-${role}`,
+  email: `${role}@example.com`,
+  role,
+  is_superadmin: role === 'superadmin',
+  tenant_id: TENANT,
+  crm_access: true,
+  // No navigation_permissions → exercises the role-default fallback path.
+});
+
+describe('hasPageAccess(FinanceOps) — users relying on role defaults (tenant selected)', () => {
+  const enabled = [{ module_name: 'financeOps', is_enabled: true }];
+  const disabled = [{ module_name: 'financeOps', is_enabled: false }];
+
+  for (const role of ['superadmin', 'admin', 'manager', 'employee']) {
+    it(`${role} with no explicit FinanceOps permission sees it once the module is enabled`, () => {
+      expect(hasPageAccess(roleDefaultUser(role), 'FinanceOps', TENANT, enabled)).toBe(true);
+    });
+
+    it(`${role} relying on defaults is still hidden FinanceOps when the module is disabled`, () => {
+      expect(hasPageAccess(roleDefaultUser(role), 'FinanceOps', TENANT, disabled)).toBe(false);
+    });
+  }
 });

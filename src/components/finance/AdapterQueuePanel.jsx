@@ -1,19 +1,37 @@
 /**
- * AdapterQueuePanel (UI Slice 1 / UI-1C)
+ * AdapterQueuePanel (Finance Read API Slice 1 / UI-1C)
  *
- * §7.7 Adapter queue tab — gap state only. No GET /adapter-jobs or
- * /adapter-queue projection-list endpoint exists today (§8.2.4). The
- * adapterQueueProjection is the natural backing source (projection-
- * contracts.md §7). No retry / cancel / re-emit affordance in Slice 1.
+ * §7.7 Adapter queue tab — now live via GET /api/v2/finance/adapter-jobs
+ * (design freeze §6.4). Read-only: lists adapter jobs across the canonical
+ * status set. No retry / cancel / re-emit affordance.
  */
 
-import { FINANCE_API_GAPS } from '@/api/finance';
-import GapStateCard from './GapStateCard';
+import * as finance from '@/api/finance';
+import FinanceTablePanel from './FinanceTablePanel';
 
-export default function AdapterQueuePanel() {
+const COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'operation', label: 'Operation' },
+  { key: 'status', label: 'Status' },
+  { key: 'attempts', label: 'Attempts' },
+  { key: 'next_attempt_at', label: 'Next Attempt' },
+  { key: 'last_error', label: 'Last Error' },
+  { key: 'created_at', label: 'Created' },
+];
+
+export default function AdapterQueuePanel({ tenantId }) {
   return (
     <div data-testid="finance-adapter-queue-panel">
-      <GapStateCard title="Adapter queue" gap={FINANCE_API_GAPS.adapterJobs} />
+      <FinanceTablePanel
+        tenantId={tenantId}
+        testId="finance-adapter-queue"
+        title="Adapter queue"
+        description="Read-only list of adapter jobs for this tenant. Retry and cancel actions are not available in this slice."
+        emptyText="No adapter jobs for this tenant yet."
+        columns={COLUMNS}
+        fetcher={finance.getAdapterJobs}
+        selectRows={(data) => (Array.isArray(data?.adapter_jobs) ? data.adapter_jobs : [])}
+      />
     </div>
   );
 }

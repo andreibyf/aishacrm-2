@@ -13,14 +13,15 @@ Each section below states the contract. If you're touching a deploy script, CI w
 
 ---
 
-## The four hosts
+## The five hosts
 
-| Name          | Role        | Provider                | IP                | SSH user    | What runs there                                                                               |
-| ------------- | ----------- | ----------------------- | ----------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| **VPS-1**     | Staging     | Zap-Hosting (lifetime)  | `147.189.173.237` | `andreibyf` | Staging app services (frontend, backend, braid-mcp, litellm), coolify-proxy, coolify-sentinel |
-| **VPS-2**     | Services    | Zap-Hosting (lifetime)  | `147.189.168.164` | `root`      | Coolify app (control plane), Cal.com, Uptime Kuma, Gitea, OneDev                              |
-| **Hetzner**   | Production  | Hetzner Cloud (monthly) | `178.156.140.86`  | `root`      | All prod app services                                                                         |
-| **Localhost** | Development | Dre's laptop            | (varies)          | n/a         | Local dev via Docker Compose ports 4000/4001                                                  |
+| Name                | Role         | Provider                | IP                                                 | SSH user    | What runs there                                                                               |
+| ------------------- | ------------ | ----------------------- | -------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------- |
+| **VPS-1**           | Staging      | Zap-Hosting (lifetime)  | `147.189.173.237`                                  | `andreibyf` | Staging app services (frontend, backend, braid-mcp, litellm), coolify-proxy, coolify-sentinel |
+| **VPS-2**           | Services     | Zap-Hosting (lifetime)  | `147.189.168.164`                                  | `root`      | Coolify app (control plane), Cal.com, Uptime Kuma, Gitea, OneDev                              |
+| **Hetzner**         | Production   | Hetzner Cloud (monthly) | `178.156.140.86`                                   | `root`      | All prod app services                                                                         |
+| **Localhost**       | Development  | Dre's laptop            | (varies)                                           | n/a         | Local dev via Docker Compose ports 4000/4001                                                  |
+| **AI Cloud Server** | AI Inference | Home (HP Omen 35L)      | LAN: `192.168.7.200` / Tailscale: `100.81.132.118` | `aisha`     | vLLM inference server (Qwen2.5-14B), accessible via Tailscale from all envs                   |
 
 **Rules:**
 
@@ -28,6 +29,7 @@ Each section below states the contract. If you're touching a deploy script, CI w
 - App services (backend, frontend, comms, braid-mcp, litellm) deploy to **VPS-1 or Hetzner**, never VPS-2.
 - Infra/tooling (Coolify, Cal.com, Uptime Kuma, Gitea) deploys to **VPS-2**, never VPS-1 or Hetzner.
 - Coolify on VPS-2 has a server entry pointing at itself (`host.docker.internal`); that's why the Coolify server UUID for VPS-2 is labeled "localhost" inside Coolify. Don't confuse that with Dre's actual laptop.
+- AI Cloud Server is the local inference node. It is NOT managed by Coolify. Access via Tailscale (VPS-1, Hetzner) or direct LAN (localhost dev). Hostname: `ai-cloud-server`.
 
 ### Coolify server UUIDs (for API calls)
 
@@ -77,13 +79,21 @@ This is the table that comes up most often. The Coolify app names look like they
 | `staging-braid.aishacrm.com`\*   | `staging-braid`         | `tw8zmua5jyzwnhh1oxw15kkm` | Distributed Braid MCP server |
 | `staging-litellm.aishacrm.com`\* | `staging-litellm`       | `zsy5fsbw9hccxvoznkbpy1il` | LiteLLM router               |
 
+**Production FQDNs (Hetzner, tunnel `aishacrm-prod-hetzner`, id `a5dcbb7d-672c-447f-b2a5-9aea581b13cb`):**
+
+| Public FQDN          | Container                | What it is                   |
+| -------------------- | ------------------------ | ---------------------------- |
+| `app.aishacrm.com`   | `aishacrm-frontend:3000` | Frontend (Vite/React)        |
+| `api.aishacrm.com`   | `aishacrm-backend:3001`  | Backend (Node/Express)       |
+| `braid.aishacrm.com` | `braid-mcp-server:8000`  | Distributed Braid MCP server |
+
+Health endpoint: `https://braid.aishacrm.com/health` — use this in Uptime Kuma (not `localhost:8000`, which is Uptime Kuma's own UI on VPS-2).
+
 \*Internal-only or not always exposed; check Cloudflare DNS if uncertain.
 
 **There is no `staging-backend.aishacrm.com` hostname.** If you `nslookup` it, Cloudflare returns no addresses — looks like a tunnel-detached error but is really just "this hostname doesn't exist." When verifying a staging deploy, hit `staging-api.aishacrm.com`.
 
 **Cross-app dependency:** `staging-app-fast` contains BOTH the `frontend` AND `aisha-comms` services (the latter uses the backend image with a different `command:`). When the backend image is rebuilt, BOTH `staging-backend-heavy` AND `staging-app-fast` must redeploy. The CI deploy step in `.github/workflows/deploy-staging.yml` handles the fan-out and de-dup.
-
-Production presumably mirrors this pattern (`app.aishacrm.com` + `api.aishacrm.com`); verify when prod work resumes.
 
 ---
 

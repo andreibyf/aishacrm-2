@@ -47,33 +47,57 @@ describe('LedgerSummary', () => {
     });
   });
 
-  it('renders the empty-state copy when all three payloads are empty objects', async () => {
+  it('renders operator-friendly empty-state copy when all three payloads are empty', async () => {
     render(<LedgerSummary tenantId={TENANT_ID} />);
     await waitFor(() => {
-      expect(screen.getByText('Ledger is empty for this tenant.')).toBeInTheDocument();
-      expect(screen.getByText('No P&L data for this tenant yet.')).toBeInTheDocument();
-      expect(screen.getByText('No balance-sheet data for this tenant yet.')).toBeInTheDocument();
+      expect(
+        screen.getByText('No ledger accounts available for this tenant yet.'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('No revenue or expense accounts available yet.')).toBeInTheDocument();
+      expect(
+        screen.getByText('No assets, liabilities, or equity accounts available yet.'),
+      ).toBeInTheDocument();
     });
   });
 
-  it('renders the loaded data as a key/value table per section', async () => {
-    mockFinance.getLedger.mockResolvedValue({ accounts: { 1000: 0 }, currency: 'USD' });
-    mockFinance.getProfitLoss.mockResolvedValue({ revenue: 100, expenses: 30, net: 70 });
-    mockFinance.getBalanceSheet.mockResolvedValue({ assets: 500, liabilities: 200, equity: 300 });
+  it('formats cents data as currency with readable labels — not raw API field names', async () => {
+    mockFinance.getLedger.mockResolvedValue({
+      accounts: [{ account_name: 'Accounts Receivable', balance_cents: 540000 }],
+      totals: { debit_cents: 627550, credit_cents: 660000 },
+    });
+    mockFinance.getProfitLoss.mockResolvedValue({
+      revenue_accounts: [{ account_name: 'Sales', amount_cents: 660000 }],
+      expense_accounts: [{ account_name: 'COGS', amount_cents: 130550 }],
+      totals: { revenue_cents: 660000, expense_cents: 130550, net_income_cents: 529450 },
+    });
+    mockFinance.getBalanceSheet.mockResolvedValue({
+      assets: [{ account_name: 'AR', amount_cents: 540000 }],
+      liabilities: [],
+      equity: [{ account_name: 'RE', amount_cents: 540000 }],
+      totals: {
+        assets_cents: 540000,
+        liabilities_cents: 0,
+        equity_cents: 540000,
+        is_balanced: true,
+      },
+    });
 
     render(<LedgerSummary tenantId={TENANT_ID} />);
 
-    await waitFor(() => {
-      const ledgerSection = screen.getByTestId('finance-ledger-summary-section-ledger');
-      expect(ledgerSection).toHaveTextContent('currency');
-      expect(ledgerSection).toHaveTextContent('USD');
-    });
-    expect(screen.getByTestId('finance-ledger-summary-section-pl')).toHaveTextContent('revenue');
-    expect(screen.getByTestId('finance-ledger-summary-section-pl')).toHaveTextContent('100');
-    expect(screen.getByTestId('finance-ledger-summary-section-balance')).toHaveTextContent(
-      'assets',
-    );
-    expect(screen.getByTestId('finance-ledger-summary-section-balance')).toHaveTextContent('500');
+    const pl = await screen.findByTestId('finance-ledger-summary-section-pl');
+    expect(pl).toHaveTextContent('Net income');
+    expect(pl).toHaveTextContent('$5,294.50');
+    expect(pl).not.toHaveTextContent('net_income_cents');
+
+    const ledger = screen.getByTestId('finance-ledger-summary-section-ledger');
+    expect(ledger).toHaveTextContent('Debits');
+    expect(ledger).toHaveTextContent('$6,275.50');
+    expect(ledger).not.toHaveTextContent('debit_cents');
+
+    const balance = screen.getByTestId('finance-ledger-summary-section-balance');
+    expect(balance).toHaveTextContent('Balanced');
+    expect(balance).toHaveTextContent('Yes');
+    expect(balance).not.toHaveTextContent('is_balanced');
   });
 
   it('renders the per-section error block when a single fetch fails', async () => {

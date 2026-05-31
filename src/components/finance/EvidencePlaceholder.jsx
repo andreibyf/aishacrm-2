@@ -1,20 +1,123 @@
 /**
- * EvidencePlaceholder (UI Slice 1 / UI-1C)
+ * EvidencePlaceholder (Finance Read API Slice 1 / UI-1C)
  *
- * §7.11 Evidence / audit pack placeholder tab — gap state only. The
- * auditEvidenceBuilder runtime exists in backend/lib/finance/
- * auditEvidenceBuilder.js but has no HTTP surface yet (§8.2.8). No
- * generate-pack button (would be mutating), no download-pack button
- * (depends on a backend gap), no export / share affordance.
+ * §7.11 Evidence / audit pack tab — now live via GET /api/v2/finance/evidence
+ * -packs (design freeze §6.8, FIXED). Builds ONE tamper-evident evidence pack
+ * on demand from the tenant event stream and shows its metadata + integrity
+ * hashes. There is no historical pack registry (none exists), no generate /
+ * download / share affordance; building a pack is a pure read. The only
+ * control is Refresh (rebuild for the current scope).
  */
 
-import { FINANCE_API_GAPS } from '@/api/finance';
-import GapStateCard from './GapStateCard';
+import { useCallback, useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { RefreshCcw } from 'lucide-react';
+import * as finance from '@/api/finance';
 
-export default function EvidencePlaceholder() {
+function Row({ label, value, testId }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-md border border-slate-700/40 bg-slate-800/40 px-3 py-2">
+      <span className="text-xs uppercase tracking-wide text-slate-400">{label}</span>
+      <span
+        className="break-all text-right text-xs font-medium text-slate-100"
+        data-testid={testId}
+      >
+        {value != null && value !== '' ? String(value) : '—'}
+      </span>
+    </div>
+  );
+}
+
+export default function EvidencePlaceholder({ tenantId }) {
+  const [state, setState] = useState({ pack: null, loading: false, error: null });
+
+  const load = useCallback(
+    async (signal) => {
+      if (!tenantId) return;
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+      try {
+        const data = await finance.getEvidencePack(tenantId, { signal });
+        if (signal?.aborted) return;
+        setState({ pack: data?.pack ?? null, loading: false, error: null });
+      } catch (err) {
+        if (err?.name === 'AbortError' || signal?.aborted) return;
+        setState({ pack: null, loading: false, error: err });
+      }
+    },
+    [tenantId],
+  );
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    load(ctrl.signal);
+    return () => ctrl.abort();
+  }, [load]);
+
+  const pack = state.pack;
+
   return (
     <div data-testid="finance-evidence-placeholder">
-      <GapStateCard title="Evidence / audit packs" gap={FINANCE_API_GAPS.evidencePacks} />
+      <Card className="border-slate-700/40 bg-slate-900/60 text-slate-100">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+          <div>
+            <CardTitle className="text-base font-semibold text-slate-100">
+              Evidence / audit pack
+            </CardTitle>
+            <p className="mt-1 text-xs text-slate-400">
+              On-demand tamper-evident evidence pack built from this tenant&apos;s event stream.
+              There is no stored pack history; this is a fresh read-only build. No generate /
+              download action.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => load()}
+            disabled={state.loading}
+            data-testid="finance-evidence-refresh"
+            aria-label="Rebuild evidence pack"
+            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCcw
+              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="ml-1.5 text-xs">Refresh</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-slate-200">
+          {state.error ? (
+            <div
+              data-testid="finance-evidence-error"
+              className="rounded-md border border-red-800/50 bg-red-900/20 p-3 text-sm text-red-100"
+            >
+              <div className="font-medium">Could not build evidence pack.</div>
+              <p className="mt-1 text-xs text-red-200/80">
+                {state.error.message || 'Unknown error.'} (status {state.error.status ?? '—'})
+              </p>
+            </div>
+          ) : !pack ? (
+            <p className="text-xs text-slate-400" data-testid="finance-evidence-loading">
+              {state.loading ? 'Building…' : 'No pack built yet.'}
+            </p>
+          ) : (
+            <div className="space-y-2" data-testid="finance-evidence-pack">
+              <Row label="Pack ID" value={pack.pack_id} testId="finance-evidence-pack-id" />
+              <Row label="Generated at" value={pack.generated_at} />
+              <Row
+                label="Artifact count"
+                value={pack.artifact_count}
+                testId="finance-evidence-artifact-count"
+              />
+              <Row label="Pack hash" value={pack.integrity?.pack_hash} />
+              <Row label="Events hash" value={pack.integrity?.events_hash} />
+              <Row label="Approvals hash" value={pack.integrity?.approvals_hash} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

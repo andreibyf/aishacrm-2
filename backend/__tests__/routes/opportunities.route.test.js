@@ -248,7 +248,7 @@ after(async () => {
 
   assert.equal(result.status, 200, 'expected 200 from update');
   const updated = result.json.data?.opportunity || result.json.data;
-  assert.equal(updated.stage, 'won', 'stage should advance to won');
+  assert.equal(updated.stage, 'closed_won', 'stage should advance to closed_won');
   assert.equal(updated.probability, 100, 'won deals should have 100% probability');
 });
 

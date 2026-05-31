@@ -1,0 +1,46 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  pr_review:
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/review')) ||
+      github.event_name == 'pull_request_review_comment'
+    runs-on: [self-hosted, ai-server]
+    timeout-minutes: 10
+
+    steps:
+      - name: AI Code Review
+        uses: Codium-ai/pr-agent@main
+        env:
+          OPENAI_KEY: "local"
+          OPENAI_API_BASE: "http://localhost:11434/v1"
+          CONFIG.MODEL: "ollama/qwen2.5-coder:7b"
+          CONFIG.MODEL_WEAK: "ollama/qwen2.5-coder:7b"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
+          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
+          CONFIG.MAX_MODEL_TOKENS: "16000"
+          PR_REVIEWER.EXTRA_INSTRUCTIONS: |
+            This is AiSHA CRM, a multi-tenant Node.js/React CRM. Apply these rules:
+            1. CRITICAL: tenant_id must always be UUID (req.tenant.id). Flag any use of tenant_id_text or string slugs as a critical bug.
+            2. ROUTES: New features go to /api/v2/* only. Flag new code added to /api/v1/* routes.
+            3. BRAID: .braid files are a custom DSL. @policy annotations are mandatory on effectful functions — flag missing ones.
+            4. DATABASE: All tables have RLS. Never use service role key except in explicit admin routes.
+            5. AI ENGINE: Tool-calling (MODEL_CHAT_TOOLS) stays on OpenAI/Anthropic. Local provider is for summaries/light tasks only.
+            6. SECURITY: No raw SQL, always use Supabase client with tenant isolation. Validate all UUIDs before DB queries.
+            Skip reviewing: dist/, node_modules/, *.min.js, backend/migrations/ (already applied).
