@@ -1,0 +1,37 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  pr_review:
+    if: |
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/review')) ||
+      github.event_name == 'pull_request_review_comment'
+    runs-on: [self-hosted, ai-server]
+    timeout-minutes: 10
+
+    steps:
+      - name: AI Code Review
+        uses: Codium-ai/pr-agent@main
+        env:
+          OPENAI_KEY: "local"
+          OPENAI_API_BASE: "http://localhost:11434/v1"
+          CONFIG.MODEL: "ollama/qwen2.5-coder:7b"
+          CONFIG.MODEL_WEAK: "ollama/qwen2.5-coder:7b"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
+          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "4"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
+          CONFIG.MAX_MODEL_TOKENS: "32000"
