@@ -32,6 +32,15 @@ jobs:
           CONFIG.MODEL_WEAK: "ollama/qwen2.5-coder:7b"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
-          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "4"
+          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
           PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
-          CONFIG.MAX_MODEL_TOKENS: "32000"
+          CONFIG.MAX_MODEL_TOKENS: "16000"
+          PR_REVIEWER.EXTRA_INSTRUCTIONS: |
+            This is AiSHA CRM, a multi-tenant Node.js/React CRM. Apply these rules:
+            1. CRITICAL: tenant_id must always be UUID (req.tenant.id). Flag any use of tenant_id_text or string slugs as a critical bug.
+            2. ROUTES: New features go to /api/v2/* only. Flag new code added to /api/v1/* routes.
+            3. BRAID: .braid files are a custom DSL. @policy annotations are mandatory on effectful functions — flag missing ones.
+            4. DATABASE: All tables have RLS. Never use service role key except in explicit admin routes.
+            5. AI ENGINE: Tool-calling (MODEL_CHAT_TOOLS) stays on OpenAI/Anthropic. Local provider is for summaries/light tasks only.
+            6. SECURITY: No raw SQL, always use Supabase client with tenant isolation. Validate all UUIDs before DB queries.
+            Skip reviewing: dist/, node_modules/, *.min.js, backend/migrations/ (already applied).
