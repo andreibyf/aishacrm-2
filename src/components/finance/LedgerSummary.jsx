@@ -102,9 +102,23 @@ function BalanceSheetBody({ data }) {
   const liabilities = asArray(data?.liabilities);
   const equity = asArray(data?.equity);
   const totals = data?.totals || {};
-  // is_balanced is true for empty/zero sheets (0 === 0); only an explicit false
-  // signals an imbalance, so default to balanced when the field is absent.
-  const balanced = totals.is_balanced !== false;
+  // Three-valued balance state. Never default an absent/failed sheet to
+  // "balanced" — that would hide a calculation or load error (beta blocker:
+  // "empty states must not hide calculation errors"). Only an explicit
+  // is_balanced boolean drives Yes / unbalanced-warning; anything else is
+  // Unknown.
+  let balanceLabel;
+  let balanceClass;
+  if (!data || totals.is_balanced === undefined || totals.is_balanced === null) {
+    balanceLabel = 'Unknown';
+    balanceClass = 'text-slate-400';
+  } else if (totals.is_balanced === false) {
+    balanceLabel = 'No — unbalanced (ledger integrity issue)';
+    balanceClass = 'text-amber-300 font-semibold';
+  } else {
+    balanceLabel = 'Yes';
+    balanceClass = 'text-slate-100';
+  }
   return (
     <div className="space-y-2">
       {assets.length === 0 && liabilities.length === 0 && equity.length === 0 ? (
@@ -115,7 +129,10 @@ function BalanceSheetBody({ data }) {
       <SummaryRow label="Assets" value={formatCents(totals.assets_cents)} />
       <SummaryRow label="Liabilities" value={formatCents(totals.liabilities_cents)} />
       <SummaryRow label="Equity" value={formatCents(totals.equity_cents)} />
-      <SummaryRow label="Balanced" value={balanced ? 'Yes' : 'No'} />
+      <div className="flex items-center justify-between py-1.5" data-testid="ledger-balance-state">
+        <span className="text-xs text-slate-400">Balanced</span>
+        <span className={`text-sm ${balanceClass}`}>{balanceLabel}</span>
+      </div>
     </div>
   );
 }
