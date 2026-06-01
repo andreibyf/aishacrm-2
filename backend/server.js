@@ -277,7 +277,11 @@ import aiSettingsRoutes from './routes/aiSettings.js';
 import createBundleRoutes from './routes/bundles.js';
 import { createDeprecationMiddleware } from './middleware/deprecation.js';
 import { authenticateRequest, requireAuth } from './middleware/authenticate.js';
-import { validateTenantAccess } from './middleware/validateTenant.js';
+import {
+  validateTenantAccess,
+  requireSuperAdminRole,
+  requireAdminRole,
+} from './middleware/validateTenant.js';
 import { defaultLimiter, publicLimiter } from './middleware/rateLimiter.js';
 import { trafficMonitor } from './middleware/trafficMonitor.js';
 import { startMetricsCollection } from './lib/systemMetrics.js';
@@ -376,14 +380,27 @@ app.use('/api/sign', publicLimiter, createPublicSignRoutes());
 app.use('/api/webhooks', defaultLimiter, createWebhookRoutes(measuredPgPool));
 app.use('/api/system', defaultLimiter, createSystemRoutes(measuredPgPool));
 app.use('/api/system-settings', defaultLimiter, createSystemSettingsRoutes(measuredPgPool));
-app.use('/api/users', defaultLimiter, createUserRoutes(measuredPgPool, supabaseAuth));
+// P0-sec: authenticateRequest added — individual route guards (requireAuth/requireAdminRole)
+// depend on req.user being populated; without this they always see req.user=undefined.
+app.use(
+  '/api/users',
+  defaultLimiter,
+  authenticateRequest,
+  createUserRoutes(measuredPgPool, supabaseAuth),
+);
 app.use(
   '/api/employees',
   defaultLimiter,
   authenticateRequest,
   createEmployeeRoutes(measuredPgPool),
 );
-app.use('/api/permissions', defaultLimiter, createPermissionRoutes(measuredPgPool));
+// P0-sec: authenticateRequest added — permission management requires identity.
+app.use(
+  '/api/permissions',
+  defaultLimiter,
+  authenticateRequest,
+  createPermissionRoutes(measuredPgPool),
+);
 app.use('/api/testing', defaultLimiter, createTestingRoutes(measuredPgPool));
 app.use(
   '/api/documents',
@@ -566,7 +583,15 @@ app.use(
   authenticateRequest,
   createTenantIntegrationRoutes(measuredPgPool),
 );
-app.use('/api/tenants', defaultLimiter, createTenantRoutes(measuredPgPool));
+// P0-sec: authenticateRequest + requireSuperAdminRole added.
+// Previously had NO auth — unauthenticated callers could cascade-delete entire tenants.
+app.use(
+  '/api/tenants',
+  defaultLimiter,
+  authenticateRequest,
+  requireSuperAdminRole,
+  createTenantRoutes(measuredPgPool),
+);
 app.use('/api/tenantresolve', defaultLimiter, createTenantResolveRoutes(measuredPgPool));
 app.use('/api/announcements', defaultLimiter, createAnnouncementRoutes(measuredPgPool));
 app.use('/api/apikeys', defaultLimiter, createApikeyRoutes(measuredPgPool));

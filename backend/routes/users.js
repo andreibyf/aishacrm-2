@@ -22,6 +22,7 @@ import { createAuditLog, getUserEmailFromRequest, getClientIP } from '../lib/aud
 import logger from '../lib/logger.js';
 import { redactEmail, summarizeRowsForLog, toSafeErrorMeta } from '../lib/logger.js';
 import { clearVisibilityCache } from '../lib/teamVisibility.js';
+import { requireAdminRole, requireSuperAdminRole } from '../middleware/validateTenant.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
@@ -2313,7 +2314,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/bulk-delete - Delete multiple users in one request
-  router.post('/bulk-delete', invalidateCache('users'), async (req, res) => {
+  // P0-sec: requireAdminRole — bulk user deletion is admin-only
+  router.post('/bulk-delete', requireAdminRole, invalidateCache('users'), async (req, res) => {
     try {
       const { ids } = req.body || {};
 
@@ -2451,226 +2453,236 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // DELETE /api/users/:id - Delete user (checks both users and employees tables)
-  router.delete('/:id', mutateLimiter, invalidateCache('users'), async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { tenant_id } = req.query;
-      logger.debug(`[DELETE /api/users/:id] Requested id=`, id, ` tenant_id(query)=`, tenant_id);
+  // P0-sec: requireAdminRole — single user deletion is admin-only
+  router.delete(
+    '/:id',
+    mutateLimiter,
+    requireAdminRole,
+    invalidateCache('users'),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { tenant_id } = req.query;
+        logger.debug(`[DELETE /api/users/:id] Requested id=`, id, ` tenant_id(query)=`, tenant_id);
 
-      // Initialize Supabase client for audit logging
-      const { getSupabaseClient } = await import('../lib/supabase-db.js');
-      const supabase = getSupabaseClient();
+        // Initialize Supabase client for audit logging
+        const { getSupabaseClient } = await import('../lib/supabase-db.js');
+        const supabase = getSupabaseClient();
 
-      // Try to find user in users table first (for SuperAdmins/Admins)
-      logger.debug(`[DELETE /api/users/:id] About to query users table with id=`, id);
+        // Try to find user in users table first (for SuperAdmins/Admins)
+        logger.debug(`[DELETE /api/users/:id] About to query users table with id=`, id);
 
-      // DIAGNOSTIC: Use Supabase client instead of pgPool to verify data
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id, email, role, tenant_id')
-        .eq('id', id);
-
-      if (usersError) {
-        logger.error(`[DELETE /api/users/:id] Supabase query error:`, usersError);
-      }
-      logger.debug(
-        `[DELETE /api/users/:id] Supabase returned`,
-        usersData?.length || 0,
-        `rows:`,
-        usersData,
-      );
-
-      let userResult = { rows: usersData || [], rowCount: usersData?.length || 0 };
-      logger.debug(
-        `[DELETE /api/users/:id] users query returned`,
-        userResult.rows.length,
-        `rows:`,
-        userResult.rows,
-      );
-      let tableName = 'users';
-
-      // If not found in users table, check employees table
-      if (userResult.rows.length === 0) {
-        // For employees, prefer locating by id only to avoid false negatives when
-        // the caller supplies a tenant_id that doesn't match (e.g. null/unknown test users)
-        const { data: empData, error: empError } = await supabase
-          .from('employees')
-          .select('id, email, tenant_id')
+        // DIAGNOSTIC: Use Supabase client instead of pgPool to verify data
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, email, role, tenant_id')
           .eq('id', id);
 
-        if (empError) {
-          logger.error(`[DELETE /api/users/:id] Employees query error:`, empError);
+        if (usersError) {
+          logger.error(`[DELETE /api/users/:id] Supabase query error:`, usersError);
         }
         logger.debug(
-          `[DELETE /api/users/:id] Employees Supabase returned`,
-          empData?.length || 0,
-          `rows`,
+          `[DELETE /api/users/:id] Supabase returned`,
+          usersData?.length || 0,
+          `rows:`,
+          usersData,
         );
 
-        userResult = { rows: empData || [], rowCount: empData?.length || 0 };
-        tableName = 'employees';
-      }
-      logger.debug(
-        `[DELETE /api/users/:id] Located table=`,
-        tableName,
-        ` rows=`,
-        userResult.rows.length,
-        ` email=`,
-        userResult.rows[0]?.email,
-      );
+        let userResult = { rows: usersData || [], rowCount: usersData?.length || 0 };
+        logger.debug(
+          `[DELETE /api/users/:id] users query returned`,
+          userResult.rows.length,
+          `rows:`,
+          userResult.rows,
+        );
+        let tableName = 'users';
 
-      if (userResult.rows.length === 0) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'User not found in users or employees table',
-        });
-      }
+        // If not found in users table, check employees table
+        if (userResult.rows.length === 0) {
+          // For employees, prefer locating by id only to avoid false negatives when
+          // the caller supplies a tenant_id that doesn't match (e.g. null/unknown test users)
+          const { data: empData, error: empError } = await supabase
+            .from('employees')
+            .select('id, email, tenant_id')
+            .eq('id', id);
 
-      const userEmail = userResult.rows[0].email;
-      logger.debug(
-        {
-          id: userResult.rows[0].id,
-          email: redactEmail(userEmail),
-          tenant_id: userResult.rows[0].tenant_id,
+          if (empError) {
+            logger.error(`[DELETE /api/users/:id] Employees query error:`, empError);
+          }
+          logger.debug(
+            `[DELETE /api/users/:id] Employees Supabase returned`,
+            empData?.length || 0,
+            `rows`,
+          );
+
+          userResult = { rows: empData || [], rowCount: empData?.length || 0 };
+          tableName = 'employees';
+        }
+        logger.debug(
+          `[DELETE /api/users/:id] Located table=`,
           tableName,
-        },
-        '[DELETE /api/users/:id] Row to delete',
-      );
-
-      // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
-      const IMMUTABLE_SUPERADMINS = [
-        // 'abyfield@4vdataconsulting.com', // Primary system owner
-        // 'andrei.byfield@gmail.com', // Secondary admin account
-      ];
-
-      // 🔒 IMMUTABLE PROTECTION: Block deletion of protected superadmin accounts
-      if (
-        IMMUTABLE_SUPERADMINS.some(
-          (email) => email.toLowerCase() === (userEmail || '').toLowerCase(),
-        )
-      ) {
-        logger.warn(
-          { email: redactEmail(userEmail) },
-          '[DELETE /api/users/:id] Blocked attempt to delete immutable superadmin',
+          ` rows=`,
+          userResult.rows.length,
+          ` email=`,
+          userResult.rows[0]?.email,
         );
-        return res.status(403).json({
-          status: 'error',
-          message: 'This superadmin account is immutable and cannot be deleted',
-          code: 'IMMUTABLE_ACCOUNT',
-          hint: 'Protected superadmin accounts can only be removed directly in Supabase Auth dashboard',
-          protected_email: userEmail,
-        });
-      }
 
-      // Stopper: prevent deleting the last remaining superadmin
-      if (tableName === 'users' && (userResult.rows[0].role || '').toLowerCase() === 'superadmin') {
-        const { count: remaining } = await supabase
-          .from('users')
-          .select('id', { count: 'exact', head: true })
-          .eq('role', 'superadmin')
-          .neq('id', id);
-        if (remaining <= 0) {
-          return res.status(403).json({
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({
             status: 'error',
-            code: 'LAST_SUPERADMIN',
-            message: 'Cannot delete the last remaining superadmin.',
+            message: 'User not found in users or employees table',
           });
         }
-      }
 
-      // Delete from Supabase Auth
-      try {
+        const userEmail = userResult.rows[0].email;
         logger.debug(
-          { email: redactEmail(userEmail) },
-          '[DELETE /api/users/:id] Attempting auth delete',
-        );
-        const { user: authUser } = await getAuthUserByEmail(userEmail);
-        if (authUser?.id) {
-          await deleteAuthUser(authUser.id);
-          logger.debug(
-            { email: redactEmail(userEmail) },
-            '[DELETE /api/users/:id] Deleted auth user',
-          );
-        } else {
-          logger.debug(
-            { email: redactEmail(userEmail) },
-            '[DELETE /api/users/:id] No auth user found',
-          );
-        }
-      } catch (authError) {
-        logger.warn(
-          { email: redactEmail(userEmail), error: authError.message },
-          '[DELETE /api/users/:id] Could not delete auth user',
-        );
-        // Continue with database deletion even if auth deletion fails
-      }
-
-      // Delete from the correct table. Use the located row's tenant_id to scope the delete
-      // instead of blindly trusting req.query. This avoids non-deletes when the UI context
-      // tenant doesn't match test rows (e.g., null/"unknown").
-      let deletedRow = null;
-      if (tableName === 'users') {
-        const { data, error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', id)
-          .select('id, email')
-          .single();
-        if (error && error.code !== 'PGRST116') throw new Error(error.message);
-        deletedRow = data || null;
-      } else {
-        const rowTenant = userResult.rows[0]?.tenant_id || null;
-        let delQuery = supabase.from('employees').delete().eq('id', id);
-        if (rowTenant) delQuery = delQuery.eq('tenant_id', rowTenant);
-        const { data, error } = await delQuery.select('id, email').maybeSingle();
-        if (error && error.code !== 'PGRST116') throw new Error(error.message);
-        deletedRow = data || null;
-      }
-
-      // Ensure we actually deleted a row; otherwise report 404 to the client
-      if (!deletedRow) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'User not found or already deleted',
-          code: 'DELETE_NOT_FOUND',
-        });
-      }
-
-      logger.debug(
-        { tableName, email: redactEmail(userEmail) },
-        '[DELETE /api/users/:id] Deleted user from table',
-      );
-
-      // Create audit log for user deletion
-      try {
-        await createAuditLog(supabase, {
-          tenant_id: userResult.rows[0].tenant_id || 'system',
-          user_email: getUserEmailFromRequest(req),
-          action: 'delete',
-          entity_type: 'user',
-          entity_id: id,
-          changes: {
-            deleted_email: userEmail,
-            deleted_from_table: tableName,
-            role: userResult.rows[0].role,
+          {
+            id: userResult.rows[0].id,
+            email: redactEmail(userEmail),
+            tenant_id: userResult.rows[0].tenant_id,
+            tableName,
           },
-          ip_address: getClientIP(req),
-          user_agent: req.headers['user-agent'],
-        });
-      } catch (auditError) {
-        logger.warn('[AUDIT] Failed to log user deletion:', auditError.message);
-      }
+          '[DELETE /api/users/:id] Row to delete',
+        );
 
-      res.json({
-        status: 'success',
-        message: 'User deleted',
-        data: { user: deletedRow },
-      });
-    } catch (error) {
-      logger.error('Error deleting user:', error);
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
+        // 🔒 CRITICAL: Define immutable superadmin accounts that cannot be deleted via API
+        const IMMUTABLE_SUPERADMINS = [
+          // 'abyfield@4vdataconsulting.com', // Primary system owner
+          // 'andrei.byfield@gmail.com', // Secondary admin account
+        ];
+
+        // 🔒 IMMUTABLE PROTECTION: Block deletion of protected superadmin accounts
+        if (
+          IMMUTABLE_SUPERADMINS.some(
+            (email) => email.toLowerCase() === (userEmail || '').toLowerCase(),
+          )
+        ) {
+          logger.warn(
+            { email: redactEmail(userEmail) },
+            '[DELETE /api/users/:id] Blocked attempt to delete immutable superadmin',
+          );
+          return res.status(403).json({
+            status: 'error',
+            message: 'This superadmin account is immutable and cannot be deleted',
+            code: 'IMMUTABLE_ACCOUNT',
+            hint: 'Protected superadmin accounts can only be removed directly in Supabase Auth dashboard',
+            protected_email: userEmail,
+          });
+        }
+
+        // Stopper: prevent deleting the last remaining superadmin
+        if (
+          tableName === 'users' &&
+          (userResult.rows[0].role || '').toLowerCase() === 'superadmin'
+        ) {
+          const { count: remaining } = await supabase
+            .from('users')
+            .select('id', { count: 'exact', head: true })
+            .eq('role', 'superadmin')
+            .neq('id', id);
+          if (remaining <= 0) {
+            return res.status(403).json({
+              status: 'error',
+              code: 'LAST_SUPERADMIN',
+              message: 'Cannot delete the last remaining superadmin.',
+            });
+          }
+        }
+
+        // Delete from Supabase Auth
+        try {
+          logger.debug(
+            { email: redactEmail(userEmail) },
+            '[DELETE /api/users/:id] Attempting auth delete',
+          );
+          const { user: authUser } = await getAuthUserByEmail(userEmail);
+          if (authUser?.id) {
+            await deleteAuthUser(authUser.id);
+            logger.debug(
+              { email: redactEmail(userEmail) },
+              '[DELETE /api/users/:id] Deleted auth user',
+            );
+          } else {
+            logger.debug(
+              { email: redactEmail(userEmail) },
+              '[DELETE /api/users/:id] No auth user found',
+            );
+          }
+        } catch (authError) {
+          logger.warn(
+            { email: redactEmail(userEmail), error: authError.message },
+            '[DELETE /api/users/:id] Could not delete auth user',
+          );
+          // Continue with database deletion even if auth deletion fails
+        }
+
+        // Delete from the correct table. Use the located row's tenant_id to scope the delete
+        // instead of blindly trusting req.query. This avoids non-deletes when the UI context
+        // tenant doesn't match test rows (e.g., null/"unknown").
+        let deletedRow = null;
+        if (tableName === 'users') {
+          const { data, error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', id)
+            .select('id, email')
+            .single();
+          if (error && error.code !== 'PGRST116') throw new Error(error.message);
+          deletedRow = data || null;
+        } else {
+          const rowTenant = userResult.rows[0]?.tenant_id || null;
+          let delQuery = supabase.from('employees').delete().eq('id', id);
+          if (rowTenant) delQuery = delQuery.eq('tenant_id', rowTenant);
+          const { data, error } = await delQuery.select('id, email').maybeSingle();
+          if (error && error.code !== 'PGRST116') throw new Error(error.message);
+          deletedRow = data || null;
+        }
+
+        // Ensure we actually deleted a row; otherwise report 404 to the client
+        if (!deletedRow) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'User not found or already deleted',
+            code: 'DELETE_NOT_FOUND',
+          });
+        }
+
+        logger.debug(
+          { tableName, email: redactEmail(userEmail) },
+          '[DELETE /api/users/:id] Deleted user from table',
+        );
+
+        // Create audit log for user deletion
+        try {
+          await createAuditLog(supabase, {
+            tenant_id: userResult.rows[0].tenant_id || 'system',
+            user_email: getUserEmailFromRequest(req),
+            action: 'delete',
+            entity_type: 'user',
+            entity_id: id,
+            changes: {
+              deleted_email: userEmail,
+              deleted_from_table: tableName,
+              role: userResult.rows[0].role,
+            },
+            ip_address: getClientIP(req),
+            user_agent: req.headers['user-agent'],
+          });
+        } catch (auditError) {
+          logger.warn('[AUDIT] Failed to log user deletion:', auditError.message);
+        }
+
+        res.json({
+          status: 'success',
+          message: 'User deleted',
+          data: { user: deletedRow },
+        });
+      } catch (error) {
+        logger.error('Error deleting user:', error);
+        res.status(500).json({ status: 'error', message: error.message });
+      }
+    },
+  );
 
   // POST /api/users/reset-password - Send password reset email
   router.post('/reset-password', passwordLimiter, async (req, res) => {
@@ -2720,7 +2732,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/generate-recovery-link - Dev diagnostic: generate recovery link without email delivery
-  router.post('/generate-recovery-link', passwordLimiter, async (req, res) => {
+  // P0-sec: requireAdminRole — recovery link generation must require elevated role
+  router.post('/generate-recovery-link', passwordLimiter, requireAdminRole, async (req, res) => {
     try {
       if (process.env.NODE_ENV === 'production') {
         return res.status(403).json({ status: 'error', message: 'Not available in production' });
@@ -2747,7 +2760,8 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   });
 
   // POST /api/users/admin-password-reset - Direct password reset (for dev/admin use)
-  router.post('/admin-password-reset', passwordLimiter, async (req, res) => {
+  // P0-sec: requireSuperAdminRole — forcibly resetting any user's password is superadmin-only
+  router.post('/admin-password-reset', passwordLimiter, requireSuperAdminRole, async (req, res) => {
     try {
       const { email, password } = req.body;
 

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **P0 security hardening — tenant/authz, CSRF, secrets/logging pass**:
+  - `backend/server.js`: Added `authenticateRequest` + `requireSuperAdminRole` to `/api/tenants` mount -- previously had no auth at all, allowing unauthenticated callers to cascade-delete entire tenants. Added `authenticateRequest` to `/api/users` and `/api/permissions` mounts -- individual `requireAuth`/`requireAdminRole` guards in those routers were being bypassed because `req.user` was never populated.
+  - `backend/routes/users.js`: Added `requireAdminRole` to `POST /bulk-delete` and `DELETE /:id`. Added `requireSuperAdminRole` to `POST /admin-password-reset`. Added `requireAdminRole` to `POST /generate-recovery-link`.
+  - `backend/middleware/authenticate.js`: Removed unconditional `logger.warn` that fired on every request, flooding logs. Gated behind `AUTH_DEBUG=true` at debug level.
+  - `backend/__tests__/routes/p0-security.test.js`: 21 new tests covering all hardened routes. All pass.
+
 ### Added
 
 - **Finance Ops — beta CSV exports** (`feat/finance-ops-beta-exports`): read-only CSV export for recordkeeping handoff on the Finance Ops panels (Draft Invoices, Journal Drafts, Approvals, Adapter Queue, Journal Entries, Audit Timeline, Ledger Summary, Evidence pack). New `src/components/finance/financeCsv.js` (`columnsToRecords`/`recordsToCsv`/`financeExportFilename`/`downloadCsv`) serializes each export from the panel's **displayed column model** (header = column label, cell = `render(row) ?? row[key]`) so the CSV matches what users see; Ledger Summary exports operator labels + `$` amounts (not raw `*_cents`/JSON). New `FinanceCsvExportButton.jsx` is disabled with an operator-facing tooltip when a panel is empty. Exports cover the displayed page (50-row default; documented limitation), are tenant-scoped + read-only (no new endpoint, no mutation), and carry no secrets/credentials (`/adapters` is not exported; evidence export is metadata + integrity hashes only, asserted by test). **PDF export deferred** (follow-up). Tests: `financeCsv.test.js`, `FinanceCsvExportButton.test.jsx`, and per-panel `*.export.test.jsx`. Docs: checklist §5 → Implemented, limitations updated, `docs/architecture/finance/finance-ops-beta-exports-slice-design.md`, `docs/plans/2026-05-31-finance-ops-beta-exports.md`.

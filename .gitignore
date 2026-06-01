@@ -262,3 +262,9 @@ docker-compose.staging.yml
 
 # Codex agent worktree / environment artifacts (per-machine tooling, not portable)
 .codex/
+
+# Local autonomous "codebase review" agent script + its generated artifacts
+# (per-machine vLLM tooling, not part of the app)
+scripts/codebase_review.py
+scripts/codebase_review_report.md
+scripts/codebase_review_chunks/

@@ -50,8 +50,10 @@ function normalizeRole(role) {
 
 export async function authenticateRequest(req, _res, next) {
   try {
-    // DEBUG: Log EVERY request to see if middleware runs
-    logger.warn(`[AUTH] Processing ${req.method} ${req.path}`);
+    // P0-sec: Demoted from warn to debug -- this fired on every request and flooded logs.
+    if (process.env.AUTH_DEBUG === 'true') {
+      logger.debug(`[AUTH] Processing ${req.method} ${req.path}`);
+    }
 
     // DEBUG: Log auth context for diagnostics (only when AUTH_DEBUG=true)
     const authHeader = req.headers?.authorization || '';
@@ -101,7 +103,7 @@ export async function authenticateRequest(req, _res, next) {
     const cookieToken = req.cookies?.aisha_access;
     if (cookieToken) {
       try {
-        // Match signing logic in routes/auth.js — fail-fast in prod via jwtSecret
+        // Match signing logic in routes/auth.js -- fail-fast in prod via jwtSecret
         const secret = getAccessSecret();
 
         // Explicitly verify with HS256 algorithm only
