@@ -27,7 +27,7 @@ jobs:
         uses: Codium-ai/pr-agent@main
         env:
           OPENAI_KEY: "local"
-          OPENAI_API_BASE: "http://localhost:11434/v1"
+          OPENAI_API_BASE: "http://172.17.0.1:11434/v1"
           CONFIG.MODEL: "ollama/qwen2.5-coder:7b"
           CONFIG.MODEL_WEAK: "ollama/qwen2.5-coder:7b"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
