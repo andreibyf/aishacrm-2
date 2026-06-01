@@ -85,15 +85,12 @@ after(async () => {
 
 describe('users.js - Section 2.6: User Deletion', () => {
   describe('DELETE /api/users/:id - Delete user', () => {
-    it('should require valid user ID', async () => {
+    it('should return 404 for malformed UUID before auth/database checks', async () => {
       const response = await makeRequest('DELETE', '/api/users/invalid-id');
-      // May return 404 for not found or 500 for Supabase init error
-      assert([404, 500].includes(response.status));
-      if (response.status === 404) {
-        const data = await response.json();
-        assert.strictEqual(data.status, 'error');
-        assert(data.message.includes('not found'));
-      }
+      assert.strictEqual(response.status, 404);
+      const data = await response.json();
+      assert.strictEqual(data.status, 'error');
+      assert.strictEqual(data.message, 'User not found in users or employees table');
     });
 
     it('should delete user from users table', async () => {

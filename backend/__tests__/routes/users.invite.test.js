@@ -109,16 +109,14 @@ after(async () => {
 
 describe('users.js - Section 2.8: User Invitations', () => {
   describe('POST /api/users/:id/invite - Send invitation to user', () => {
-    it('should return 404 for non-existent user', async () => {
-      const response = await makeRequest('POST', '/api/users/99999/invite');
-      // Currently returns 500 due to Supabase client not initialized in test environment
-      // In production, this would return 404 for non-existent users
-      assert([404, 500].includes(response.status));
-      if (response.status === 404) {
-        const data = await response.json();
-        assert.strictEqual(data.status, 'error');
-        assert.strictEqual(data.message, 'User not found');
-      }
+    it('should return 404 for malformed UUID before DB lookup', async () => {
+      const response = await makeRequest('POST', '/api/users/99999/invite', null, {
+        'X-Forwarded-For': '127.0.0.21',
+      });
+      assert.strictEqual(response.status, 404);
+      const data = await response.json();
+      assert.strictEqual(data.status, 'error');
+      assert.strictEqual(data.message, 'User not found');
     });
 
     it('should send password reset for existing auth user', async () => {
@@ -176,32 +174,24 @@ describe('users.js - Section 2.8: User Invitations', () => {
   });
 
   describe('POST /api/users/:id/resend-invite - Alias endpoint for backward compatibility', () => {
-    it('should work identically to /invite endpoint and not return 404', async () => {
-      const response = await makeRequest('POST', '/api/users/99999/resend-invite');
+    it('should match /invite malformed UUID behavior', async () => {
+      const inviteResponse = await makeRequest('POST', '/api/users/99999/invite', null, {
+        'X-Forwarded-For': '127.0.0.22',
+      });
+      const resendResponse = await makeRequest('POST', '/api/users/99999/resend-invite', null, {
+        'X-Forwarded-For': '127.0.0.23',
+      });
 
-      // Log for debugging
-      const responseStatus = response.status;
+      assert.strictEqual(inviteResponse.status, 404);
+      assert.strictEqual(resendResponse.status, 404);
 
-      // Should not return 404 - the endpoint must exist
-      assert.notStrictEqual(
-        responseStatus,
-        404,
-        `resend-invite endpoint should exist and not return 404, got ${responseStatus}`,
-      );
+      const inviteData = await inviteResponse.json();
+      const resendData = await resendResponse.json();
 
-      // The endpoint should behave like /invite
-      // May return 429 if rate limited, 500 due to Supabase client not initialized in test environment,
-      // or 404 for non-existent users in production
-      assert(
-        [404, 429, 500].includes(responseStatus),
-        `Expected 404, 429, or 500, got ${responseStatus}`,
-      );
-
-      if (responseStatus === 404) {
-        const data = await response.json();
-        assert.strictEqual(data.status, 'error');
-        assert.strictEqual(data.message, 'User not found');
-      }
+      assert.strictEqual(inviteData.status, 'error');
+      assert.strictEqual(resendData.status, 'error');
+      assert.strictEqual(inviteData.message, 'User not found');
+      assert.strictEqual(resendData.message, 'User not found');
     });
 
     it('should apply rate limiting to POST /:id/resend-invite', async () => {

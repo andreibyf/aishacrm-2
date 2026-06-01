@@ -23,6 +23,8 @@ import logger from '../lib/logger.js';
 import { redactEmail, summarizeRowsForLog, toSafeErrorMeta } from '../lib/logger.js';
 import { clearVisibilityCache } from '../lib/teamVisibility.js';
 import { requireAdminRole, requireSuperAdminRole } from '../middleware/validateTenant.js';
+import { isValidUUID } from '../lib/uuidValidator.js';
+import { isValidEmail } from '../config/constants.js';
 
 export default function createUserRoutes(_pgPool, _supabaseAuth) {
   const router = express.Router();
@@ -2457,6 +2459,18 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   router.delete(
     '/:id',
     mutateLimiter,
+    (req, res, next) => {
+      const { id } = req.params;
+      // Short-circuit malformed IDs before auth/DB work.
+      // This preserves legacy not-found semantics for non-UUID IDs used by older clients/tests.
+      if (!isValidUUID(id)) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'User not found in users or employees table',
+        });
+      }
+      return next();
+    },
     requireAdminRole,
     invalidateCache('users'),
     async (req, res) => {
@@ -2739,10 +2753,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
         return res.status(403).json({ status: 'error', message: 'Not available in production' });
       }
       const { email, redirectTo } = req.body || {};
-      if (!email) {
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      if (!normalizedEmail) {
         return res.status(400).json({ status: 'error', message: 'email is required' });
       }
-      const { link, error } = await generateRecoveryLink(email, redirectTo);
+      if (!isValidEmail(normalizedEmail)) {
+        return res.status(400).json({ status: 'error', message: 'Invalid email format' });
+      }
+      const { link, error } = await generateRecoveryLink(normalizedEmail, redirectTo);
       if (error) {
         return res.status(500).json({
           status: 'error',
@@ -2763,17 +2781,25 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
   // P0-sec: requireSuperAdminRole — forcibly resetting any user's password is superadmin-only
   router.post('/admin-password-reset', passwordLimiter, requireSuperAdminRole, async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password } = req.body || {};
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const normalizedPassword = typeof password === 'string' ? password : '';
 
-      if (!email || !password) {
+      if (!normalizedEmail || !normalizedPassword.trim()) {
         return res.status(400).json({
           status: 'error',
           message: 'email and password are required',
         });
       }
+      if (!isValidEmail(normalizedEmail)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid email format',
+        });
+      }
 
       // Get auth user by email
-      const { user: authUser, error: getUserError } = await getAuthUserByEmail(email);
+      const { user: authUser, error: getUserError } = await getAuthUserByEmail(normalizedEmail);
 
       if (getUserError || !authUser) {
         return res.status(404).json({
@@ -2783,7 +2809,7 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       // Update password AND confirm email
-      const { error: updateError } = await updateAuthUserPassword(authUser.id, password);
+      const { error: updateError } = await updateAuthUserPassword(authUser.id, normalizedPassword);
 
       if (updateError) {
         logger.error('[Admin Password Reset] Error:', {
@@ -2826,14 +2852,14 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       }
 
       logger.debug(
-        { email: redactEmail(email) },
+        { email: redactEmail(normalizedEmail) },
         '[Admin Password Reset] Password reset completed',
       );
 
       res.json({
         status: 'success',
         message: 'Password updated, email confirmed, and expiration cleared',
-        data: { email, userId: authUser.id },
+        data: { email: normalizedEmail, userId: authUser.id },
       });
     } catch (error) {
       logger.error({ error: toSafeErrorMeta(error) }, 'Error in admin password reset');
@@ -2848,6 +2874,15 @@ export default function createUserRoutes(_pgPool, _supabaseAuth) {
       const { redirect_url } = req.body;
 
       logger.debug(`[User Invite] Sending invitation for user ID: ${id}`);
+
+      // Avoid UUID type errors from Supabase/Postgres for malformed IDs.
+      // Keep response shape/status compatible with existing "not found" behavior.
+      if (!isValidUUID(id)) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'User not found',
+        });
+      }
 
       // Fetch user from database using Supabase
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
