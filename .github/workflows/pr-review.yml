@@ -20,7 +20,7 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/review')) ||
       github.event_name == 'pull_request_review_comment'
     runs-on: [self-hosted, ai-server]
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: AI Code Review
@@ -31,7 +31,7 @@ jobs:
           CONFIG.MODEL: "openai/qwen-14b"
           CONFIG.MODEL_WEAK: "openai/qwen-14b"
           CONFIG.FALLBACK_MODELS: "[]"
-          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "16000"
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "32000"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
           PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
