@@ -36,6 +36,16 @@ before(async () => {
   app = express();
   app.set('trust proxy', 1); // Trust proxy to use X-Forwarded-For header
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = {
+      id: 'test-superadmin-user',
+      email: 'superadmin@test.com',
+      role: 'superadmin',
+      is_superadmin: true,
+      tenant_id: null,
+    };
+    next();
+  });
 
   // Mock pgPool and supabaseAuth for testing
   const mockPgPool = null; // Routes should handle null pgPool gracefully for middleware tests
@@ -188,6 +198,20 @@ describe('users.js - Section 2.7: Password Management', () => {
       }
     });
 
+    it('should reject invalid email format', async () => {
+      const response = await makeRequest(
+        'POST',
+        '/api/users/generate-recovery-link',
+        { email: 'not-an-email' },
+        { 'X-Forwarded-For': '127.0.0.61' },
+      );
+
+      assert.strictEqual(response.status, 400);
+      const data = await response.json();
+      assert.strictEqual(data.status, 'error');
+      assert(data.message.includes('Invalid email format'));
+    });
+
     it('should generate recovery link successfully', async () => {
       const response = await makeRequest('POST', '/api/users/generate-recovery-link', {
         email: 'test@example.com',
@@ -233,6 +257,23 @@ describe('users.js - Section 2.7: Password Management', () => {
         assert.strictEqual(data.status, 'error');
         assert(data.message.includes('email and password are required'));
       }
+    });
+
+    it('should reject invalid email format', async () => {
+      const response = await makeRequest(
+        'POST',
+        '/api/users/admin-password-reset',
+        {
+          email: 'invalid-email',
+          password: 'newpass123',
+        },
+        { 'X-Forwarded-For': '127.0.0.62' },
+      );
+
+      assert.strictEqual(response.status, 400);
+      const data = await response.json();
+      assert.strictEqual(data.status, 'error');
+      assert(data.message.includes('Invalid email format'));
     });
 
     it('should require password parameter', async () => {
