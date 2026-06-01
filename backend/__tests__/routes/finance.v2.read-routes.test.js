@@ -4,6 +4,11 @@ import express from 'express';
 import request from 'supertest';
 import createFinanceV2Routes from '../../routes/finance.v2.js';
 import createFinanceDomainService from '../../lib/finance/financeDomainService.js';
+import {
+  buildLedger,
+  buildProfitAndLoss,
+  buildBalanceSheet,
+} from '../../lib/finance/accountingEngine.js';
 
 // Read-only GET endpoints — Finance Read API Implementation Slice 1.
 // Contracts frozen in docs/architecture/finance/finance-ui-slice-1-api-gaps-design.md §6.
@@ -652,5 +657,53 @@ describe('finance.v2 read endpoints — no mutation', () => {
     }
     const after = (await service.getState(TENANT_ID)).auditEvents.length;
     assert.equal(after, before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Beta integrity slice — the financial-statement routes must return exactly
+// what the accounting engine computes (no recompute / shape drift between the
+// engine source of truth and the GET pass-through routes).
+// ---------------------------------------------------------------------------
+describe('finance.v2 ledger/P&L/balance-sheet — engine parity', () => {
+  const line = (classification, account_name, debit_cents, credit_cents) => ({
+    classification,
+    account_name,
+    debit_cents,
+    credit_cents,
+  });
+  const entry = (status, lines) => ({ tenant_id: TENANT_ID, status, lines });
+  const FIXTURE = [
+    entry('posted', [line('Asset', 'Cash', 500000, 0), line('Equity', 'Owner Capital', 0, 500000)]),
+    entry('posted', [line('Asset', 'Cash', 200000, 0), line('Revenue', 'Sales', 0, 200000)]),
+    entry('posted', [line('Expense', 'Rent', 80000, 0), line('Asset', 'Cash', 0, 80000)]),
+    entry('draft', [line('Asset', 'Cash', 999999, 0), line('Revenue', 'Sales', 0, 999999)]),
+  ];
+  function seeded() {
+    const service = createFinanceDomainService();
+    FIXTURE.forEach((e) => service.seedJournalEntry(e));
+    return service;
+  }
+
+  test('GET /ledger equals buildLedger', async () => {
+    const { app } = buildApp({ service: seeded() });
+    const res = await request(app).get('/api/v2/finance/ledger');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, buildLedger(FIXTURE));
+  });
+
+  test('GET /profit-loss equals buildProfitAndLoss', async () => {
+    const { app } = buildApp({ service: seeded() });
+    const res = await request(app).get('/api/v2/finance/profit-loss');
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, buildProfitAndLoss(FIXTURE));
+  });
+
+  test('GET /balance-sheet equals buildBalanceSheet (is_balanced=false)', async () => {
+    const { app } = buildApp({ service: seeded() });
+    const res = await request(app).get('/api/v2/finance/balance-sheet');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.totals.is_balanced, false);
+    assert.deepEqual(res.body.data, buildBalanceSheet(FIXTURE));
   });
 });
