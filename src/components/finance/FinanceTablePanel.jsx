@@ -6,8 +6,9 @@
  * button, loading / empty / error / table states) so every newly-live read
  * tab presents identical chrome.
  *
- * Read-only by construction: the ONLY interactive control is the Refresh
- * button. No mutating affordance is rendered or accepted.
+ * Read-only by construction: the only interactive controls are Refresh and,
+ * when `exportArea` is set, a CSV Export button (a read-only serialization of
+ * the already-displayed rows). No mutating affordance is rendered or accepted.
  *
  * @param {object} props
  * @param {string} props.tenantId
@@ -24,6 +25,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
+import { columnsToRecords } from './financeCsv';
 
 export default function FinanceTablePanel({
   tenantId,
@@ -34,6 +37,7 @@ export default function FinanceTablePanel({
   columns,
   fetcher,
   selectRows,
+  exportArea,
 }) {
   const [state, setState] = useState({ rows: [], loading: false, error: null });
 
@@ -67,22 +71,31 @@ export default function FinanceTablePanel({
           <CardTitle className="text-base font-semibold text-slate-100">{title}</CardTitle>
           {description ? <p className="mt-1 text-xs text-slate-400">{description}</p> : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => load()}
-          disabled={state.loading}
-          data-testid={`${testId}-refresh`}
-          aria-label={`Refresh ${title}`}
-          className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
-        >
-          <RefreshCcw
-            className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
-            aria-hidden="true"
-          />
-          <span className="ml-1.5 text-xs">Refresh</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {exportArea ? (
+            <FinanceCsvExportButton
+              records={columnsToRecords(columns, state.rows)}
+              area={exportArea}
+              tenantId={tenantId}
+            />
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => load()}
+            disabled={state.loading}
+            data-testid={`${testId}-refresh`}
+            aria-label={`Refresh ${title}`}
+            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCcw
+              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="ml-1.5 text-xs">Refresh</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {state.error ? (

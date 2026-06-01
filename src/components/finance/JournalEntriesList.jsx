@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
+import { columnsToRecords } from './financeCsv';
 
 const COLUMN_DEFS = [
   { key: 'id', label: 'ID' },
@@ -75,22 +77,29 @@ export default function JournalEntriesList({ tenantId }) {
             deferred to a later slice.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => fetchEntries()}
-          disabled={state.loading}
-          data-testid="finance-journal-entries-refresh"
-          aria-label="Refresh journal entries"
-          className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
-        >
-          <RefreshCcw
-            className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
-            aria-hidden="true"
+        <div className="flex items-center gap-2">
+          <FinanceCsvExportButton
+            records={columnsToRecords(COLUMN_DEFS, state.entries)}
+            area="journal-entries"
+            tenantId={tenantId}
           />
-          <span className="ml-1.5 text-xs">Refresh</span>
-        </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fetchEntries()}
+            disabled={state.loading}
+            data-testid="finance-journal-entries-refresh"
+            aria-label="Refresh journal entries"
+            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCcw
+              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="ml-1.5 text-xs">Refresh</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {state.error ? (

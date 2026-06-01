@@ -3,8 +3,8 @@
  *
  * §7.8 Audit timeline tab — now live via GET /api/v2/finance/audit-events
  * (design freeze §6.5). Cursor-paginated, newest first. Read-only: the only
- * controls are Refresh and Load more (cursor advance). No per-event mutation,
- * no export.
+ * controls are Refresh, Load more (cursor advance), and CSV Export (a read-only
+ * serialization of the currently-loaded events). No per-event mutation.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
+import { columnsToRecords } from './financeCsv';
 
 const COLUMNS = [
   { key: 'occurred_at', label: 'Occurred At' },
@@ -68,22 +70,29 @@ export default function AuditTimelinePanel({ tenantId }) {
               bounded by process restart until persistent reads land.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => load()}
-            disabled={state.loading}
-            data-testid="finance-audit-timeline-refresh"
-            aria-label="Refresh audit timeline"
-            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
-          >
-            <RefreshCcw
-              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
-              aria-hidden="true"
+          <div className="flex items-center gap-2">
+            <FinanceCsvExportButton
+              records={columnsToRecords(COLUMNS, state.events)}
+              area="audit-events"
+              tenantId={tenantId}
             />
-            <span className="ml-1.5 text-xs">Refresh</span>
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => load()}
+              disabled={state.loading}
+              data-testid="finance-audit-timeline-refresh"
+              aria-label="Refresh audit timeline"
+              className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+            >
+              <RefreshCcw
+                className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              <span className="ml-1.5 text-xs">Refresh</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {state.error ? (

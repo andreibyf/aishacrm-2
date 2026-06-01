@@ -4,9 +4,10 @@
  * §7.11 Evidence / audit pack tab — now live via GET /api/v2/finance/evidence
  * -packs (design freeze §6.8, FIXED). Builds ONE tamper-evident evidence pack
  * on demand from the tenant event stream and shows its metadata + integrity
- * hashes. There is no historical pack registry (none exists), no generate /
- * download / share affordance; building a pack is a pure read. The only
- * control is Refresh (rebuild for the current scope).
+ * hashes. There is no historical pack registry (none exists) and no generate /
+ * share affordance; building a pack is a pure read. The controls are Refresh
+ * (rebuild for the current scope) and a read-only CSV Export of the displayed
+ * pack metadata + integrity hashes (no secrets).
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -14,6 +15,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
+import { displayCell } from './financeCsv';
+
+/**
+ * CSV records for the displayed evidence-pack fields, mirroring the on-screen
+ * cell text (empty -> '—', artifact_count 0 -> '0'). Integrity hashes are
+ * tamper-evidence values, not secrets; no credential/token field is ever
+ * surfaced (the API does not return any).
+ */
+function evidenceRecords(pack) {
+  if (!pack) return [];
+  return [
+    { Field: 'Pack ID', Value: displayCell(pack.pack_id) },
+    { Field: 'Generated at', Value: displayCell(pack.generated_at) },
+    { Field: 'Artifact count', Value: displayCell(pack.artifact_count) },
+    { Field: 'Pack hash', Value: displayCell(pack.integrity?.pack_hash) },
+    { Field: 'Events hash', Value: displayCell(pack.integrity?.events_hash) },
+    { Field: 'Approvals hash', Value: displayCell(pack.integrity?.approvals_hash) },
+  ];
+}
 
 function Row({ label, value, testId }) {
   return (
@@ -70,22 +91,29 @@ export default function EvidencePlaceholder({ tenantId }) {
               download action.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => load()}
-            disabled={state.loading}
-            data-testid="finance-evidence-refresh"
-            aria-label="Rebuild evidence pack"
-            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
-          >
-            <RefreshCcw
-              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
-              aria-hidden="true"
+          <div className="flex items-center gap-2">
+            <FinanceCsvExportButton
+              records={evidenceRecords(pack)}
+              area="evidence-pack"
+              tenantId={tenantId}
             />
-            <span className="ml-1.5 text-xs">Refresh</span>
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => load()}
+              disabled={state.loading}
+              data-testid="finance-evidence-refresh"
+              aria-label="Rebuild evidence pack"
+              className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+            >
+              <RefreshCcw
+                className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              <span className="ml-1.5 text-xs">Refresh</span>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-slate-200">
           {state.error ? (

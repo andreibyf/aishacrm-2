@@ -49,13 +49,23 @@ Legend: ✅ Implemented · 🟡 Partial (works for the read-only beta scope; nam
 | Access/module denial is auditable/testable                                     | ✅          | authorization-matrix tests assert 403 paths deterministically                                                                                    |
 | Persistent evidence-pack registry / file download                              | ⛔ Deferred | Evidence packs are built on demand; a persistent pack registry + file export is a follow-up                                                      |
 
-## 5. Export-based recordkeeping ⛔ Deferred (next slice)
+## 5. Export-based recordkeeping ✅ CSV implemented / 🟡 PDF deferred
 
-CSV/PDF export is intentionally **not** in this slice. Per Andrei's steer — _"reports always come
-afterwards"_ — recordkeeping export is the immediate follow-up once the numbers are proven (this slice).
-A reusable `src/components/shared/CsvExportButton.jsx` already exists; the export slice must build CSV from
-each panel's **displayed columns** (label→header, rendered value→cell) so the export provably matches
-on-screen/API data, and must be tenant-scoped + read-only.
+Implemented in the Beta Exports slice (`feat/finance-ops-beta-exports`). CSV export is wired into the
+read-only panels and serialized from each panel's **displayed column model** (`columnsToRecords` →
+header = column label, cell = `render(row) ?? row[key]`), so the export provably matches on-screen/API data.
+
+| Claim                               | Enforcement                                                                                                                                         | Evidence                                                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Exports match on-screen/API data    | `src/components/finance/financeCsv.js` `columnsToRecords` over each panel's displayed `columns`+`rows`; Ledger uses operator labels + `formatCents` | `financeCsv.test.js`; `*.export.test.jsx` per panel; `LedgerSummary.export.test.jsx` asserts `$` amounts + labels, not raw `*_cents`/JSON |
+| Tenant-scoped + read-only           | Export serializes only already-fetched, gated, displayed data; no new endpoint, no POST/mutation                                                    | per-panel read-only assertions (`LiveDataPanels.test.jsx`, `LedgerSummary.test.jsx`)                                                      |
+| No secrets/credentials/tokens       | Built from displayed columns (no credential fields); `/adapters` registry is **not** exported                                                       | `EvidencePlaceholder.export.test.jsx` asserts no `secret/credential/token/api_key/password`                                               |
+| Deterministic empty state           | Export button **disabled with an operator-facing tooltip** when a panel has no rows                                                                 | `FinanceCsvExportButton.test.jsx`; per-panel disabled-when-empty tests                                                                    |
+| Filenames carry context, no secrets | `financeExportFilename` → `finance-<area>_<tenantShort>_<YYYY-MM-DD>`                                                                               | `financeCsv.test.js`                                                                                                                      |
+
+Covered panels: Draft Invoices, Journal Drafts, Approvals, Adapter Queue, Journal Entries, Audit Timeline,
+Ledger Summary, Evidence pack. **PDF export remains deferred** (CSV is the beta recordkeeping export; PDF is
+a follow-up enhancement). See [finance-ops-beta-limitations.md](./finance-ops-beta-limitations.md).
 
 ---
 

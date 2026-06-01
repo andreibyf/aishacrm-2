@@ -29,6 +29,7 @@ export default function AdapterQueuePanel({ tenantId }) {
         description="Read-only list of adapter jobs for this tenant. Retry and cancel actions are not available in this slice."
         emptyText="No adapter jobs for this tenant yet."
         columns={COLUMNS}
+        exportArea="adapter-jobs"
         fetcher={finance.getAdapterJobs}
         selectRows={(data) => (Array.isArray(data?.adapter_jobs) ? data.adapter_jobs : [])}
       />
