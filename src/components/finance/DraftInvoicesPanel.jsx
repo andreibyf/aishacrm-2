@@ -31,6 +31,7 @@ export default function DraftInvoicesPanel({ tenantId }) {
         description="Read-only list of draft invoices for this tenant. Create and edit actions are deferred to a later slice."
         emptyText="No draft invoices for this tenant yet."
         columns={COLUMNS}
+        exportArea="draft-invoices"
         fetcher={finance.getDraftInvoices}
         selectRows={(data) => (Array.isArray(data?.invoices) ? data.invoices : [])}
       />

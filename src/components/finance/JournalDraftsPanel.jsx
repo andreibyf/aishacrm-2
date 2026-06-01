@@ -29,6 +29,7 @@ export default function JournalDraftsPanel({ tenantId }) {
         description="Read-only list of draft and pending-approval journal entries for this tenant."
         emptyText="No journal drafts for this tenant yet."
         columns={COLUMNS}
+        exportArea="journal-drafts"
         fetcher={finance.getJournalDrafts}
         selectRows={(data) => (Array.isArray(data?.journal_drafts) ? data.journal_drafts : [])}
       />

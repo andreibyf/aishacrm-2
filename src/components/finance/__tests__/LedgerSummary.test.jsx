@@ -136,11 +136,12 @@ describe('LedgerSummary', () => {
     expect(mockFinance.getLedger).not.toHaveBeenCalled();
   });
 
-  it('exposes only the Refresh button — no mutating affordance', async () => {
+  it('exposes only read-only controls (Refresh + Export CSV) — no mutating affordance', async () => {
     render(<LedgerSummary tenantId={TENANT_ID} />);
     await waitFor(() => expect(mockFinance.getLedger).toHaveBeenCalledOnce());
     const buttons = screen.getAllByRole('button');
     const labels = buttons.map((b) => (b.textContent || b.getAttribute('aria-label') || '').trim());
-    expect(labels.every((l) => /refresh/i.test(l))).toBe(true);
+    // Refresh (re-read) and Export CSV (read-only recordkeeping serialization) only.
+    expect(labels.every((l) => /refresh|export/i.test(l))).toBe(true);
   });
 });

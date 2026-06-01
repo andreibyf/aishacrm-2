@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
 
 /** Format an integer-cents value as USD currency, defaulting null/NaN to $0.00. */
 function formatCents(cents) {
@@ -32,6 +33,34 @@ function formatCents(cents) {
 
 function asArray(v) {
   return Array.isArray(v) ? v : [];
+}
+
+/**
+ * Build the CSV export records for the ledger summary: operator-facing
+ * { Section, Line, Amount } rows using readable labels + formatted currency
+ * (never raw `*_cents` keys or JSON). Returns [] when nothing has loaded so the
+ * export control disables.
+ */
+function ledgerStatementRecords({ ledger, profitLoss, balanceSheet }) {
+  if (!ledger && !profitLoss && !balanceSheet) return [];
+  const rec = (Section, Line, Amount) => ({ Section, Line, Amount });
+  const out = [];
+  asArray(ledger?.accounts).forEach((a) =>
+    out.push(
+      rec('Ledger', a.account_name || a.account_code || 'Account', formatCents(a.balance_cents)),
+    ),
+  );
+  out.push(rec('Ledger', 'Debits', formatCents(ledger?.totals?.debit_cents)));
+  out.push(rec('Ledger', 'Credits', formatCents(ledger?.totals?.credit_cents)));
+  out.push(rec('Profit & Loss', 'Revenue', formatCents(profitLoss?.totals?.revenue_cents)));
+  out.push(rec('Profit & Loss', 'Expenses', formatCents(profitLoss?.totals?.expense_cents)));
+  out.push(rec('Profit & Loss', 'Net income', formatCents(profitLoss?.totals?.net_income_cents)));
+  out.push(rec('Balance sheet', 'Assets', formatCents(balanceSheet?.totals?.assets_cents)));
+  out.push(
+    rec('Balance sheet', 'Liabilities', formatCents(balanceSheet?.totals?.liabilities_cents)),
+  );
+  out.push(rec('Balance sheet', 'Equity', formatCents(balanceSheet?.totals?.equity_cents)));
+  return out;
 }
 
 function SummaryRow({ label, value, testId }) {
@@ -211,22 +240,29 @@ export default function LedgerSummary({ tenantId }) {
             are shown in USD.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => fetchAll()}
-          disabled={state.loading}
-          data-testid="finance-ledger-summary-refresh"
-          aria-label="Refresh ledger summary"
-          className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
-        >
-          <RefreshCcw
-            className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
-            aria-hidden="true"
+        <div className="flex items-center gap-2">
+          <FinanceCsvExportButton
+            records={ledgerStatementRecords(state)}
+            area="ledger"
+            tenantId={tenantId}
           />
-          <span className="ml-1.5 text-xs">Refresh</span>
-        </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fetchAll()}
+            disabled={state.loading}
+            data-testid="finance-ledger-summary-refresh"
+            aria-label="Refresh ledger summary"
+            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+          >
+            <RefreshCcw
+              className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            <span className="ml-1.5 text-xs">Refresh</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-5">
         <Section

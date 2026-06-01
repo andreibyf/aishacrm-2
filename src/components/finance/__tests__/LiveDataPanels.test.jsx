@@ -39,9 +39,11 @@ afterEach(() => cleanup());
 // A button is "read-only-safe" if its accessible name carries no mutating verb
 // (approve / reject / reverse / replay / retry / cancel / sync / generate /
 // create / delete / post / send / save / enable / disable / activate). Refresh,
-// Load more, and Rebuild (a pure re-read) are allowed.
+// Load more, Rebuild (a pure re-read), and Export CSV (a read-only recordkeeping
+// serialization of already-displayed data — authorized by the Beta Exports
+// packet) are allowed.
 const MUTATING_LABEL =
-  /(approve|reject|reverse|replay|retry|cancel|sync|generate|create|delete|remove|post|send|submit|save|enable|disable|activate|deactivate|trigger|download|export)/i;
+  /(approve|reject|reverse|replay|retry|cancel|sync|generate|create|delete|remove|post|send|submit|save|enable|disable|activate|deactivate|trigger)/i;
 function assertOnlyReadOnlyButtons() {
   for (const btn of screen.queryAllByRole('button')) {
     const label = btn.getAttribute('aria-label') || btn.textContent || '';

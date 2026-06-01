@@ -31,6 +31,7 @@ export default function ApprovalQueuePanel({ tenantId }) {
         description="Read-only list of pending approvals for this tenant. Approve and reject actions are not available in this slice."
         emptyText="No pending approvals for this tenant."
         columns={COLUMNS}
+        exportArea="approvals"
         fetcher={(tenantId, opts) => finance.getApprovals(tenantId, { status: 'pending', ...opts })}
         selectRows={(data) => (Array.isArray(data?.approvals) ? data.approvals : [])}
       />
