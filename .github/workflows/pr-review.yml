@@ -31,11 +31,11 @@ jobs:
           CONFIG.MODEL: "openai/qwen-14b"
           CONFIG.MODEL_WEAK: "openai/qwen-14b"
           CONFIG.FALLBACK_MODELS: "[]"
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "16000"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
           PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
           PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
-          CONFIG.MAX_MODEL_TOKENS: "16000"
           PR_REVIEWER.EXTRA_INSTRUCTIONS: |
             This is AiSHA CRM, a multi-tenant Node.js/React CRM. Apply these rules:
             1. CRITICAL: tenant_id must always be UUID (req.tenant.id). Flag any use of tenant_id_text or string slugs as a critical bug.
