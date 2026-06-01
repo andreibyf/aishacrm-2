@@ -26,10 +26,10 @@ jobs:
       - name: AI Code Review
         uses: Codium-ai/pr-agent@main
         env:
-          OPENAI_KEY: "local"
-          OPENAI_API_BASE: "http://172.17.0.1:11434/v1"
-          CONFIG.MODEL: "ollama/qwen2.5-coder:7b"
-          CONFIG.MODEL_WEAK: "ollama/qwen2.5-coder:7b"
+          OPENAI_KEY: "JL_XEpLuEgYgpxpVO9Dg_IyDFrj7Pjwy_SFxKA7NnOY"
+          OPENAI_API_BASE: "http://172.17.0.1:8000/v1"
+          CONFIG.MODEL: "openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ"
+          CONFIG.MODEL_WEAK: "openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
           PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
