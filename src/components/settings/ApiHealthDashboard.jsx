@@ -19,6 +19,12 @@ import { BACKEND_URL } from '../../api/entities';
 import { createHealthIssue, generateAPIFixSuggestion } from '../../utils/githubIssueCreator';
 import { supabase } from '../../lib/supabase';
 import { useTenant } from '../shared/tenantContext';
+import {
+  fetchJsonWithHandling,
+  getErrorMessage,
+  isAbortError,
+  logApiError,
+} from '../../utils/apiErrorHandling';
 
 // Fallback tenant UUID for API health tests when no tenant is selected
 // This is the local development tenant
@@ -43,7 +49,7 @@ async function getAuthHeaders() {
         console.log('[API Health] No session available (user not logged in)');
         return headers;
       }
-      console.warn('[API Health] Auth session error:', error.message);
+      logApiError('ApiHealthDashboard.getAuthHeaders.authSession', error);
       return headers;
     }
 
@@ -54,7 +60,7 @@ async function getAuthHeaders() {
       console.warn('[API Health] No Supabase session, relying on aisha_access cookie');
     }
   } catch (e) {
-    console.warn('[API Health] Failed to get auth session:', e?.message);
+    logApiError('ApiHealthDashboard.getAuthHeaders.exception', e);
   }
   return headers;
 }
@@ -71,6 +77,32 @@ export default function ApiHealthDashboard() {
   const [testResults, setTestResults] = useState(null);
   const [isFullScan, setIsFullScan] = useState(false);
   const [fullScanResults, setFullScanResults] = useState(null);
+  const toNormalizedResponse = (ok, status, payload) => ({
+    ok,
+    status: status ?? (ok ? 200 : 0),
+    json: async () => payload ?? {},
+  });
+  const requestWithHandling = async (url, options = {}) => {
+    const { fallbackMessage, context, ...fetchOptions } = options;
+    try {
+      const responseMeta = await fetchJsonWithHandling(url, fetchOptions, {
+        fallbackMessage: fallbackMessage || `Request failed (${url})`,
+        includeResponseMeta: true,
+      });
+      return toNormalizedResponse(true, responseMeta?.status || 200, responseMeta?.data);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      if (error?.name === 'ApiRequestError') {
+        return toNormalizedResponse(false, error.status || 0, error.payload);
+      }
+      logApiError(context || 'ApiHealthDashboard.requestWithHandling', error, {
+        url,
+        method: fetchOptions?.method || 'GET',
+      });
+      throw error;
+    }
+  };
+  const fetch = requestWithHandling;
 
   const refreshReport = () => {
     setIsRefreshing(true);
@@ -499,7 +531,7 @@ export default function ApiHealthDashboard() {
         results.details.push({
           name: endpoint.name,
           status: 'failed',
-          message: `Network error: ${error.message}`,
+          message: `Network error: ${getErrorMessage(error)}`,
           statusCode: 0,
         });
       }
@@ -620,7 +652,7 @@ export default function ApiHealthDashboard() {
       return {
         name: 'Opportunities - v2 Lifecycle (create/get/update/delete)',
         status: 'failed',
-        message: `Network error during lifecycle test: ${error.message}`,
+        message: `Network error during lifecycle test: ${getErrorMessage(error)}`,
         statusCode: 0,
       };
     }
@@ -1235,7 +1267,7 @@ export default function ApiHealthDashboard() {
       return {
         name: 'Reports - v2 Dashboard Stats',
         status: 'failed',
-        message: `Network error during stats test: ${error.message}`,
+        message: `Network error during stats test: ${getErrorMessage(error)}`,
         statusCode: 0,
       };
     }
@@ -1306,7 +1338,7 @@ export default function ApiHealthDashboard() {
       return {
         name: 'Opportunities - v2 Inline Stats',
         status: 'failed',
-        message: `Network error: ${error.message}`,
+        message: `Network error: ${getErrorMessage(error)}`,
         statusCode: 0,
       };
     }
@@ -1604,7 +1636,7 @@ export default function ApiHealthDashboard() {
       return {
         name: 'Workflows - v2 List & AI Context',
         status: 'failed',
-        message: `Network error during test: ${error.message}`,
+        message: `Network error during test: ${getErrorMessage(error)}`,
         statusCode: 0,
       };
     }
@@ -1861,7 +1893,7 @@ export default function ApiHealthDashboard() {
                     });
                   }
                 } catch (err) {
-                  toast.error('Full scan network error', { description: err.message });
+                  toast.error('Full scan network error', { description: getErrorMessage(err) });
                 } finally {
                   setIsFullScan(false);
                 }
@@ -2171,7 +2203,9 @@ export default function ApiHealthDashboard() {
           });
         }
       } catch (error) {
-        console.error(`Failed to create issue for ${failure.endpoint}:`, error);
+        logApiError('ApiHealthDashboard.createGitHubIssuesForFailures', error, {
+          endpoint: failure.endpoint,
+        });
       }
     }
   }

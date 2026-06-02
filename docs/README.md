@@ -12,6 +12,7 @@
 | [OPENREPLAY_SELF_HOSTED_CICD.md](./admin-guides/OPENREPLAY_SELF_HOSTED_CICD.md) | OpenReplay infrastructure deployment via GitHub Actions | Admins/DevOps  |
 | [AI_ASSISTANT_GUIDE.md](./user-guides/AI_ASSISTANT_GUIDE.md)                    | AiSHA AI assistant features and capabilities            | Users          |
 | [DEVELOPER_MANUAL.md](./developer-docs/DEVELOPER_MANUAL.md)                     | Development setup, architecture, API reference          | Developers     |
+| [API_ERROR_HANDLING.md](./developer-docs/API_ERROR_HANDLING.md)                 | Frontend request/error-handling utility usage patterns  | Developers     |
 | [DATABASE_GUIDE.md](./developer-docs/DATABASE_GUIDE.md)                         | Database schema, migrations, Supabase configuration     | DBAs/Devs      |
 | [SECURITY_GUIDE.md](./admin-guides/SECURITY_GUIDE.md)                           | Security best practices, RLS policies, authentication   | Security       |
 | [BRANDING_GUIDE.md](./references/BRANDING_GUIDE.md)                             | Brand assets, colors, typography                        | Design         |

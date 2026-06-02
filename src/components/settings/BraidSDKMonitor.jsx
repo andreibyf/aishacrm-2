@@ -4,8 +4,7 @@
  * Dashboard for monitoring AI tool execution metrics, health scores,
  * and dependency graph visualization.
  */
-
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,45 +28,32 @@ import {
   Loader2,
 } from 'lucide-react';
 import { BACKEND_URL } from '@/api/entities';
+import {
+  fetchJsonWithHandling,
+  getErrorMessage,
+  isAbortError,
+  logApiError,
+} from '@/utils/apiErrorHandling';
 
 // Helper to fetch with auth
-async function fetchWithAuth(endpoint) {
+async function fetchWithAuth(endpoint, { signal, fallbackMessage } = {}) {
   const token =
     localStorage.getItem('supabase_access_token') ||
     sessionStorage.getItem('supabase_access_token');
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, {
-    credentials: 'include',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+  return fetchJsonWithHandling(
+    `${BACKEND_URL}${endpoint}`,
+    {
+      credentials: 'include',
+      headers,
+      signal,
     },
-  });
-
-  if (!response.ok) {
-    throw await handleFetchError(response);
-  }
-
-  return response.json();
-}
-
-async function handleFetchError(response) {
-  let errorMessage = `API error: ${response.status}`;
-
-  try {
-    const errorData = await response.json();
-    errorMessage = errorData.error || errorData.message || errorMessage;
-  } catch {
-    // Ignore JSON parse errors
-  }
-
-  if (response.status === 401) {
-    errorMessage = 'Authentication required. Please log in again.';
-  } else if (response.status === 403) {
-    errorMessage = 'Admin access required for this feature.';
-  }
-
-  return new Error(errorMessage);
+    { fallbackMessage: fallbackMessage || `Request failed (${endpoint})` },
+  );
 }
 
 // Health status badge component
@@ -209,23 +195,63 @@ export default function BraidSDKMonitor() {
   const [graphData, setGraphData] = useState(null);
   const [selectedTool, setSelectedTool] = useState(null);
   const [period, setPeriod] = useState('24h');
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Fetch realtime metrics
-  const fetchRealtime = useCallback(async () => {
-    const data = await fetchWithAuth('/api/braid/metrics/realtime');
-    setRealtimeMetrics(data);
+  const fetchRealtime = useCallback(async ({ signal } = {}) => {
+    try {
+      const data = await fetchWithAuth('/api/braid/metrics/realtime', {
+        signal,
+        fallbackMessage: 'Failed to load realtime Braid metrics',
+      });
+      if (!isMountedRef.current || signal?.aborted) return;
+      setRealtimeMetrics(data);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      logApiError('BraidSDKMonitor.fetchRealtime', err);
+      throw err;
+    }
   }, []);
 
   // Fetch tool metrics
-  const fetchToolMetrics = useCallback(async () => {
-    const data = await fetchWithAuth(`/api/braid/metrics/tools?period=${period}`);
-    setToolMetrics(data);
-  }, [period]);
+  const fetchToolMetrics = useCallback(
+    async ({ signal } = {}) => {
+      try {
+        const data = await fetchWithAuth(`/api/braid/metrics/tools?period=${period}`, {
+          signal,
+          fallbackMessage: 'Failed to load Braid tool metrics',
+        });
+        if (!isMountedRef.current || signal?.aborted) return;
+        setToolMetrics(data);
+      } catch (err) {
+        if (isAbortError(err)) return;
+        logApiError('BraidSDKMonitor.fetchToolMetrics', err, { period });
+        throw err;
+      }
+    },
+    [period],
+  );
 
   // Fetch graph data
-  const fetchGraph = useCallback(async () => {
-    const data = await fetchWithAuth('/api/braid/graph/categories');
-    setGraphData(data);
+  const fetchGraph = useCallback(async ({ signal } = {}) => {
+    try {
+      const data = await fetchWithAuth('/api/braid/graph/categories', {
+        signal,
+        fallbackMessage: 'Failed to load Braid category graph',
+      });
+      if (!isMountedRef.current || signal?.aborted) return;
+      setGraphData(data);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      logApiError('BraidSDKMonitor.fetchGraph', err);
+      throw err;
+    }
   }, []);
 
   // Fetch tool impact when selected
@@ -251,41 +277,67 @@ export default function BraidSDKMonitor() {
 
     // Then try to fetch additional impact data (optional)
     try {
-      const data = await fetchWithAuth(`/api/braid/graph/tool/${toolName}/impact`);
+      const data = await fetchWithAuth(`/api/braid/graph/tool/${toolName}/impact`, {
+        fallbackMessage: `Failed to load tool impact for ${toolName}`,
+      });
+      if (!isMountedRef.current) return;
       setSelectedTool((prev) => ({ ...prev, ...data }));
     } catch (err) {
-      console.warn('Could not fetch tool impact details:', err.message);
+      logApiError('BraidSDKMonitor.fetchToolImpact', err, { toolName });
       // Don't clear selectedTool - keep the basic info visible
     }
   }, []);
 
   // Initial load
   useEffect(() => {
+    const controller = new AbortController();
     const loadData = async () => {
-      setLoading(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       try {
-        await Promise.all([fetchRealtime(), fetchToolMetrics(), fetchGraph()]);
+        await Promise.all([
+          fetchRealtime({ signal: controller.signal }),
+          fetchToolMetrics({ signal: controller.signal }),
+          fetchGraph({ signal: controller.signal }),
+        ]);
       } catch (err) {
-        setError(err.message);
+        if (isAbortError(err)) return;
+        if (isMountedRef.current) setError(getErrorMessage(err));
       } finally {
-        setLoading(false);
+        if (isMountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     loadData();
+    return () => controller.abort();
   }, [fetchRealtime, fetchToolMetrics, fetchGraph]);
 
   // Auto-refresh realtime every 30s
   useEffect(() => {
-    const interval = setInterval(fetchRealtime, 30000);
+    const interval = setInterval(() => {
+      fetchRealtime().catch((err) => {
+        if (isAbortError(err)) return;
+        if (isMountedRef.current) setError(getErrorMessage(err));
+      });
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchRealtime]);
 
   // Manual refresh
   const handleRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([fetchRealtime(), fetchToolMetrics(), fetchGraph()]);
-    setRefreshing(false);
+    if (isMountedRef.current) {
+      setRefreshing(true);
+      setError(null);
+    }
+    try {
+      await Promise.all([fetchRealtime(), fetchToolMetrics(), fetchGraph()]);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      if (isMountedRef.current) setError(getErrorMessage(err));
+    } finally {
+      if (isMountedRef.current) setRefreshing(false);
+    }
   };
 
   if (loading) {
