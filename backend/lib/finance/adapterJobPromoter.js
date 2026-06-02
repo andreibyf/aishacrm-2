@@ -212,18 +212,22 @@ export async function promoteLinkedAdapterJobs({
     const drafts = findInMemoryDrafts({ bucket, tenantId, aggregateId });
     for (const job of drafts) {
       const queuedAt = now();
-      job.status = 'queued';
-      job.updated_at = queuedAt;
+      // Append-before-mutate (PR #632 P2): emit sync_queued from a post-promotion
+      // snapshot first; only flip the live job to 'queued' after the append
+      // resolves, so a failed append never leaves a phantom-promoted job.
+      const promotedJob = { ...job, status: 'queued', updated_at: queuedAt };
       await eventStore.append(
         buildSyncQueuedEvent({
           tenantId,
-          promotedJob: job,
+          promotedJob,
           actor,
           requestId,
           braidTraceId,
           queuedAt,
         }),
       );
+      job.status = 'queued';
+      job.updated_at = queuedAt;
       promoted.push(job);
     }
   }

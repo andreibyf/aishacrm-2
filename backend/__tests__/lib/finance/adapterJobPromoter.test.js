@@ -360,3 +360,31 @@ test('promoteLinkedAdapterJobs persistent mode: rolls back on error and releases
   assert.equal(rolledBack, true, 'rollback issued');
   assert.equal(released, true, 'client released even on failure');
 });
+
+// Codex PR #632 P2 — append-before-mutate in the in-memory branch. A failed
+// sync_queued append must not leave the job phantom-promoted to 'queued' while
+// the event store never recorded the promotion.
+test('promoteLinkedAdapterJobs (in-memory): a failed append leaves the job at draft', async () => {
+  const job = makeDraftJob();
+  const bucket = makeBucket([job]);
+  await assert.rejects(
+    () =>
+      promoteLinkedAdapterJobs({
+        bucket,
+        tenantId: TENANT_ID,
+        aggregateId: job.aggregate_id,
+        eventStore: {
+          append: async () => {
+            throw new Error('event store down');
+          },
+        },
+      }),
+    /event store down/,
+  );
+  assert.equal(bucket.adapterJobs[0].status, 'draft', 'job not phantom-promoted');
+  assert.equal(
+    bucket.adapterJobs[0].updated_at,
+    '2026-05-24T00:00:00.000Z',
+    'updated_at not bumped',
+  );
+});
