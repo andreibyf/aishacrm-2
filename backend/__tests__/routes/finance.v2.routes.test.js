@@ -263,69 +263,32 @@ describe('finance.v2 routes', () => {
       }
     });
 
-    // Phase 4-1 slice #1: with ENABLE_FINANCE_PERSISTENT_EVENTS=true + a pool,
-    // the domain service's WRITES must land in the Postgres event store
-    // (finance.audit_events), not the in-memory bucket — otherwise writes never
-    // reach the projection-backed reads (split-brain).
-    test('writes to the Postgres event store when ENABLE_FINANCE_PERSISTENT_EVENTS=true', async () => {
-      const pool = buildSpyPool();
-      const { app, restoreEnv } = buildAppWithPool({ pool, persistent: true });
-      try {
-        const res = await request(app)
-          .post('/api/v2/finance/journal-drafts')
-          .send({
-            lines: [
-              { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
-              {
-                account_name: 'Revenue',
-                classification: 'Revenue',
-                debit_cents: 0,
-                credit_cents: 1000,
-              },
-            ],
-          });
-
-        assert.equal(res.status, 201);
-        // The draft_created event was appended to Postgres, not the in-memory store.
-        assert.ok(
-          pool.calls.some((c) => /insert into finance\.audit_events/i.test(c.text)),
-          'a finance.audit_events insert occurred (persistent write path)',
-        );
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    // Phase 4-1 §5: with a pool present, ENABLE_FINANCE_PERSISTENT_EVENTS=true is
-    // now a supported mode — the route mounts and selects the projection-backed
-    // read adapter (no longer the old unconditional split-brain throw). Verified
-    // decoupled from the pg adapter internals via an injected factory.
-    test('selects the projection-backed adapter when ENABLE_FINANCE_PERSISTENT_EVENTS=true (with pool)', () => {
+    // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is not yet
+    // activatable. Even WITH a pool, ENABLE_FINANCE_PERSISTENT_EVENTS=true refuses
+    // to mount, because the service-backed read/mutation endpoints
+    // (/journal-drafts, /approvals, /adapter-jobs, /draft-invoices, and the
+    // approve/reverse/update mutations) still read the in-memory buckets, which
+    // start empty per process — a PG-persisted record would be visible via the
+    // projection-backed reads but 404/empty via these. The projection-backed read
+    // adapter + pg event store still SHIP and are unit-tested (see
+    // finance.v2.adapterSelection.test.js); they are simply not activated here.
+    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (even with a pool)', () => {
       const pool = buildSpyPool();
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
-        let captured = null;
-        const readAdapterFactory = (args) => {
-          captured = args;
-          return { async getRuntimeStatus() {} };
-        };
-        assert.doesNotThrow(() =>
-          createFinanceV2Routes(pool, {
-            isFinanceModuleEnabled: async () => true,
-            readAdapterFactory,
-          }),
+        assert.throws(
+          () => createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
+          /not yet supported|ENABLE_FINANCE_PERSISTENT_EVENTS/i,
         );
-        assert.equal(captured.persistentEvents, true);
-        assert.equal(captured.pgPool, pool);
       } finally {
         if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
         else process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = previous;
       }
     });
 
-    // Loud-on-misconfig (§5): persistent-events without a pool refuses to mount —
-    // the fail-closed posture the prior guard provided, now structural.
+    // Loud-on-misconfig (§5): persistent-events without a pool also refuses to
+    // mount — the fail-closed posture the prior guard provided, now structural.
     test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (no pool)', () => {
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';

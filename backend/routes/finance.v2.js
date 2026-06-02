@@ -141,11 +141,36 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // at construction (no per-request read, no runtime swap).
   const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
 
-  // Slice #1 (persistent write path): in persistent mode the domain service's
-  // WRITES (the mutating endpoints) must emit into the Postgres event store, not
-  // the in-memory bucket — otherwise writes never reach the projections the
-  // route now reads from, and a write made through the same route vanishes from
-  // its reads (split-brain). `opts.eventStore` injection remains for tests.
+  // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is NOT yet
+  // activatable; refuse to mount when the flag is on (fail-closed).
+  //
+  // The infrastructure ships and is unit-tested: the Postgres event-store wiring
+  // (`eventStoreOpt` below), the projection-backed read adapter
+  // (`defaultFinanceReadAdapterFactory`'s persistent branch — covered by
+  // finance.v2.adapterSelection.test.js + projectionBackedFinanceReadAdapter.test.js),
+  // the projections, and append-before-mutate atomic writes. What is NOT yet
+  // done is the read/mutation surface: several GET handlers (`/journal-drafts`,
+  // `/approvals`, `/adapter-jobs`, `/draft-invoices`) and the approve/reverse/
+  // update mutations still read the in-memory domain-service buckets, which start
+  // empty per process. Enabling the flag would expose a PG-persisted draft/
+  // approval through the projection-backed reads while the service-backed reads
+  // 404/empty it (and a second instance or a restart would lose it entirely).
+  // Until those flows are routed through durable state, mounting persistent mode
+  // is unsafe — so we refuse, the same fail-closed posture the no-pool guard
+  // already enforces. Removing this guard is the activation step of the
+  // remaining Phase 4-1 read/mutation migration.
+  if (persistentEvents) {
+    throw new Error(
+      'ENABLE_FINANCE_PERSISTENT_EVENTS=true is not yet supported: the finance v2 ' +
+        'service-backed read/mutation endpoints are not projection-durable. ' +
+        'Refusing to mount the finance v2 routes (fail-closed).',
+    );
+  }
+
+  // Persistent write path (gated by the boot guard above): in persistent mode the
+  // domain service's WRITES would emit into the Postgres event store rather than
+  // the in-memory bucket. Retained as the activation wiring; `opts.eventStore`
+  // injection remains for tests.
   const eventStoreOpt = opts.eventStore
     ? { eventStore: opts.eventStore }
     : persistentEvents && pgPool
@@ -153,12 +178,11 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       : {};
   const service = opts.service || createFinanceDomainService(eventStoreOpt);
 
-  // Select the read adapter ONCE at construction time. The loud-on-misconfig
-  // guard inside the factory REPLACES the prior unconditional split-brain throw:
-  // persistent-events without projection-backed deps refuses to mount,
-  // preserving the fail-closed posture structurally. The default (in-memory)
-  // branch is behaviourally identical to the pre-lift handlers via
-  // InMemoryFinanceReadAdapter.
+  // Select the read adapter ONCE at construction time. With the boot guard above,
+  // `persistentEvents` is always false here, so this resolves to the in-memory
+  // adapter (behaviourally identical to the pre-lift handlers). The factory's
+  // projection-backed branch remains the activation path for when persistent mode
+  // lands, and is exercised directly in finance.v2.adapterSelection.test.js.
   const readAdapter = (opts.readAdapterFactory || defaultFinanceReadAdapterFactory)({
     persistentEvents,
     pgPool,
