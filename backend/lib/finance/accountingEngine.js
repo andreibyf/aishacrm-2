@@ -121,11 +121,20 @@ export function buildLedger(entries = []) {
 }
 
 export function buildProfitAndLoss(entries = []) {
-  const ledger = buildLedger(entries);
+  return profitAndLossFromLedger(buildLedger(entries));
+}
+
+/**
+ * P&L derived from an already-built ledger ({ accounts, totals }). Split out so
+ * the Phase 4-1 projection-backed read path can derive P&L over the ledger
+ * projection's account balances without re-deriving from raw entries — the
+ * derivation depends only on account classification + balances, not the store.
+ */
+export function profitAndLossFromLedger(ledger = { accounts: [] }) {
   const revenue_accounts = [];
   const expense_accounts = [];
 
-  ledger.accounts.forEach((account) => {
+  (ledger.accounts || []).forEach((account) => {
     if (account.classification === 'Revenue') {
       revenue_accounts.push({
         ...account,
@@ -155,13 +164,20 @@ export function buildProfitAndLoss(entries = []) {
 }
 
 export function buildBalanceSheet(entries = []) {
-  const ledger = buildLedger(entries);
+  return balanceSheetFromLedger(buildLedger(entries));
+}
 
+/**
+ * Balance sheet derived from an already-built ledger ({ accounts, totals }).
+ * Split out for the Phase 4-1 projection-backed read path (see
+ * profitAndLossFromLedger).
+ */
+export function balanceSheetFromLedger(ledger = { accounts: [] }) {
   const assets = [];
   const liabilities = [];
   const equity = [];
 
-  ledger.accounts.forEach((account) => {
+  (ledger.accounts || []).forEach((account) => {
     if (account.classification === 'Asset') {
       assets.push({ ...account, amount_cents: account.debit_cents - account.credit_cents });
     }

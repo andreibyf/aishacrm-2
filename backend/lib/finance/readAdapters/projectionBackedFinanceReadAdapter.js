@@ -1,0 +1,153 @@
+/**
+ * projectionBackedFinanceReadAdapter.js
+ *
+ * Phase 4-1 §8 — the FinanceReadAdapter used when
+ * `ENABLE_FINANCE_PERSISTENT_EVENTS=true`. Reads the Finance v2 GET surface
+ * from Postgres-backed projections (per design §4) instead of the in-memory
+ * domain service.
+ *
+ * §6 no-silent-fallback contract: if a projection-store / audit-events read
+ * fails, the adapter throws `FinanceReadDegradedError` (→ 503 at the route).
+ * It NEVER falls back to in-memory data — doing so would silently re-introduce
+ * the split-brain the persistent-events guard exists to prevent.
+ */
+
+import { profitAndLossFromLedger, balanceSheetFromLedger } from '../accountingEngine.js';
+
+export class FinanceReadDegradedError extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.name = 'FinanceReadDegradedError';
+    this.code = 'FINANCE_READ_DEGRADED';
+    this.statusCode = 503;
+    if (cause) this.cause = cause;
+  }
+}
+
+// Count a projection read model: arrays by length, bucket-objects by summing
+// their array values (approval_queue: pending+resolved; adapter_queue:
+// queued+running+failed+completed).
+function countReadModel(readModel) {
+  if (Array.isArray(readModel)) return readModel.length;
+  if (readModel && typeof readModel === 'object') {
+    return Object.values(readModel).reduce(
+      (sum, value) => sum + (Array.isArray(value) ? value.length : 0),
+      0,
+    );
+  }
+  return 0;
+}
+
+export function createProjectionBackedFinanceReadAdapter({
+  storeProvider,
+  auditEventsReader,
+  workers,
+}) {
+  if (!storeProvider || !auditEventsReader || !workers) {
+    throw new Error(
+      'createProjectionBackedFinanceReadAdapter requires storeProvider, auditEventsReader, workers',
+    );
+  }
+  const { ledger, journalEntries, approvalQueue, adapterQueue } = workers;
+  if (!ledger || !journalEntries || !approvalQueue || !adapterQueue) {
+    throw new Error(
+      'createProjectionBackedFinanceReadAdapter requires ledger, journalEntries, approvalQueue, adapterQueue workers',
+    );
+  }
+
+  // Read one projection's read model. Any store failure becomes a degraded
+  // error — never a silent in-memory fallback (§6).
+  async function readProjection(worker, tenantId) {
+    let store;
+    try {
+      store = await storeProvider.getLiveStore(worker.projectionName, tenantId);
+    } catch (err) {
+      throw new FinanceReadDegradedError(
+        `projection store read failed for ${worker.projectionName}`,
+        err,
+      );
+    }
+    return worker.getProjection(tenantId, {}, store);
+  }
+
+  async function ledgerReadModel(tenantId) {
+    const lm = await readProjection(ledger, tenantId);
+    return {
+      accounts: Array.isArray(lm?.accounts) ? lm.accounts : [],
+      totals: lm?.totals || { debit_cents: 0, credit_cents: 0 },
+    };
+  }
+
+  return {
+    async listJournalEntries(tenantId) {
+      return readProjection(journalEntries, tenantId);
+    },
+
+    async getLedger(tenantId) {
+      // Strip the projection read model's tenant_id wrapper so the shape matches
+      // the in-memory `service.getLedger()` ({ accounts, totals }).
+      return ledgerReadModel(tenantId);
+    },
+
+    async getProfitLoss(tenantId) {
+      return profitAndLossFromLedger(await ledgerReadModel(tenantId));
+    },
+
+    async getBalanceSheet(tenantId) {
+      return balanceSheetFromLedger(await ledgerReadModel(tenantId));
+    },
+
+    async getRuntimeStatus(tenantId) {
+      let auditCount;
+      try {
+        auditCount = await auditEventsReader.count(tenantId);
+      } catch (err) {
+        throw new FinanceReadDegradedError('audit_events read failed', err);
+      }
+
+      const je = await readProjection(journalEntries, tenantId);
+      const ap = await readProjection(approvalQueue, tenantId);
+      const aj = await readProjection(adapterQueue, tenantId);
+
+      // Per-projection cursor + degraded flag — the honest lag signal (§6 row 2):
+      // expose where each projection is, never mask staleness by re-reading
+      // audit_events directly.
+      const lag = {};
+      for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue]) {
+        let state = null;
+        try {
+          state = await storeProvider.getState(worker.projectionName, tenantId);
+        } catch {
+          state = null;
+        }
+        lag[worker.projectionName] = {
+          cursor: state?.cursor ?? null,
+          is_degraded: Boolean(state?.is_degraded),
+        };
+      }
+
+      return {
+        tenant_id: tenantId,
+        runtime: {
+          mode: 'persistent',
+          persistence: 'persistent',
+          provider_sync: 'disabled',
+          governance: 'enabled',
+        },
+        counts: {
+          journal_entries: countReadModel(je),
+          invoices: 0, // no invoice projection; draft-invoices is a deferred gap endpoint
+          approvals: countReadModel(ap),
+          audit_events: auditCount,
+          adapter_jobs: countReadModel(aj),
+        },
+        persistence_lag: {
+          audit_events_total: auditCount,
+          projections: lag,
+        },
+      };
+    },
+  };
+}
+
+export default createProjectionBackedFinanceReadAdapter;

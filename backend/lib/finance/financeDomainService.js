@@ -537,7 +537,15 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { approval: clone(approval), adapter_job: clone(adapterJob) },
+          // Phase 4-1 Amendment A: carry the post-transition journal_entry
+          // (draftEntry was just set to status 'pending_approval' above) so the
+          // journal_entries projection can reproduce listJournalEntries()
+          // bit-for-bit. Additive — approval + adapter_job keys unchanged.
+          payload: {
+            approval: clone(approval),
+            adapter_job: clone(adapterJob),
+            journal_entry: clone(draftEntry),
+          },
           policyDecision: decision,
         }),
       );
