@@ -122,6 +122,23 @@ This is the §7 slice #2 contract: which projection (or direct event-store query
 
 ---
 
+### §4.1 — Amendment A (2026-06-02): write-path enrichment for true `journal_entries` parity (Option 2)
+
+**Status:** Post-freeze amendment, authorized by Andrei 2026-06-02. Scope-expands slice #2 by one additive write-path change. Subject to Codex review on the implementation packet.
+
+**Why:** Grounding the implementation revealed the original read-path-only design cannot reconstruct the journal-entry snapshot **bit-for-bit** from the current event stream. The approval-request flow mutates the bucket entry in place — `draftEntry.status = 'pending_approval'`, `governance_policy_snapshot = decision`, `updated_at = now()` (`financeDomainService.js:466-469`) — but the emitted `finance.approval.requested` event carries only `{ approval, adapter_job }` (`:529-543`), not the post-transition `journal_entry`. A projection built from events would therefore show the entry as `draft` (or only approximate `updated_at`/`governance_policy_snapshot`), diverging from `service.listJournalEntries()`.
+
+**The change (one emit site, additive):** the single `finance.approval.requested` emit (`financeDomainService.js:529-543`) adds the post-transition entry to its payload — `payload: { approval, adapter_job, journal_entry: clone(draftEntry) }` — captured **after** the `:466-469` status mutation so it carries `status: 'pending_approval'` + the final `updated_at`/`governance_policy_snapshot`.
+
+**Backward-compatibility / blast radius:**
+
+- Additive key only. The two existing consumers (`approvalQueueProjection`, `auditTimelineProjection`) read specific keys, not the whole payload — they ignore `journal_entry`. `financeEventEnvelope.js` does not whitelist/validate payload keys, so the envelope accepts it.
+- **Migration-of-meaning:** any `finance.approval.requested` rows persisted _before_ this enrichment lack `journal_entry`. The `journal_entries` projection MUST handle its absence gracefully — fall back to a status-only transition keyed by `approval.target_id` (the journal-entry id). Because persistent events are fail-closed today, no production/staging `audit_events` of this type exist yet, so there is no real historical corpus to migrate; the fallback exists for defensiveness + local fixtures only.
+
+**Effect on §4 / §8 / §9:** the `journal_entries` projection consumes `finance.approval.requested` and applies `payload.journal_entry` (when present) as the entry's snapshot, achieving true bit-for-bit parity. §9 row 8's behavioral-parity sub-assertion is upgraded from "status-set parity" to "full-entry parity" for the enriched path. `posted`/`reversed` statuses remain defined-but-unreachable until a separate journal-posting slice adds a `finance.journal.posted` emit-site (unchanged by this amendment).
+
+---
+
 ## 5. Route construction and env-gating sequence
 
 The route construction sequence in `createFinanceV2Routes(pgPool, opts)` at `backend/routes/finance.v2.js:35` becomes (post-lift):
