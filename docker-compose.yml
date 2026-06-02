@@ -68,35 +68,9 @@ services:
     networks:
       - aishanet
 
-  # Ollama - local LLM server for PEP compiler parser
-  ollama:
-    image: ollama/ollama:latest
-    container_name: aishacrm-ollama
-    restart: unless-stopped
-    entrypoint: >
-      sh -c "ollama serve & sleep 5 && ollama pull llama3.2:3b && ollama pull qwen2.5-coder:3b && ollama run llama3.2:3b 'ready' && wait"
-    environment:
-      - OLLAMA_NUM_CTX=1024
-      - OLLAMA_MAX_LOADED_MODELS=1
-      - OLLAMA_KEEP_ALIVE=-1
-      - OLLAMA_NUM_PARALLEL=2
-    ports:
-      - "11436:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "2"
-    networks:
-      - aishanet
+  # Ollama removed: replaced by AI Cloud Server (HP Omen 35L, RTX 5070 Ti)
+  # running vLLM + Qwen2.5-14B-AWQ on Tailscale (100.81.132.118:8000).
+  # LOCAL_LLM_BASE_URL and LOCAL_LLM_API_KEY are now sourced from Doppler.
 
   litellm:
     build:
@@ -137,8 +111,6 @@ services:
       redis-memory:
         condition: service_healthy
       redis-cache:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
     ports:
       - "4001:3001"  # Host:Container - prod port 4001 maps to dev port 3001
@@ -190,13 +162,14 @@ services:
       #   AI_TRIGGERS_WORKER_ENABLED, AI_TRIGGERS_WORKER_INTERVAL_MS
       #   CARE_STATE_WRITE_ENABLED, CARE_WORKFLOW_TRIGGERS_ENABLED
       #   CARE_AUTONOMY_ENABLED, CARE_SHADOW_MODE
-      # PEP LLM Parser
-      - LOCAL_LLM_BASE_URL=http://ollama:11434/v1
-      - LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY:-ollama}
+      # AI Cloud Server (vLLM + Qwen2.5-14B on RTX 5070 Ti) - sourced from Doppler
+      - LOCAL_LLM_BASE_URL=${LOCAL_LLM_BASE_URL}
+      - LOCAL_LLM_API_KEY=${LOCAL_LLM_API_KEY}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-qwen-14b}
       - GROQ_API_KEY=${GROQ_API_KEY}
       - PEP_LLM_PROVIDER=groq
       - PEP_LLM_MODEL=llama-3.3-70b-versatile
-      - SUMMARY_LLM_MODEL=llama3.2:3b
+      - SUMMARY_LLM_MODEL=${SUMMARY_LLM_MODEL:-qwen-14b}
       # Telemetry
       - TELEMETRY_ENABLED=true
       - TELEMETRY_LOG_PATH=/telemetry/telemetry.ndjson
@@ -508,8 +481,6 @@ volumes:
   redis_memory_data:
     driver: local
   redis_cache_data:
-    driver: local
-  ollama_data:
     driver: local
   aisha_telemetry:
     external: true

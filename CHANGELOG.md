@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Replace in-stack Ollama with AI Cloud Server** (`docker-compose.yml`, Doppler): removed the `aishacrm-ollama` container (CPU-based `llama3.2:3b`/`qwen2.5-coder:3b`) and replaced with vLLM running Qwen2.5-14B-AWQ on the HP Omen 35L (RTX 5070 Ti) AI cloud server. `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_API_KEY`, `LOCAL_LLM_MODEL`, and `SUMMARY_LLM_MODEL` are now sourced from Doppler (all three envs updated). The `ollama_data` volume and `depends_on: ollama` were removed from the backend service. No application logic changed; the `local` provider path uses the same env vars.
+
 ### Security
 
 - **P0 security hardening — tenant/authz, CSRF, secrets/logging pass**:

@@ -221,6 +221,7 @@ test('checkConvergence passes — dispatch and replay build identical stores', a
   assert.deepEqual(res.detail.projections.map((p) => p.projection).sort(), [
     'finance.projection.adapter_queue',
     'finance.projection.approval_queue',
+    'finance.projection.journal_entries',
     'finance.projection.ledger',
   ]);
   assert.ok(res.detail.projections.every((p) => p.converged));
@@ -292,12 +293,12 @@ test('checkReplayOrdering resolves a created_at tie deterministically by id ASC'
 
 // ── Per-projection parity ─────────────────────────────────────────────────────
 
-test('checkPerProjectionParity passes for ledger, approval_queue, adapter_queue', async () => {
+test('checkPerProjectionParity passes for ledger, approval_queue, adapter_queue, journal_entries', async () => {
   const res = await checkPerProjectionParity(healthyStream(), TENANT_A);
 
   assert.equal(res.name, 'per_projection_parity');
   assert.equal(res.passed, true);
-  assert.equal(res.detail.projections.length, 3);
+  assert.equal(res.detail.projections.length, 4);
   assert.ok(res.detail.projections.every((p) => p.converged));
 });
 
@@ -308,7 +309,7 @@ test('checkRepeatedReplayDeterminism passes — replaying twice yields identical
 
   assert.equal(res.name, 'repeated_replay_determinism');
   assert.equal(res.passed, true);
-  assert.equal(res.detail.projections.length, 3);
+  assert.equal(res.detail.projections.length, 4);
   assert.ok(res.detail.projections.every((p) => p.stable));
 });
 
@@ -364,7 +365,7 @@ test('checkInfrastructureEventFiltering passes — infra events never reach busi
   assert.equal(res.passed, true);
   assert.equal(res.detail.coverage_exercised, true, 'the stream actually contained infra events');
   assert.equal(res.detail.infrastructure_event_count, 2);
-  assert.equal(res.detail.projections.length, 3);
+  assert.equal(res.detail.projections.length, 4);
   assert.ok(res.detail.projections.every((p) => p.state_identical && p.cursor_identical));
 });
 
@@ -628,6 +629,7 @@ test('createDefaultHarnessConfig wires the three real projection workers', () =>
   assert.deepEqual(workers.map((w) => w.projectionName).sort(), [
     'finance.projection.adapter_queue',
     'finance.projection.approval_queue',
+    'finance.projection.journal_entries',
     'finance.projection.ledger',
   ]);
   // Each factory call yields fresh, independent instances.
