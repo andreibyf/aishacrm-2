@@ -10,6 +10,7 @@ import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/in
 import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAdapters/projectionBackedFinanceReadAdapter.js';
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
+import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
 import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
@@ -31,7 +32,6 @@ export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, ser
         'projection-backed reads; refusing to mount the finance v2 routes.',
     );
   }
-  const storeProvider = createPgProjectionStoreProvider({ pool: pgPool });
   const auditEventsReader = createPgAuditEventsReader({ pool: pgPool });
   const workers = {
     ledger: createLedgerProjectionWorker(),
@@ -39,7 +39,15 @@ export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, ser
     approvalQueue: createApprovalQueueProjectionWorker(),
     adapterQueue: createAdapterQueueProjectionWorker(),
   };
-  return createProjectionBackedFinanceReadAdapter({ storeProvider, auditEventsReader, workers });
+  // Build a FRESH projection-store provider per request so reads always reflect
+  // the latest worker-persisted projection_state — `getLiveStore()` caches for
+  // the provider's lifetime, so a single long-lived provider would pin the
+  // first hydrated snapshot until restart.
+  return createProjectionBackedFinanceReadAdapter({
+    createStoreProvider: () => createPgProjectionStoreProvider({ pool: pgPool }),
+    auditEventsReader,
+    workers,
+  });
 }
 
 function resolveTenantId(req) {
@@ -129,19 +137,28 @@ function decodeAuditCursor(cursor, tenantId) {
 
 export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
-  // opts.eventStore / opts.service injection remains for tests.
-  const service =
-    opts.service ||
-    createFinanceDomainService(opts.eventStore ? { eventStore: opts.eventStore } : {});
-
-  // Phase 4-1 §5: select the read adapter ONCE at construction time. Single env
-  // read — no per-request env read, no runtime adapter swap (persistence mode is
-  // a deploy-time decision). The loud-on-misconfig guard inside the factory
-  // REPLACES the prior unconditional split-brain throw: persistent-events
-  // without projection-backed deps refuses to mount, preserving the fail-closed
-  // posture structurally. The default (in-memory) branch is behaviourally
-  // identical to the pre-lift handlers via InMemoryFinanceReadAdapter.
+  // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
+  // at construction (no per-request read, no runtime swap).
   const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
+
+  // Slice #1 (persistent write path): in persistent mode the domain service's
+  // WRITES (the mutating endpoints) must emit into the Postgres event store, not
+  // the in-memory bucket — otherwise writes never reach the projections the
+  // route now reads from, and a write made through the same route vanishes from
+  // its reads (split-brain). `opts.eventStore` injection remains for tests.
+  const eventStoreOpt = opts.eventStore
+    ? { eventStore: opts.eventStore }
+    : persistentEvents && pgPool
+      ? { eventStore: createFinancePgEventStore({ pool: pgPool }) }
+      : {};
+  const service = opts.service || createFinanceDomainService(eventStoreOpt);
+
+  // Select the read adapter ONCE at construction time. The loud-on-misconfig
+  // guard inside the factory REPLACES the prior unconditional split-brain throw:
+  // persistent-events without projection-backed deps refuses to mount,
+  // preserving the fail-closed posture structurally. The default (in-memory)
+  // branch is behaviourally identical to the pre-lift handlers via
+  // InMemoryFinanceReadAdapter.
   const readAdapter = (opts.readAdapterFactory || defaultFinanceReadAdapterFactory)({
     persistentEvents,
     pgPool,

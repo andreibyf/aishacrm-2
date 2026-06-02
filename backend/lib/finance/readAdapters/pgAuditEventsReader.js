@@ -14,8 +14,11 @@ export function createPgAuditEventsReader({ pool }) {
   }
   return {
     async count(tenantId) {
+      // Schema-qualified: the persistent event store writes/reads
+      // `finance.audit_events` (financeEventStore.pg.js AUDIT_EVENTS_TABLE). A
+      // bare `audit_events` would not resolve under the default search_path.
       const result = await pool.query(
-        'SELECT count(*)::int AS n FROM audit_events WHERE tenant_id = $1',
+        'SELECT count(*)::int AS n FROM finance.audit_events WHERE tenant_id = $1',
         [tenantId],
       );
       return Number(result?.rows?.[0]?.n ?? 0);

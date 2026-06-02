@@ -85,7 +85,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const w = workers();
     const storeProvider = await seededProvider(w);
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider,
+      createStoreProvider: () => storeProvider,
       auditEventsReader: { count: async () => 2 },
       workers: w,
     });
@@ -99,7 +99,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const w = workers();
     const storeProvider = await seededProvider(w);
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider,
+      createStoreProvider: () => storeProvider,
       auditEventsReader: { count: async () => 2 },
       workers: w,
     });
@@ -117,7 +117,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const w = workers();
     const storeProvider = await seededProvider(w);
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider,
+      createStoreProvider: () => storeProvider,
       auditEventsReader: { count: async () => 2 },
       workers: w,
     });
@@ -139,7 +139,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       getState: async () => null,
     };
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider: failingProvider,
+      createStoreProvider: () => failingProvider,
       auditEventsReader: { count: async () => 0 },
       workers: w,
     });
@@ -151,7 +151,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const w = workers();
     const storeProvider = await seededProvider(w);
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider,
+      createStoreProvider: () => storeProvider,
       auditEventsReader: {
         count: async () => {
           throw new Error('pg down');
@@ -166,19 +166,47 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
   // masked — they must raise FinanceReadDegradedError (§6 no-silent-fallback).
   test('no silent fallback: a projection_state read failure (getState) throws on runtime/status', async () => {
     const w = workers();
+    // A projection-store-shaped stub (keys() returns an array, matching the real
+    // memory/pg stores) so getProjection runs and the failure is genuinely the
+    // getState call — not an incidental TypeError from a native Map.
+    const emptyStore = {
+      get: () => undefined,
+      set: () => {},
+      delete: () => {},
+      keys: () => [],
+      clear: () => {},
+    };
     const failingProvider = {
-      getLiveStore: async (projName, tenantId) => {
-        return new Map();
-      },
+      getLiveStore: async () => emptyStore,
       getState: async () => {
         throw new Error('projection_state query failed');
       },
     };
     const adapter = createProjectionBackedFinanceReadAdapter({
-      storeProvider: failingProvider,
+      createStoreProvider: () => failingProvider,
       auditEventsReader: { count: async () => 2 },
       workers: w,
     });
     await assert.rejects(() => adapter.getRuntimeStatus(T), FinanceReadDegradedError);
+  });
+
+  // #2: the route must not serve a snapshot cached for the router lifetime — the
+  // adapter builds a FRESH store provider per request.
+  test('builds a fresh store provider per request (no cached-for-lifetime snapshot)', async () => {
+    const w = workers();
+    const storeProvider = await seededProvider(w);
+    let providerBuilds = 0;
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => {
+        providerBuilds += 1;
+        return storeProvider;
+      },
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+    await adapter.listJournalEntries(T);
+    await adapter.listJournalEntries(T);
+    await adapter.getLedger(T);
+    assert.equal(providerBuilds, 3, 'a fresh provider is built for every read request');
   });
 });

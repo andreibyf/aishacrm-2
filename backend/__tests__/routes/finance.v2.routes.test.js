@@ -263,6 +263,39 @@ describe('finance.v2 routes', () => {
       }
     });
 
+    // Phase 4-1 slice #1: with ENABLE_FINANCE_PERSISTENT_EVENTS=true + a pool,
+    // the domain service's WRITES must land in the Postgres event store
+    // (finance.audit_events), not the in-memory bucket — otherwise writes never
+    // reach the projection-backed reads (split-brain).
+    test('writes to the Postgres event store when ENABLE_FINANCE_PERSISTENT_EVENTS=true', async () => {
+      const pool = buildSpyPool();
+      const { app, restoreEnv } = buildAppWithPool({ pool, persistent: true });
+      try {
+        const res = await request(app)
+          .post('/api/v2/finance/journal-drafts')
+          .send({
+            lines: [
+              { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
+              {
+                account_name: 'Revenue',
+                classification: 'Revenue',
+                debit_cents: 0,
+                credit_cents: 1000,
+              },
+            ],
+          });
+
+        assert.equal(res.status, 201);
+        // The draft_created event was appended to Postgres, not the in-memory store.
+        assert.ok(
+          pool.calls.some((c) => /insert into finance\.audit_events/i.test(c.text)),
+          'a finance.audit_events insert occurred (persistent write path)',
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
     // Phase 4-1 §5: with a pool present, ENABLE_FINANCE_PERSISTENT_EVENTS=true is
     // now a supported mode — the route mounts and selects the projection-backed
     // read adapter (no longer the old unconditional split-brain throw). Verified
