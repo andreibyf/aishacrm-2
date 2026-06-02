@@ -76,7 +76,7 @@ export function createFinanceDomainService(opts = {}) {
   // inline inside simulateDealWon and reverseJournalEntry. Any new code path
   // that calls bucket.approvals.push() directly bypasses the invariant silently.
   // All approval creation MUST go through pushApproval().
-  function pushApproval(bucket, record) {
+  function assertNoDuplicateApproval(bucket, record) {
     const existing = bucket.approvals.find(
       (a) =>
         a.tenant_id === record.tenant_id &&
@@ -92,6 +92,15 @@ export function createFinanceDomainService(opts = {}) {
       err.statusCode = 409;
       throw err;
     }
+  }
+
+  function pushApproval(bucket, record) {
+    // Re-checks the duplicate invariant atomically at push time. Callers that
+    // append an event before pushing (append-before-mutate, PR #632 P2) also
+    // call assertNoDuplicateApproval() up front so a duplicate is rejected
+    // without persisting an approval.requested event; this re-check is the
+    // authoritative one that runs after any await on append.
+    assertNoDuplicateApproval(bucket, record);
     bucket.approvals.push(record);
     return record;
   }
@@ -222,8 +231,9 @@ export function createFinanceDomainService(opts = {}) {
         created_at: now(),
         updated_at: now(),
       };
-      bucket.invoices.push(invoice);
-
+      // Append-before-mutate (PR #632 P2): persist the event first; only add the
+      // invoice to the in-memory bucket after the append resolves, so a failed
+      // append never exposes a phantom draft through the read endpoints.
       await appendEvent(
         bucket,
         createFinanceEventEnvelope({
@@ -235,10 +245,11 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { invoice },
+          payload: { invoice: clone(invoice) },
           policyDecision: decision,
         }),
       );
+      bucket.invoices.push(invoice);
 
       return {
         invoice: clone(invoice),
@@ -283,10 +294,15 @@ export function createFinanceDomainService(opts = {}) {
         braidTraceId,
       });
 
-      Object.assign(invoice, payload, {
+      // Append-before-mutate (PR #632 P2): compute the updated snapshot, persist
+      // it, and only then apply the in-place mutation — so a failed append leaves
+      // the existing invoice untouched rather than half-updated.
+      const updatedInvoice = {
+        ...invoice,
+        ...payload,
         updated_by: normalizedActor.id,
         updated_at: now(),
-      });
+      };
 
       await appendEvent(
         bucket,
@@ -299,10 +315,11 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { invoice: clone(invoice) },
+          payload: { invoice: clone(updatedInvoice) },
           policyDecision: decision,
         }),
       );
+      Object.assign(invoice, updatedInvoice);
 
       return {
         invoice: clone(invoice),
@@ -383,8 +400,9 @@ export function createFinanceDomainService(opts = {}) {
         created_at: now(),
         updated_at: now(),
       };
-      bucket.journalEntries.push(journalEntry);
-
+      // Append-before-mutate (PR #632 P2): persist draft_created first, then add
+      // the entry to the in-memory bucket, so a failed append never leaves a
+      // phantom draft visible to the read endpoints.
       await appendEvent(
         bucket,
         createFinanceEventEnvelope({
@@ -400,6 +418,7 @@ export function createFinanceDomainService(opts = {}) {
           policyDecision: decision,
         }),
       );
+      bucket.journalEntries.push(journalEntry);
 
       return {
         journal_entry: clone(journalEntry),
@@ -463,22 +482,33 @@ export function createFinanceDomainService(opts = {}) {
         ],
       });
 
+      // Append-before-mutate (PR #632 P2): the draft_created event + entry are
+      // already persisted by createJournalDraft above. The rest of this flow
+      // (promote the draft to pending_approval, create the approval, queue the
+      // adapter job) is gated behind a SINGLE approval.requested append. We build
+      // every post-transition snapshot WITHOUT touching the bucket, append once,
+      // and only then apply the in-memory mutations — so a failed append leaves
+      // the entry an un-promoted draft with no phantom approval or adapter job.
       const draftEntry = bucket.journalEntries.find((entry) => entry.id === draft.journal_entry.id);
-      draftEntry.status = 'pending_approval';
-      draftEntry.governance_policy_snapshot = decision;
-      draftEntry.updated_at = now();
+      const updatedDraftEntry = {
+        ...draftEntry,
+        status: 'pending_approval',
+        governance_policy_snapshot: decision,
+        updated_at: now(),
+      };
 
-      const approval = pushApproval(
-        bucket,
-        buildApprovalRecord({
-          tenantId,
-          actor: normalizedActor,
-          aggregateType: 'journal_entry',
-          aggregateId: draftEntry.id,
-          decision,
-          requestId,
-        }),
-      );
+      const approval = buildApprovalRecord({
+        tenantId,
+        actor: normalizedActor,
+        aggregateType: 'journal_entry',
+        aggregateId: updatedDraftEntry.id,
+        decision,
+        requestId,
+      });
+      // Reject a duplicate approval up front so we never persist an
+      // approval.requested event for one; pushApproval() re-checks atomically
+      // after the append resolves.
+      assertNoDuplicateApproval(bucket, approval);
 
       // Slice 2B review P1 + follow-up P1: the adapter_job must carry the
       // canonical object snapshot in the EXACT SHAPE the Slice 2A ERPNext
@@ -508,8 +538,10 @@ export function createFinanceDomainService(opts = {}) {
       //
       // The canonical is cloned implicitly by the mapper (which builds a
       // fresh object from selected fields), so future bucket mutations
-      // cannot leak into the persisted payload.
-      const adapterJobPayload = mapJournalEntryToQuickBooksCanonical(draftEntry);
+      // cannot leak into the persisted payload. Mapped from the post-transition
+      // snapshot (status is not a canonical field, so the body is identical to
+      // mapping the pre-transition entry).
+      const adapterJobPayload = mapJournalEntryToQuickBooksCanonical(updatedDraftEntry);
 
       const adapterJob = {
         id: `adapter_job_${generateId()}`,
@@ -517,14 +549,13 @@ export function createFinanceDomainService(opts = {}) {
         status: 'draft',
         provider: payload.provider || 'quickbooks',
         aggregate_type: 'journal_entry',
-        aggregate_id: draftEntry.id,
+        aggregate_id: updatedDraftEntry.id,
         operation: 'push_draft',
         mode: 'draft_only',
         payload: adapterJobPayload,
         created_at: now(),
         updated_at: now(),
       };
-      bucket.adapterJobs.push(adapterJob);
 
       await appendEvent(
         bucket,
@@ -538,17 +569,24 @@ export function createFinanceDomainService(opts = {}) {
           requestId,
           braidTraceId,
           // Phase 4-1 Amendment A: carry the post-transition journal_entry
-          // (draftEntry was just set to status 'pending_approval' above) so the
+          // (updatedDraftEntry — status 'pending_approval') so the
           // journal_entries projection can reproduce listJournalEntries()
           // bit-for-bit. Additive — approval + adapter_job keys unchanged.
           payload: {
             approval: clone(approval),
             adapter_job: clone(adapterJob),
-            journal_entry: clone(draftEntry),
+            journal_entry: clone(updatedDraftEntry),
           },
           policyDecision: decision,
         }),
       );
+
+      // Append succeeded — apply the in-memory mutations. Promote the draft in
+      // place, then push the approval (atomic duplicate re-check) and the
+      // adapter job.
+      Object.assign(draftEntry, updatedDraftEntry);
+      pushApproval(bucket, approval);
+      bucket.adapterJobs.push(adapterJob);
 
       return {
         journal_entry: clone(draftEntry),
@@ -602,19 +640,19 @@ export function createFinanceDomainService(opts = {}) {
         updated_at: now(),
       });
 
-      bucket.journalEntries.push(reversalEntry);
-
-      const approval = pushApproval(
-        bucket,
-        buildApprovalRecord({
-          tenantId,
-          actor: normalizedActor,
-          aggregateType: 'journal_entry',
-          aggregateId: reversalEntry.id,
-          decision,
-          requestId,
-        }),
-      );
+      // Append-before-mutate (PR #632 P2): build the reversal entry + approval,
+      // pre-validate the duplicate invariant, append the event, and only then
+      // add both to the in-memory bucket — so a failed append leaves no phantom
+      // reversal or approval.
+      const approval = buildApprovalRecord({
+        tenantId,
+        actor: normalizedActor,
+        aggregateType: 'journal_entry',
+        aggregateId: reversalEntry.id,
+        decision,
+        requestId,
+      });
+      assertNoDuplicateApproval(bucket, approval);
 
       await appendEvent(
         bucket,
@@ -635,6 +673,9 @@ export function createFinanceDomainService(opts = {}) {
           policyDecision: decision,
         }),
       );
+
+      bucket.journalEntries.push(reversalEntry);
+      pushApproval(bucket, approval);
 
       return {
         original_entry_id: original.id,
@@ -670,9 +711,16 @@ export function createFinanceDomainService(opts = {}) {
       const approval = bucket.approvals.find((row) => row.id === approvalId);
       ensureTenantMatch(approval, tenantId);
 
-      approval.status = 'approved';
-      approval.approved_by = normalizedActor.id;
-      approval.approved_at = now();
+      // Append-before-mutate (PR #632 P2): persist the approved transition before
+      // mutating the in-memory approval, so a failed append leaves it pending.
+      // The append must also land before promoteLinkedAdapterJobs runs, since the
+      // promotion is a consequence of a durably-recorded approval.
+      const approvedApproval = {
+        ...approval,
+        status: 'approved',
+        approved_by: normalizedActor.id,
+        approved_at: now(),
+      };
 
       await appendEvent(
         bucket,
@@ -685,10 +733,11 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { approval: clone(approval) },
+          payload: { approval: clone(approvedApproval) },
           policyDecision: decision,
         }),
       );
+      Object.assign(approval, approvedApproval);
 
       // Slice 2B: promote any linked adapter_jobs from `draft → queued` and
       // emit one `finance.adapter.sync_queued` event per promoted job. The

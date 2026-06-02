@@ -6,6 +6,49 @@ import createFinanceDomainService from '../lib/finance/financeDomainService.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
 import { buildEvidencePack } from '../lib/finance/auditEvidenceBuilder.js';
 import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
+import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
+import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAdapters/projectionBackedFinanceReadAdapter.js';
+import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
+import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
+import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
+import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerProjection.js';
+import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
+import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
+import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
+
+/**
+ * Phase 4-1 §5 — default FinanceReadAdapter factory. In-memory by default;
+ * projection-backed (Postgres) when ENABLE_FINANCE_PERSISTENT_EVENTS=true.
+ * Loud-on-misconfig: persistent-events without a pool refuses to mount — the
+ * fail-closed posture the prior split-brain guard provided, now structural.
+ */
+export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, service }) {
+  if (!persistentEvents) {
+    return createInMemoryFinanceReadAdapter({ service });
+  }
+  if (!pgPool) {
+    throw new Error(
+      'ENABLE_FINANCE_PERSISTENT_EVENTS=true requires a Postgres pool for ' +
+        'projection-backed reads; refusing to mount the finance v2 routes.',
+    );
+  }
+  const auditEventsReader = createPgAuditEventsReader({ pool: pgPool });
+  const workers = {
+    ledger: createLedgerProjectionWorker(),
+    journalEntries: createJournalEntriesProjectionWorker(),
+    approvalQueue: createApprovalQueueProjectionWorker(),
+    adapterQueue: createAdapterQueueProjectionWorker(),
+  };
+  // Build a FRESH projection-store provider per request so reads always reflect
+  // the latest worker-persisted projection_state — `getLiveStore()` caches for
+  // the provider's lifetime, so a single long-lived provider would pin the
+  // first hydrated snapshot until restart.
+  return createProjectionBackedFinanceReadAdapter({
+    createStoreProvider: () => createPgProjectionStoreProvider({ pool: pgPool }),
+    auditEventsReader,
+    workers,
+  });
+}
 
 function resolveTenantId(req) {
   // M-5: Trust only server-injected sources. req.body?.tenant_id and req.query?.tenant_id
@@ -93,32 +136,58 @@ function decodeAuditCursor(cursor, tenantId) {
 }
 
 export default function createFinanceV2Routes(pgPool, opts = {}) {
-  // Split-brain guard. ENABLE_FINANCE_PERSISTENT_EVENTS=true would route writes
-  // into the Postgres event store while the domain service's business reads
-  // (listJournalEntries, listApprovals, getLedger, getProfitLoss,
-  // getBalanceSheet) still hit the in-memory per-process bucket. After a
-  // restart the bucket is empty, audit_events_count is non-zero, and two
-  // backend instances see divergent views of the same tenant. Refuse to mount
-  // the route entirely — a loud boot failure under
-  // ENABLE_FINANCE_OPS=true + ENABLE_FINANCE_PERSISTENT_EVENTS=true beats
-  // silent operational corruption. Lift this check once projection-backed
-  // reads land (Slice 2). The in-memory branch below stays accurate
-  // (persistence: 'in_memory' in /runtime/status) precisely because this
-  // throw makes the persistent branch structurally unreachable.
-  if (process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true') {
+  const router = express.Router();
+  // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
+  // at construction (no per-request read, no runtime swap).
+  const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
+
+  // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is NOT yet
+  // activatable; refuse to mount when the flag is on (fail-closed).
+  //
+  // The infrastructure ships and is unit-tested: the Postgres event-store wiring
+  // (`eventStoreOpt` below), the projection-backed read adapter
+  // (`defaultFinanceReadAdapterFactory`'s persistent branch — covered by
+  // finance.v2.adapterSelection.test.js + projectionBackedFinanceReadAdapter.test.js),
+  // the projections, and append-before-mutate atomic writes. What is NOT yet
+  // done is the read/mutation surface: several GET handlers (`/journal-drafts`,
+  // `/approvals`, `/adapter-jobs`, `/draft-invoices`) and the approve/reverse/
+  // update mutations still read the in-memory domain-service buckets, which start
+  // empty per process. Enabling the flag would expose a PG-persisted draft/
+  // approval through the projection-backed reads while the service-backed reads
+  // 404/empty it (and a second instance or a restart would lose it entirely).
+  // Until those flows are routed through durable state, mounting persistent mode
+  // is unsafe — so we refuse, the same fail-closed posture the no-pool guard
+  // already enforces. Removing this guard is the activation step of the
+  // remaining Phase 4-1 read/mutation migration.
+  if (persistentEvents) {
     throw new Error(
-      'ENABLE_FINANCE_PERSISTENT_EVENTS=true is not yet a supported backend mode: ' +
-        'the finance v2 routes still read business state from the in-memory domain ' +
-        'service while writes would persist to Postgres, which is split-brain. ' +
-        'Wait for projection-backed reads (Phase 3 Slice 2) before enabling this flag.',
+      'ENABLE_FINANCE_PERSISTENT_EVENTS=true is not yet supported: the finance v2 ' +
+        'service-backed read/mutation endpoints are not projection-durable. ' +
+        'Refusing to mount the finance v2 routes (fail-closed).',
     );
   }
-  const router = express.Router();
-  // Slice 1 keeps the in-memory event store as the only supported route-backed
-  // mode. opts.eventStore / opts.service injection remains for tests.
-  const service =
-    opts.service ||
-    createFinanceDomainService(opts.eventStore ? { eventStore: opts.eventStore } : {});
+
+  // Persistent write path (gated by the boot guard above): in persistent mode the
+  // domain service's WRITES would emit into the Postgres event store rather than
+  // the in-memory bucket. Retained as the activation wiring; `opts.eventStore`
+  // injection remains for tests.
+  const eventStoreOpt = opts.eventStore
+    ? { eventStore: opts.eventStore }
+    : persistentEvents && pgPool
+      ? { eventStore: createFinancePgEventStore({ pool: pgPool }) }
+      : {};
+  const service = opts.service || createFinanceDomainService(eventStoreOpt);
+
+  // Select the read adapter ONCE at construction time. With the boot guard above,
+  // `persistentEvents` is always false here, so this resolves to the in-memory
+  // adapter (behaviourally identical to the pre-lift handlers). The factory's
+  // projection-backed branch remains the activation path for when persistent mode
+  // lands, and is exercised directly in finance.v2.adapterSelection.test.js.
+  const readAdapter = (opts.readAdapterFactory || defaultFinanceReadAdapterFactory)({
+    persistentEvents,
+    pgPool,
+    service,
+  });
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
     opts.isFinanceModuleEnabled ||
@@ -151,35 +220,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/runtime/status', async (req, res) => {
     try {
-      const state =
-        typeof service.getState === 'function'
-          ? await service.getState(req.financeTenantId)
-          : {
-              journalEntries: service.listJournalEntries(req.financeTenantId),
-              approvals: service.listApprovals(req.financeTenantId),
-              auditEvents: await service.listAuditEvents(req.financeTenantId),
-              invoices: [],
-              adapterJobs: [],
-            };
-
       res.json({
         status: 'success',
-        data: {
-          tenant_id: req.financeTenantId,
-          runtime: {
-            mode: 'mock_read_only',
-            persistence: 'in_memory',
-            provider_sync: 'disabled',
-            governance: 'enabled',
-          },
-          counts: {
-            journal_entries: Array.isArray(state.journalEntries) ? state.journalEntries.length : 0,
-            invoices: Array.isArray(state.invoices) ? state.invoices.length : 0,
-            approvals: Array.isArray(state.approvals) ? state.approvals.length : 0,
-            audit_events: Array.isArray(state.auditEvents) ? state.auditEvents.length : 0,
-            adapter_jobs: Array.isArray(state.adapterJobs) ? state.adapterJobs.length : 0,
-          },
-        },
+        data: await readAdapter.getRuntimeStatus(req.financeTenantId),
       });
     } catch (error) {
       logger.error('[finance.v2] runtime status failed:', error);
@@ -189,7 +232,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/journal-entries', async (req, res) => {
     try {
-      const journalEntries = service.listJournalEntries(req.financeTenantId);
+      const journalEntries = await readAdapter.listJournalEntries(req.financeTenantId);
       res.json({ status: 'success', data: { journal_entries: journalEntries } });
     } catch (error) {
       logger.error('[finance.v2] list journal entries failed:', error);
@@ -199,7 +242,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/ledger', async (req, res) => {
     try {
-      const ledger = service.getLedger(req.financeTenantId);
+      const ledger = await readAdapter.getLedger(req.financeTenantId);
       res.json({ status: 'success', data: ledger });
     } catch (error) {
       logger.error('[finance.v2] ledger failed:', error);
@@ -209,7 +252,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/profit-loss', async (req, res) => {
     try {
-      const profitLoss = service.getProfitLoss(req.financeTenantId);
+      const profitLoss = await readAdapter.getProfitLoss(req.financeTenantId);
       res.json({ status: 'success', data: profitLoss });
     } catch (error) {
       logger.error('[finance.v2] profit-loss failed:', error);
@@ -219,7 +262,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/balance-sheet', async (req, res) => {
     try {
-      const balanceSheet = service.getBalanceSheet(req.financeTenantId);
+      const balanceSheet = await readAdapter.getBalanceSheet(req.financeTenantId);
       res.json({ status: 'success', data: balanceSheet });
     } catch (error) {
       logger.error('[finance.v2] balance-sheet failed:', error);

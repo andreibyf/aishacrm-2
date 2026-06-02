@@ -69,6 +69,18 @@ describe('finance.v2 routes', () => {
     assert.match(res.body.message, /access denied/i);
   });
 
+  // Phase 4-1 §9 row 10: the route lift must NOT expand the mutating surface.
+  test('route surface exposes exactly the 6 known mutating endpoints (no expansion)', () => {
+    const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
+    const mutating = [];
+    for (const layer of router.stack) {
+      if (!layer.route) continue;
+      const methods = Object.keys(layer.route.methods).filter((m) => m !== 'get' && m !== '_all');
+      if (methods.length) mutating.push(`${methods.join(',').toUpperCase()} ${layer.route.path}`);
+    }
+    assert.equal(mutating.length, 6, `expected 6 mutating endpoints, got: ${mutating.join(' | ')}`);
+  });
+
   test('POST /journal-drafts rejects unbalanced journals', async () => {
     const { app } = buildApp();
     const res = await request(app)
@@ -251,24 +263,23 @@ describe('finance.v2 routes', () => {
       }
     });
 
-    // Split-brain prevention: the domain service still maintains in-memory
-    // per-process buckets for journal entries / invoices / approvals / adapter
-    // jobs and every business read (listJournalEntries, listApprovals,
-    // getLedger, getProfitLoss, getBalanceSheet) reads from those buckets, not
-    // from the event stream. With ENABLE_FINANCE_PERSISTENT_EVENTS=true, writes
-    // would persist to Postgres while reads would still see only the current
-    // process's in-memory snapshot — restart yields empty business reads
-    // alongside a non-zero audit_events count, and two backend instances see
-    // divergent views. The route factory MUST refuse to mount in this case
-    // until projection-backed reads land (Slice 2).
-    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (with pool)', () => {
+    // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is not yet
+    // activatable. Even WITH a pool, ENABLE_FINANCE_PERSISTENT_EVENTS=true refuses
+    // to mount, because the service-backed read/mutation endpoints
+    // (/journal-drafts, /approvals, /adapter-jobs, /draft-invoices, and the
+    // approve/reverse/update mutations) still read the in-memory buckets, which
+    // start empty per process — a PG-persisted record would be visible via the
+    // projection-backed reads but 404/empty via these. The projection-backed read
+    // adapter + pg event store still SHIP and are unit-tested (see
+    // finance.v2.adapterSelection.test.js); they are simply not activated here.
+    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (even with a pool)', () => {
       const pool = buildSpyPool();
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
         assert.throws(
           () => createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
-          /ENABLE_FINANCE_PERSISTENT_EVENTS/i,
+          /not yet supported|ENABLE_FINANCE_PERSISTENT_EVENTS/i,
         );
       } finally {
         if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
@@ -276,6 +287,8 @@ describe('finance.v2 routes', () => {
       }
     });
 
+    // Loud-on-misconfig (§5): persistent-events without a pool also refuses to
+    // mount — the fail-closed posture the prior guard provided, now structural.
     test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (no pool)', () => {
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';

@@ -39,13 +39,13 @@ function countReadModel(readModel) {
 }
 
 export function createProjectionBackedFinanceReadAdapter({
-  storeProvider,
+  createStoreProvider,
   auditEventsReader,
   workers,
 }) {
-  if (!storeProvider || !auditEventsReader || !workers) {
+  if (typeof createStoreProvider !== 'function' || !auditEventsReader || !workers) {
     throw new Error(
-      'createProjectionBackedFinanceReadAdapter requires storeProvider, auditEventsReader, workers',
+      'createProjectionBackedFinanceReadAdapter requires createStoreProvider(fn), auditEventsReader, workers',
     );
   }
   const { ledger, journalEntries, approvalQueue, adapterQueue } = workers;
@@ -55,9 +55,12 @@ export function createProjectionBackedFinanceReadAdapter({
     );
   }
 
-  // Read one projection's read model. Any store failure becomes a degraded
+  // Read one projection's read model from a per-request store provider. A fresh
+  // provider is built per request (see each method) so the route never serves a
+  // snapshot cached for the router lifetime — it always reflects the latest
+  // worker-persisted projection_state. Any store failure becomes a degraded
   // error — never a silent in-memory fallback (§6).
-  async function readProjection(worker, tenantId) {
+  async function readProjection(storeProvider, worker, tenantId) {
     let store;
     try {
       store = await storeProvider.getLiveStore(worker.projectionName, tenantId);
@@ -70,8 +73,8 @@ export function createProjectionBackedFinanceReadAdapter({
     return worker.getProjection(tenantId, {}, store);
   }
 
-  async function ledgerReadModel(tenantId) {
-    const lm = await readProjection(ledger, tenantId);
+  async function ledgerReadModel(storeProvider, tenantId) {
+    const lm = await readProjection(storeProvider, ledger, tenantId);
     return {
       accounts: Array.isArray(lm?.accounts) ? lm.accounts : [],
       totals: lm?.totals || { debit_cents: 0, credit_cents: 0 },
@@ -80,24 +83,25 @@ export function createProjectionBackedFinanceReadAdapter({
 
   return {
     async listJournalEntries(tenantId) {
-      return readProjection(journalEntries, tenantId);
+      return readProjection(createStoreProvider(), journalEntries, tenantId);
     },
 
     async getLedger(tenantId) {
       // Strip the projection read model's tenant_id wrapper so the shape matches
       // the in-memory `service.getLedger()` ({ accounts, totals }).
-      return ledgerReadModel(tenantId);
+      return ledgerReadModel(createStoreProvider(), tenantId);
     },
 
     async getProfitLoss(tenantId) {
-      return profitAndLossFromLedger(await ledgerReadModel(tenantId));
+      return profitAndLossFromLedger(await ledgerReadModel(createStoreProvider(), tenantId));
     },
 
     async getBalanceSheet(tenantId) {
-      return balanceSheetFromLedger(await ledgerReadModel(tenantId));
+      return balanceSheetFromLedger(await ledgerReadModel(createStoreProvider(), tenantId));
     },
 
     async getRuntimeStatus(tenantId) {
+      const storeProvider = createStoreProvider();
       let auditCount;
       try {
         auditCount = await auditEventsReader.count(tenantId);
@@ -105,20 +109,26 @@ export function createProjectionBackedFinanceReadAdapter({
         throw new FinanceReadDegradedError('audit_events read failed', err);
       }
 
-      const je = await readProjection(journalEntries, tenantId);
-      const ap = await readProjection(approvalQueue, tenantId);
-      const aj = await readProjection(adapterQueue, tenantId);
+      const je = await readProjection(storeProvider, journalEntries, tenantId);
+      const ap = await readProjection(storeProvider, approvalQueue, tenantId);
+      const aj = await readProjection(storeProvider, adapterQueue, tenantId);
 
       // Per-projection cursor + degraded flag — the honest lag signal (§6 row 2):
       // expose where each projection is, never mask staleness by re-reading
       // audit_events directly.
+      // §6 no-silent-fallback: getState failures must raise FinanceReadDegradedError,
+      // not be silently collapsed to null — that would mask projection_state read
+      // failures and return 200 instead of 503.
       const lag = {};
       for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue]) {
-        let state = null;
+        let state;
         try {
           state = await storeProvider.getState(worker.projectionName, tenantId);
-        } catch {
-          state = null;
+        } catch (err) {
+          throw new FinanceReadDegradedError(
+            `projection_state read failed for ${worker.projectionName}`,
+            err,
+          );
         }
         lag[worker.projectionName] = {
           cursor: state?.cursor ?? null,
