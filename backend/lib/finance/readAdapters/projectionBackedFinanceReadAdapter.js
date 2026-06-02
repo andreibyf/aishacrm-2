@@ -112,13 +112,19 @@ export function createProjectionBackedFinanceReadAdapter({
       // Per-projection cursor + degraded flag — the honest lag signal (§6 row 2):
       // expose where each projection is, never mask staleness by re-reading
       // audit_events directly.
+      // §6 no-silent-fallback: getState failures must raise FinanceReadDegradedError,
+      // not be silently collapsed to null — that would mask projection_state read
+      // failures and return 200 instead of 503.
       const lag = {};
       for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue]) {
-        let state = null;
+        let state;
         try {
           state = await storeProvider.getState(worker.projectionName, tenantId);
-        } catch {
-          state = null;
+        } catch (err) {
+          throw new FinanceReadDegradedError(
+            `projection_state read failed for ${worker.projectionName}`,
+            err,
+          );
         }
         lag[worker.projectionName] = {
           cursor: state?.cursor ?? null,

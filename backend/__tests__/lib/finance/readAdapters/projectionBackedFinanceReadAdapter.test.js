@@ -161,4 +161,24 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     });
     await assert.rejects(() => adapter.getRuntimeStatus(T), FinanceReadDegradedError);
   });
+
+  // P2 fix: getState failures in the per-projection lag loop must not be silently
+  // masked — they must raise FinanceReadDegradedError (§6 no-silent-fallback).
+  test('no silent fallback: a projection_state read failure (getState) throws on runtime/status', async () => {
+    const w = workers();
+    const failingProvider = {
+      getLiveStore: async (projName, tenantId) => {
+        return new Map();
+      },
+      getState: async () => {
+        throw new Error('projection_state query failed');
+      },
+    };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      storeProvider: failingProvider,
+      auditEventsReader: { count: async () => 2 },
+      workers: w,
+    });
+    await assert.rejects(() => adapter.getRuntimeStatus(T), FinanceReadDegradedError);
+  });
 });
