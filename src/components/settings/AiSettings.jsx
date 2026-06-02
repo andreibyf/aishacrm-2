@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,12 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { BACKEND_URL } from '@/api/entities';
+import {
+  fetchJsonWithHandling,
+  getErrorMessage,
+  isAbortError,
+  logApiError,
+} from '@/utils/apiErrorHandling';
 
 const CATEGORY_CONFIG = {
   context: {
@@ -74,122 +80,207 @@ export default function AiSettings({ tenantId }) {
   const [ollamaLoading, setOllamaLoading] = useState(false);
   const [ollamaSaving, setOllamaSaving] = useState(false);
   const [ollamaRestarting, setOllamaRestarting] = useState(false);
+  const isMountedRef = useRef(true);
+  const settingsRequestIdRef = useRef(0);
+  const ollamaRequestIdRef = useRef(0);
+  const timerRefs = useRef([]);
 
-  const fetchOllamaSettings = useCallback(async () => {
-    setOllamaLoading(true);
+  const scheduleRefresh = useCallback((callback, delayMs) => {
+    const timerId = setTimeout(() => {
+      timerRefs.current = timerRefs.current.filter((id) => id !== timerId);
+      if (isMountedRef.current) callback();
+    }, delayMs);
+    timerRefs.current.push(timerId);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      timerRefs.current.forEach((id) => clearTimeout(id));
+      timerRefs.current = [];
+    };
+  }, []);
+
+  const fetchOllamaSettings = useCallback(async ({ signal } = {}) => {
+    const requestId = ++ollamaRequestIdRef.current;
+    if (isMountedRef.current) setOllamaLoading(true);
+
     try {
-      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama`, { credentials: 'include' });
-      const data = await r.json();
-      if (data.success) {
+      const data = await fetchJsonWithHandling(
+        `${BACKEND_URL}/api/ai-settings/ollama`,
+        { credentials: 'include', signal },
+        { fallbackMessage: 'Could not load Ollama settings' },
+      );
+
+      if (requestId !== ollamaRequestIdRef.current || signal?.aborted || !isMountedRef.current)
+        return;
+
+      if (data?.success) {
         setOllamaSettings(data.settings || []);
-        setOllamaStatus(data.liveStatus);
+        setOllamaStatus(data.liveStatus || null);
+      } else {
+        toast({
+          title: 'Could not load Ollama settings',
+          description: data?.error || 'Unknown error',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
+      if (isAbortError(err)) return;
+      logApiError('AiSettings.fetchOllamaSettings', err);
+      if (!isMountedRef.current) return;
       toast({
         title: 'Could not load Ollama settings',
-        description: err.message,
+        description: getErrorMessage(err),
         variant: 'destructive',
       });
     } finally {
-      setOllamaLoading(false);
+      if (requestId === ollamaRequestIdRef.current && !signal?.aborted && isMountedRef.current) {
+        setOllamaLoading(false);
+      }
     }
   }, []);
 
   const saveOllamaSettings = async (withRestart = false) => {
     if (Object.keys(ollamaPending).length === 0 && !withRestart) return;
-    setOllamaSaving(true);
-    if (withRestart) setOllamaRestarting(true);
+    if (isMountedRef.current) {
+      setOllamaSaving(true);
+      if (withRestart) setOllamaRestarting(true);
+    }
     try {
-      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ settings: ollamaPending, restart: withRestart }),
-      });
-      const data = await r.json();
+      const data = await fetchJsonWithHandling(
+        `${BACKEND_URL}/api/ai-settings/ollama`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ settings: ollamaPending, restart: withRestart }),
+        },
+        { fallbackMessage: 'Error saving Ollama settings' },
+      );
       if (data.success) {
         toast({
           title: withRestart ? '✅ Saved & restarting Ollama' : '✅ Settings saved',
-          description: data.message,
+          description: data.message || 'Ollama settings updated',
         });
-        setOllamaPending({});
-        setTimeout(fetchOllamaSettings, withRestart ? 8000 : 500);
+        if (isMountedRef.current) setOllamaPending({});
+        scheduleRefresh(() => fetchOllamaSettings(), withRestart ? 8000 : 500);
       } else {
-        toast({ title: 'Error', description: data.error, variant: 'destructive' });
+        toast({
+          title: 'Error',
+          description: data.error || 'Could not save Ollama settings',
+          variant: 'destructive',
+        });
       }
     } catch (err) {
+      logApiError('AiSettings.saveOllamaSettings', err, { withRestart });
+      if (!isMountedRef.current) return;
       toast({
         title: 'Error saving Ollama settings',
-        description: err.message,
+        description: getErrorMessage(err),
         variant: 'destructive',
       });
     } finally {
-      setOllamaSaving(false);
-      if (withRestart) setOllamaRestarting(false);
+      if (isMountedRef.current) {
+        setOllamaSaving(false);
+        if (withRestart) setOllamaRestarting(false);
+      }
     }
   };
 
   const restartOllama = async () => {
-    setOllamaRestarting(true);
+    if (isMountedRef.current) setOllamaRestarting(true);
     try {
-      const r = await fetch(`${BACKEND_URL}/api/ai-settings/ollama/restart`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const data = await r.json();
+      const data = await fetchJsonWithHandling(
+        `${BACKEND_URL}/api/ai-settings/ollama/restart`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+        { fallbackMessage: 'Restart failed' },
+      );
       toast({
         title: data.success ? '✅ Ollama restarted' : '⚠️ Restart failed',
         description: data.message || data.error,
         variant: data.success ? 'default' : 'destructive',
       });
-      setTimeout(fetchOllamaSettings, 6000);
+      scheduleRefresh(() => fetchOllamaSettings(), 6000);
     } catch (err) {
-      toast({ title: 'Restart failed', description: err.message, variant: 'destructive' });
+      logApiError('AiSettings.restartOllama', err);
+      if (!isMountedRef.current) return;
+      toast({ title: 'Restart failed', description: getErrorMessage(err), variant: 'destructive' });
     } finally {
-      setOllamaRestarting(false);
+      if (isMountedRef.current) setOllamaRestarting(false);
     }
   };
 
-  const fetchSettings = useCallback(async () => {
-    if (!tenantId) return;
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `${BACKEND_URL}/api/ai-settings?agent_role=${selectedRole}&tenant_id=${tenantId}`,
-        {
-          credentials: 'include',
-        },
-      );
-      const data = await response.json();
+  const fetchSettings = useCallback(
+    async ({ signal } = {}) => {
+      if (!tenantId) return;
+      const requestId = ++settingsRequestIdRef.current;
+      try {
+        if (isMountedRef.current) setLoading(true);
+        const data = await fetchJsonWithHandling(
+          `${BACKEND_URL}/api/ai-settings?agent_role=${selectedRole}&tenant_id=${tenantId}`,
+          {
+            credentials: 'include',
+            signal,
+          },
+          { fallbackMessage: 'Error loading settings' },
+        );
 
-      if (data.success) {
-        setSettings(data.data || []);
-        setGrouped(data.grouped || {});
-        setAgentRoles(data.agent_roles || ['aisha']);
-      } else {
+        if (
+          requestId !== settingsRequestIdRef.current ||
+          signal?.aborted ||
+          !isMountedRef.current
+        ) {
+          return;
+        }
+
+        if (data.success) {
+          setSettings(data.data || []);
+          setGrouped(data.grouped || {});
+          setAgentRoles(data.agent_roles || ['aisha']);
+        } else {
+          toast({
+            title: 'Error loading settings',
+            description: data.error || 'Unknown error',
+            variant: 'destructive',
+          });
+        }
+      } catch (err) {
+        if (isAbortError(err)) return;
+        logApiError('AiSettings.fetchSettings', err, { tenantId, selectedRole });
+        if (!isMountedRef.current) return;
         toast({
           title: 'Error loading settings',
-          description: data.error || 'Unknown error',
+          description: getErrorMessage(err),
           variant: 'destructive',
         });
+      } finally {
+        if (
+          requestId === settingsRequestIdRef.current &&
+          !signal?.aborted &&
+          isMountedRef.current
+        ) {
+          setLoading(false);
+        }
       }
-    } catch (err) {
-      toast({
-        title: 'Error loading settings',
-        description: err.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedRole, tenantId]);
+    },
+    [selectedRole, tenantId],
+  );
 
   useEffect(() => {
-    if (tenantId) fetchSettings();
+    if (!tenantId) return undefined;
+    const controller = new AbortController();
+    fetchSettings({ signal: controller.signal });
+    return () => controller.abort();
   }, [fetchSettings, tenantId]);
 
   useEffect(() => {
-    fetchOllamaSettings();
+    const controller = new AbortController();
+    fetchOllamaSettings({ signal: controller.signal });
+    return () => controller.abort();
   }, [fetchOllamaSettings]);
 
   const handleValueChange = (settingId, newValue) => {
@@ -202,11 +293,10 @@ export default function AiSettings({ tenantId }) {
   const saveSetting = async (setting) => {
     const newValue = pendingChanges[setting.id];
     if (newValue === undefined) return;
-
-    setSaving((prev) => ({ ...prev, [setting.id]: true }));
+    if (isMountedRef.current) setSaving((prev) => ({ ...prev, [setting.id]: true }));
 
     try {
-      const response = await fetch(
+      const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/${setting.id}?tenant_id=${tenantId}`,
         {
           method: 'PUT',
@@ -214,9 +304,8 @@ export default function AiSettings({ tenantId }) {
           credentials: 'include',
           body: JSON.stringify({ value: newValue }),
         },
+        { fallbackMessage: 'Error saving setting' },
       );
-
-      const data = await response.json();
 
       if (data.success) {
         toast({
@@ -224,11 +313,13 @@ export default function AiSettings({ tenantId }) {
           description: data.message || `Updated ${setting.display_name}`,
         });
         // Remove from pending changes
-        setPendingChanges((prev) => {
-          const next = { ...prev };
-          delete next[setting.id];
-          return next;
-        });
+        if (isMountedRef.current) {
+          setPendingChanges((prev) => {
+            const next = { ...prev };
+            delete next[setting.id];
+            return next;
+          });
+        }
         // Refresh settings
         fetchSettings();
       } else {
@@ -239,26 +330,31 @@ export default function AiSettings({ tenantId }) {
         });
       }
     } catch (err) {
+      logApiError('AiSettings.saveSetting', err, {
+        settingId: setting.id,
+        settingKey: setting.setting_key,
+      });
+      if (!isMountedRef.current) return;
       toast({
         title: 'Error saving setting',
-        description: err.message,
+        description: getErrorMessage(err),
         variant: 'destructive',
       });
     } finally {
-      setSaving((prev) => ({ ...prev, [setting.id]: false }));
+      if (isMountedRef.current) setSaving((prev) => ({ ...prev, [setting.id]: false }));
     }
   };
 
   const clearCache = async () => {
     try {
-      const response = await fetch(
+      const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/clear-cache?tenant_id=${tenantId}`,
         {
           method: 'POST',
           credentials: 'include',
         },
+        { fallbackMessage: 'Error clearing cache' },
       );
-      const data = await response.json();
 
       if (data.success) {
         toast({
@@ -268,9 +364,11 @@ export default function AiSettings({ tenantId }) {
         });
       }
     } catch (err) {
+      logApiError('AiSettings.clearCache', err, { tenantId });
+      if (!isMountedRef.current) return;
       toast({
         title: 'Error clearing cache',
-        description: err.message,
+        description: getErrorMessage(err),
         variant: 'destructive',
       });
     }
