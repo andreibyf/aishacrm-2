@@ -15,6 +15,7 @@ import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerP
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
+import { createInvoiceProjectionWorker } from '../lib/finance/projections/invoiceProjection.js';
 
 /**
  * Phase 4-1 §5 — default FinanceReadAdapter factory. In-memory by default;
@@ -38,6 +39,7 @@ export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, ser
     journalEntries: createJournalEntriesProjectionWorker(),
     approvalQueue: createApprovalQueueProjectionWorker(),
     adapterQueue: createAdapterQueueProjectionWorker(),
+    invoices: createInvoiceProjectionWorker(),
   };
   // Build a FRESH projection-store provider per request so reads always reflect
   // the latest worker-persisted projection_state — `getLiveStore()` caches for

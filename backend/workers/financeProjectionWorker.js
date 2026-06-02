@@ -44,6 +44,7 @@ import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/
 import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
 import { createAuditTimelineProjectionWorker } from '../lib/finance/projections/auditTimelineProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from '../lib/finance/projections/invoiceProjection.js';
 // Slice 2C: shared worker process-lifecycle helpers extracted to a common module
 // so finance-adapter-worker (and any future finance-*-worker) follows the same
 // disabled-by-default + heartbeat-file + clean-shutdown contract without
@@ -199,6 +200,7 @@ export function buildProjectionRunner({ pool }) {
   runner.register(createAdapterQueueProjectionWorker());
   runner.register(createAuditTimelineProjectionWorker({ includeInfrastructureEvents: true }));
   runner.register(createJournalEntriesProjectionWorker());
+  runner.register(createInvoiceProjectionWorker());
 
   return runner;
 }

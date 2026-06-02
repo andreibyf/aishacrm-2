@@ -48,10 +48,10 @@ export function createProjectionBackedFinanceReadAdapter({
       'createProjectionBackedFinanceReadAdapter requires createStoreProvider(fn), auditEventsReader, workers',
     );
   }
-  const { ledger, journalEntries, approvalQueue, adapterQueue } = workers;
-  if (!ledger || !journalEntries || !approvalQueue || !adapterQueue) {
+  const { ledger, journalEntries, approvalQueue, adapterQueue, invoices } = workers;
+  if (!ledger || !journalEntries || !approvalQueue || !adapterQueue || !invoices) {
     throw new Error(
-      'createProjectionBackedFinanceReadAdapter requires ledger, journalEntries, approvalQueue, adapterQueue workers',
+      'createProjectionBackedFinanceReadAdapter requires ledger, journalEntries, approvalQueue, adapterQueue, invoices workers',
     );
   }
 
@@ -110,6 +110,7 @@ export function createProjectionBackedFinanceReadAdapter({
       }
 
       const je = await readProjection(storeProvider, journalEntries, tenantId);
+      const inv = await readProjection(storeProvider, invoices, tenantId);
       const ap = await readProjection(storeProvider, approvalQueue, tenantId);
       const aj = await readProjection(storeProvider, adapterQueue, tenantId);
 
@@ -146,7 +147,7 @@ export function createProjectionBackedFinanceReadAdapter({
         },
         counts: {
           journal_entries: countReadModel(je),
-          invoices: 0, // no invoice projection; draft-invoices is a deferred gap endpoint
+          invoices: countReadModel(inv),
           approvals: countReadModel(ap),
           audit_events: auditCount,
           adapter_jobs: countReadModel(aj),

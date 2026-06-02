@@ -6,6 +6,7 @@ import { createLedgerProjectionWorker } from '../../../../lib/finance/projection
 import { createApprovalQueueProjectionWorker } from '../../../../lib/finance/projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from '../../../../lib/finance/projections/adapterQueueProjection.js';
 import { createJournalEntriesProjectionWorker } from '../../../../lib/finance/projections/journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from '../../../../lib/finance/projections/invoiceProjection.js';
 import {
   createProjectionBackedFinanceReadAdapter,
   FinanceReadDegradedError,
@@ -19,6 +20,7 @@ function workers() {
     journalEntries: createJournalEntriesProjectionWorker(),
     approvalQueue: createApprovalQueueProjectionWorker(),
     adapterQueue: createAdapterQueueProjectionWorker(),
+    invoices: createInvoiceProjectionWorker(),
   };
 }
 
@@ -75,8 +77,24 @@ async function seededProvider(w) {
       },
     },
   };
+  const invoiceDraftCreated = {
+    id: 'evt_inv_dc',
+    tenant_id: T,
+    event_type: 'finance.invoice.draft_created',
+    created_at: '2026-06-01T00:00:03Z',
+    payload: {
+      invoice: {
+        id: 'inv1',
+        tenant_id: T,
+        status: 'draft',
+        total_cents: 1000,
+        currency: 'usd',
+      },
+    },
+  };
   await runner.dispatch(draftCreated);
   await runner.dispatch(approvalRequested);
+  await runner.dispatch(invoiceDraftCreated);
   return storeProvider;
 }
 
@@ -125,6 +143,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     assert.equal(status.runtime.persistence, 'persistent');
     assert.equal(status.runtime.mode, 'persistent');
     assert.equal(status.counts.journal_entries, 1);
+    assert.equal(status.counts.invoices, 1);
     assert.equal(status.counts.audit_events, 2);
     assert.equal(status.persistence_lag.audit_events_total, 2);
     assert.ok(status.persistence_lag.projections['finance.projection.journal_entries']);
