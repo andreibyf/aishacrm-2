@@ -121,7 +121,7 @@ export function createProjectionBackedFinanceReadAdapter({
       // not be silently collapsed to null — that would mask projection_state read
       // failures and return 200 instead of 503.
       const lag = {};
-      for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue]) {
+      for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue, invoices]) {
         let state;
         try {
           state = await storeProvider.getState(worker.projectionName, tenantId);

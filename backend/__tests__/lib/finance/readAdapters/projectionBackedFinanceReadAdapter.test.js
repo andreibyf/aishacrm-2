@@ -147,6 +147,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     assert.equal(status.counts.audit_events, 2);
     assert.equal(status.persistence_lag.audit_events_total, 2);
     assert.ok(status.persistence_lag.projections['finance.projection.journal_entries']);
+    assert.ok(status.persistence_lag.projections['finance.projection.invoices']);
   });
 
   test('no silent fallback: a projection-store read failure throws FinanceReadDegradedError', async () => {
