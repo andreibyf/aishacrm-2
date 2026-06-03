@@ -285,8 +285,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     try {
       const { limit, offset } = clampPagination(req.query);
       const customerId = req.query.customer_id || null;
-      const all = service
-        .listInvoices(req.financeTenantId)
+      const all = (await readAdapter.listInvoices(req.financeTenantId))
         .filter((inv) => inv.status === 'draft')
         .filter((inv) => (customerId ? inv.customer_id === customerId : true));
       const page = all.slice(offset, offset + limit).map((inv) => ({
@@ -315,8 +314,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     try {
       const { limit, offset } = clampPagination(req.query);
       const aggregateId = req.query.aggregate_id || null;
-      const all = service
-        .listJournalEntries(req.financeTenantId)
+      const all = (await readAdapter.listJournalEntries(req.financeTenantId))
         .filter((j) => j.status === 'draft' || j.status === 'pending_approval')
         .filter((j) => (aggregateId ? j.id === aggregateId : true));
       const page = all.slice(offset, offset + limit).map((j) => ({
@@ -348,9 +346,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     try {
       const { limit, offset } = clampPagination(req.query);
       const status = req.query.status || 'pending';
-      const all = service
-        .listApprovals(req.financeTenantId)
-        .filter((a) => (status === 'all' ? true : a.status === status));
+      const all = (await readAdapter.listApprovals(req.financeTenantId)).filter((a) =>
+        status === 'all' ? true : a.status === status,
+      );
       const page = all.slice(offset, offset + limit).map((a) => ({
         id: a.id,
         status: a.status,
@@ -379,8 +377,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       const { limit, offset } = clampPagination(req.query);
       const status = req.query.status || 'all';
       const operation = req.query.operation || null;
-      const all = service
-        .listAdapterJobs(req.financeTenantId)
+      const all = (await readAdapter.listAdapterJobs(req.financeTenantId))
         .filter((j) => (status === 'all' ? true : j.status === status))
         .filter((j) => (operation ? j.operation === operation : true));
       const page = all.slice(offset, offset + limit).map((j) => ({
