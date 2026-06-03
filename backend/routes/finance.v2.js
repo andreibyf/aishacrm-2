@@ -11,6 +11,7 @@ import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAda
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
+import { runPersistentWrite as defaultRunPersistentWrite } from '../lib/finance/persistentWriteRunner.js';
 import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
@@ -23,11 +24,16 @@ import { createInvoiceProjectionWorker } from '../lib/finance/projections/invoic
  * Loud-on-misconfig: persistent-events without a pool refuses to mount — the
  * fail-closed posture the prior split-brain guard provided, now structural.
  */
-export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, service }) {
+export function defaultFinanceReadAdapterFactory({
+  persistentEvents,
+  pgPool,
+  service,
+  createStoreProvider,
+}) {
   if (!persistentEvents) {
     return createInMemoryFinanceReadAdapter({ service });
   }
-  if (!pgPool) {
+  if (!pgPool && !createStoreProvider) {
     throw new Error(
       'ENABLE_FINANCE_PERSISTENT_EVENTS=true requires a Postgres pool for ' +
         'projection-backed reads; refusing to mount the finance v2 routes.',
@@ -41,12 +47,17 @@ export function defaultFinanceReadAdapterFactory({ persistentEvents, pgPool, ser
     adapterQueue: createAdapterQueueProjectionWorker(),
     invoices: createInvoiceProjectionWorker(),
   };
-  // Build a FRESH projection-store provider per request so reads always reflect
-  // the latest worker-persisted projection_state — `getLiveStore()` caches for
-  // the provider's lifetime, so a single long-lived provider would pin the
-  // first hydrated snapshot until restart.
+  // Task 8: the read path and the persistent WRITE path must share projection
+  // state so a write's synchronous advancement is visible to the next read
+  // (read-your-write). When the caller injects a shared `createStoreProvider`,
+  // use it. Otherwise fall back to building a FRESH Postgres projection-store
+  // provider per request so reads always reflect the latest worker-persisted
+  // projection_state — `getLiveStore()` caches for the provider's lifetime, so a
+  // single long-lived PG provider would pin the first hydrated snapshot until
+  // restart.
   return createProjectionBackedFinanceReadAdapter({
-    createStoreProvider: () => createPgProjectionStoreProvider({ pool: pgPool }),
+    createStoreProvider:
+      createStoreProvider || (() => createPgProjectionStoreProvider({ pool: pgPool })),
     auditEventsReader,
     workers,
   });
@@ -84,14 +95,19 @@ function sendError(res, error) {
 }
 
 // Provenance / freshness disclosure block attached to every read payload
-// (design freeze §5.7). Slice 1 serves exclusively from the in-memory domain
-// service, so mode is always 'in_memory' and no projection/cursor lag applies.
-function buildSource(projection = null) {
-  return {
-    mode: 'in_memory',
-    served_at: new Date().toISOString(),
-    projection,
-    cursor_lag_ms: null,
+// (design freeze §5.7). `mode` reflects the deploy-time persistence decision:
+// 'in_memory' when serving from the in-memory domain service, 'persistent' when
+// serving from the Postgres-backed projections. `makeBuildSource` binds the mode
+// once at construction so each handler's buildSource() reports it.
+function makeBuildSource(persistentEvents) {
+  const mode = persistentEvents ? 'persistent' : 'in_memory';
+  return function buildSource(projection = null) {
+    return {
+      mode,
+      served_at: new Date().toISOString(),
+      projection,
+      cursor_lag_ms: null,
+    };
   };
 }
 
@@ -143,52 +159,46 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // at construction (no per-request read, no runtime swap).
   const persistentEvents = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS === 'true';
 
-  // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is NOT yet
-  // activatable; refuse to mount when the flag is on (fail-closed).
-  //
-  // The infrastructure ships and is unit-tested: the Postgres event-store wiring
-  // (`eventStoreOpt` below), the projection-backed read adapter
-  // (`defaultFinanceReadAdapterFactory`'s persistent branch — covered by
-  // finance.v2.adapterSelection.test.js + projectionBackedFinanceReadAdapter.test.js),
-  // the projections, and append-before-mutate atomic writes. What is NOT yet
-  // done is the read/mutation surface: several GET handlers (`/journal-drafts`,
-  // `/approvals`, `/adapter-jobs`, `/draft-invoices`) and the approve/reverse/
-  // update mutations still read the in-memory domain-service buckets, which start
-  // empty per process. Enabling the flag would expose a PG-persisted draft/
-  // approval through the projection-backed reads while the service-backed reads
-  // 404/empty it (and a second instance or a restart would lose it entirely).
-  // Until those flows are routed through durable state, mounting persistent mode
-  // is unsafe — so we refuse, the same fail-closed posture the no-pool guard
-  // already enforces. Removing this guard is the activation step of the
-  // remaining Phase 4-1 read/mutation migration.
-  if (persistentEvents) {
-    throw new Error(
-      'ENABLE_FINANCE_PERSISTENT_EVENTS=true is not yet supported: the finance v2 ' +
-        'service-backed read/mutation endpoints are not projection-durable. ' +
-        'Refusing to mount the finance v2 routes (fail-closed).',
-    );
-  }
+  // Phase 4-1 Task 8 — ACTIVATION. The boot guard is gone: persistent mode now
+  // mounts and is fully functional (durable reads + writes, read-your-write).
+  // The fail-closed posture is preserved structurally — persistent mode still
+  // requires a Postgres pool OR injected stores (the factory's no-pool guard and
+  // the persistent-deps construction below both enforce it).
 
-  // Persistent write path (gated by the boot guard above): in persistent mode the
-  // domain service's WRITES would emit into the Postgres event store rather than
-  // the in-memory bucket. Retained as the activation wiring; `opts.eventStore`
-  // injection remains for tests.
-  const eventStoreOpt = opts.eventStore
-    ? { eventStore: opts.eventStore }
-    : persistentEvents && pgPool
-      ? { eventStore: createFinancePgEventStore({ pool: pgPool }) }
-      : {};
+  // Build the SHARED persistent dependencies ONCE at construction. The READ path
+  // (projection-backed read adapter) and the WRITE path (persistentWriteRunner)
+  // must share the SAME projection-store provider so a write's synchronous
+  // projection advancement is visible to the very next read (read-your-write),
+  // and the SAME persistent event store so a write's durable appends are what the
+  // next write hydrates from. Both are injectable for tests.
+  const persistentEventStore =
+    opts.eventStore ||
+    (persistentEvents && pgPool ? createFinancePgEventStore({ pool: pgPool }) : null);
+  const createStoreProvider =
+    opts.createStoreProvider ||
+    (persistentEvents && pgPool ? () => createPgProjectionStoreProvider({ pool: pgPool }) : null);
+  const runPersistentWriteFn = opts.runPersistentWrite || defaultRunPersistentWrite;
+
+  // The domain service's eventStore is the SAME persistent event store in
+  // persistent mode (so /audit-events + /evidence-packs read the durable PG
+  // stream); in-memory by default. In persistent mode the top-level `service` is
+  // NOT used for the 6 mutations — those go through the write runner, which
+  // builds its own hydrated domain service per request.
+  const eventStoreOpt = persistentEventStore ? { eventStore: persistentEventStore } : {};
   const service = opts.service || createFinanceDomainService(eventStoreOpt);
 
-  // Select the read adapter ONCE at construction time. With the boot guard above,
-  // `persistentEvents` is always false here, so this resolves to the in-memory
-  // adapter (behaviourally identical to the pre-lift handlers). The factory's
-  // projection-backed branch remains the activation path for when persistent mode
-  // lands, and is exercised directly in finance.v2.adapterSelection.test.js.
+  // Provenance/freshness `source` block bound to the deploy-time mode.
+  const buildSource = makeBuildSource(persistentEvents);
+
+  // Select the read adapter ONCE at construction time. In persistent mode it is
+  // projection-backed and shares `createStoreProvider` with the write path; in
+  // default mode it is the in-memory adapter (behaviourally identical to the
+  // pre-lift handlers).
   const readAdapter = (opts.readAdapterFactory || defaultFinanceReadAdapterFactory)({
     persistentEvents,
     pgPool,
     service,
+    createStoreProvider,
   });
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
@@ -533,13 +543,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/draft-invoices', async (req, res) => {
     try {
-      const result = await service.createDraftInvoice({
-        tenantId: req.financeTenantId,
-        actor: buildActor(req),
-        payload: req.body || {},
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.createDraftInvoice({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] create draft invoice failed:', error);
@@ -549,14 +569,24 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.patch('/draft-invoices/:id', async (req, res) => {
     try {
-      const result = await service.updateDraftInvoice({
-        tenantId: req.financeTenantId,
-        invoiceId: req.params.id,
-        actor: buildActor(req),
-        payload: req.body || {},
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.updateDraftInvoice({
+          tenantId: req.financeTenantId,
+          invoiceId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] update draft invoice failed:', error);
@@ -566,13 +596,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/journal-drafts', async (req, res) => {
     try {
-      const result = await service.createJournalDraft({
-        tenantId: req.financeTenantId,
-        actor: buildActor(req),
-        payload: req.body || {},
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.createJournalDraft({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] create journal draft failed:', error);
@@ -582,13 +622,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/simulate/deal-won', async (req, res) => {
     try {
-      const result = await service.simulateDealWon({
-        tenantId: req.financeTenantId,
-        actor: buildActor(req),
-        payload: req.body || {},
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.simulateDealWon({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] simulate deal won failed:', error);
@@ -598,14 +648,24 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/journal-entries/:id/reverse', async (req, res) => {
     try {
-      const result = await service.reverseJournalEntry({
-        tenantId: req.financeTenantId,
-        journalEntryId: req.params.id,
-        actor: buildActor(req),
-        payload: req.body || {},
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.reverseJournalEntry({
+          tenantId: req.financeTenantId,
+          journalEntryId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] reverse journal entry failed:', error);
@@ -615,13 +675,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/approvals/:id/approve', async (req, res) => {
     try {
-      const result = await service.approveFinanceAction({
-        tenantId: req.financeTenantId,
-        approvalId: req.params.id,
-        actor: buildActor(req),
-        requestId: req.headers['x-request-id'] || null,
-        braidTraceId: req.body?.braid_trace_id || null,
-      });
+      const command = (svc) =>
+        svc.approveFinanceAction({
+          tenantId: req.financeTenantId,
+          approvalId: req.params.id,
+          actor: buildActor(req),
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = persistentEvents
+        ? await runPersistentWriteFn({
+            tenantId: req.financeTenantId,
+            eventStore: persistentEventStore,
+            storeProvider: createStoreProvider(),
+            logger,
+            command,
+          })
+        : await command(service);
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] approve finance action failed:', error);
