@@ -48,6 +48,7 @@ import { useUser } from '@/components/shared/useUser';
 import * as finance from '@/api/finance';
 import GuardrailBanners from '@/components/finance/GuardrailBanners';
 import RuntimeOverview from '@/components/finance/RuntimeOverview';
+import FinanceCreatePanel from '@/components/finance/FinanceCreatePanel';
 import LedgerSummary from '@/components/finance/LedgerSummary';
 import JournalEntriesList from '@/components/finance/JournalEntriesList';
 import DraftInvoicesPanel from '@/components/finance/DraftInvoicesPanel';
@@ -382,6 +383,11 @@ export default function FinanceOpsPage() {
             modeUpdating={modeUpdating}
             modeError={modeError}
           />
+          {status?.runtime?.mode === 'test' ? (
+            <div className="mt-3">
+              <FinanceCreatePanel tenantId={selectedTenantId} onCreated={handleRefresh} />
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="ledger" className="m-0">
