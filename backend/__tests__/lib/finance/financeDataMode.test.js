@@ -4,6 +4,7 @@ import {
   FINANCE_DATA_MODES,
   resolveFinanceDataMode,
   fetchFinanceDataMode,
+  setFinanceDataMode,
 } from '../../../lib/finance/financeDataMode.js';
 
 const FIN = 'financeOps';
@@ -43,8 +44,14 @@ describe('resolveFinanceDataMode (pure)', () => {
 
   test('featureFlags.financeDataMode overrides DB rows', () => {
     const rows = [{ module_name: FIN, settings: { data_mode: 'live' } }];
-    assert.equal(resolveFinanceDataMode({ rows, featureFlags: { financeDataMode: 'test' } }), 'test');
-    assert.equal(resolveFinanceDataMode({ rows: [], featureFlags: { financeDataMode: 'live' } }), 'live');
+    assert.equal(
+      resolveFinanceDataMode({ rows, featureFlags: { financeDataMode: 'test' } }),
+      'test',
+    );
+    assert.equal(
+      resolveFinanceDataMode({ rows: [], featureFlags: { financeDataMode: 'live' } }),
+      'live',
+    );
   });
 
   test('exports the mode constants', () => {
@@ -95,12 +102,82 @@ describe('fetchFinanceDataMode (with Supabase)', () => {
   test('propagates a Supabase error', async () => {
     const client = {
       from: () => ({
-        select: () => ({ eq: () => ({ in: async () => ({ data: null, error: new Error('db down') }) }) }),
+        select: () => ({
+          eq: () => ({ in: async () => ({ data: null, error: new Error('db down') }) }),
+        }),
       }),
     };
     await assert.rejects(
       () => fetchFinanceDataMode({ tenantId: 't1', getSupabaseClient: () => client }),
       /db down/,
     );
+  });
+});
+
+describe('setFinanceDataMode', () => {
+  function spyClient({ rows = [], readError = null, writeError = null } = {}) {
+    const calls = { updated: null };
+    const client = {
+      from: () => ({
+        select: () => ({ eq: () => ({ in: async () => ({ data: rows, error: readError }) }) }),
+        update: (payload) => ({
+          eq: async (_col, val) => {
+            calls.updated = { payload, id: val };
+            return { error: writeError };
+          },
+        }),
+      }),
+    };
+    return { client, calls };
+  }
+
+  test('updates the canonical financeOps row settings.data_mode (merging existing keys)', async () => {
+    const { client, calls } = spyClient({
+      rows: [{ id: 'r1', module_name: FIN, settings: { other: 1 } }],
+    });
+    const mode = await setFinanceDataMode({
+      tenantId: 't1',
+      mode: 'live',
+      getSupabaseClient: () => client,
+    });
+    assert.equal(mode, 'live');
+    assert.deepEqual(calls.updated.payload, { settings: { other: 1, data_mode: 'live' } });
+    assert.equal(calls.updated.id, 'r1');
+  });
+
+  test('rejects an invalid mode (400) without touching the DB', async () => {
+    let called = false;
+    await assert.rejects(
+      () =>
+        setFinanceDataMode({
+          tenantId: 't1',
+          mode: 'bogus',
+          getSupabaseClient: () => {
+            called = true;
+            return {};
+          },
+        }),
+      (e) => e.statusCode === 400 && e.code === 'FINANCE_DATA_MODE_INVALID',
+    );
+    assert.equal(called, false);
+  });
+
+  test('throws 409 when Finance Ops is not enabled for the tenant (no row)', async () => {
+    const { client } = spyClient({ rows: [] });
+    await assert.rejects(
+      () => setFinanceDataMode({ tenantId: 't1', mode: 'live', getSupabaseClient: () => client }),
+      (e) => e.statusCode === 409 && e.code === 'FINANCE_NOT_ENABLED',
+    );
+  });
+
+  test('prefers the canonical row over the alias', async () => {
+    const { client, calls } = spyClient({
+      rows: [
+        { id: 'alias', module_name: ALIAS, settings: {} },
+        { id: 'canon', module_name: FIN, settings: {} },
+      ],
+    });
+    await setFinanceDataMode({ tenantId: 't1', mode: 'test', getSupabaseClient: () => client });
+    assert.equal(calls.updated.id, 'canon');
   });
 });

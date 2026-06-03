@@ -87,4 +87,54 @@ export async function fetchFinanceDataMode({ tenantId, getSupabaseClient, featur
   return resolveFinanceDataMode({ rows: data || [], featureFlags });
 }
 
+/**
+ * Persist a tenant's finance data mode by writing `settings.data_mode` on its
+ * existing finance modulesettings row (CANONICAL preferred, else ALIAS). Does
+ * NOT create a row or change `is_enabled` — Finance Ops must already be enabled
+ * for the tenant (a missing row throws 409). Superadmin-gating is the caller's
+ * responsibility (route layer).
+ *
+ * @param {Object}   opts
+ * @param {string}   opts.tenantId
+ * @param {'test'|'live'} opts.mode
+ * @param {Function} opts.getSupabaseClient
+ * @returns {Promise<'test'|'live'>} the persisted mode
+ */
+export async function setFinanceDataMode({ tenantId, mode, getSupabaseClient }) {
+  if (!VALID_MODES.has(mode)) {
+    const err = new Error(`Invalid finance data mode: ${mode} (expected 'test' or 'live')`);
+    err.statusCode = 400;
+    err.code = 'FINANCE_DATA_MODE_INVALID';
+    throw err;
+  }
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('modulesettings')
+    .select('id, module_name, settings')
+    .eq('tenant_id', tenantId)
+    .in('module_name', [FINANCE_MODULE_KEYS.CANONICAL, FINANCE_MODULE_KEYS.ALIAS]);
+  if (error) throw error;
+
+  const rows = (data || []).filter(
+    (r) =>
+      r?.module_name === FINANCE_MODULE_KEYS.CANONICAL ||
+      r?.module_name === FINANCE_MODULE_KEYS.ALIAS,
+  );
+  const target = rows.find((r) => r.module_name === FINANCE_MODULE_KEYS.CANONICAL) || rows[0];
+  if (!target) {
+    const err = new Error('Finance Ops is not enabled for this tenant');
+    err.statusCode = 409;
+    err.code = 'FINANCE_NOT_ENABLED';
+    throw err;
+  }
+
+  const settings = { ...(target.settings || {}), data_mode: mode };
+  const { error: writeError } = await supabase
+    .from('modulesettings')
+    .update({ settings })
+    .eq('id', target.id);
+  if (writeError) throw writeError;
+  return mode;
+}
+
 export default fetchFinanceDataMode;

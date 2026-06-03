@@ -13,6 +13,7 @@ function buildApp({
   user = { id: 'user-1', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
   service = createFinanceDomainService(),
   dataMode = 'test',
+  setFinanceDataMode,
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -26,6 +27,7 @@ function buildApp({
       service,
       isFinanceModuleEnabled: async () => moduleEnabled,
       getFinanceDataMode: async () => dataMode,
+      ...(setFinanceDataMode ? { setFinanceDataMode } : {}),
     }),
   );
   return { app, service };
@@ -64,6 +66,27 @@ describe('finance.v2 routes', () => {
     assert.equal(res.body.data.runtime.data_mode, 'live');
   });
 
+  // The superadmin SUCCESS path requires passing validateTenantAccess's
+  // superadmin-write tenant resolution (a Supabase canonical-tenant lookup), so
+  // it's covered by an integration test rather than here; the persist logic
+  // (valid/invalid mode, not-enabled) is unit-tested in financeDataMode.test.js.
+  // This route test pins the superadmin GATE: a non-superadmin is forbidden and
+  // the setter is never reached.
+  test('PUT /settings/data-mode forbids non-superadmins (and never calls the setter)', async () => {
+    let called = false;
+    const { app } = buildApp({
+      user: { id: 'a', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
+      setFinanceDataMode: async () => {
+        called = true;
+        return 'live';
+      },
+    });
+    const res = await request(app).put('/api/v2/finance/settings/data-mode').send({ mode: 'live' });
+    assert.equal(res.status, 403);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_FORBIDDEN');
+    assert.equal(called, false);
+  });
+
   test('module gate blocks access when Finance Ops is disabled', async () => {
     const { app } = buildApp({ moduleEnabled: false });
     const res = await request(app).get('/api/v2/finance/journal-entries');
@@ -83,7 +106,7 @@ describe('finance.v2 routes', () => {
   });
 
   // Phase 4-1 §9 row 10: the route lift must NOT expand the mutating surface.
-  test('route surface exposes exactly the 6 known mutating endpoints (no expansion)', () => {
+  test('route surface exposes exactly the 6 finance-data mutations + the settings endpoint (no expansion)', () => {
     const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
     const mutating = [];
     for (const layer of router.stack) {
@@ -91,7 +114,19 @@ describe('finance.v2 routes', () => {
       const methods = Object.keys(layer.route.methods).filter((m) => m !== 'get' && m !== '_all');
       if (methods.length) mutating.push(`${methods.join(',').toUpperCase()} ${layer.route.path}`);
     }
-    assert.equal(mutating.length, 6, `expected 6 mutating endpoints, got: ${mutating.join(' | ')}`);
+    // The superadmin Test/Live data-mode setter is a config mutation, not a
+    // finance-DATA write — allowed, and excluded from the §9 row-10 count of
+    // exactly-6 data mutations.
+    const dataMutations = mutating.filter((m) => m !== 'PUT /settings/data-mode');
+    assert.equal(
+      dataMutations.length,
+      6,
+      `expected 6 finance-data mutations, got: ${dataMutations.join(' | ')}`,
+    );
+    assert.ok(
+      mutating.includes('PUT /settings/data-mode'),
+      'the superadmin data-mode settings endpoint must be present',
+    );
   });
 
   test('POST /journal-drafts rejects unbalanced journals', async () => {

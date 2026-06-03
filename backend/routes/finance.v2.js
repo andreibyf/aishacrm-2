@@ -4,7 +4,11 @@ import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-d
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
-import { fetchFinanceDataMode, FINANCE_DATA_MODES } from '../lib/finance/financeDataMode.js';
+import {
+  fetchFinanceDataMode,
+  setFinanceDataMode,
+  FINANCE_DATA_MODES,
+} from '../lib/finance/financeDataMode.js';
 import { buildEvidencePack } from '../lib/finance/auditEvidenceBuilder.js';
 import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
 import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
@@ -80,6 +84,12 @@ function buildActor(req) {
     id: req.user?.id || null,
     type: isAiAgent ? 'ai_agent' : 'human',
   };
+}
+
+// The authenticate middleware normalizes super_admin/super-admin/etc. → 'superadmin'
+// and sets an is_superadmin flag. Honor either; never trust body-supplied roles.
+function isSuperAdmin(req) {
+  return req.user?.role === 'superadmin' || req.user?.is_superadmin === true;
 }
 
 function sendError(res, error) {
@@ -227,6 +237,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   const getFinanceDataMode =
     opts.getFinanceDataMode ||
     (({ tenantId }) => fetchFinanceDataMode({ tenantId, getSupabaseClient }));
+  const setFinanceDataModeFn =
+    opts.setFinanceDataMode ||
+    (({ tenantId, mode }) => setFinanceDataMode({ tenantId, mode, getSupabaseClient }));
 
   router.use(validateTenantAccess);
 
@@ -270,6 +283,32 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.json({ status: 'success', data: status });
     } catch (error) {
       logger.error('[finance.v2] runtime status failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // Superadmin-only: flip the per-tenant Test/Live finance data mode. Admins and
+  // below cannot change it (stricter than the modulesettings admin gate). The
+  // module gate above already required Finance Ops to be enabled for the tenant.
+  router.put('/settings/data-mode', async (req, res) => {
+    try {
+      if (!isSuperAdmin(req)) {
+        const err = new Error('Only a superadmin can change the finance data mode');
+        err.statusCode = 403;
+        err.code = 'FINANCE_DATA_MODE_FORBIDDEN';
+        throw err;
+      }
+      const mode = req.body?.mode;
+      if (mode !== FINANCE_DATA_MODES.TEST && mode !== FINANCE_DATA_MODES.LIVE) {
+        const err = new Error("Finance data mode must be 'test' or 'live'");
+        err.statusCode = 400;
+        err.code = 'FINANCE_DATA_MODE_INVALID';
+        throw err;
+      }
+      const updated = await setFinanceDataModeFn({ tenantId: req.financeTenantId, mode, req });
+      res.json({ status: 'success', data: { mode: updated } });
+    } catch (error) {
+      logger.error('[finance.v2] set data mode failed:', error);
       sendError(res, error);
     }
   });
