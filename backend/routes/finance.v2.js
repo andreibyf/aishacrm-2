@@ -196,12 +196,25 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // domain service. Behaviour is identical to the per-handler branch it replaces.
   async function runWrite(req, command) {
     if (persistentEvents) {
+      // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
+      // into the durable write runner so HYDRATE + the projection REBUILD both
+      // operate on the active mode's partition only. FAIL-SAFE to TEST: a
+      // mode-lookup error must never silently write/rebuild over live data.
+      let isTestData = true;
+      try {
+        isTestData =
+          (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+          FINANCE_DATA_MODES.TEST;
+      } catch {
+        isTestData = true;
+      }
       return runPersistentWriteFn({
         tenantId: req.financeTenantId,
         eventStore: persistentEventStore,
         storeProvider: createStoreProvider(),
         logger,
         command,
+        isTestData,
       });
     }
     return command(service);

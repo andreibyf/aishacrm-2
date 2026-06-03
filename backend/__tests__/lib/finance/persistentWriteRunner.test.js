@@ -85,8 +85,10 @@ function makeSpyRunnerFactory({ failAlways = false, degradeAlways = false } = {}
   const registered = [];
   const factory = () => ({
     register: (worker) => registered.push(worker),
-    replay: async (projectionName, tenantId) => {
-      replayed.push({ projectionName, tenantId });
+    replay: async (projectionName, tenantId, isTestData) => {
+      // Slice 6b-1: capture the data-mode arg so tests can assert the active
+      // mode is threaded into each affected projection's rebuild.
+      replayed.push({ projectionName, tenantId, isTestData });
       if (failAlways) {
         throw new Error('projection rebuild boom');
       }
@@ -363,6 +365,15 @@ test('isTestData=true: hydrate replays the test partition and every captured env
     eventStore.appended.every((e) => e.is_test_data === true),
     'every captured envelope must be stamped is_test_data=true',
   );
+
+  // (c) Slice 6b-1: the ADVANCE rebuild forwards the active mode (test ⇒ true)
+  // to runner.replay for EVERY affected projection — projections are rebuilt
+  // from the test partition only.
+  assert.ok(createRunner.replayed.length >= 1, 'at least one projection rebuilt');
+  assert.ok(
+    createRunner.replayed.every((r) => r.isTestData === true),
+    'every affected projection must be rebuilt with isTestData=true',
+  );
 });
 
 test('default (no isTestData): hydrate replays live partition and envelopes are stamped is_test_data=false', async () => {
@@ -392,6 +403,14 @@ test('default (no isTestData): hydrate replays live partition and envelopes are 
   assert.ok(
     eventStore.appended.every((e) => e.is_test_data === false),
     'default mode must stamp envelopes is_test_data=false',
+  );
+
+  // Slice 6b-1: the ADVANCE rebuild forwards the default live mode (false) to
+  // runner.replay for every affected projection.
+  assert.ok(createRunner.replayed.length >= 1, 'at least one projection rebuilt');
+  assert.ok(
+    createRunner.replayed.every((r) => r.isTestData === false),
+    'default mode must rebuild every affected projection with isTestData=false',
   );
 });
 

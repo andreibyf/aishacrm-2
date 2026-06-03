@@ -48,7 +48,7 @@ afterEach(() => {
 // Build a persistent-mode app over a SHARED in-memory event store + projection
 // store provider. Returning the SAME provider instance from createStoreProvider
 // means the read adapter and the write runner advance/read the same live store.
-function buildPersistentApp({ user } = {}) {
+function buildPersistentApp({ user, dataMode = 'live' } = {}) {
   const eventStore = createFinanceEventStore();
   const storeProvider = createMemoryProjectionStoreProvider();
 
@@ -71,6 +71,12 @@ function buildPersistentApp({ user } = {}) {
       isFinanceModuleEnabled: async () => true,
       eventStore,
       createStoreProvider: () => storeProvider,
+      // Slice 6b-1: runWrite now resolves the tenant data mode to thread the
+      // active partition into HYDRATE + the projection REBUILD. Inject it so the
+      // write path does NOT fall back to the real Supabase-backed resolver. The
+      // acceptance suite seeds default-live (is_test_data=false) events, so the
+      // default app builds in 'live' mode (isTestData=false).
+      getFinanceDataMode: async () => dataMode,
     }),
   );
 
@@ -183,5 +189,64 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       `just-created draft ${createdId} should be visible via GET; got ${JSON.stringify(drafts)}`,
     );
     assert.equal(found.status, 'draft');
+  });
+
+  // Slice 6b-1 — WRITE-SIDE SEGREGATION. In TEST mode, HYDRATE replays only the
+  // test partition, so a test approval is visible (approvable) while a live
+  // approval is NOT (the bucket never sees it ⇒ 404). This proves the active
+  // data mode partitions the durable hydrate on the write path.
+  test('test mode: approves a TEST approval but a LIVE approval is invisible (404)', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'test' });
+
+    function seedApprovalRequested(approvalId, isTestData) {
+      eventStore.append(
+        createFinanceEventEnvelope({
+          tenantId: TENANT_ID,
+          eventType: 'finance.approval.requested',
+          aggregateType: 'approval',
+          aggregateId: approvalId,
+          actorId: 'requester',
+          actorType: 'human',
+          isTestData,
+          payload: {
+            approval: {
+              id: approvalId,
+              tenant_id: TENANT_ID,
+              target_type: 'journal_entry',
+              target_id: `j-${approvalId}`,
+              status: 'pending',
+              requested_by: 'requester',
+              requested_at: new Date().toISOString(),
+            },
+          },
+        }),
+      );
+    }
+
+    // Approval A is a TEST event; approval B is a LIVE event.
+    seedApprovalRequested('A', true);
+    seedApprovalRequested('B', false);
+
+    // In test mode, HYDRATE replays the test partition only ⇒ A is visible.
+    const resA = await request(app).post('/api/v2/finance/approvals/A/approve').send({});
+    assert.equal(
+      resA.status,
+      200,
+      `expected 200 approving TEST approval A, got ${resA.status}: ${JSON.stringify(resA.body)}`,
+    );
+    assert.equal(resA.body.data.approval.id, 'A');
+    assert.equal(resA.body.data.approval.status, 'approved');
+
+    // The LIVE approval B is NOT in the test partition ⇒ the hydrated bucket
+    // never sees it ⇒ approveFinanceAction 404s. This is the segregation proof:
+    // a test-mode write cannot touch live data.
+    const resB = await request(app).post('/api/v2/finance/approvals/B/approve').send({});
+    assert.equal(
+      resB.status,
+      404,
+      `expected 404 approving LIVE approval B in test mode, got ${resB.status}: ${JSON.stringify(
+        resB.body,
+      )}`,
+    );
   });
 });

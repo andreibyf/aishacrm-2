@@ -365,6 +365,83 @@ test('replayAll rebuilds every registered projection', async () => {
   assert.deepEqual(provider.getLiveStore('invoice', TENANT_A).get('events'), ['e2']);
 });
 
+// ── slice 6b-1: data-mode partition threaded into the rebuild ─────────────────
+
+/**
+ * A spy event store recording every `replay(...)` call's argument tuple so a
+ * test can assert the runner forwarded the data-mode filter (or omitted it).
+ */
+function spyEventStore() {
+  const calls = [];
+  return {
+    calls,
+    replay: async (...args) => {
+      calls.push(args);
+      return [];
+    },
+  };
+}
+
+test('replay(name, tenant, true) forwards isTestData=true to eventStore.replay (test partition)', async () => {
+  const eventStore = spyEventStore();
+  const runner = makeRunner({ eventStore, storeProvider: createMemoryProjectionStoreProvider() });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A, true);
+
+  assert.equal(eventStore.calls.length, 1, 'rebuild replays the stream exactly once');
+  assert.deepEqual(
+    eventStore.calls[0],
+    [TENANT_A, true],
+    'replay must be called with (tenantId, true)',
+  );
+});
+
+test('replay(name, tenant, false) forwards isTestData=false to eventStore.replay (live partition)', async () => {
+  const eventStore = spyEventStore();
+  const runner = makeRunner({ eventStore, storeProvider: createMemoryProjectionStoreProvider() });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A, false);
+
+  assert.deepEqual(eventStore.calls[0], [TENANT_A, false]);
+});
+
+test('replay(name, tenant) without a mode replays ALL events (isTestData defaults to null)', async () => {
+  const eventStore = spyEventStore();
+  const runner = makeRunner({ eventStore, storeProvider: createMemoryProjectionStoreProvider() });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A);
+
+  // The default `isTestData = null` is passed through — the in-memory event
+  // store treats null as "no filter = all events" (unchanged behaviour).
+  assert.deepEqual(
+    eventStore.calls[0],
+    [TENANT_A, null],
+    'omitting the mode must replay(tenantId, null) = all events',
+  );
+});
+
+test('replayAll threads isTestData into every projection rebuild', async () => {
+  const eventStore = spyEventStore();
+  const runner = makeRunner({ eventStore, storeProvider: createMemoryProjectionStoreProvider() });
+  runner.register(
+    recordingWorker({ projectionName: 'p1', consumedEvents: ['finance.journal.posted'] }),
+  );
+  runner.register(
+    recordingWorker({ projectionName: 'p2', consumedEvents: ['finance.invoice.draft_created'] }),
+  );
+
+  await runner.replayAll(TENANT_A, true);
+
+  assert.equal(eventStore.calls.length, 2);
+  assert.ok(
+    eventStore.calls.every((args) => args[0] === TENANT_A && args[1] === true),
+    'every replay in replayAll must forward (tenantId, true)',
+  );
+});
+
 // ── Infrastructure event filtering ────────────────────────────────────────────
 
 test('finance.audit.event_appended is not delivered to a business projection (even if listed)', async () => {

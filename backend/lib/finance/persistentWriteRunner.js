@@ -225,7 +225,11 @@ export async function runPersistentWrite({
     for (const projectionName of affected) {
       let replayResult;
       try {
-        replayResult = await runner.replay(projectionName, tenantId);
+        // Slice 6b-1: rebuild each affected projection from the ACTIVE mode's
+        // events only — a test-mode write rebuilds from the test partition,
+        // a live-mode write from the live partition. Default false (live)
+        // preserves existing behaviour.
+        replayResult = await runner.replay(projectionName, tenantId, isTestData);
       } catch (err) {
         // Infra-level failure (projection-store / Postgres error): replay threw.
         // The event is already durably appended — log and continue; the async
