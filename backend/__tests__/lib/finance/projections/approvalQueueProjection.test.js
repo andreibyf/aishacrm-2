@@ -205,9 +205,20 @@ test('finance.approval.rejected removes the pending entry and adds a resolved en
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.pending.length, 0);
   assert.equal(queue.resolved.length, 1);
-  assert.equal(queue.resolved[0].status, 'rejected');
-  assert.equal(queue.resolved[0].resolved_by, 'user_boss');
-  assert.equal(queue.resolved[0].resolved_at, '2026-05-21T02:00:00.000Z');
+
+  assert.deepEqual(queue.resolved[0], {
+    approval_id: 'approval_1',
+    status: 'rejected',
+    resolved_by: 'user_boss',
+    resolved_at: '2026-05-21T02:00:00.000Z',
+    target_type: 'journal_entry',
+    target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
+  });
 });
 
 test('finance.approval.cancelled removes the pending entry and adds a resolved entry', async () => {
@@ -234,7 +245,20 @@ test('finance.approval.cancelled removes the pending entry and adds a resolved e
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.pending.length, 0);
   assert.equal(queue.resolved.length, 1);
-  assert.equal(queue.resolved[0].status, 'cancelled');
+
+  assert.deepEqual(queue.resolved[0], {
+    approval_id: 'approval_1',
+    status: 'cancelled',
+    resolved_by: 'user_alice',
+    resolved_at: '2026-05-21T02:00:00.000Z',
+    target_type: 'journal_entry',
+    target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
+  });
 });
 
 // ── Replay rebuild (acceptance) ────────────────────────────────────────────────

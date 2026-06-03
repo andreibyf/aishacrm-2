@@ -210,6 +210,95 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     await assert.rejects(() => adapter.getRuntimeStatus(T), FinanceReadDegradedError);
   });
 
+  // Fix A: exercise listApprovals' rejected/cancelled reconstruction branches.
+  // The parity test can only produce `approved` (the domain service only exposes
+  // approveFinanceAction), so dispatch the approval lifecycle directly to
+  // materialize one resolved approval per terminal status and assert the adapter
+  // stamps the correct status-specific decision fields.
+  test('listApprovals reconstructs approved / rejected / cancelled decision fields per status', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    // A finance.approval.requested event for the given approval id.
+    const requested = (approvalId, targetId) => ({
+      id: `evt_req_${approvalId}`,
+      tenant_id: T,
+      event_type: 'finance.approval.requested',
+      created_at: '2026-06-01T00:00:01Z',
+      actor_id: 'u_requester',
+      payload: {
+        approval: {
+          id: approvalId,
+          tenant_id: T,
+          status: 'pending',
+          target_type: 'journal_entry',
+          target_id: targetId,
+          requested_by: 'u_requester',
+          requested_at: '2026-06-01T00:00:01Z',
+          created_at: '2026-06-01T00:00:01Z',
+        },
+      },
+    });
+    // A resolution event (approved/rejected/cancelled). The projection stamps
+    // resolved_by from actor_id and resolved_at from created_at.
+    const resolved = (eventType, approvalId, actorId) => ({
+      id: `evt_res_${approvalId}`,
+      tenant_id: T,
+      event_type: eventType,
+      created_at: '2026-06-01T00:01:00Z',
+      actor_id: actorId,
+      payload: { approval: { id: approvalId } },
+    });
+
+    await runner.dispatch(requested('appr_ok', 'j_ok'));
+    await runner.dispatch(requested('appr_rej', 'j_rej'));
+    await runner.dispatch(requested('appr_can', 'j_can'));
+    await runner.dispatch(resolved('finance.approval.approved', 'appr_ok', 'u_boss'));
+    await runner.dispatch(resolved('finance.approval.rejected', 'appr_rej', 'u_boss'));
+    await runner.dispatch(resolved('finance.approval.cancelled', 'appr_can', 'u_alice'));
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const approvals = await adapter.listApprovals(T);
+    const byId = Object.fromEntries(approvals.map((a) => [a.id, a]));
+
+    const approved = byId.appr_ok;
+    assert.equal(approved.status, 'approved');
+    assert.equal(approved.approved_by, 'u_boss');
+    assert.equal(approved.approved_at, '2026-06-01T00:01:00Z');
+    assert.equal(approved.rejected_by, undefined);
+    assert.equal(approved.cancelled_by, undefined);
+    assert.equal(approved.requested_by, 'u_requester');
+    assert.equal(approved.requested_at, '2026-06-01T00:00:01Z');
+
+    const rejected = byId.appr_rej;
+    assert.equal(rejected.status, 'rejected');
+    assert.equal(rejected.rejected_by, 'u_boss');
+    assert.equal(rejected.rejected_at, '2026-06-01T00:01:00Z');
+    assert.equal(rejected.approved_by, undefined);
+    assert.equal(rejected.cancelled_by, undefined);
+    assert.equal(rejected.requested_by, 'u_requester');
+    assert.equal(rejected.requested_at, '2026-06-01T00:00:01Z');
+
+    const cancelled = byId.appr_can;
+    assert.equal(cancelled.status, 'cancelled');
+    assert.equal(cancelled.cancelled_by, 'u_alice');
+    assert.equal(cancelled.cancelled_at, '2026-06-01T00:01:00Z');
+    assert.equal(cancelled.approved_by, undefined);
+    assert.equal(cancelled.rejected_by, undefined);
+    assert.equal(cancelled.requested_by, 'u_requester');
+    assert.equal(cancelled.requested_at, '2026-06-01T00:00:01Z');
+  });
+
   // #2: the route must not serve a snapshot cached for the router lifetime — the
   // adapter builds a FRESH store provider per request.
   test('builds a fresh store provider per request (no cached-for-lifetime snapshot)', async () => {

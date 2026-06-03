@@ -107,11 +107,11 @@ export function createProjectionBackedFinanceReadAdapter({
       const queue = await readProjection(createStoreProvider(), approvalQueue, tenantId);
       const pending = (queue?.pending || []).map((entry) => ({
         id: entry.approval_id,
-        tenant_id: entry.tenant_id,
+        tenant_id: entry.tenant_id ?? null,
         target_type: entry.target_type,
         target_id: entry.target_id,
         status: 'pending',
-        requested_by: entry.requested_by,
+        requested_by: entry.requested_by ?? null,
         requested_at: entry.created_at,
       }));
       const resolved = (queue?.resolved || []).map((entry) => {
