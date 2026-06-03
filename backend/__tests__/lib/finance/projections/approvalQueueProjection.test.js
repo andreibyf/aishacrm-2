@@ -173,6 +173,11 @@ test('finance.approval.approved removes the pending entry and adds a resolved en
     resolved_at: '2026-05-21T02:00:00.000Z',
     target_type: 'journal_entry',
     target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
   });
 });
 
@@ -348,6 +353,8 @@ test('a duplicate finance.approval.requested does not reopen an already-resolved
     resolved_at: '2026-05-21T02:00:00.000Z',
     target_type: 'journal_entry',
     target_id: 'je-e1',
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T01:00:00.000Z',
   });
 });
 

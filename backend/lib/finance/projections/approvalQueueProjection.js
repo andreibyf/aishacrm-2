@@ -124,7 +124,17 @@ function toPendingEntry(record) {
   };
 }
 
-/** Project a stored record into the `resolved` read-model entry. */
+/**
+ * Project a stored record into the `resolved` read-model entry.
+ *
+ * Phase 4-1 (Task 3): additively carries `requested_by` / `requested_at` so the
+ * persistent-mode `/approvals?status=all` read reproduces the in-memory
+ * `service.listApprovals()` shape for resolved approvals (which keep their
+ * original requester + request timestamp). `requested_at` is sourced from the
+ * stored record's `created_at`, which the requested-event handler set from the
+ * approval's `created_at ?? requested_at` — the same value the in-memory
+ * `buildApprovalRecord()` stamps on both fields.
+ */
 function toResolvedEntry(record) {
   return {
     approval_id: record.approval_id,
@@ -133,6 +143,8 @@ function toResolvedEntry(record) {
     resolved_at: record.resolved_at,
     target_type: record.target_type,
     target_id: record.target_id,
+    requested_by: record.requested_by,
+    requested_at: record.created_at,
   };
 }
 

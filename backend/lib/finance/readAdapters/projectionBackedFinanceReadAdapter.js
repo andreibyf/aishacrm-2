@@ -86,6 +86,93 @@ export function createProjectionBackedFinanceReadAdapter({
       return readProjection(createStoreProvider(), journalEntries, tenantId);
     },
 
+    // The invoices projection stores FULL invoice snapshots and getProjection
+    // returns them as an insertion-ordered array — the same shape
+    // `service.listInvoices()` returns — so it is served as-is. The route's
+    // /draft-invoices handler reads id/status/customer_id/currency/total_cents/
+    // created_at/updated_at off each record, all present on the snapshot.
+    async listInvoices(tenantId) {
+      return readProjection(createStoreProvider(), invoices, tenantId);
+    },
+
+    // Reconstruct a flat approval list matching `service.listApprovals()` on the
+    // route-consumed fields (finance.v2.js /approvals: id/status/target_type/
+    // target_id/requested_by/requested_at + the decision actor/timestamp the
+    // route coalesces into decided_by/decided_at). The approval_queue projection
+    // splits records into pending/resolved buckets, so flatten both: pending
+    // entries map straight through; resolved entries map resolved_by/resolved_at
+    // into the status-specific decision fields (approved_/rejected_/cancelled_)
+    // the route coalesces over.
+    async listApprovals(tenantId) {
+      const queue = await readProjection(createStoreProvider(), approvalQueue, tenantId);
+      const pending = (queue?.pending || []).map((entry) => ({
+        id: entry.approval_id,
+        tenant_id: entry.tenant_id,
+        target_type: entry.target_type,
+        target_id: entry.target_id,
+        status: 'pending',
+        requested_by: entry.requested_by,
+        requested_at: entry.created_at,
+      }));
+      const resolved = (queue?.resolved || []).map((entry) => {
+        const record = {
+          id: entry.approval_id,
+          tenant_id: entry.tenant_id ?? null,
+          target_type: entry.target_type,
+          target_id: entry.target_id,
+          status: entry.status,
+          requested_by: entry.requested_by ?? null,
+          requested_at: entry.requested_at ?? null,
+        };
+        // Stamp the decision actor + timestamp onto the status-specific fields
+        // (approved_by/at | rejected_by/at | cancelled_by/at) the route's
+        // decided_by/decided_at coalescing reads from.
+        if (entry.status === 'approved') {
+          record.approved_by = entry.resolved_by;
+          record.approved_at = entry.resolved_at;
+        } else if (entry.status === 'rejected') {
+          record.rejected_by = entry.resolved_by;
+          record.rejected_at = entry.resolved_at;
+        } else if (entry.status === 'cancelled') {
+          record.cancelled_by = entry.resolved_by;
+          record.cancelled_at = entry.resolved_at;
+        }
+        return record;
+      });
+      return [...pending, ...resolved];
+    },
+
+    // Reconstruct a flat adapter-job list matching `service.listAdapterJobs()` on
+    // the route-consumed fields (finance.v2.js /adapter-jobs: id/operation/status/
+    // attempts/created_at). The adapter_queue projection splits records into
+    // queued/running/failed/completed buckets keyed by adapter_job_id; concat all
+    // buckets and map adapter_job_id -> id. Note the projection only materializes
+    // a job once a finance.adapter.sync_* event has been emitted, so a draft job
+    // with no sync event yet is absent here (by design — it has no queue state).
+    async listAdapterJobs(tenantId) {
+      const buckets = await readProjection(createStoreProvider(), adapterQueue, tenantId);
+      const items = [
+        ...(buckets?.queued || []),
+        ...(buckets?.running || []),
+        ...(buckets?.failed || []),
+        ...(buckets?.completed || []),
+      ];
+      return items.map((item) => ({
+        id: item.adapter_job_id,
+        tenant_id: item.tenant_id,
+        provider: item.provider,
+        aggregate_type: item.aggregate_type,
+        aggregate_id: item.aggregate_id,
+        operation: item.operation,
+        mode: item.mode,
+        status: item.status,
+        attempts: item.attempts,
+        error_message: item.error_message,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      }));
+    },
+
     async getLedger(tenantId) {
       // Strip the projection read model's tenant_id wrapper so the shape matches
       // the in-memory `service.getLedger()` ({ accounts, totals }).
