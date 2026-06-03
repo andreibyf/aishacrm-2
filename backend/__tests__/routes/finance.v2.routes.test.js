@@ -12,6 +12,7 @@ function buildApp({
   moduleEnabled = true,
   user = { id: 'user-1', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
   service = createFinanceDomainService(),
+  dataMode = 'test',
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -24,13 +25,14 @@ function buildApp({
     createFinanceV2Routes(null, {
       service,
       isFinanceModuleEnabled: async () => moduleEnabled,
+      getFinanceDataMode: async () => dataMode,
     }),
   );
   return { app, service };
 }
 
 describe('finance.v2 routes', () => {
-  test('GET /runtime/status returns mock runtime status', async () => {
+  test('GET /runtime/status reports the tenant Test/Live data mode', async () => {
     const service = createFinanceDomainService();
     await service.createDraftInvoice({
       tenantId: TENANT_ID,
@@ -44,11 +46,22 @@ describe('finance.v2 routes', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.status, 'success');
     assert.equal(res.body.data.tenant_id, TENANT_ID);
-    assert.equal(res.body.data.runtime.mode, 'mock_read_only');
+    // `runtime.mode` is now the authoritative data mode (was the `mock_read_only`
+    // placeholder); the engine is reported separately via `runtime.persistence`.
+    assert.equal(res.body.data.runtime.mode, 'test');
+    assert.equal(res.body.data.runtime.data_mode, 'test');
     assert.equal(res.body.data.runtime.persistence, 'in_memory');
     assert.equal(res.body.data.runtime.provider_sync, 'disabled');
     assert.equal(res.body.data.counts.invoices, 1);
     assert.equal(res.body.data.counts.audit_events, 1);
+  });
+
+  test('GET /runtime/status reports live when the tenant data mode is live', async () => {
+    const { app } = buildApp({ dataMode: 'live' });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.runtime.mode, 'live');
+    assert.equal(res.body.data.runtime.data_mode, 'live');
   });
 
   test('module gate blocks access when Finance Ops is disabled', async () => {

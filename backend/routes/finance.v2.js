@@ -4,6 +4,7 @@ import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-d
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
+import { fetchFinanceDataMode, FINANCE_DATA_MODES } from '../lib/finance/financeDataMode.js';
 import { buildEvidencePack } from '../lib/finance/auditEvidenceBuilder.js';
 import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
 import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
@@ -221,6 +222,11 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   const isFinanceModuleEnabled =
     opts.isFinanceModuleEnabled ||
     (({ tenantId }) => checkFinanceOpsEnabled({ tenantId, getSupabaseClient }));
+  // Per-tenant Test/Live data mode (superadmin-controlled). Injectable for tests;
+  // defaults to reading the financeOps modulesettings row.
+  const getFinanceDataMode =
+    opts.getFinanceDataMode ||
+    (({ tenantId }) => fetchFinanceDataMode({ tenantId, getSupabaseClient }));
 
   router.use(validateTenantAccess);
 
@@ -249,10 +255,19 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/runtime/status', async (req, res) => {
     try {
-      res.json({
-        status: 'success',
-        data: await readAdapter.getRuntimeStatus(req.financeTenantId),
-      });
+      const status = await readAdapter.getRuntimeStatus(req.financeTenantId);
+      // Surface the authoritative per-tenant Test/Live data mode as `runtime.mode`
+      // (replacing the legacy `mock_read_only` placeholder). `runtime.persistence`
+      // continues to report the engine (in_memory vs persistent). Resolve failures
+      // fail-safe to `test` — never expose a tenant as `live` on a lookup error.
+      let dataMode = FINANCE_DATA_MODES.TEST;
+      try {
+        dataMode = await getFinanceDataMode({ tenantId: req.financeTenantId, req });
+      } catch (err) {
+        logger.warn('[finance.v2] data-mode resolve failed; defaulting to test:', err?.message);
+      }
+      status.runtime = { ...status.runtime, mode: dataMode, data_mode: dataMode };
+      res.json({ status: 'success', data: status });
     } catch (error) {
       logger.error('[finance.v2] runtime status failed:', error);
       sendError(res, error);
