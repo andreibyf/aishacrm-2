@@ -26,7 +26,7 @@ export class FinanceReadDegradedError extends Error {
 
 // Count a projection read model: arrays by length, bucket-objects by summing
 // their array values (approval_queue: pending+resolved; adapter_queue:
-// queued+running+failed+completed).
+// draft+queued+running+failed+completed).
 function countReadModel(readModel) {
   if (Array.isArray(readModel)) return readModel.length;
   if (readModel && typeof readModel === 'object') {
@@ -145,13 +145,15 @@ export function createProjectionBackedFinanceReadAdapter({
     // Reconstruct a flat adapter-job list matching `service.listAdapterJobs()` on
     // the route-consumed fields (finance.v2.js /adapter-jobs: id/operation/status/
     // attempts/created_at). The adapter_queue projection splits records into
-    // queued/running/failed/completed buckets keyed by adapter_job_id; concat all
-    // buckets and map adapter_job_id -> id. Note the projection only materializes
-    // a job once a finance.adapter.sync_* event has been emitted, so a draft job
-    // with no sync event yet is absent here (by design — it has no queue state).
+    // draft/queued/running/failed/completed buckets keyed by adapter_job_id;
+    // concat all buckets and map adapter_job_id -> id. The projection now
+    // materializes a draft job from the `finance.approval.requested` adapter_job
+    // snapshot (before any sync event), so an un-synced draft is present here —
+    // matching the in-memory domain service's listAdapterJobs().
     async listAdapterJobs(tenantId) {
       const buckets = await readProjection(createStoreProvider(), adapterQueue, tenantId);
       const items = [
+        ...(buckets?.draft || []),
         ...(buckets?.queued || []),
         ...(buckets?.running || []),
         ...(buckets?.failed || []),

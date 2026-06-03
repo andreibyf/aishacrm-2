@@ -60,6 +60,58 @@ function adapterEvent(
   };
 }
 
+// A finance.approval.requested event carrying the optional draft `adapter_job`
+// snapshot (mirrors `simulateDealWon` in financeDomainService.js: status
+// 'draft', no `attempts`/`error_message` on the snapshot). The projection
+// materializes this into the `draft` bucket before any sync event exists.
+function approvalRequestedWithDraftJob(
+  id,
+  {
+    adapterJobId = `adapter_job_${id}`,
+    tenant = TENANT_A,
+    createdAt = '2026-05-21T00:00:00.000Z',
+    jobCreatedAt = createdAt,
+    provider = 'quickbooks',
+    aggregateType = 'journal_entry',
+    aggregateId = `je-${id}`,
+    operation = 'push_draft',
+    mode = 'draft_only',
+    correlationId = `corr-${id}`,
+    causationId = `cause-${id}`,
+    includeAdapterJob = true,
+  } = {},
+) {
+  return {
+    id,
+    tenant_id: tenant,
+    event_type: 'finance.approval.requested',
+    created_at: createdAt,
+    aggregate_type: 'approval',
+    aggregate_id: `appr-${id}`,
+    correlation_id: correlationId,
+    causation_id: causationId,
+    payload: {
+      approval: { id: `appr-${id}`, target_type: aggregateType, target_id: aggregateId },
+      ...(includeAdapterJob
+        ? {
+            adapter_job: {
+              id: adapterJobId,
+              tenant_id: tenant,
+              status: 'draft',
+              provider,
+              aggregate_type: aggregateType,
+              aggregate_id: aggregateId,
+              operation,
+              mode,
+              created_at: jobCreatedAt,
+              updated_at: createdAt,
+            },
+          }
+        : {}),
+    },
+  };
+}
+
 function fakeEventStore(eventsByTenant = {}) {
   return {
     async replay(tenantId) {
@@ -129,6 +181,111 @@ test('a finance.adapter.sync_queued event adds an item to the queued bucket', as
     correlation_id: 'corr-1',
     causation_id: 'cause-1',
   });
+});
+
+// ── approval.requested draft adapter_job -> draft bucket ───────────────────────
+
+test('a finance.approval.requested with a draft adapter_job materializes it in the draft bucket', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(
+    approvalRequestedWithDraftJob('e1', {
+      adapterJobId: 'adapter_job_1',
+      aggregateId: 'je-1',
+      createdAt: '2026-05-21T01:00:00.000Z',
+      jobCreatedAt: '2026-05-21T01:00:00.000Z',
+      correlationId: 'corr-1',
+      causationId: 'cause-1',
+    }),
+  );
+
+  const queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.draft.length, 1);
+  assert.equal(queue.queued.length, 0);
+  assert.equal(queue.running.length, 0);
+  assert.equal(queue.failed.length, 0);
+  assert.equal(queue.completed.length, 0);
+
+  assert.deepEqual(queue.draft[0], {
+    adapter_job_id: 'adapter_job_1',
+    tenant_id: TENANT_A,
+    provider: 'quickbooks',
+    aggregate_type: 'journal_entry',
+    aggregate_id: 'je-1',
+    operation: 'push_draft',
+    mode: 'draft_only',
+    status: 'draft',
+    attempts: 0,
+    error_message: null,
+    created_at: '2026-05-21T01:00:00.000Z',
+    updated_at: '2026-05-21T01:00:00.000Z',
+    correlation_id: 'corr-1',
+    causation_id: 'cause-1',
+  });
+});
+
+test('a finance.approval.requested WITHOUT an adapter_job is a no-op (not degraded)', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(approvalRequestedWithDraftJob('e1', { includeAdapterJob: false }));
+
+  const queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.draft.length, 0);
+  assert.equal(queue.queued.length, 0);
+  assert.equal(
+    (await runner.status(ADAPTER_QUEUE_PROJECTION_NAME, TENANT_A)).is_degraded,
+    false,
+    'an approval.requested with no adapter_job is skipped, never degraded',
+  );
+});
+
+// The core Task 8b transition: a draft materialized by approval.requested must
+// move OUT of `draft` and INTO `queued` when its sync_queued arrives — same
+// adapter_job_id, keyed-by-id overwrite, re-bucketed by status — with NO
+// duplicate left in `draft`.
+test('a draft adapter_job transitions draft -> queued on sync_queued with no duplicate', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(
+    approvalRequestedWithDraftJob('e1', {
+      adapterJobId: 'adapter_job_1',
+      aggregateId: 'je-1',
+      createdAt: '2026-05-21T01:00:00.000Z',
+    }),
+  );
+  let queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.draft.length, 1, 'draft materialized');
+  assert.equal(queue.queued.length, 0);
+
+  // The promoter emits sync_queued for the SAME adapter_job_id.
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_queued', 'e2', {
+      adapterJobId: 'adapter_job_1',
+      aggregateId: 'je-1',
+      createdAt: '2026-05-21T02:00:00.000Z',
+    }),
+  );
+  queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.draft.length, 0, 'left the draft bucket on sync_queued');
+  assert.equal(queue.queued.length, 1, 'moved into the queued bucket');
+  assert.equal(queue.queued[0].adapter_job_id, 'adapter_job_1');
+
+  const total =
+    queue.draft.length +
+    queue.queued.length +
+    queue.running.length +
+    queue.failed.length +
+    queue.completed.length;
+  assert.equal(total, 1, 'one adapter_job_id is represented exactly once across all buckets');
 });
 
 // ── sync_succeeded -> completed bucket ─────────────────────────────────────────

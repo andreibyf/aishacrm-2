@@ -184,11 +184,44 @@ const adapterSyncQueued = {
   },
 };
 
+// Task 8b: the adapter_queue projection also consumes finance.approval.requested
+// for its optional draft adapter_job snapshot. The draft-materialization path is
+// the same set-by-id upsert, so it must be idempotent under double-apply too.
+const approvalRequestedWithDraftAdapterJob = {
+  id: 'evt_appr_draft_1',
+  tenant_id: T,
+  event_type: 'finance.approval.requested',
+  created_at: '2026-05-21T01:00:00.000Z',
+  correlation_id: 'corr-2',
+  causation_id: 'cause-2',
+  payload: {
+    approval: { id: 'appr-2', target_type: 'journal_entry', target_id: 'je-2' },
+    adapter_job: {
+      id: 'aj-2',
+      tenant_id: T,
+      status: 'draft',
+      provider: 'quickbooks',
+      aggregate_type: 'journal_entry',
+      aggregate_id: 'je-2',
+      operation: 'push_draft',
+      mode: 'draft_only',
+      created_at: '2026-05-21T01:00:00.000Z',
+      updated_at: '2026-05-21T01:00:00.000Z',
+    },
+  },
+};
+
 const FLOWING = [
   ['journal_entries', createJournalEntriesProjectionWorker, journalDraftCreated],
   ['invoices', createInvoiceProjectionWorker, invoiceDraftCreated],
   ['approval_queue', createApprovalQueueProjectionWorker, approvalRequested],
   ['adapter_queue', createAdapterQueueProjectionWorker, adapterSyncQueued],
+  // adapter_queue draft-materialization path (Task 8b).
+  [
+    'adapter_queue (draft)',
+    createAdapterQueueProjectionWorker,
+    approvalRequestedWithDraftAdapterJob,
+  ],
 ];
 
 // ── Tests ──────────────────────────────────────────────────────────────────────

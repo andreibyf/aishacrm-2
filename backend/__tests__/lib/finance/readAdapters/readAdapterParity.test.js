@@ -177,22 +177,22 @@ describe('finance read adapter parity (InMemory vs ProjectionBacked)', () => {
     assert.deepEqual(projectAll(proj, approvalRouteFields), projectAll(mem, approvalRouteFields));
   });
 
-  test('listAdapterJobs: route-consumed fields are identical (incl. a queued job)', async () => {
+  test('listAdapterJobs: route-consumed fields are identical (full set: a draft and a queued job)', async () => {
     const { inMemory, projectionBacked } = await buildBoth();
     const mem = await inMemory.listAdapterJobs(T);
     const proj = await projectionBacked.listAdapterJobs(T);
     assert.ok(
-      proj.some((j) => j.status === 'queued'),
-      'the approved deal promoted an adapter job to queued in the projection',
+      mem.some((j) => j.status === 'draft') && mem.some((j) => j.status === 'queued'),
+      'representative sequence produced both a draft (un-approved deal) and a queued (approved deal) adapter job',
     );
-    // The adapter_queue projection only materializes jobs once a sync_* event
-    // has been emitted (the draft job from the un-approved deal has no
-    // sync_queued event yet), so compare on the queued/terminal jobs both
-    // adapters agree exist — keyed by id.
-    const memById = new Map(mem.map((j) => [j.id, j]));
-    for (const pj of proj) {
-      assert.ok(memById.has(pj.id), `projection job ${pj.id} exists in-memory`);
-      assert.deepEqual(adapterJobRouteFields(pj), adapterJobRouteFields(memById.get(pj.id)));
-    }
+    // The adapter_queue projection now materializes the draft adapter_job from
+    // the un-approved deal's finance.approval.requested snapshot (Task 8b), so
+    // the projection-backed list is the FULL set the in-memory service returns —
+    // assert exact set equality on the route-consumed fields, matching the
+    // invoices/approvals comparisons above.
+    assert.deepEqual(
+      projectAll(proj, adapterJobRouteFields),
+      projectAll(mem, adapterJobRouteFields),
+    );
   });
 });
