@@ -353,6 +353,63 @@ test('T-11: replay is deterministic when events share identical created_at — _
   );
 });
 
+// ── slice 6a: is_test_data partition ──────────────────────────────────────────
+
+test('append preserves is_test_data=true on the stored event', () => {
+  const store = createFinanceEventStore();
+  const evt = store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.created',
+    is_test_data: true,
+  });
+  assert.equal(evt.is_test_data, true, 'is_test_data=true must be preserved');
+});
+
+test('append defaults is_test_data to false when not supplied', () => {
+  const store = createFinanceEventStore();
+  const evt = store.append({
+    tenant_id: TENANT_A,
+    event_type: 'finance.test.created',
+  });
+  assert.equal(evt.is_test_data, false, 'is_test_data must default to false (live)');
+});
+
+test('replay(t, true/false) filters by is_test_data; replay(t) returns all', () => {
+  const store = createFinanceEventStore();
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.a', is_test_data: true });
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.b', is_test_data: true });
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.c', is_test_data: false });
+
+  assert.equal(store.replay(TENANT_A, true).length, 2, 'two test events');
+  assert.equal(store.replay(TENANT_A, false).length, 1, 'one live event');
+  assert.equal(store.replay(TENANT_A).length, 3, 'no filter → all events');
+  assert.ok(store.replay(TENANT_A, true).every((e) => e.is_test_data === true));
+  assert.ok(store.replay(TENANT_A, false).every((e) => e.is_test_data === false));
+});
+
+test('query filters by is_test_data when provided', () => {
+  const store = createFinanceEventStore();
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.a', is_test_data: true });
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.b', is_test_data: false });
+
+  const testEvents = store.query({ tenant_id: TENANT_A, is_test_data: true });
+  assert.equal(testEvents.length, 1);
+  assert.ok(testEvents.every((e) => e.is_test_data === true));
+  // No is_test_data arg → all events (today's behavior).
+  assert.equal(store.query({ tenant_id: TENANT_A }).length, 2);
+});
+
+test('getCount(t, isTestData) filters by mode when supplied', () => {
+  const store = createFinanceEventStore();
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.a', is_test_data: true });
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.b', is_test_data: false });
+  store.append({ tenant_id: TENANT_A, event_type: 'finance.test.c', is_test_data: false });
+
+  assert.equal(store.getCount(TENANT_A), 3, 'no mode arg → all events');
+  assert.equal(store.getCount(TENANT_A, true), 1, 'test events');
+  assert.equal(store.getCount(TENANT_A, false), 2, 'live events');
+});
+
 // A-3 — Idempotency posture: append-always (no dedup on caller-supplied id)
 test('A-3: append-always — two calls with the same id produce two records (no dedup)', () => {
   const store = createFinanceEventStore();

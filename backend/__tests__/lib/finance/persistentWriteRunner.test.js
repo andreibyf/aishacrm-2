@@ -58,10 +58,15 @@ function seedApprovalRequestedEvent(approvalId = 'A') {
 // Fake eventStore mirroring the PG store surface used by the runner.
 function makeFakeEventStore(seedEvents = []) {
   const appended = [];
+  const replayCalls = []; // [{ tenantId, isTestData }] — proves hydrate's mode arg
   return {
     appended,
+    replayCalls,
     seedEvents,
-    replay: async (_tenantId) => [...seedEvents],
+    replay: async (_tenantId, isTestData) => {
+      replayCalls.push({ tenantId: _tenantId, isTestData });
+      return [...seedEvents];
+    },
     append: async (e) => {
       appended.push(e);
       return e;
@@ -323,6 +328,71 @@ test('durable hydration proof: seeded PG approval is visible to the command (no 
 
   assert.equal(result.approval.id, 'A');
   assert.equal(result.approval.status, 'approved');
+});
+
+// ── slice 6a: Test/Live data-mode stamping ────────────────────────────────────
+
+test('isTestData=true: hydrate replays the test partition and every captured envelope is stamped is_test_data=true', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const result = await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    logger,
+    isTestData: true,
+  });
+
+  assert.equal(result.approval.status, 'approved');
+
+  // (a) HYDRATE replayed with the current mode (test ⇒ true).
+  assert.ok(eventStore.replayCalls.length >= 1, 'hydrate must call replay');
+  assert.equal(
+    eventStore.replayCalls[0].isTestData,
+    true,
+    'hydrate must replay(tenantId, true) for test mode',
+  );
+
+  // (b) Every appended/captured envelope is stamped is_test_data=true.
+  assert.ok(eventStore.appended.length >= 1, 'at least one event appended');
+  assert.ok(
+    eventStore.appended.every((e) => e.is_test_data === true),
+    'every captured envelope must be stamped is_test_data=true',
+  );
+});
+
+test('default (no isTestData): hydrate replays live partition and envelopes are stamped is_test_data=false', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const result = await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    logger,
+  });
+
+  assert.equal(result.approval.status, 'approved');
+
+  // Hydrate replays with the default live mode (false).
+  assert.equal(
+    eventStore.replayCalls[0].isTestData,
+    false,
+    'default hydrate must replay(tenantId, false)',
+  );
+  // Every captured envelope stamped live (false).
+  assert.ok(eventStore.appended.length >= 1);
+  assert.ok(
+    eventStore.appended.every((e) => e.is_test_data === false),
+    'default mode must stamp envelopes is_test_data=false',
+  );
 });
 
 test('validation: missing tenantId / command / deps throw a clear error', async () => {

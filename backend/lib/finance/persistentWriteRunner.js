@@ -117,6 +117,10 @@ export async function runPersistentWrite({
   logger = defaultLogger,
   maxAttempts = 3,
   retryBackoffMs = 20,
+  // Test/Live data-mode partition (slice 6a): hydrate replays only the current
+  // mode's events, and every appended envelope is stamped with this mode.
+  // Live (false) by default so existing behaviour is preserved.
+  isTestData = false,
 } = {}) {
   if (!tenantId) {
     throw new Error('runPersistentWrite requires a tenantId');
@@ -145,7 +149,8 @@ export async function runPersistentWrite({
   // event store's replay(tenantId) returns the tenant's ordered events; the
   // projection runner consumes replay() the same way (see projectionRunner.js
   // doReplay → eventStore.replay(tenantId)), so we mirror that call shape.
-  const events = await resolvedEventStore.replay(tenantId);
+  // Slice 6a: replay only the current mode's partition (test ⇒ true).
+  const events = await resolvedEventStore.replay(tenantId, isTestData);
   const bucket = rebuildBucketFromEvents(events);
 
   // 2. RUN — a per-request domain service over the hydrated bucket and a
@@ -159,8 +164,11 @@ export async function runPersistentWrite({
   const captured = [];
   const capturingEventStore = {
     append: async (envelope) => {
-      captured.push(envelope);
-      return resolvedEventStore.append(envelope);
+      // Slice 6a: stamp the current data-mode onto every appended envelope so
+      // the command's parent + all spawned events are tagged for the partition.
+      const stamped = { ...envelope, is_test_data: isTestData };
+      captured.push(stamped);
+      return resolvedEventStore.append(stamped);
     },
     query: (...args) => resolvedEventStore.query(...args),
     replay: (...args) => resolvedEventStore.replay(...args),

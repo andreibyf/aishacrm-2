@@ -47,6 +47,8 @@ const INSERT_COLUMNS = [
   'causation_id',
   'payload',
   'policy_decision',
+  // Test/Live data-mode partition (slice 6a): live (false) by default.
+  'is_test_data',
 ];
 
 function invalid(message) {
@@ -111,6 +113,7 @@ export function createFinancePgEventStore({ pool } = {}) {
       eventPartial.causation_id ?? null,
       JSON.stringify(eventPartial.payload ?? {}),
       JSON.stringify(eventPartial.policy_decision ?? {}),
+      eventPartial.is_test_data ?? false,
     ];
     const placeholders = INSERT_COLUMNS.map((_, i) => `$${i + 1}`).join(', ');
     const text =
@@ -142,7 +145,14 @@ export function createFinancePgEventStore({ pool } = {}) {
    * Query tenant-scoped events with optional equality filters, ordered
    * created_at ASC, id ASC.
    */
-  async function query({ tenant_id, event_type, aggregate_type, aggregate_id, limit } = {}) {
+  async function query({
+    tenant_id,
+    event_type,
+    aggregate_type,
+    aggregate_id,
+    is_test_data,
+    limit,
+  } = {}) {
     if (!tenant_id) {
       throw invalid('tenant_id is required for event store queries');
     }
@@ -159,6 +169,11 @@ export function createFinancePgEventStore({ pool } = {}) {
     if (aggregate_id !== undefined) {
       values.push(aggregate_id);
       conditions.push(`aggregate_id = $${values.length}`);
+    }
+    // Test/Live partition (slice 6a): filter only when explicitly provided.
+    if (is_test_data !== undefined && is_test_data !== null) {
+      values.push(is_test_data);
+      conditions.push(`is_test_data = $${values.length}`);
     }
     let text =
       `select * from ${AUDIT_EVENTS_TABLE} where ${conditions.join(' and ')} ` +
@@ -180,29 +195,42 @@ export function createFinancePgEventStore({ pool } = {}) {
    * Replay the full tenant event stream in deterministic order:
    * created_at ASC, with id (uuid) as the tie-break.
    */
-  async function replay(tenant_id) {
+  async function replay(tenant_id, isTestData = null) {
     if (!tenant_id) {
       throw invalid('tenant_id is required for event store replay');
     }
+    const values = [tenant_id];
+    let where = 'tenant_id = $1';
+    // Test/Live partition (slice 6a): filter to the requested mode only when
+    // supplied. null/undefined → all events (today's behaviour, unchanged).
+    if (isTestData !== null && isTestData !== undefined) {
+      values.push(isTestData);
+      where += ` and is_test_data = $${values.length}`;
+    }
     const text =
-      `select * from ${AUDIT_EVENTS_TABLE} where tenant_id = $1 ` +
-      `order by created_at asc, id asc`;
+      `select * from ${AUDIT_EVENTS_TABLE} where ${where} ` + `order by created_at asc, id asc`;
     try {
-      const result = await pool.query(text, [tenant_id]);
+      const result = await pool.query(text, values);
       return result.rows;
     } catch (err) {
       throw dbError('replay', err);
     }
   }
 
-  /** Count tenant-scoped events. */
-  async function getCount(tenant_id) {
+  /** Count tenant-scoped events; optionally partitioned by Test/Live mode. */
+  async function getCount(tenant_id, isTestData = null) {
     if (!tenant_id) {
       throw invalid('tenant_id is required for event store getCount');
     }
-    const text = `select count(*)::int as count from ${AUDIT_EVENTS_TABLE} where tenant_id = $1`;
+    const values = [tenant_id];
+    let where = 'tenant_id = $1';
+    if (isTestData !== null && isTestData !== undefined) {
+      values.push(isTestData);
+      where += ` and is_test_data = $${values.length}`;
+    }
+    const text = `select count(*)::int as count from ${AUDIT_EVENTS_TABLE} where ${where}`;
     try {
-      const result = await pool.query(text, [tenant_id]);
+      const result = await pool.query(text, values);
       return result.rows[0].count;
     } catch (err) {
       throw dbError('count', err);
