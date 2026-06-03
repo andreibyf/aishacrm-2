@@ -80,6 +80,12 @@ function adapterJobRouteFields(j) {
     operation: j.operation ?? null,
     status: j.status,
     attempts: Number(j.attempts ?? 0),
+    // Route-consumed error/next-attempt fields. Previously omitted here, which
+    // hid the persistent adapter reconstructing `error_message` instead of the
+    // route's `last_error` (Codex PR #632-followup P2). Both are part of the
+    // /adapter-jobs response contract, so parity must cover them.
+    last_error: j.last_error ?? null,
+    next_attempt_at: j.next_attempt_at ?? null,
     created_at: j.created_at ?? null,
   };
 }

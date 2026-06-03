@@ -318,4 +318,50 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     await adapter.getLedger(T);
     assert.equal(providerBuilds, 3, 'a fresh provider is built for every read request');
   });
+
+  // Codex PR #632-followup P2: a FAILED adapter job's error text must surface on
+  // /adapter-jobs in persistent mode. The route serializer reads `last_error`,
+  // but the adapter_queue projection stores it as `error_message`; the adapter
+  // must map it back to `last_error` or the failure text is silently dropped.
+  test('listAdapterJobs surfaces a failed job error as last_error (route contract)', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    await runner.dispatch({
+      id: 'evt_sync_failed',
+      tenant_id: T,
+      event_type: 'finance.adapter.sync_failed',
+      created_at: '2026-06-01T00:05:00Z',
+      payload: {
+        adapter_job: {
+          id: 'aj_failed',
+          tenant_id: T,
+          provider: 'quickbooks',
+          operation: 'push_draft',
+          mode: 'draft_only',
+          status: 'failed',
+          attempts: 2,
+          error_message: 'provider sync timed out',
+        },
+      },
+    });
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const [job] = await adapter.listAdapterJobs(T);
+    assert.equal(job.id, 'aj_failed');
+    assert.equal(job.status, 'failed');
+    // The error must land on `last_error` (route-consumed), not be dropped.
+    assert.equal(job.last_error, 'provider sync timed out');
+    assert.equal('error_message' in job, false, 'reconstruct to last_error, not error_message');
+  });
 });

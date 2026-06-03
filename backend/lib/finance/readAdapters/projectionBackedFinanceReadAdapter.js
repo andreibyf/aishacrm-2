@@ -169,7 +169,12 @@ export function createProjectionBackedFinanceReadAdapter({
         mode: item.mode,
         status: item.status,
         attempts: item.attempts,
-        error_message: item.error_message,
+        // The route serializer (finance.v2.js GET /adapter-jobs) reads `last_error`
+        // — the in-memory contract's field name. The adapter_queue projection
+        // stores the error under `error_message`, so map it back to `last_error`
+        // here or the route emits `last_error: null` and drops the failure text
+        // for failed jobs in persistent mode (Codex PR #632-followup P2).
+        last_error: item.error_message ?? null,
         created_at: item.created_at,
         updated_at: item.updated_at,
       }));
