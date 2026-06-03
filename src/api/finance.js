@@ -149,6 +149,53 @@ export function getRuntimeStatus(tenantId, { signal } = {}) {
 }
 
 /**
+ * Internal mutation helper. The finance v2 module is otherwise GET-only (a
+ * read-only console); this is the single intentional mutation surface — the
+ * superadmin-controlled Test/Live data mode. Sends the tenant as `x-tenant-id`
+ * (which also satisfies the backend's superadmin-write tenant requirement) plus
+ * a JSON body, and unwraps the standard { status, data } envelope.
+ */
+async function mutate(path, { tenantId, method = 'PUT', body, signal } = {}) {
+  if (!tenantId) {
+    const err = new Error('finance api client: tenant_id is required');
+    err.status = 0;
+    err.code = 'CLIENT_MISSING_TENANT';
+    err.details = null;
+    throw err;
+  }
+  const url = `${getBackendUrl()}${FINANCE_BASE_PATH}${path}`;
+  const res = await fetch(url, {
+    method,
+    credentials: 'include',
+    signal,
+    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json.message || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.code = json.code || null;
+    err.details = json.details || null;
+    throw err;
+  }
+  return json.data;
+}
+
+/**
+ * PUT /api/v2/finance/settings/data-mode — superadmin-only. Flip the tenant's
+ * Test/Live finance data mode.
+ *
+ * @param {string} tenantId
+ * @param {'test'|'live'} mode
+ * @param {Object} [opts] { signal }
+ * @returns {Promise<{ mode: 'test'|'live' }>}
+ */
+export function updateFinanceDataMode(tenantId, mode, { signal } = {}) {
+  return mutate('/settings/data-mode', { tenantId, method: 'PUT', body: { mode }, signal });
+}
+
+/**
  * GET /api/v2/finance/journal-entries
  *
  * Returns posted journal entries for the tenant. The in-memory domain service

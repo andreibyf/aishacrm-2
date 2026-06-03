@@ -6,16 +6,17 @@
  * persistent guardrail banners, and the tab strip that UI-1C populates with
  * data panels.
  *
- * Strict scope per design freeze §1 and §15 (commits 5db9d45b / bc0bce52):
- *   - This page exposes NO mutating affordance. No approve / reject / reverse
- *     / replay / retry / cancel / sync / activate / enable button anywhere.
- *   - The page consumes only the 5 GET routes exposed via src/api/finance.js
- *     (UI-1A). The 6 mutating Finance v2 endpoints are not imported, not
- *     referenced, not called.
+ * Scope (per design freeze §1/§15, extended by the Test/Live data-mode feature):
+ *   - The page exposes NO finance-DATA mutating affordance — no approve / reject
+ *     / reverse / replay / retry / cancel / sync / activate / enable button. The
+ *     6 mutating Finance v2 data endpoints are not imported, referenced, or called.
+ *   - The ONE exception is the superadmin **Test/Live data-mode** control (in the
+ *     Runtime overview): it calls the single config setter
+ *     `finance.updateFinanceDataMode` (PUT /settings/data-mode), and is gated to
+ *     superadmins on the frontend (the backend enforces it too, 403 otherwise).
+ *   - Otherwise the page consumes only the GET read routes via src/api/finance.js.
  *   - Access follows the backend contract: authenticated tenant +
- *     validateTenantAccess + per-tenant financeOps module gate. No frontend
- *     role gate is enforced — that decision is deferred to a later
- *     product/UX slice (design freeze §11.3).
+ *     validateTenantAccess + per-tenant financeOps module gate.
  *
  * The page renders one of three top-level states:
  *
@@ -43,6 +44,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, BarChart3, Lock, Loader2 } from 'lucide-react';
 import { useTenant } from '@/components/shared/tenantContext';
+import { useUser } from '@/components/shared/useUser';
 import * as finance from '@/api/finance';
 import GuardrailBanners from '@/components/finance/GuardrailBanners';
 import RuntimeOverview from '@/components/finance/RuntimeOverview';
@@ -203,6 +205,8 @@ function GenericErrorState({ error, onRetry }) {
 
 export default function FinanceOpsPage() {
   const { selectedTenantId } = useTenant();
+  const { user } = useUser();
+  const isSuperadmin = user?.role === 'superadmin' || user?.is_superadmin === true;
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab');
@@ -269,6 +273,27 @@ export default function FinanceOpsPage() {
     fetchStatus();
   }, [fetchStatus]);
 
+  // Superadmin Test/Live data-mode control. The backend also enforces the
+  // superadmin gate (403 otherwise); the UI hides the control for non-superadmins.
+  const [modeUpdating, setModeUpdating] = useState(false);
+  const [modeError, setModeError] = useState(null);
+  const handleChangeMode = useCallback(
+    async (mode) => {
+      if (!selectedTenantId) return;
+      setModeUpdating(true);
+      setModeError(null);
+      try {
+        await finance.updateFinanceDataMode(selectedTenantId, mode);
+        await fetchStatus();
+      } catch (err) {
+        setModeError(err?.message || 'Failed to change the data mode.');
+      } finally {
+        setModeUpdating(false);
+      }
+    },
+    [selectedTenantId, fetchStatus],
+  );
+
   // Top-level state selection. The order matters: route-disabled and
   // tenant-not-enrolled override the page chrome entirely (banners + tabs
   // would be confusing when the data surface is unavailable), while the
@@ -302,6 +327,18 @@ export default function FinanceOpsPage() {
     <div className="flex flex-col gap-4 p-4" data-testid="finance-ops-page">
       <PageHeader />
       <GuardrailBanners status={status} />
+
+      {status?.runtime?.mode === 'test' ? (
+        <div
+          className="rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm text-amber-200"
+          data-testid="finance-ops-test-mode-banner"
+          role="status"
+        >
+          <span className="font-semibold">⚠ TEST DATA</span> — this tenant&apos;s Finance module is
+          in <span className="font-semibold">test mode</span>. Records here are sandbox data (not
+          real) and can be cleared.
+        </div>
+      ) : null}
 
       {error ? <GenericErrorState error={error} onRetry={handleRefresh} /> : null}
 
@@ -339,6 +376,11 @@ export default function FinanceOpsPage() {
             error={null}
             onRefresh={handleRefresh}
             lastRefreshedAt={lastRefreshedAt}
+            dataMode={status?.runtime?.data_mode || status?.runtime?.mode || null}
+            canEditMode={isSuperadmin}
+            onChangeMode={handleChangeMode}
+            modeUpdating={modeUpdating}
+            modeError={modeError}
           />
         </TabsContent>
 

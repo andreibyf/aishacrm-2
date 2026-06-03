@@ -162,3 +162,56 @@ describe('RuntimeOverview — read-only safety', () => {
     expect(labels).toContain('refresh');
   });
 });
+
+describe('RuntimeOverview — Test/Live data mode control (superadmin)', () => {
+  const base = (mode) => ({ ...HEALTHY, runtime: { ...HEALTHY.runtime, mode, data_mode: mode } });
+
+  it('does not render the mode toggle without canEditMode/onChangeMode', () => {
+    render(<RuntimeOverview status={base('test')} />);
+    expect(screen.queryByTestId('runtime-overview-mode-toggle')).toBeNull();
+  });
+
+  it('renders the toggle for a superadmin and marks the active mode', () => {
+    render(
+      <RuntimeOverview status={base('test')} dataMode="test" canEditMode onChangeMode={() => {}} />,
+    );
+    expect(screen.getByTestId('runtime-overview-mode-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('runtime-overview-mode-set-test')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByTestId('runtime-overview-mode-set-live')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('fires onChangeMode with the clicked mode', () => {
+    const onChangeMode = vi.fn();
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={onChangeMode}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('runtime-overview-mode-set-live'));
+    expect(onChangeMode).toHaveBeenCalledWith('live');
+  });
+
+  it('disables controls while a change is in flight and surfaces an error', () => {
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={() => {}}
+        modeUpdating
+        modeError="boom"
+      />,
+    );
+    expect(screen.getByTestId('runtime-overview-mode-set-live')).toBeDisabled();
+    expect(screen.getByTestId('runtime-overview-mode-error')).toHaveTextContent('boom');
+  });
+});

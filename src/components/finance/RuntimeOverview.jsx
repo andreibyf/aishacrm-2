@@ -81,6 +81,14 @@ export default function RuntimeOverview({
   error = null,
   onRefresh,
   lastRefreshedAt = null,
+  // Test/Live data mode control (superadmin only). Presentation-only: the page
+  // owns the API call + user-role gate and passes these down. The toggle renders
+  // only when both `canEditMode` and `onChangeMode` are provided.
+  dataMode = null,
+  canEditMode = false,
+  onChangeMode = null,
+  modeUpdating = false,
+  modeError = null,
 }) {
   const runtime = status?.runtime || {};
   const counts = status?.counts || {};
@@ -143,6 +151,46 @@ export default function RuntimeOverview({
             >
               The {`"${MODE_PLACEHOLDER}"`} value is a backend placeholder, not an authoritative
               mode signal — see gap {FINANCE_API_GAPS.runtimeMode.designRef}.
+            </p>
+          ) : null}
+
+          {canEditMode && onChangeMode ? (
+            <div
+              className="flex items-center justify-between gap-3 border-b border-slate-700/40 py-2"
+              data-testid="runtime-overview-mode-toggle"
+            >
+              <span className="text-xs uppercase tracking-wide text-slate-400">
+                Data mode (superadmin)
+              </span>
+              <div className="inline-flex overflow-hidden rounded-md border border-slate-600">
+                {['test', 'live'].map((m) => {
+                  const active = (dataMode || runtime.mode) === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={modeUpdating || active}
+                      onClick={() => onChangeMode(m)}
+                      aria-pressed={active}
+                      data-testid={`runtime-overview-mode-set-${m}`}
+                      className={`px-3 py-1 text-xs font-medium transition-colors disabled:cursor-default ${
+                        active
+                          ? m === 'test'
+                            ? 'bg-amber-500/90 text-slate-900'
+                            : 'bg-emerald-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      } ${modeUpdating ? 'opacity-60' : ''}`}
+                    >
+                      {m === 'test' ? 'Test' : 'Live'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          {modeError ? (
+            <p className="pb-1 text-[10px] text-red-300" data-testid="runtime-overview-mode-error">
+              {modeError}
             </p>
           ) : null}
           <PostureRow label="Persistence" value={runtime.persistence} dataTestKey="persistence" />
