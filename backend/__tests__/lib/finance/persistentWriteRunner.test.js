@@ -70,8 +70,10 @@ function makeFakeEventStore(seedEvents = []) {
 }
 
 // A spy runner factory: records every dispatch call (and the order vs append).
-// `failAlways` makes dispatch reject so we can assert non-fatal advancement.
-function makeSpyRunnerFactory({ failAlways = false } = {}) {
+// `failAlways` makes dispatch REJECT (infra-level failure) so we can assert
+// non-fatal advancement. `degradeAlways` makes dispatch RESOLVE but report a
+// degraded worker outcome — the dominant handler-level non-fatal failure.
+function makeSpyRunnerFactory({ failAlways = false, degradeAlways = false } = {}) {
   const dispatched = [];
   const registered = [];
   const factory = () => ({
@@ -80,6 +82,12 @@ function makeSpyRunnerFactory({ failAlways = false } = {}) {
       dispatched.push(envelope);
       if (failAlways) {
         throw new Error('projection dispatch boom');
+      }
+      if (degradeAlways) {
+        return {
+          event_id: envelope.id,
+          dispatched: [{ projectionName: 'finance.projection.ledger', outcome: 'degraded' }],
+        };
       }
       return { event_id: envelope.id, dispatched: [] };
     },
@@ -191,7 +199,7 @@ test('read-your-write: every captured envelope is dispatched through the runner'
   assert.deepEqual(dispatchedIds, appendedIds);
 });
 
-test('advance failure is non-fatal: resolves with command result, retries maxAttempts, logs warn', async () => {
+test('advance failure (infra: dispatch REJECTS) is non-fatal: resolves with command result, dispatched ONCE per envelope, logs warn', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory({ failAlways: true });
   const { logger, warns } = makeFakeLogger();
@@ -208,19 +216,50 @@ test('advance failure is non-fatal: resolves with command result, retries maxAtt
     retryBackoffMs: 1,
   });
 
-  // Resolved with the authoritative command result despite dispatch failure.
+  // Resolved with the authoritative command result despite dispatch rejection.
   assert.equal(result.approval.status, 'approved');
 
-  // Each captured envelope was retried maxAttempts times.
+  // The runner retries handlers INTERNALLY — runPersistentWrite no longer wraps
+  // an outer retry, so dispatch is called exactly ONCE per captured envelope.
   const captured = eventStore.appended.length;
   assert.ok(captured >= 1);
-  assert.equal(createRunner.dispatched.length, captured * maxAttempts);
+  assert.equal(createRunner.dispatched.length, captured);
 
   // logger.warn called at least once per failed envelope.
   assert.ok(warns.length >= captured);
   // Warn includes the event id/type + tenant context.
   const flat = JSON.stringify(warns);
   assert.ok(flat.includes(TENANT));
+});
+
+test('advance degradation (handler: dispatch RESOLVES with degraded outcome) is non-fatal: resolves with command result, logs warn with degraded projection', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory({ degradeAlways: true });
+  const { logger, warns } = makeFakeLogger();
+
+  const result = await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    logger,
+  });
+
+  // Resolved with the authoritative command result despite the degraded worker.
+  assert.equal(result.approval.status, 'approved');
+
+  // Dispatch resolved (not rejected) — exactly once per captured envelope.
+  const captured = eventStore.appended.length;
+  assert.ok(captured >= 1);
+  assert.equal(createRunner.dispatched.length, captured);
+
+  // logger.warn was called, surfacing the degraded projection in its payload.
+  assert.ok(warns.length >= captured, 'a warn fires per envelope with a degraded worker');
+  const flat = JSON.stringify(warns);
+  assert.ok(flat.includes(TENANT));
+  assert.ok(flat.includes('finance.projection.ledger'), 'degraded projection name is logged');
+  assert.ok(flat.includes('degraded'), 'degraded outcome is logged');
 });
 
 test('command error propagates after best-effort advancing captured events', async () => {

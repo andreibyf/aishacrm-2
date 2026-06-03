@@ -17,11 +17,18 @@
  *      to the real (durable) event store — append-before-mutate is preserved.
  *
  *   3. ADVANCE  — synchronously dispatch every captured envelope (in append
- *      order) through an in-process projection runner so the PG-backed
- *      projections reflect the write (read-your-write). Advancement failure is
- *      NON-FATAL: the event is already durably appended, so we log and continue;
- *      the async worker loop catches up. The authoritative write result (or the
- *      command's error) is what's returned/rethrown.
+ *      order, once each) through an in-process projection runner so the PG-backed
+ *      projections reflect the write (read-your-write). The runner retries each
+ *      worker handler INTERNALLY (maxAttempts/retryBackoffMs); we do NOT wrap an
+ *      extra outer retry around it. Advancement has TWO non-fatal failure
+ *      surfaces, both logged: (a) `dispatch` REJECTS — an infra error (malformed
+ *      envelope guard, or a projection-store / Postgres failure); (b) `dispatch`
+ *      RESOLVES but one or more workers report `degraded`/`paused` — a handler
+ *      that failed after the runner's internal retries (degraded), or a
+ *      projection that was already degraded (paused). In BOTH cases the event is
+ *      already durably appended, so we log and continue; the async worker loop
+ *      re-drives the projection. The authoritative write result (or the
+ *      command's error) is what's returned/rethrown — the advance NEVER throws.
  *
  * Everything is injectable for tests; defaults are built from `pgPool`, mirroring
  * `defaultFinanceReadAdapterFactory` in backend/routes/finance.v2.js.
@@ -38,8 +45,6 @@ import { createJournalEntriesProjectionWorker } from './projections/journalEntri
 import { createApprovalQueueProjectionWorker } from './projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from './projections/adapterQueueProjection.js';
 import { createInvoiceProjectionWorker } from './projections/invoiceProjection.js';
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Build the five projection workers used to advance projections in-process.
 // Mirrors defaultFinanceReadAdapterFactory's `workers` block.
@@ -65,13 +70,7 @@ function buildDefaultRunner({ eventStore, storeProvider, workers, maxAttempts, r
     maxAttempts,
     retryBackoffMs,
   });
-  for (const worker of [
-    workers.ledger,
-    workers.journalEntries,
-    workers.approvalQueue,
-    workers.adapterQueue,
-    workers.invoices,
-  ]) {
+  for (const worker of Object.values(workers)) {
     runner.register(worker);
   }
   return runner;
@@ -169,12 +168,16 @@ export async function runPersistentWrite({
     commandError = err;
   }
 
-  // 4. ADVANCE (read-your-write) — dispatch every captured envelope, in order,
-  // through the in-process projection runner so the PG-backed projections
-  // reflect this write before we return. Advancement is best-effort: a dispatch
-  // that still fails after retries is logged and skipped (the event is durably
-  // appended; the async worker loop will catch up). This is the design's
-  // "advancement failure returns the authoritative write result" rule.
+  // 4. ADVANCE (read-your-write) — dispatch every captured envelope ONCE, in
+  // order, through the in-process projection runner so the PG-backed projections
+  // reflect this write before we return. The runner retries each worker handler
+  // INTERNALLY (maxAttempts/retryBackoffMs passed to createProjectionRunner), so
+  // we do NOT add an outer retry. Advancement is best-effort and NON-FATAL — it
+  // never throws; the event is durably appended and the async worker re-drives.
+  // Two failure surfaces are surfaced via logger.warn: (a) dispatch REJECTS
+  // (infra: malformed envelope or projection-store/PG error); (b) dispatch
+  // RESOLVES but a worker reports degraded/paused (handler failed after the
+  // runner's internal retries, or the projection was already degraded).
   if (captured.length > 0) {
     const makeRunner = createRunner || buildDefaultRunner;
     const runner = makeRunner({
@@ -186,31 +189,40 @@ export async function runPersistentWrite({
     });
 
     for (const envelope of captured) {
-      let dispatched = false;
-      let lastError;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          await runner.dispatch(envelope);
-          dispatched = true;
-          break;
-        } catch (err) {
-          lastError = err;
-          if (attempt < maxAttempts) {
-            await sleep(retryBackoffMs * 2 ** (attempt - 1));
-          }
-        }
-      }
-      if (!dispatched) {
+      let dispatchResult;
+      try {
+        dispatchResult = await runner.dispatch(envelope);
+      } catch (err) {
+        // Infra-level failure (malformed envelope or projection-store/PG error):
+        // dispatch rejected. The event is already durably appended — log and
+        // continue; the async worker re-drives.
         logger.warn(
           {
             tenant_id: tenantId,
             event_id: envelope?.id ?? null,
             event_type: envelope?.event_type ?? null,
-            attempts: maxAttempts,
-            err: lastError?.message ?? String(lastError),
+            err: err?.message ?? String(err),
           },
-          'persistentWriteRunner: projection advancement failed after retries; ' +
-            'event is durably appended — async worker will catch up',
+          'persistentWriteRunner: projection dispatch failed (infra); event durably appended — async worker will catch up',
+        );
+        continue;
+      }
+      // Handler-level: dispatch resolved, but a worker may have degraded or
+      // paused (its handler failed after the runner's internal retries, or the
+      // projection was already degraded). Surface that — it is the dominant
+      // non-fatal advancement failure.
+      const degraded = (dispatchResult?.dispatched || []).filter(
+        (d) => d.outcome === 'degraded' || d.outcome === 'paused',
+      );
+      if (degraded.length > 0) {
+        logger.warn(
+          {
+            tenant_id: tenantId,
+            event_id: envelope?.id ?? null,
+            event_type: envelope?.event_type ?? null,
+            degraded: degraded.map((d) => ({ projection: d.projectionName, outcome: d.outcome })),
+          },
+          'persistentWriteRunner: projection(s) degraded/paused during advance; event durably appended — async worker will re-drive',
         );
       }
     }
