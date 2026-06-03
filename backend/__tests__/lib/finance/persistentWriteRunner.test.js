@@ -6,7 +6,8 @@
  * Uses INJECTED fakes only — no real Postgres. The fake eventStore exposes the
  * same surface the PG event store does (append/query/replay), and an injectable
  * `createRunner` lets the test substitute a spy runner so we can assert exactly
- * which captured envelopes were dispatched, and when, relative to the append.
+ * which projections were REBUILT (runner.replay) during the advance, and that
+ * the rebuild covers the AFFECTED projection set for the captured event types.
  */
 
 import { test } from 'node:test';
@@ -69,30 +70,28 @@ function makeFakeEventStore(seedEvents = []) {
   };
 }
 
-// A spy runner factory: records every dispatch call (and the order vs append).
-// `failAlways` makes dispatch REJECT (infra-level failure) so we can assert
-// non-fatal advancement. `degradeAlways` makes dispatch RESOLVE but report a
-// degraded worker outcome — the dominant handler-level non-fatal failure.
+// A spy runner factory: records every replay(projectionName, tenantId) call made
+// during the advance (the catch-up-by-rebuild step). `failAlways` makes replay
+// REJECT (infra-level failure: projection-store / PG error) so we can assert
+// non-fatal advancement. `degradeAlways` makes replay RESOLVE with a degraded
+// outcome — the rebuild itself failed (a worker threw on the full stream).
 function makeSpyRunnerFactory({ failAlways = false, degradeAlways = false } = {}) {
-  const dispatched = [];
+  const replayed = []; // [{ projectionName, tenantId }]
   const registered = [];
   const factory = () => ({
     register: (worker) => registered.push(worker),
-    dispatch: async (envelope) => {
-      dispatched.push(envelope);
+    replay: async (projectionName, tenantId) => {
+      replayed.push({ projectionName, tenantId });
       if (failAlways) {
-        throw new Error('projection dispatch boom');
+        throw new Error('projection rebuild boom');
       }
       if (degradeAlways) {
-        return {
-          event_id: envelope.id,
-          dispatched: [{ projectionName: 'finance.projection.ledger', outcome: 'degraded' }],
-        };
+        return { outcome: 'degraded', cursor: null };
       }
-      return { event_id: envelope.id, dispatched: [] };
+      return { outcome: 'rebuilt', cursor: null };
     },
   });
-  factory.dispatched = dispatched;
+  factory.replayed = replayed;
   factory.registered = registered;
   return factory;
 }
@@ -121,11 +120,11 @@ function approveCommand(approvalId = 'A') {
     });
 }
 
-test('hydrate → run → advance: command sees seeded approval, then captured envelope is dispatched AFTER append', async () => {
+test('hydrate → run → advance: command sees seeded approval, then affected projections are rebuilt AFTER append', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const { logger } = makeFakeLogger();
 
-  // Track relative order of append vs dispatch on a shared timeline.
+  // Track relative order of append vs replay (rebuild) on a shared timeline.
   const timeline = [];
   const wrappedStore = {
     ...eventStore,
@@ -136,9 +135,9 @@ test('hydrate → run → advance: command sees seeded approval, then captured e
   };
   const createRunnerTracked = () => ({
     register: () => {},
-    dispatch: async (env) => {
-      timeline.push({ op: 'dispatch', id: env.id, type: env.event_type });
-      return { event_id: env.id, dispatched: [] };
+    replay: async (projectionName) => {
+      timeline.push({ op: 'replay', projection: projectionName });
+      return { outcome: 'rebuilt', cursor: null };
     },
   });
 
@@ -155,24 +154,21 @@ test('hydrate → run → advance: command sees seeded approval, then captured e
   assert.equal(result.approval.id, 'A');
   assert.equal(result.approval.status, 'approved');
 
-  // At least the approval.approved envelope was appended then dispatched.
+  // The approval.approved envelope was appended, then at least one rebuild ran.
   const approvedAppendIdx = timeline.findIndex(
     (t) => t.op === 'append' && t.type === 'finance.approval.approved',
   );
-  const approvedDispatchIdx = timeline.findIndex(
-    (t) => t.op === 'dispatch' && t.type === 'finance.approval.approved',
-  );
+  const firstReplayIdx = timeline.findIndex((t) => t.op === 'replay');
   assert.ok(approvedAppendIdx >= 0, 'approval.approved should be appended');
-  assert.ok(approvedDispatchIdx >= 0, 'approval.approved should be dispatched');
-  assert.ok(approvedDispatchIdx > approvedAppendIdx, 'dispatch (advance) must happen AFTER append');
+  assert.ok(firstReplayIdx >= 0, 'at least one projection should be rebuilt');
+  assert.ok(firstReplayIdx > approvedAppendIdx, 'rebuild (advance) must happen AFTER append');
 
-  // Every dispatch in the timeline must follow at least one append.
+  // Every rebuild in the timeline must follow at least one append.
   const firstAppend = timeline.findIndex((t) => t.op === 'append');
-  const firstDispatch = timeline.findIndex((t) => t.op === 'dispatch');
-  assert.ok(firstAppend >= 0 && firstDispatch > firstAppend);
+  assert.ok(firstAppend >= 0 && firstReplayIdx > firstAppend);
 });
 
-test('read-your-write: every captured envelope is dispatched through the runner', async () => {
+test('read-your-write: the AFFECTED projections (and only those) are rebuilt during advance', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory();
   const { logger } = makeFakeLogger();
@@ -186,25 +182,47 @@ test('read-your-write: every captured envelope is dispatched through the runner'
     logger,
   });
 
-  // The command (approve + promote linked adapter jobs) appended N envelopes;
-  // all N must have been dispatched, in the same order.
+  // The command appended finance.approval.approved (+ a finance.adapter.sync_queued
+  // from promoting the seeded draft adapter_job for journal_X). The affected
+  // projection set is every worker consuming those event types:
+  //   approval.approved   → approval_queue, journal_entries
+  //   adapter.sync_queued → adapter_queue
   assert.ok(eventStore.appended.length >= 1, 'command appended at least one event');
-  assert.equal(
-    createRunner.dispatched.length,
-    eventStore.appended.length,
-    'every appended envelope was dispatched',
+  const replayedNames = createRunner.replayed.map((r) => r.projectionName);
+
+  // Each affected projection replayed EXACTLY once (distinct set), for TENANT.
+  assert.ok(
+    replayedNames.includes('finance.projection.approval_queue'),
+    'approval_queue is affected by approval.approved',
   );
-  const appendedIds = eventStore.appended.map((e) => e.id);
-  const dispatchedIds = createRunner.dispatched.map((e) => e.id);
-  assert.deepEqual(dispatchedIds, appendedIds);
+  assert.ok(
+    replayedNames.includes('finance.projection.journal_entries'),
+    'journal_entries is affected by approval.approved',
+  );
+  assert.ok(
+    replayedNames.includes('finance.projection.adapter_queue'),
+    'adapter_queue is affected by adapter.sync_queued',
+  );
+  // Non-affected projections must NOT be rebuilt (no posted/invoice events here).
+  assert.ok(
+    !replayedNames.includes('finance.projection.ledger'),
+    'ledger consumes only finance.journal.posted — not affected',
+  );
+  assert.ok(
+    !replayedNames.includes('finance.projection.invoices'),
+    'invoices consumes only invoice draft events — not affected',
+  );
+  // Distinct set: no projection rebuilt twice.
+  assert.equal(replayedNames.length, new Set(replayedNames).size, 'each affected projection once');
+  // Every replay scoped to the write's tenant.
+  assert.ok(createRunner.replayed.every((r) => r.tenantId === TENANT));
 });
 
-test('advance failure (infra: dispatch REJECTS) is non-fatal: resolves with command result, dispatched ONCE per envelope, logs warn', async () => {
+test('advance failure (infra: replay REJECTS) is non-fatal: resolves with command result, rebuilds each affected projection once, logs warn', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory({ failAlways: true });
   const { logger, warns } = makeFakeLogger();
 
-  const maxAttempts = 3;
   const result = await runPersistentWrite({
     eventStore,
     storeProvider: {},
@@ -212,27 +230,30 @@ test('advance failure (infra: dispatch REJECTS) is non-fatal: resolves with comm
     command: approveCommand('A'),
     createRunner,
     logger,
-    maxAttempts,
+    maxAttempts: 3,
     retryBackoffMs: 1,
   });
 
-  // Resolved with the authoritative command result despite dispatch rejection.
+  // Resolved with the authoritative command result despite the rebuild rejecting.
   assert.equal(result.approval.status, 'approved');
 
-  // The runner retries handlers INTERNALLY — runPersistentWrite no longer wraps
-  // an outer retry, so dispatch is called exactly ONCE per captured envelope.
-  const captured = eventStore.appended.length;
-  assert.ok(captured >= 1);
-  assert.equal(createRunner.dispatched.length, captured);
+  // Each affected projection's rebuild is attempted exactly once.
+  const affected = new Set(createRunner.replayed.map((r) => r.projectionName));
+  assert.ok(affected.size >= 1, 'at least one affected projection');
+  assert.equal(
+    createRunner.replayed.length,
+    affected.size,
+    'each affected projection replayed once',
+  );
 
-  // logger.warn called at least once per failed envelope.
-  assert.ok(warns.length >= captured);
-  // Warn includes the event id/type + tenant context.
+  // logger.warn called at least once per failed rebuild.
+  assert.ok(warns.length >= affected.size);
   const flat = JSON.stringify(warns);
   assert.ok(flat.includes(TENANT));
+  assert.ok(flat.includes('infra'), 'infra failure is logged');
 });
 
-test('advance degradation (handler: dispatch RESOLVES with degraded outcome) is non-fatal: resolves with command result, logs warn with degraded projection', async () => {
+test('advance degradation (replay RESOLVES with degraded outcome) is non-fatal: resolves with command result, logs warn with degraded projection', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory({ degradeAlways: true });
   const { logger, warns } = makeFakeLogger();
@@ -246,19 +267,19 @@ test('advance degradation (handler: dispatch RESOLVES with degraded outcome) is 
     logger,
   });
 
-  // Resolved with the authoritative command result despite the degraded worker.
+  // Resolved with the authoritative command result despite the degraded rebuild.
   assert.equal(result.approval.status, 'approved');
 
-  // Dispatch resolved (not rejected) — exactly once per captured envelope.
-  const captured = eventStore.appended.length;
-  assert.ok(captured >= 1);
-  assert.equal(createRunner.dispatched.length, captured);
+  // Rebuild resolved (not rejected) — each affected projection once.
+  const affected = new Set(createRunner.replayed.map((r) => r.projectionName));
+  assert.ok(affected.size >= 1);
+  assert.equal(createRunner.replayed.length, affected.size);
 
   // logger.warn was called, surfacing the degraded projection in its payload.
-  assert.ok(warns.length >= captured, 'a warn fires per envelope with a degraded worker');
+  assert.ok(warns.length >= affected.size, 'a warn fires per degraded rebuild');
   const flat = JSON.stringify(warns);
   assert.ok(flat.includes(TENANT));
-  assert.ok(flat.includes('finance.projection.ledger'), 'degraded projection name is logged');
+  assert.ok(flat.includes('finance.projection.'), 'degraded projection name is logged');
   assert.ok(flat.includes('degraded'), 'degraded outcome is logged');
 });
 

@@ -16,19 +16,33 @@
  *      The capturing store records every appended envelope WHILE still appending
  *      to the real (durable) event store — append-before-mutate is preserved.
  *
- *   3. ADVANCE  — synchronously dispatch every captured envelope (in append
- *      order, once each) through an in-process projection runner so the PG-backed
- *      projections reflect the write (read-your-write). The runner retries each
- *      worker handler INTERNALLY (maxAttempts/retryBackoffMs); we do NOT wrap an
- *      extra outer retry around it. Advancement has TWO non-fatal failure
- *      surfaces, both logged: (a) `dispatch` REJECTS — an infra error (malformed
- *      envelope guard, or a projection-store / Postgres failure); (b) `dispatch`
- *      RESOLVES but one or more workers report `degraded`/`paused` — a handler
- *      that failed after the runner's internal retries (degraded), or a
- *      projection that was already degraded (paused). In BOTH cases the event is
- *      already durably appended, so we log and continue; the async worker loop
- *      re-drives the projection. The authoritative write result (or the
- *      command's error) is what's returned/rethrown — the advance NEVER throws.
+ *   3. ADVANCE  — catch up the AFFECTED projections by REBUILDING each from the
+ *      durable event stream (read-your-write). We do NOT dispatch only this
+ *      write's new envelopes in isolation: a projection in this process can be
+ *      BEHIND the durable stream (cold start, async-worker lag, or — the core
+ *      scenario — approving an approval whose `finance.approval.requested` is
+ *      durably in the event store but was never projected into this process).
+ *      Dispatching the new `finance.approval.approved` onto an approval_queue
+ *      projection that lacks the prior `pending` entry makes the worker throw and
+ *      DEGRADES the projection. Instead, for every captured envelope we compute
+ *      the DISTINCT set of projection names whose worker consumes that event
+ *      type, and `runner.replay(projectionName, tenantId)` each one. `replay`
+ *      rebuilds the projection from `eventStore.replay(tenantId)` (which now
+ *      includes this write's appended events — the capturing store forwarded them
+ *      to the real durable store) into a shadow store and atomically promotes it.
+ *      Rebuild is idempotent, recovers a degraded projection, and is correct
+ *      regardless of the projection's prior state. Advancement is best-effort and
+ *      NON-FATAL — it NEVER throws. Two surfaces are logged: (a) `replay` returns
+ *      `{ outcome: 'degraded' }` — the rebuild itself failed (e.g. a worker
+ *      handler threw on the full stream); (b) `replay` THROWS — an infra/PG error.
+ *      In both cases the event is already durably appended, so we log and
+ *      continue; the async worker loop re-drives the projection. The
+ *      authoritative write result (or the command's error) is returned/rethrown.
+ *
+ *      Tradeoff: rebuild is O(stream) per affected projection per write. That is
+ *      acceptable for the low-write-volume finance console; an incremental
+ *      catch-up-since-cursor (dispatch only events after the projection's stored
+ *      cursor) could optimize this later if write volume grows.
  *
  * Everything is injectable for tests; defaults are built from `pgPool`, mirroring
  * `defaultFinanceReadAdapterFactory` in backend/routes/finance.v2.js.
@@ -168,16 +182,15 @@ export async function runPersistentWrite({
     commandError = err;
   }
 
-  // 4. ADVANCE (read-your-write) — dispatch every captured envelope ONCE, in
-  // order, through the in-process projection runner so the PG-backed projections
-  // reflect this write before we return. The runner retries each worker handler
-  // INTERNALLY (maxAttempts/retryBackoffMs passed to createProjectionRunner), so
-  // we do NOT add an outer retry. Advancement is best-effort and NON-FATAL — it
-  // never throws; the event is durably appended and the async worker re-drives.
-  // Two failure surfaces are surfaced via logger.warn: (a) dispatch REJECTS
-  // (infra: malformed envelope or projection-store/PG error); (b) dispatch
-  // RESOLVES but a worker reports degraded/paused (handler failed after the
-  // runner's internal retries, or the projection was already degraded).
+  // 4. ADVANCE (read-your-write) — catch up the AFFECTED projections by
+  // REBUILDING each from the durable event stream. We do NOT dispatch only this
+  // write's new envelopes: a projection may be behind the durable stream (cold
+  // start / async-worker lag) or — the core scenario — a prior durable event
+  // (e.g. finance.approval.requested) may have never been projected into this
+  // process, so an isolated dispatch of only the new event would DEGRADE the
+  // projection. Rebuilding from the stream (which now includes this write's
+  // appended events) is idempotent, recovers a degraded projection, and is
+  // correct regardless of prior state. Best-effort and NON-FATAL: never throws.
   if (captured.length > 0) {
     const makeRunner = createRunner || buildDefaultRunner;
     const runner = makeRunner({
@@ -188,41 +201,48 @@ export async function runPersistentWrite({
       retryBackoffMs,
     });
 
+    // Compute the DISTINCT set of projection names affected by this write: every
+    // worker whose consumedEvents includes any captured envelope's event_type.
+    const workerList = Object.values(resolvedWorkers);
+    const affected = new Set();
     for (const envelope of captured) {
-      let dispatchResult;
+      const eventType = envelope?.event_type;
+      for (const worker of workerList) {
+        if (worker?.consumedEvents?.includes(eventType)) {
+          affected.add(worker.projectionName);
+        }
+      }
+    }
+
+    for (const projectionName of affected) {
+      let replayResult;
       try {
-        dispatchResult = await runner.dispatch(envelope);
+        replayResult = await runner.replay(projectionName, tenantId);
       } catch (err) {
-        // Infra-level failure (malformed envelope or projection-store/PG error):
-        // dispatch rejected. The event is already durably appended — log and
-        // continue; the async worker re-drives.
+        // Infra-level failure (projection-store / Postgres error): replay threw.
+        // The event is already durably appended — log and continue; the async
+        // worker re-drives.
         logger.warn(
           {
             tenant_id: tenantId,
-            event_id: envelope?.id ?? null,
-            event_type: envelope?.event_type ?? null,
+            projection: projectionName,
             err: err?.message ?? String(err),
           },
-          'persistentWriteRunner: projection dispatch failed (infra); event durably appended — async worker will catch up',
+          'persistentWriteRunner: projection rebuild failed (infra); event durably appended — async worker will re-drive',
         );
         continue;
       }
-      // Handler-level: dispatch resolved, but a worker may have degraded or
-      // paused (its handler failed after the runner's internal retries, or the
-      // projection was already degraded). Surface that — it is the dominant
-      // non-fatal advancement failure.
-      const degraded = (dispatchResult?.dispatched || []).filter(
-        (d) => d.outcome === 'degraded' || d.outcome === 'paused',
-      );
-      if (degraded.length > 0) {
+      // Rebuild ran but the projection itself degraded (e.g. a worker handler
+      // threw replaying the full stream). Surface it — the event is durable.
+      if (replayResult?.outcome === 'degraded') {
         logger.warn(
           {
             tenant_id: tenantId,
-            event_id: envelope?.id ?? null,
-            event_type: envelope?.event_type ?? null,
-            degraded: degraded.map((d) => ({ projection: d.projectionName, outcome: d.outcome })),
+            projection: projectionName,
+            outcome: replayResult.outcome,
+            cursor: replayResult.cursor ?? null,
           },
-          'persistentWriteRunner: projection(s) degraded/paused during advance; event durably appended — async worker will re-drive',
+          'persistentWriteRunner: projection rebuild degraded during advance; event durably appended — async worker will re-drive',
         );
       }
     }

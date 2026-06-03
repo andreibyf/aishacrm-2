@@ -179,6 +179,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     (persistentEvents && pgPool ? () => createPgProjectionStoreProvider({ pool: pgPool }) : null);
   const runPersistentWriteFn = opts.runPersistentWrite || defaultRunPersistentWrite;
 
+  // Single mutation dispatch path shared by all 6 mutating handlers. In
+  // persistent mode the command runs through the durable write runner (hydrate →
+  // run → advance); in default mode it runs directly against the in-memory
+  // domain service. Behaviour is identical to the per-handler branch it replaces.
+  async function runWrite(req, command) {
+    if (persistentEvents) {
+      return runPersistentWriteFn({
+        tenantId: req.financeTenantId,
+        eventStore: persistentEventStore,
+        storeProvider: createStoreProvider(),
+        logger,
+        command,
+      });
+    }
+    return command(service);
+  }
+
   // The domain service's eventStore is the SAME persistent event store in
   // persistent mode (so /audit-events + /evidence-packs read the durable PG
   // stream); in-memory by default. In persistent mode the top-level `service` is
@@ -551,15 +568,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] create draft invoice failed:', error);
@@ -578,15 +587,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] update draft invoice failed:', error);
@@ -604,15 +605,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] create journal draft failed:', error);
@@ -630,15 +623,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] simulate deal won failed:', error);
@@ -657,15 +642,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] reverse journal entry failed:', error);
@@ -683,15 +660,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = persistentEvents
-        ? await runPersistentWriteFn({
-            tenantId: req.financeTenantId,
-            eventStore: persistentEventStore,
-            storeProvider: createStoreProvider(),
-            logger,
-            command,
-          })
-        : await command(service);
+      const result = await runWrite(req, command);
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] approve finance action failed:', error);

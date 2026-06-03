@@ -120,6 +120,26 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
     assert.equal(res.body.data.approval.id, 'A');
     assert.equal(res.body.data.approval.status, 'approved');
     assert.equal(res.body.data.approval.approved_by, 'human-user-1');
+
+    // Read-your-write CONSISTENCY: the approval_queue projection must reflect the
+    // approved transition — proving the advance CAUGHT UP the projection by
+    // rebuild (not degraded). Before the fix, dispatching approval.approved onto
+    // an approval_queue that never projected the prior `pending` entry degraded
+    // the projection and this read would be stale/wrong.
+    const listRes = await request(app).get('/api/v2/finance/approvals?status=all');
+    assert.equal(listRes.status, 200);
+    assert.equal(listRes.body.status, 'success');
+    const approvalA = listRes.body.data.approvals.find((a) => a.id === 'A');
+    assert.ok(
+      approvalA,
+      `approval A should be visible via GET; got ${JSON.stringify(listRes.body.data.approvals)}`,
+    );
+    assert.equal(
+      approvalA.status,
+      'approved',
+      'approval_queue projection is consistent (caught up, not degraded)',
+    );
+    assert.equal(approvalA.decided_by, 'human-user-1', 'decision actor recorded in the projection');
   });
 
   // Acceptance B — read-your-write. A journal draft created via POST is
