@@ -16,7 +16,10 @@ import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAda
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
-import { runPersistentWrite as defaultRunPersistentWrite } from '../lib/finance/persistentWriteRunner.js';
+import {
+  runPersistentWrite as defaultRunPersistentWrite,
+  rebuildFinanceProjections as defaultRebuildFinanceProjections,
+} from '../lib/finance/persistentWriteRunner.js';
 import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
@@ -66,6 +69,50 @@ export function defaultFinanceReadAdapterFactory({
     auditEventsReader,
     workers,
   });
+}
+
+/**
+ * Slice 6b-2 — orchestrate a finance Test/Live data-mode change: persist the new
+ * mode, then (PERSISTENT-only) rebuild the tenant's projections from the NEW mode's
+ * events so reads immediately reflect the switch (the shared projection_state row
+ * otherwise holds the OLD mode's data until the next write).
+ *
+ * Extracted as a thin, exported helper so the persist+rebuild orchestration is
+ * unit-testable WITHOUT going through validateTenantAccess (a superadmin write
+ * there needs a Supabase canonical-tenant lookup).
+ *
+ * NON-FATAL: the mode is already persisted before the rebuild runs; a rebuild
+ * error is swallowed (logged) and never fails the switch. In-memory mode
+ * (persistent=false, or no stores) skips the rebuild entirely — there are no
+ * persistent projections to rebuild.
+ *
+ * @returns {Promise<*>} the persisted mode (whatever setFinanceDataMode returned).
+ */
+export async function applyFinanceDataModeChange({
+  tenantId,
+  mode,
+  persistent,
+  setFinanceDataMode: setFinanceDataModeFn,
+  rebuildFinanceProjections: rebuildFinanceProjectionsFn,
+  eventStore,
+  storeProvider,
+  logger: log = logger,
+}) {
+  const persisted = await setFinanceDataModeFn({ tenantId, mode });
+  if (persistent && eventStore && storeProvider) {
+    try {
+      await rebuildFinanceProjectionsFn({
+        eventStore,
+        storeProvider,
+        tenantId,
+        isTestData: mode === FINANCE_DATA_MODES.TEST,
+        logger: log,
+      });
+    } catch (err) {
+      log.warn('[finance.v2] post-switch projection rebuild failed:', err?.message);
+    }
+  }
+  return persisted;
 }
 
 function resolveTenantId(req) {
@@ -189,6 +236,10 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     opts.createStoreProvider ||
     (persistentEvents && pgPool ? () => createPgProjectionStoreProvider({ pool: pgPool }) : null);
   const runPersistentWriteFn = opts.runPersistentWrite || defaultRunPersistentWrite;
+  // Slice 6b-2: on a data-mode SWITCH, rebuild the tenant's projections from the
+  // NEW mode's events (PERSISTENT-only; injectable for tests).
+  const rebuildFinanceProjectionsFn =
+    opts.rebuildFinanceProjections || defaultRebuildFinanceProjections;
 
   // Single mutation dispatch path shared by all 6 mutating handlers. In
   // persistent mode the command runs through the durable write runner (hydrate →
@@ -318,7 +369,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         err.code = 'FINANCE_DATA_MODE_INVALID';
         throw err;
       }
-      const updated = await setFinanceDataModeFn({ tenantId: req.financeTenantId, mode, req });
+      // Persist the new mode, then (PERSISTENT-only) rebuild the tenant's
+      // projections from the NEW mode's events so the very next read reflects the
+      // switch. NON-FATAL: the mode is already persisted; a rebuild error never
+      // fails the switch. In-memory mode skips the rebuild (no persistent
+      // projections). `applyFinanceDataModeChange` keeps this handler thin and
+      // makes the persist+rebuild orchestration unit-testable without Express.
+      const updated = await applyFinanceDataModeChange({
+        tenantId: req.financeTenantId,
+        mode,
+        persistent: persistentEvents,
+        setFinanceDataMode: ({ tenantId, mode: m }) =>
+          setFinanceDataModeFn({ tenantId, mode: m, req }),
+        rebuildFinanceProjections: rebuildFinanceProjectionsFn,
+        eventStore: persistentEventStore,
+        storeProvider: createStoreProvider ? createStoreProvider() : null,
+        logger,
+      });
       res.json({ status: 'success', data: { mode: updated } });
     } catch (error) {
       logger.error('[finance.v2] set data mode failed:', error);

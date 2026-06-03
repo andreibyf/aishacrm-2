@@ -13,7 +13,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runPersistentWrite } from '../../../lib/finance/persistentWriteRunner.js';
+import {
+  runPersistentWrite,
+  rebuildFinanceProjections,
+} from '../../../lib/finance/persistentWriteRunner.js';
 
 const TENANT = 'tenant-7';
 
@@ -449,5 +452,167 @@ test('validation: missing tenantId / command / deps throw a clear error', async 
   await assert.rejects(
     () => runPersistentWrite({ tenantId: TENANT, command: approveCommand('A') }),
     /pgPool|eventStore|storeProvider/,
+  );
+});
+
+// ── slice 6b-2: rebuildFinanceProjections (mode-switch projection rebuild) ─────
+
+// A spy runner factory exposing replayAll (the mode-switch rebuild path). Records
+// every replayAll(tenantId, isTestData) call. `failAll` makes replayAll REJECT
+// (infra error). `degradeNames` is a set of projection names that come back with
+// a degraded outcome; everything else is 'rebuilt'.
+function makeReplayAllRunnerFactory({ failAll = false, degradeNames = [] } = {}) {
+  const replayAllCalls = []; // [{ tenantId, isTestData }]
+  const allProjections = [
+    'finance.projection.ledger',
+    'finance.projection.journal_entries',
+    'finance.projection.approval_queue',
+    'finance.projection.adapter_queue',
+    'finance.projection.invoices',
+  ];
+  const degraded = new Set(degradeNames);
+  const factory = () => ({
+    register: () => {},
+    replayAll: async (tenantId, isTestData) => {
+      replayAllCalls.push({ tenantId, isTestData });
+      if (failAll) {
+        throw new Error('replayAll boom');
+      }
+      return allProjections.map((projectionName) => ({
+        projectionName,
+        outcome: degraded.has(projectionName) ? 'degraded' : 'rebuilt',
+        cursor: null,
+      }));
+    },
+  });
+  factory.replayAllCalls = replayAllCalls;
+  factory.allProjections = allProjections;
+  return factory;
+}
+
+test('rebuildFinanceProjections: rebuilds EVERY projection via replayAll(tenantId, isTestData=true) for test mode', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const summary = await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: true,
+    logger,
+  });
+
+  // replayAll called exactly once with the NEW mode's partition (test ⇒ true).
+  assert.equal(createRunner.replayAllCalls.length, 1);
+  assert.equal(createRunner.replayAllCalls[0].tenantId, TENANT);
+  assert.equal(createRunner.replayAllCalls[0].isTestData, true);
+
+  // Every registered projection reported as rebuilt; none degraded.
+  assert.deepEqual(new Set(summary.rebuilt), new Set(createRunner.allProjections));
+  assert.deepEqual(summary.degraded, []);
+});
+
+test('rebuildFinanceProjections: live mode threads isTestData=false', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: false,
+    logger,
+  });
+
+  assert.equal(createRunner.replayAllCalls[0].isTestData, false);
+});
+
+test('rebuildFinanceProjections: a degraded projection is NON-FATAL — logged, surfaced in summary.degraded', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory({
+    degradeNames: ['finance.projection.ledger'],
+  });
+  const { logger, warns } = makeFakeLogger();
+
+  const summary = await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: true,
+    logger,
+  });
+
+  // Resolves (no throw); the degraded projection is reported, the rest rebuilt.
+  assert.deepEqual(summary.degraded, ['finance.projection.ledger']);
+  assert.ok(summary.rebuilt.length === createRunner.allProjections.length - 1);
+  assert.ok(!summary.rebuilt.includes('finance.projection.ledger'));
+
+  // logger.warn fired, naming the tenant + degraded projection.
+  const flat = JSON.stringify(warns);
+  assert.ok(flat.includes(TENANT));
+  assert.ok(flat.includes('finance.projection.ledger'));
+  assert.ok(flat.includes('degraded'));
+});
+
+test('rebuildFinanceProjections: a THROWING replayAll (infra) is NON-FATAL — resolves, logs warn, empty summary', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory({ failAll: true });
+  const { logger, warns } = makeFakeLogger();
+
+  const summary = await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: true,
+    logger,
+  });
+
+  // Did not throw; nothing rebuilt; warn logged with the tenant.
+  assert.deepEqual(summary, { rebuilt: [], degraded: [] });
+  assert.ok(warns.length >= 1);
+  assert.ok(JSON.stringify(warns).includes(TENANT));
+});
+
+test('rebuildFinanceProjections: missing eventStore / storeProvider / tenantId throws a clear error', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        storeProvider: {},
+        createRunner,
+        tenantId: TENANT,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
+  );
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        createRunner,
+        tenantId: TENANT,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
+  );
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        storeProvider: {},
+        createRunner,
+        tenantId: null,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
   );
 });

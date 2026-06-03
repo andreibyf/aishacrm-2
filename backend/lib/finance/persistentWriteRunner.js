@@ -268,4 +268,92 @@ export async function runPersistentWrite({
   return result;
 }
 
+/**
+ * Slice 6b-2 — rebuild ALL of a tenant's registered finance projections from the
+ * NEW data mode's events.
+ *
+ * `projection_state` is a SHARED row per (projection, tenant) holding the CURRENT
+ * mode's projection. Writes (6a/6b-1) rebuild AFFECTED projections from the active
+ * mode's events. The gap: when a superadmin SWITCHES the tenant's data mode, the
+ * shared projection_state still holds the OLD mode's data until the next write —
+ * a read right after a switch would show stale (other-mode) data. This helper, run
+ * on a mode switch, rebuilds EVERY registered projection from the NEW mode's events
+ * so reads immediately reflect the new mode.
+ *
+ * PERSISTENT-only: in in-memory mode there are no persistent projections (the
+ * in-memory adapter reads the domain-service bucket directly) — the caller skips
+ * this entirely (no-op). NON-FATAL: a degraded or throwing replay is logged and
+ * does NOT throw — reads of a degraded projection already fail-closed elsewhere
+ * (FinanceReadDegradedError).
+ *
+ * @param {object}   opts
+ * @param {object}   opts.eventStore     persistent event store (required).
+ * @param {object}   opts.storeProvider  projection-store provider (required).
+ * @param {object}  [opts.workers]       injectable five-worker map; default built.
+ * @param {Function}[opts.createRunner]  injectable runner factory (for spies).
+ * @param {string}   opts.tenantId       tenant UUID (required).
+ * @param {boolean} [opts.isTestData]    NEW mode partition (test ⇒ true).
+ * @param {object}  [opts.logger]        injectable logger (default project logger).
+ * @returns {Promise<{rebuilt: string[], degraded: string[]}>} per-projection summary.
+ */
+export async function rebuildFinanceProjections({
+  eventStore,
+  storeProvider,
+  workers,
+  createRunner,
+  tenantId,
+  isTestData,
+  logger = defaultLogger,
+} = {}) {
+  if (!eventStore || !storeProvider || !tenantId) {
+    throw new Error('rebuildFinanceProjections requires eventStore, storeProvider, and tenantId');
+  }
+
+  const resolvedWorkers = workers || buildDefaultWorkers();
+  const runner = (createRunner || buildDefaultRunner)({
+    eventStore,
+    storeProvider,
+    workers: resolvedWorkers,
+  });
+
+  const rebuilt = [];
+  const degraded = [];
+
+  // Rebuild EVERY registered projection from the new mode's events. Prefer the
+  // runner's replayAll (6b-1 added the isTestData arg); collect its per-projection
+  // results. A whole-batch throw OR a per-projection degraded outcome is NON-FATAL.
+  let results;
+  try {
+    results = await runner.replayAll(tenantId, isTestData);
+  } catch (err) {
+    logger.warn(
+      {
+        tenant_id: tenantId,
+        err: err?.message ?? String(err),
+      },
+      'rebuildFinanceProjections: replayAll failed (infra) on mode switch; reads of stale projections fail-closed — async worker will re-drive',
+    );
+    return { rebuilt, degraded };
+  }
+
+  for (const result of results || []) {
+    const projection = result?.projectionName ?? null;
+    if (result?.outcome === 'degraded') {
+      degraded.push(projection);
+      logger.warn(
+        {
+          tenant_id: tenantId,
+          projection,
+          outcome: result.outcome,
+        },
+        'rebuildFinanceProjections: projection degraded during mode-switch rebuild; reads fail-closed — async worker will re-drive',
+      );
+    } else {
+      rebuilt.push(projection);
+    }
+  }
+
+  return { rebuilt, degraded };
+}
+
 export default runPersistentWrite;

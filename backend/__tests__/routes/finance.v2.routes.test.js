@@ -2,8 +2,10 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import createFinanceV2Routes from '../../routes/finance.v2.js';
+import createFinanceV2Routes, { applyFinanceDataModeChange } from '../../routes/finance.v2.js';
 import createFinanceDomainService from '../../lib/finance/financeDomainService.js';
+
+const NOOP_LOGGER = { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} };
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000011';
 const OTHER_TENANT_ID = '00000000-0000-4000-8000-000000000099';
@@ -375,5 +377,112 @@ describe('finance.v2 routes', () => {
     assert.equal(approveRes.body.data.approval.id, approvalId);
     assert.equal(approveRes.body.data.approval.status, 'approved');
     assert.equal(approveRes.body.data.approval.approved_by, 'human-user-2');
+  });
+
+  // ── slice 6b-2: applyFinanceDataModeChange orchestration (no Express/DB) ─────
+  describe('applyFinanceDataModeChange', () => {
+    test('persists THEN rebuilds (persistent mode), threading isTestData=true for test', async () => {
+      const order = [];
+      const setFinanceDataMode = async ({ mode }) => {
+        order.push('persist');
+        return mode;
+      };
+      let rebuildArgs = null;
+      const rebuildFinanceProjections = async (args) => {
+        order.push('rebuild');
+        rebuildArgs = args;
+      };
+
+      const eventStore = { name: 'es' };
+      const storeProvider = { name: 'sp' };
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: true,
+        setFinanceDataMode,
+        rebuildFinanceProjections,
+        eventStore,
+        storeProvider,
+        logger: NOOP_LOGGER,
+      });
+
+      assert.equal(result, 'test');
+      assert.deepEqual(order, ['persist', 'rebuild']);
+      assert.equal(rebuildArgs.tenantId, TENANT_ID);
+      assert.equal(rebuildArgs.isTestData, true);
+      assert.equal(rebuildArgs.eventStore, eventStore);
+      assert.equal(rebuildArgs.storeProvider, storeProvider);
+    });
+
+    test('live mode threads isTestData=false', async () => {
+      let rebuildArgs = null;
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'live',
+        persistent: true,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async (args) => {
+          rebuildArgs = args;
+        },
+        eventStore: {},
+        storeProvider: {},
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(result, 'live');
+      assert.equal(rebuildArgs.isTestData, false);
+    });
+
+    test('in-memory mode (persistent=false) persists but SKIPS the rebuild', async () => {
+      let rebuilt = false;
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'live',
+        persistent: false,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async () => {
+          rebuilt = true;
+        },
+        eventStore: {},
+        storeProvider: {},
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(result, 'live');
+      assert.equal(rebuilt, false);
+    });
+
+    test('skips rebuild when stores are absent even if persistent', async () => {
+      let rebuilt = false;
+      await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: true,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async () => {
+          rebuilt = true;
+        },
+        eventStore: null,
+        storeProvider: null,
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(rebuilt, false);
+    });
+
+    test('rebuild error is NON-FATAL — still returns the persisted mode', async () => {
+      const warns = [];
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: true,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async () => {
+          throw new Error('rebuild kaboom');
+        },
+        eventStore: {},
+        storeProvider: {},
+        logger: { ...NOOP_LOGGER, warn: (...a) => warns.push(a) },
+      });
+      assert.equal(result, 'test');
+      assert.ok(warns.length >= 1, 'rebuild failure is logged');
+    });
   });
 });
