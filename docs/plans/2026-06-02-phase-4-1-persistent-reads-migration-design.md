@@ -1,7 +1,7 @@
 # Phase 4-1 Persistent Reads + Writes Migration — Design
 
 **Date:** 2026-06-02
-**Status:** Approved (brainstorm)
+**Status:** Implemented (this branch — persistent mode durable end-to-end; boot guard removed; closes Codex PR #632 P1 `#3344750464`)
 **Branch:** `feat/finance-ops-phase4-1-persistent-reads-migration`
 **Predecessor:** PR #632 (route lift + Codex hardening), merged as `54ee9e1d`. That PR
 added a boot guard so `ENABLE_FINANCE_PERSISTENT_EVENTS=true` **refuses to mount** until
@@ -68,33 +68,54 @@ In persistent mode, each mutating endpoint:
    store, and run the existing command method unchanged. `bucket.find` lookups and the
    duplicate/state guards now see the full durable picture. Append-before-mutate (from
    PR #632) means the event lands in PG before the (discarded) bucket mutation.
-3. **Advance** — synchronously run the projection runner's catch-up in-process
-   (cursor-guarded, idempotent) for the affected projections so the read models reflect
-   the write.
+3. **Advance** — synchronously REBUILD the affected projections in-process so the read
+   models reflect the write. **As implemented** (`persistentWriteRunner.js`): the advance
+   computes the distinct set of affected projection names (every worker whose
+   `consumedEvents` includes any appended envelope's `event_type`) and calls
+   `runner.replay(projectionName, tenantId)` for each — rebuilding it from the durable
+   stream (`eventStore.replay(tenantId)`, which now includes this write's events) into a
+   shadow store that is atomically promoted. Rebuild (rather than dispatching only the new
+   envelopes) is robust to a projection being BEHIND the durable stream — cold start, async
+   worker lag, or a durably-recorded-but-unprojected prior event (e.g. approving an approval
+   whose `finance.approval.requested` is in the event store but was never projected into
+   this process). It is idempotent and recovers a degraded projection.
 4. **Return** the authoritative command result.
 
 ## Components
 
-| Component                                                    | Type   | Notes                                                                                                                                                                                                           |
-| ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `financeDomainReplay.js` → `rebuildBucketFromEvents(events)` | NEW    | Folds finance events into `{journalEntries, invoices, approvals, adapterJobs}`. Riskiest piece → pinned by an equivalence test.                                                                                 |
-| `invoiceProjection.js` (`finance.projection.invoices`)       | NEW    | Consumes `finance.invoice.draft_created` / `draft_updated`; returns full invoice snapshots (mirrors `journalEntriesProjection`). Registered in runner, read-adapter workers, worker deployment, replay harness. |
-| Read adapter interface                                       | EXTEND | `listInvoices`, `listApprovals`, `listAdapterJobs` on both adapters.                                                                                                                                            |
-| `getRuntimeStatus` invoices count                            | FIX    | Wire the real invoice-projection count (currently hardcoded `0`).                                                                                                                                               |
-| Persistent write orchestration                               | NEW    | Per-request hydrate → run → advance, in `finance.v2.js` (or a small helper).                                                                                                                                    |
-| Boot guard                                                   | REMOVE | Once reads + writes are durable. The no-pool guard (persistent requires a pool) stays.                                                                                                                          |
+| Component                                                    | Type                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `financeDomainReplay.js` → `rebuildBucketFromEvents(events)` | NEW                           | Folds finance events into `{journalEntries, invoices, approvals, adapterJobs}`. Riskiest piece → pinned by an equivalence test.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `invoiceProjection.js` (`finance.projection.invoices`)       | NEW                           | Consumes `finance.invoice.draft_created` / `draft_updated`; returns full invoice snapshots (mirrors `journalEntriesProjection`). Registered in runner, read-adapter workers, worker deployment, replay harness.                                                                                                                                                                                                                                                                                                                 |
+| Read adapter interface                                       | EXTEND                        | `listInvoices`, `listApprovals`, `listAdapterJobs` on both adapters.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `getRuntimeStatus` invoices count                            | FIX                           | Wire the real invoice-projection count (currently hardcoded `0`).                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Persistent write orchestration                               | NEW                           | Per-request hydrate → run → advance, in `finance.v2.js` (or a small helper).                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Boot guard                                                   | REMOVE (done)                 | Removed once reads + writes were durable (activation capstone). The no-pool guard (persistent requires a pool) stays.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `adapterQueueProjection.js` — DRAFT materialization          | EXTEND (Task 8b, post-design) | **Not in the original design — code-review follow-up.** The `adapter_queue` projection now ALSO consumes `finance.approval.requested` and, when the payload carries an `adapter_job`, materializes it into a new `draft` bucket keyed by `adapter_job_id` (guard-skips approval.requested events with no `adapter_job`). Closes the persistent-mode parity gap where un-synced draft adapter jobs were omitted from `/adapter-jobs` and the runtime `adapter_jobs` count — persistent now matches the in-memory domain service. |
 
 ## Read-your-write & advancement failure
 
-Append is the commit point. Synchronous advancement is best-effort-strong: retry N times;
-on persistent failure, log and return the authoritative result (eventual consistency for
-that one request). Never 500 a durable write.
+Append is the commit point. Synchronous advancement is best-effort-strong. **As
+implemented**, the advance REBUILDS each affected projection from the durable stream via
+`runner.replay(projectionName, tenantId)` (robust to a projection being behind — cold
+start / worker lag / a durably-recorded-but-unprojected prior event). Advancement stays
+strictly NON-FATAL: a `degraded` outcome or a thrown `replay` (infra/PG) is logged via
+`logger.warn` and the loop continues; the authoritative command result (or error) is still
+returned/rethrown (eventual consistency for that one request via the async worker). Never
+500 a durable write. (Tradeoff: rebuild is O(stream) per affected projection per write —
+acceptable for the low-write-volume finance console; incremental catch-up-since-cursor can
+optimize later.)
 
 ## Concurrency / deployment
 
 Synchronous in-process advancement (API read-your-write) must coexist with the async
 projection worker: both advance the same projections from the same PG event store, so the
-same event can be processed by both processes.
+same event can be processed by both processes. **As implemented**, the API-side advance is a
+full `runner.replay(projection, tenant)` rebuild from the durable stream into a shadow store
+that is atomically promoted (not an incremental dispatch); the async worker still advances
+incrementally via the cursor. The idempotency reasoning below is unchanged — every live
+projection is an idempotent upsert-by-id, so a rebuild and an incremental dispatch converge
+to identical read-model state.
 
 **Finding (Task 6 — verified, not assumed).** Cross-process `projection_state` row-locking is
 **deferred** because there is no exposure today:
