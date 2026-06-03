@@ -23,7 +23,7 @@ In persistent mode today:
   **in-memory domain-service buckets**, which start empty per process.
 - The mutation lookups (`updateDraftInvoice`, `reverseJournalEntry`, `approveFinanceAction`)
   also read the empty buckets → a PG-persisted record 404s on a fresh process / second
-  instance, while the projection-backed reads *do* see it. Divergence (Codex PR #632 P1
+  instance, while the projection-backed reads _do_ see it. Divergence (Codex PR #632 P1
   `#3344750464`).
 
 `/audit-events` and `/evidence-packs` read through `service.listAuditEvents` /
@@ -75,14 +75,14 @@ In persistent mode, each mutating endpoint:
 
 ## Components
 
-| Component | Type | Notes |
-|---|---|---|
-| `financeDomainReplay.js` → `rebuildBucketFromEvents(events)` | NEW | Folds finance events into `{journalEntries, invoices, approvals, adapterJobs}`. Riskiest piece → pinned by an equivalence test. |
-| `invoiceProjection.js` (`finance.projection.invoices`) | NEW | Consumes `finance.invoice.draft_created` / `draft_updated`; returns full invoice snapshots (mirrors `journalEntriesProjection`). Registered in runner, read-adapter workers, worker deployment, replay harness. |
-| Read adapter interface | EXTEND | `listInvoices`, `listApprovals`, `listAdapterJobs` on both adapters. |
-| `getRuntimeStatus` invoices count | FIX | Wire the real invoice-projection count (currently hardcoded `0`). |
-| Persistent write orchestration | NEW | Per-request hydrate → run → advance, in `finance.v2.js` (or a small helper). |
-| Boot guard | REMOVE | Once reads + writes are durable. The no-pool guard (persistent requires a pool) stays. |
+| Component                                                    | Type   | Notes                                                                                                                                                                                                           |
+| ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `financeDomainReplay.js` → `rebuildBucketFromEvents(events)` | NEW    | Folds finance events into `{journalEntries, invoices, approvals, adapterJobs}`. Riskiest piece → pinned by an equivalence test.                                                                                 |
+| `invoiceProjection.js` (`finance.projection.invoices`)       | NEW    | Consumes `finance.invoice.draft_created` / `draft_updated`; returns full invoice snapshots (mirrors `journalEntriesProjection`). Registered in runner, read-adapter workers, worker deployment, replay harness. |
+| Read adapter interface                                       | EXTEND | `listInvoices`, `listApprovals`, `listAdapterJobs` on both adapters.                                                                                                                                            |
+| `getRuntimeStatus` invoices count                            | FIX    | Wire the real invoice-projection count (currently hardcoded `0`).                                                                                                                                               |
+| Persistent write orchestration                               | NEW    | Per-request hydrate → run → advance, in `finance.v2.js` (or a small helper).                                                                                                                                    |
+| Boot guard                                                   | REMOVE | Once reads + writes are durable. The no-pool guard (persistent requires a pool) stays.                                                                                                                          |
 
 ## Read-your-write & advancement failure
 
@@ -92,10 +92,46 @@ that one request). Never 500 a durable write.
 
 ## Concurrency / deployment
 
-Synchronous in-process advancement must coexist with the async projection worker without
-double-applying or clobbering cursors → **`projection_state` row-locking
-(`SELECT … FOR UPDATE`) during cursor advancement**. Verify `projectionStore.pg.js` already
-locks; add if missing. Advancement is cursor-guarded so double-processing is a no-op.
+Synchronous in-process advancement (API read-your-write) must coexist with the async
+projection worker: both advance the same projections from the same PG event store, so the
+same event can be processed by both processes.
+
+**Finding (Task 6 — verified, not assumed).** Cross-process `projection_state` row-locking is
+**deferred** because there is no exposure today:
+
+- The **only non-idempotent** projection is the **ledger** (`ledgerProjection.js`), whose
+  accumulation `debit_cents = prev + line.debit_cents` is a read-modify-write that
+  double-counts under double-apply. It consumes **`finance.journal.posted` only**, which has
+  **no emit-site anywhere in the codebase** — confirmed by grep; every reference is a
+  projection `consumedEvents` declaration, a "no emit-site today" comment
+  (`financeDomainReplay.js`), or a test fixture. So **no live event ever reaches it.**
+- **Every projection that actually receives events today** — `journal_entries`, `invoices`,
+  `approval_queue`, `adapter_queue` — is an **idempotent upsert-by-id** (`store.set(id, …)`
+  with event-type-derived status; the approval-`requested` create is dedup-guarded). Double-
+  applying any of their live events yields **identical** read-model state. Pinned by
+  `backend/__tests__/lib/finance/projections/projectionDoubleApply.test.js`, which proves
+  idempotency two ways per worker: (1) a direct double-`handleEvent` (cursor bypassed) and
+  (2) a runner re-`dispatch` (cursor guard makes the 2nd a no-op).
+
+The runner's cursor guard (`isAfterCursor` in `projectionRunner.js`) already makes a re-
+dispatch of an already-applied event a no-op **within a process**. That guard is a per-process
+read-then-write of `projection_state`; it is **not serialized across the API and worker
+processes** (`projectionStore.pg.js` issues plain upserts — no `SELECT … FOR UPDATE` / no
+advisory lock during the getState→commit→setState window). For idempotent projections that
+gap is harmless. For the ledger it would double-count.
+
+**REQUIRED before the journal-posting slice** (Slicing item beyond #5 / the deferred posting
+flow) — pick one before any `finance.journal.posted` emit-site goes live:
+
+- **(a) cross-process serialization** of the per-`(projection, tenant)` read-modify-write on
+  `finance.projection_state` — e.g. `SELECT … FOR UPDATE` on the row or
+  `pg_advisory_xact_lock` keyed by `(projection_name, tenant_id)` in `projectionStore.pg.js`,
+  held across `getState → getLiveStore → buffer.commit() → setState`; **or**
+- **(b) an idempotent ledger rewrite** keying each contribution by journal/event id, so
+  re-applying the same event is a no-op (removes the read-modify-write hazard entirely).
+
+This requirement is also documented as a comment block next to `applyJournalPosted` in
+`ledgerProjection.js`.
 
 ## Error handling
 
@@ -111,7 +147,7 @@ projection outage never corrupts a write's guard checks.
 - **Read-adapter parity** (per endpoint): ProjectionBacked output == InMemory output for
   the same event history.
 - **Read-your-write**: persistent-mode POST then immediate GET reflects the write.
-- **Durable mutation** (core Codex fix): approve a PG-persisted approval on a *fresh*
+- **Durable mutation** (core Codex fix): approve a PG-persisted approval on a _fresh_
   process (empty in-process bucket) → succeeds, not 404.
 - **Invoice projection** unit tests (`draft_created` / `draft_updated` folds).
 - **Guard removal**: persistent mode mounts with a pool; refuses without one.

@@ -35,6 +35,42 @@ function accountKey(line) {
  *
  * A `finance.journal.posted` event must carry `payload.journal_entry.lines`;
  * a malformed one throws, which the runtime surfaces as a degraded projection.
+ *
+ * ⚠️ CONCURRENCY / DOUBLE-APPLY RISK — NOT IDEMPOTENT (Phase 4-1, Task 6).
+ *
+ * This accumulation (`debit_cents = prev + line.debit_cents`) is a
+ * read-modify-write: applying the SAME event twice double-counts the lines.
+ * Unlike every projection that actually receives events today
+ * (journal_entries / invoices / approval_queue / adapter_queue, all idempotent
+ * upsert-by-id), the ledger is safe right now ONLY because
+ * `finance.journal.posted` has NO emit-site in the codebase — no live event
+ * ever reaches this handler. See:
+ *   - backend/__tests__/lib/finance/projections/projectionDoubleApply.test.js
+ *     (proves the four flowing projections ARE idempotent — ledger excluded)
+ *   - docs/plans/2026-06-02-phase-4-1-persistent-reads-migration-design.md
+ *     §"Concurrency / deployment"
+ *
+ * Task 7 introduces persistent-mode writes that advance projections
+ * SYNCHRONOUSLY in the API process (read-your-write) while a separate async
+ * worker ALSO advances them from the same Postgres event store — so the same
+ * event can be processed by both. The runner's cursor guard makes the second
+ * advance a no-op for an already-applied event, but that guard is a per-process
+ * read-then-write and is NOT serialized across the API and worker processes.
+ *
+ * THEREFORE: BEFORE a journal-posting slice adds a `finance.journal.posted`
+ * emit-site and this projection is advanced concurrently by both processes,
+ * one of these is REQUIRED:
+ *   (a) cross-process serialization of the per-(projection, tenant)
+ *       read-modify-write on `finance.projection_state` — e.g.
+ *       `SELECT … FOR UPDATE` on the row or a `pg_advisory_xact_lock` keyed by
+ *       (projection_name, tenant_id) in projectionStore.pg.js, held across the
+ *       getState → getLiveStore → commit → setState window; OR
+ *   (b) an idempotent rewrite of this handler that keys each contribution by
+ *       journal/event id (so re-applying the same event is a no-op), removing
+ *       the read-modify-write hazard entirely.
+ *
+ * Locking is deliberately DEFERRED today (YAGNI — zero exposure: no live
+ * events). Do NOT activate a journal-posting slice without (a) or (b).
  */
 function applyJournalPosted(event, store) {
   const journal = event && event.payload && event.payload.journal_entry;
