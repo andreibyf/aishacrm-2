@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Finance Ops — adapter-queue projection: transient sync failures stay `queued`, not `failed` (Codex PR #633 P2)** (`backend/lib/finance/projections/adapterQueueProjection.js`): the projection that backs persistent `/adapter-jobs` stamped every `finance.adapter.sync_failed` as terminal `failed`. But `runAdapterPollCycle` re-queues a TRANSIENT (retryable) failure — it writes the job row back to `status: 'queued'` with a `next_attempt_at` and emits NO follow-up `sync_queued` (the event carries the classification in `payload.permanent`). So a still-retryable job showed as `failed` in the API and was dropped from `/adapter-jobs?status=queued` until some later event. Fixed with a new `statusForEvent(event)` that projects a `sync_failed` with `payload.permanent === false` back to `queued` (only a PERMANENT failure is terminal; absent flag ⇒ terminal, the conservative back-compat default), and the queue item now carries the authoritative `next_attempt_at` (added to the stored record and `toQueueItem`, surfaced by the `/adapter-jobs` route which already mapped it). Tests (`adapterQueueProjection.test.js`, +3): transient ⇒ queued + `next_attempt_at`; permanent ⇒ failed; retries-exhausted transient→permanent moves queued→failed. Full finance backend suite 524/524.
+
 ### Added
 
 - **Finance Ops — Phase 4-1 persistent reads + writes migration: `ENABLE_FINANCE_PERSISTENT_EVENTS=true` is now fully durable end-to-end** (`feat/finance-ops-phase4-1-persistent-reads-migration`). Persistent mode now MOUNTS and is fully functional — durable reads, durable writes, and read-your-write — closing the divergence flagged by Codex PR #632 P1 `#3344750464`. This consolidates the migration's slices:
