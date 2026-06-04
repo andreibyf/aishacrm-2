@@ -382,6 +382,7 @@ export default function FinanceOpsPage() {
             onChangeMode={handleChangeMode}
             modeUpdating={modeUpdating}
             modeError={modeError}
+            testDataCount={status?.test_data_count ?? 0}
           />
           {status?.runtime?.mode === 'test' ? (
             <div className="mt-3">

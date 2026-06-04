@@ -305,6 +305,17 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     opts.setFinanceDataMode ||
     (({ tenantId, mode }) => setFinanceDataMode({ tenantId, mode, getSupabaseClient }));
 
+  // Slice 6d: count of the tenant's dormant TEST finance events, surfaced on
+  // /runtime/status so the console can warn that test data exists (in any mode).
+  // Injectable for tests; defaults to the persistent event store's partitioned
+  // getCount. In-memory mode has no durable test partition → reports 0.
+  const getTestDataCount =
+    opts.getTestDataCount ||
+    (async ({ tenantId, isTestData }) => {
+      if (!persistentEventStore) return 0;
+      return persistentEventStore.getCount(tenantId, isTestData);
+    });
+
   router.use(validateTenantAccess);
 
   router.use(async (req, res, next) => {
@@ -344,6 +355,15 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         logger.warn('[finance.v2] data-mode resolve failed; defaulting to test:', err?.message);
       }
       status.runtime = { ...status.runtime, mode: dataMode, data_mode: dataMode };
+      // Slice 6d: attach the count of dormant TEST finance events. FAIL-SAFE:
+      // never break /runtime/status — default to 0 on any error.
+      let testDataCount = 0;
+      try {
+        testDataCount = await getTestDataCount({ tenantId: req.financeTenantId, isTestData: true });
+      } catch (err) {
+        logger.warn('[finance.v2] test-data count failed; defaulting to 0:', err?.message);
+      }
+      status.test_data_count = Number.isFinite(testDataCount) ? testDataCount : 0;
       res.json({ status: 'success', data: status });
     } catch (error) {
       logger.error('[finance.v2] runtime status failed:', error);

@@ -215,3 +215,88 @@ describe('RuntimeOverview — Test/Live data mode control (superadmin)', () => {
     expect(screen.getByTestId('runtime-overview-mode-error')).toHaveTextContent('boom');
   });
 });
+
+describe('RuntimeOverview — dormant test-data indicator + switch confirm (slice 6d)', () => {
+  const base = (mode) => ({ ...HEALTHY, runtime: { ...HEALTHY.runtime, mode, data_mode: mode } });
+
+  it('does not render the dormant indicator when testDataCount is 0', () => {
+    render(<RuntimeOverview status={base('live')} testDataCount={0} />);
+    expect(screen.queryByTestId('runtime-overview-dormant-test')).toBeNull();
+  });
+
+  it('renders the dormant indicator when testDataCount > 0 (even in live mode)', () => {
+    render(<RuntimeOverview status={base('live')} testDataCount={5} />);
+    const dormant = screen.getByTestId('runtime-overview-dormant-test');
+    expect(dormant).toBeInTheDocument();
+    expect(dormant).toHaveTextContent(/5/);
+    expect(dormant).toHaveTextContent(/test record/i);
+  });
+
+  it('with dormant test data, clicking the target mode shows a confirm and does NOT call onChangeMode', () => {
+    const onChangeMode = vi.fn();
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={onChangeMode}
+        testDataCount={3}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('runtime-overview-mode-set-live'));
+    expect(onChangeMode).not.toHaveBeenCalled();
+    const confirm = screen.getByTestId('runtime-overview-switch-confirm');
+    expect(confirm).toBeInTheDocument();
+    expect(confirm).toHaveTextContent(/3/);
+    expect(confirm).toHaveTextContent(/keeps them/i);
+  });
+
+  it('confirming the switch calls onChangeMode with the target mode', () => {
+    const onChangeMode = vi.fn();
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={onChangeMode}
+        testDataCount={3}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('runtime-overview-mode-set-live'));
+    fireEvent.click(screen.getByTestId('runtime-overview-switch-confirm-yes'));
+    expect(onChangeMode).toHaveBeenCalledWith('live');
+  });
+
+  it('cancelling the switch dismisses the confirm without calling onChangeMode', () => {
+    const onChangeMode = vi.fn();
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={onChangeMode}
+        testDataCount={3}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('runtime-overview-mode-set-live'));
+    fireEvent.click(screen.getByTestId('runtime-overview-switch-confirm-cancel'));
+    expect(onChangeMode).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('runtime-overview-switch-confirm')).toBeNull();
+  });
+
+  it('with testDataCount === 0, clicking the target mode switches immediately (no confirm)', () => {
+    const onChangeMode = vi.fn();
+    render(
+      <RuntimeOverview
+        status={base('test')}
+        dataMode="test"
+        canEditMode
+        onChangeMode={onChangeMode}
+        testDataCount={0}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('runtime-overview-mode-set-live'));
+    expect(onChangeMode).toHaveBeenCalledWith('live');
+    expect(screen.queryByTestId('runtime-overview-switch-confirm')).toBeNull();
+  });
+});

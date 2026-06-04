@@ -16,6 +16,7 @@ function buildApp({
   service = createFinanceDomainService(),
   dataMode = 'test',
   setFinanceDataMode,
+  getTestDataCount,
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -30,6 +31,7 @@ function buildApp({
       isFinanceModuleEnabled: async () => moduleEnabled,
       getFinanceDataMode: async () => dataMode,
       ...(setFinanceDataMode ? { setFinanceDataMode } : {}),
+      ...(getTestDataCount ? { getTestDataCount } : {}),
     }),
   );
   return { app, service };
@@ -58,6 +60,8 @@ describe('finance.v2 routes', () => {
     assert.equal(res.body.data.runtime.provider_sync, 'disabled');
     assert.equal(res.body.data.counts.invoices, 1);
     assert.equal(res.body.data.counts.audit_events, 1);
+    // Slice 6d: the in-memory path has no durable test partition → 0.
+    assert.equal(res.body.data.test_data_count, 0);
   });
 
   test('GET /runtime/status reports live when the tenant data mode is live', async () => {
@@ -66,6 +70,35 @@ describe('finance.v2 routes', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.data.runtime.mode, 'live');
     assert.equal(res.body.data.runtime.data_mode, 'live');
+  });
+
+  test('GET /runtime/status surfaces the dormant test_data_count from the injected counter', async () => {
+    let calledTenant = null;
+    let calledIsTest = null;
+    const { app } = buildApp({
+      dataMode: 'live',
+      getTestDataCount: async ({ tenantId, isTestData }) => {
+        calledTenant = tenantId;
+        calledIsTest = isTestData;
+        return 7;
+      },
+    });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.test_data_count, 7);
+    assert.equal(calledTenant, TENANT_ID);
+    assert.equal(calledIsTest, true);
+  });
+
+  test('GET /runtime/status fails safe to test_data_count=0 when the counter throws', async () => {
+    const { app } = buildApp({
+      getTestDataCount: async () => {
+        throw new Error('count blew up');
+      },
+    });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.test_data_count, 0);
   });
 
   // The superadmin SUCCESS path requires passing validateTenantAccess's
