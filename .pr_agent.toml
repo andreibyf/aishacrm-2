@@ -1,0 +1,36 @@
+[config]
+# Files excluded from the diff entirely — never tokenized.
+# This is the real fix for large PRs; EXTRA_INSTRUCTIONS only affects the model.
+exclude_files = [
+    "**/__tests__/**",
+    "**/tests/**",
+    "**/*.test.js",
+    "**/*.test.jsx",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/migrations/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/*.min.js",
+    "**/*.min.css",
+    "**/*.lock",
+    "package-lock.json",
+    "yarn.lock"
+]
+
+# Reduce context lines around each hunk (default is 3)
+patch_extra_lines_before = 2
+patch_extra_lines_after  = 1
+
+# Drop individual files that exceed the budget rather than failing
+large_patch_policy = "drop"
+
+[pr_reviewer]
+require_score_review          = false
+num_code_suggestions          = 3
+inline_code_comments          = true
+require_tests_review          = true
+require_security_review       = true
+require_estimate_effort_to_review = true
