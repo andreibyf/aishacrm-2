@@ -64,6 +64,9 @@ function createFakePool() {
           err.code = '23505';
           throw err;
         }
+        // The DB assigns a monotonic `seq` (identity) in append order — the
+        // adapter never inserts it. Simulate so replay/query can tie-break by seq.
+        row.seq = pool.seqCounter = (pool.seqCounter || 0) + 1;
         pool.rows.push(row);
         return { rows: [{ ...row }], rowCount: 1 };
       }
@@ -83,8 +86,8 @@ function createFakePool() {
         }
       }
       // Only sort when the adapter actually asks for the contract ordering.
-      if (lower.includes('order by created_at asc, id asc')) {
-        result = result.slice().sort(compareByCreatedAtThenId);
+      if (lower.includes('order by created_at asc, seq asc')) {
+        result = result.slice().sort(compareByCreatedAtThenSeq);
       }
       const limitMatch = lower.match(/limit \$(\d+)/);
       if (limitMatch) {
@@ -103,12 +106,11 @@ function normalizeJson(value) {
   return value;
 }
 
-function compareByCreatedAtThenId(a, b) {
+function compareByCreatedAtThenSeq(a, b) {
   if (a.created_at < b.created_at) return -1;
   if (a.created_at > b.created_at) return 1;
-  if (a.id < b.id) return -1;
-  if (a.id > b.id) return 1;
-  return 0;
+  // Append-order tie-break on the monotonic DB seq (NOT the random id UUID).
+  return (a.seq ?? 0) - (b.seq ?? 0);
 }
 
 function validEvent(overrides = {}) {
@@ -233,27 +235,32 @@ test('replay returns events ordered by created_at ASC', async () => {
   assert.equal(replayed[2].created_at, '2026-05-20T12:00:00.000Z');
 });
 
-test('replay tie-breaks events with identical created_at by id ASC', async () => {
+test('replay tie-breaks identical created_at by APPEND ORDER (seq), not id (Codex PR #633)', async () => {
   const pool = createFakePool();
   const store = createFinancePgEventStore({ pool });
 
-  // Same created_at for all three; append ids out of sorted order.
+  // All three share created_at. The ids are appended in DESCENDING order, so an
+  // `id ASC` tie-break would REVERSE the append order — proving the seq tie-break
+  // preserves the order a command actually wrote (e.g. draft before approval).
   pool.nowValue = '2026-05-20T12:00:00.000Z';
   await store.append(validEvent({ id: '00000000-0000-4000-8000-00000000000c' }));
-  await store.append(validEvent({ id: '00000000-0000-4000-8000-00000000000a' }));
   await store.append(validEvent({ id: '00000000-0000-4000-8000-00000000000b' }));
+  await store.append(validEvent({ id: '00000000-0000-4000-8000-00000000000a' }));
 
   const replayed = await store.replay(TENANT_A);
 
   assert.deepEqual(
     replayed.map((e) => e.id),
     [
-      '00000000-0000-4000-8000-00000000000a',
-      '00000000-0000-4000-8000-00000000000b',
       '00000000-0000-4000-8000-00000000000c',
+      '00000000-0000-4000-8000-00000000000b',
+      '00000000-0000-4000-8000-00000000000a',
     ],
-    'identical timestamps must be tie-broken deterministically by id ASC',
+    'tied timestamps must replay in APPEND order (seq), not id ASC',
   );
+  // And the SELECT must order by seq, not id.
+  const replaySql = pool.calls.find((c) => /select .* order by/i.test(c.text));
+  assert.match(replaySql.text.toLowerCase(), /order by created_at asc, seq asc/);
 });
 
 test('replay is tenant-scoped — tenant A events are not visible to tenant B', async () => {
@@ -272,14 +279,11 @@ test('replay is tenant-scoped — tenant A events are not visible to tenant B', 
 
 test('append rejects a missing tenant_id', async () => {
   const store = createFinancePgEventStore({ pool: createFakePool() });
-  await assert.rejects(
-    store.append({ event_type: 'finance.journal.posted' }),
-    (err) => {
-      assert.ok(err instanceof FinanceEventStoreError);
-      assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
-      return true;
-    },
-  );
+  await assert.rejects(store.append({ event_type: 'finance.journal.posted' }), (err) => {
+    assert.ok(err instanceof FinanceEventStoreError);
+    assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
+    return true;
+  });
 });
 
 test('query, replay and getCount reject a missing tenant_id', async () => {
@@ -297,26 +301,20 @@ test('query, replay and getCount reject a missing tenant_id', async () => {
 
 test('append rejects a missing event_type', async () => {
   const store = createFinancePgEventStore({ pool: createFakePool() });
-  await assert.rejects(
-    store.append({ tenant_id: TENANT_A }),
-    (err) => {
-      assert.ok(err instanceof FinanceEventStoreError);
-      assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
-      return true;
-    },
-  );
+  await assert.rejects(store.append({ tenant_id: TENANT_A }), (err) => {
+    assert.ok(err instanceof FinanceEventStoreError);
+    assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
+    return true;
+  });
 });
 
 test('append rejects an event_type outside the finance.* taxonomy', async () => {
   const store = createFinancePgEventStore({ pool: createFakePool() });
-  await assert.rejects(
-    store.append(validEvent({ event_type: 'journal.posted' })),
-    (err) => {
-      assert.ok(err instanceof FinanceEventStoreError);
-      assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
-      return true;
-    },
-  );
+  await assert.rejects(store.append(validEvent({ event_type: 'journal.posted' })), (err) => {
+    assert.ok(err instanceof FinanceEventStoreError);
+    assert.equal(err.code, 'FINANCE_EVENT_STORE_INVALID');
+    return true;
+  });
 });
 
 // ── Acceptance: command names are rejected as event_type ──────────────────────
@@ -393,14 +391,11 @@ test('append surfaces a DB failure as a FinanceEventStoreError (no silent retry)
   pool.failNext = new Error('connection terminated unexpectedly');
   const store = createFinancePgEventStore({ pool });
 
-  await assert.rejects(
-    store.append(validEvent()),
-    (err) => {
-      assert.ok(err instanceof FinanceEventStoreError);
-      assert.equal(err.code, 'FINANCE_EVENT_STORE_DB_ERROR');
-      return true;
-    },
-  );
+  await assert.rejects(store.append(validEvent()), (err) => {
+    assert.ok(err instanceof FinanceEventStoreError);
+    assert.equal(err.code, 'FINANCE_EVENT_STORE_DB_ERROR');
+    return true;
+  });
   assert.equal(pool.rows.length, 0, 'a failed append must not persist a row');
 });
 
