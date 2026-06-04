@@ -228,6 +228,63 @@ test('read-your-write: the AFFECTED projections (and only those) are rebuilt dur
   assert.ok(createRunner.replayed.every((r) => r.tenantId === TENANT));
 });
 
+test('materializes finance.adapter_jobs from captured events when a pool is present (Codex PR #633 P1)', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+  const materializeCalls = [];
+  const fakePool = { query: async () => ({ rowCount: 1 }) };
+
+  await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    adapterJobPool: fakePool,
+    materializeAdapterJobs: async (args) => {
+      materializeCalls.push(args);
+      return { written: 1 };
+    },
+    logger,
+  });
+
+  // Invoked once with the pool, tenant, and the captured envelopes — including the
+  // sync_queued emitted by promoting the seeded draft adapter_job — so the SQL
+  // adapter worker has a row to claim.
+  assert.equal(materializeCalls.length, 1);
+  assert.equal(materializeCalls[0].pool, fakePool);
+  assert.equal(materializeCalls[0].tenantId, TENANT);
+  const types = materializeCalls[0].events.map((e) => e.event_type);
+  assert.ok(
+    types.includes('finance.adapter.sync_queued'),
+    'the sync_queued envelope is handed to the materializer',
+  );
+});
+
+test('skips adapter-jobs materialization when no pool is available (in-memory/test path)', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+  let called = false;
+
+  await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    // no adapterJobPool / pgPool
+    materializeAdapterJobs: async () => {
+      called = true;
+      return { written: 0 };
+    },
+    logger,
+  });
+
+  assert.equal(called, false, 'no pool → the materializer is not invoked');
+});
+
 test('advance failure (infra: replay REJECTS) is non-fatal: resolves with command result, rebuilds each affected projection once, logs warn', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory({ failAlways: true });
