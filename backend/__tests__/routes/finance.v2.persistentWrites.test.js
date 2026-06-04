@@ -249,4 +249,76 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       )}`,
     );
   });
+
+  // Slice 6 (Codex P1) — READ-SIDE SEGREGATION. /audit-events and /evidence-packs
+  // read the durable event stream DIRECTLY (not via the projection rebuild that
+  // segregates the other reads), so they must filter by the active mode's
+  // partition. Without the fix a `live` tenant receives dormant `test` events and
+  // a `test` tenant receives live events on exactly these two endpoints.
+  function seedAuditEvent(eventStore, { aggregateId, isTestData }) {
+    eventStore.append(
+      createFinanceEventEnvelope({
+        tenantId: TENANT_ID,
+        eventType: 'finance.journal.created',
+        aggregateType: 'journal_entry',
+        aggregateId,
+        actorId: 'requester',
+        actorType: 'human',
+        isTestData,
+        payload: { note: aggregateId },
+      }),
+    );
+  }
+
+  test('test mode: GET /audit-events returns only TEST events (no live leak) [Codex P1]', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'test' });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-test', isTestData: true });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-live', isTestData: false });
+
+    const res = await request(app).get('/api/v2/finance/audit-events');
+    assert.equal(res.status, 200);
+    const aggIds = res.body.data.events.map((e) => e.aggregate_id);
+    assert.ok(aggIds.includes('evt-test'), 'test event present in test mode');
+    assert.ok(!aggIds.includes('evt-live'), 'live event must NOT leak into test mode');
+  });
+
+  test('live mode: GET /audit-events returns only LIVE events (no test leak) [Codex P1]', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'live' });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-test', isTestData: true });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-live', isTestData: false });
+
+    const res = await request(app).get('/api/v2/finance/audit-events');
+    assert.equal(res.status, 200);
+    const aggIds = res.body.data.events.map((e) => e.aggregate_id);
+    assert.ok(aggIds.includes('evt-live'), 'live event present in live mode');
+    assert.ok(!aggIds.includes('evt-test'), 'dormant test event must NOT leak into live mode');
+  });
+
+  test('GET /evidence-packs counts only the active-mode partition [Codex P1]', async () => {
+    // Same durable stream (2 test + 1 live), built once in test mode and once in
+    // live mode. The pack must reflect only the active partition.
+    const testApp = buildPersistentApp({ dataMode: 'test' });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-test-1', isTestData: true });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-test-2', isTestData: true });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-live-1', isTestData: false });
+    const testRes = await request(testApp.app).get('/api/v2/finance/evidence-packs');
+    assert.equal(testRes.status, 200);
+    assert.equal(
+      testRes.body.data.pack.artifact_count,
+      2,
+      'test-mode pack counts only the 2 test events',
+    );
+
+    const liveApp = buildPersistentApp({ dataMode: 'live' });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-test-1', isTestData: true });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-test-2', isTestData: true });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-live-1', isTestData: false });
+    const liveRes = await request(liveApp.app).get('/api/v2/finance/evidence-packs');
+    assert.equal(liveRes.status, 200);
+    assert.equal(
+      liveRes.body.data.pack.artifact_count,
+      1,
+      'live-mode pack counts only the 1 live event',
+    );
+  });
 });

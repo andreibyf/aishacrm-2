@@ -500,22 +500,56 @@ describe('finance.v2 routes', () => {
       assert.equal(rebuilt, false);
     });
 
-    test('rebuild error is NON-FATAL — still returns the persisted mode', async () => {
-      const warns = [];
-      const result = await applyFinanceDataModeChange({
-        tenantId: TENANT_ID,
-        mode: 'test',
-        persistent: true,
-        setFinanceDataMode: async ({ mode }) => mode,
-        rebuildFinanceProjections: async () => {
-          throw new Error('rebuild kaboom');
-        },
-        eventStore: {},
-        storeProvider: {},
-        logger: { ...NOOP_LOGGER, warn: (...a) => warns.push(a) },
-      });
-      assert.equal(result, 'test');
-      assert.ok(warns.length >= 1, 'rebuild failure is logged');
+    test('rebuild error FAILS LOUD — reverts the mode and throws (no silent success) [Codex P2]', async () => {
+      const errors = [];
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // pre-switch mode, used for the rollback
+          getFinanceDataMode: async () => 'test',
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          rebuildFinanceProjections: async () => {
+            throw new Error('rebuild kaboom');
+          },
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: (...a) => errors.push(a) },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED' && err.statusCode === 503,
+      );
+      // Persisted 'live' first, then reverted to the pre-switch 'test'.
+      assert.deepEqual(setCalls, ['live', 'test']);
+      assert.ok(errors.length >= 1, 'rebuild failure is logged at error level');
+    });
+
+    test('rebuild error without a resolvable previous mode still throws (no revert, but loud)', async () => {
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // no getFinanceDataMode injected → cannot roll back, but must NOT swallow
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          rebuildFinanceProjections: async () => {
+            throw new Error('rebuild kaboom');
+          },
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED',
+      );
+      assert.deepEqual(setCalls, ['live'], 'no revert when previous mode is unknown');
     });
   });
 });
