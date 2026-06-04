@@ -147,9 +147,12 @@ export default function NavigationPermissions({
     try {
       console.log('[NavigationPermissions] Saving:', local);
 
-      // Save to User entity
+      // Save to User entity — must use nav_permissions (the DB column),
+      // NOT navigation_permissions which the backend writes into metadata blob.
+      // The read path in User.me() checks nav_permissions first; the metadata
+      // blob is never surfaced as a top-level property on the userData object.
       await User.update(user.id, {
-        navigation_permissions: local,
+        nav_permissions: local,
       });
 
       // Verify it saved by re-fetching

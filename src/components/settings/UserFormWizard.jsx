@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getBackendUrl } from '@/api/backendUrl';
+import { getAuthFetchOptions } from '@/api/core/httpClient';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -711,8 +712,7 @@ export default function UserFormWizard({
         if (result.user?.id && teamMemberships.length > 0) {
           await fetch(`${BACKEND_URL}/api/v2/teams/sync-user-memberships`, {
             method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            ...(await getAuthFetchOptions()),
             body: JSON.stringify({
               user_id: result.user.id,
               memberships: teamMemberships,

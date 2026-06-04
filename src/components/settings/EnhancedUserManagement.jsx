@@ -64,6 +64,7 @@ import { useUser } from '@/components/shared/useUser.js';
 // useTenant hook removed — caused re-render cascade on edit click (PR #295 bug fix)
 // Tenant changes now handled via 'tenant-changed' window event listener instead
 import { getBackendUrl } from '@/api/backendUrl';
+import { getAuthFetchOptions } from '@/api/core/httpClient';
 
 // Backend API URL
 const BACKEND_URL = getBackendUrl();
@@ -988,7 +989,7 @@ export default function EnhancedUserManagement() {
       try {
         const res = await fetch(
           `${BACKEND_URL}/api/v2/teams/user-memberships?user_id=${editingUser.id}`,
-          { credentials: 'include' },
+          await getAuthFetchOptions(),
         );
         if (res.ok) {
           const json = await res.json();
@@ -1251,8 +1252,7 @@ export default function EnhancedUserManagement() {
         try {
           const res = await fetch(`${BACKEND_URL}/api/v2/teams/sync-user-memberships`, {
             method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            ...(await getAuthFetchOptions()),
             body: JSON.stringify({
               user_id: userId,
               tenant_id: cleanedData.tenant_id,
@@ -1303,8 +1303,7 @@ export default function EnhancedUserManagement() {
     try {
       const response = await fetch(`${BACKEND_URL}/api/users/${userToDelete.id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        ...(await getAuthFetchOptions()),
         body: JSON.stringify({ tenant_id: userToDelete.tenant_id }),
       });
 
@@ -1329,8 +1328,7 @@ export default function EnhancedUserManagement() {
       // Use the correct /invite endpoint (backend supports both /invite and /resend-invite)
       const response = await fetch(`${BACKEND_URL}/api/users/${user.id}/invite`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        ...(await getAuthFetchOptions()),
       });
       const result = await response.json();
 
@@ -1387,8 +1385,7 @@ export default function EnhancedUserManagement() {
       const ids = usersToDelete.map((u) => u.id);
       const response = await fetch(`${BACKEND_URL}/api/users/bulk-delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        ...(await getAuthFetchOptions()),
         body: JSON.stringify({ ids }),
       });
 
