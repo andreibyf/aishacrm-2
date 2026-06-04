@@ -36,6 +36,9 @@ function adapterEvent(
     // `permanent: false` + `nextAttemptAt` models a transient/retryable failure.
     permanent = undefined,
     nextAttemptAt = null,
+    // The REAL provider error, at `payload.error.message` (buildSyncFailedEvent).
+    // Distinct from `errorMessage`, which sets the adapter_job SNAPSHOT field.
+    payloadError = null,
   } = {},
 ) {
   return {
@@ -49,6 +52,7 @@ function adapterEvent(
     causation_id: causationId,
     payload: {
       ...(permanent !== undefined ? { permanent } : {}),
+      ...(payloadError !== null ? { error: { message: payloadError, code: null } } : {}),
       next_attempt_at: nextAttemptAt,
       adapter_job: {
         id: adapterJobId,
@@ -342,6 +346,35 @@ test('a finance.adapter.sync_failed event places the item in the failed bucket w
   assert.equal(queue.failed[0].status, 'failed');
   assert.equal(queue.failed[0].error_message, 'provider timeout');
   assert.equal(queue.failed[0].attempts, 2);
+});
+
+test('a sync_failed surfaces the REAL provider error from payload.error.message, not the snapshot (Codex PR #633 P2)', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  // buildSyncFailedEvent puts the provider error at payload.error.message; the
+  // adapter_job snapshot does NOT carry it (errorMessage left null here). Reading
+  // only the snapshot would return null for every real processor failure.
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_failed', 'e1', {
+      adapterJobId: 'adapter_job_1',
+      attempts: 3,
+      permanent: true,
+      errorMessage: null,
+      payloadError: 'QuickBooks 401 invalid_grant',
+      createdAt: '2026-05-21T01:00:00.000Z',
+    }),
+  );
+
+  const queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.failed.length, 1);
+  assert.equal(
+    queue.failed[0].error_message,
+    'QuickBooks 401 invalid_grant',
+    'the real payload.error.message is surfaced, not the null snapshot field',
+  );
 });
 
 // ── sync_failed: transient (retryable) vs permanent (terminal) (Codex PR #633 P2) ─

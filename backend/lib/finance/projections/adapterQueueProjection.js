@@ -145,7 +145,14 @@ function upsertAdapterJob(event, job, status, store) {
     // `/adapter-jobs`) shows when a queued retry will next run.
     next_attempt_at:
       (event.payload && event.payload.next_attempt_at) ?? job.next_attempt_at ?? null,
-    error_message: job.error_message ?? null,
+    // For a real `sync_failed`, the provider error is at `payload.error.message`
+    // (buildSyncFailedEvent); the adapter_job snapshot is just `{ ...job, status }`
+    // and does NOT carry it. Prefer the payload error so `/adapter-jobs` surfaces
+    // the actual failure instead of null; fall back to the snapshot field.
+    error_message:
+      (event.payload && event.payload.error && event.payload.error.message) ??
+      job.error_message ??
+      null,
     created_at: job.created_at ?? event.created_at ?? null,
     updated_at: job.updated_at ?? event.created_at ?? null,
     correlation_id: event.correlation_id ?? null,
