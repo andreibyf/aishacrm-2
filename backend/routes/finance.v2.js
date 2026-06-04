@@ -189,6 +189,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         tenantId: req.financeTenantId,
         eventStore: persistentEventStore,
         storeProvider: createStoreProvider(),
+        // Codex PR #633 P1: the pool used to materialize finance.adapter_jobs rows
+        // so the SQL adapter worker can claim jobs created via the persistent write.
+        adapterJobPool: pgPool,
         logger,
         command,
       });

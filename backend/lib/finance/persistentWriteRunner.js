@@ -59,6 +59,7 @@ import { createJournalEntriesProjectionWorker } from './projections/journalEntri
 import { createApprovalQueueProjectionWorker } from './projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from './projections/adapterQueueProjection.js';
 import { createInvoiceProjectionWorker } from './projections/invoiceProjection.js';
+import { materializeAdapterJobs as defaultMaterializeAdapterJobs } from './persistentAdapterJobWriter.js';
 
 // Build the five projection workers used to advance projections in-process.
 // Mirrors defaultFinanceReadAdapterFactory's `workers` block.
@@ -117,6 +118,10 @@ export async function runPersistentWrite({
   logger = defaultLogger,
   maxAttempts = 3,
   retryBackoffMs = 20,
+  // Codex PR #633 P1: pool used to materialize finance.adapter_jobs rows (so the
+  // SQL adapter worker can claim them). Injectable writer for tests.
+  adapterJobPool,
+  materializeAdapterJobs: materializeAdapterJobsFn = defaultMaterializeAdapterJobs,
 } = {}) {
   if (!tenantId) {
     throw new Error('runPersistentWrite requires a tenantId');
@@ -192,6 +197,28 @@ export async function runPersistentWrite({
   // appended events) is idempotent, recovers a degraded projection, and is
   // correct regardless of prior state. Best-effort and NON-FATAL: never throws.
   if (captured.length > 0) {
+    // Codex PR #633 P1: materialize finance.adapter_jobs ROWS from the captured
+    // adapter-job events so the SQL adapter worker (claimPersistent) can drain
+    // them — the in-memory promote path emits sync_queued but never writes the
+    // canonical table. Best-effort and NON-FATAL: the events are already durable
+    // and the adapter_queue projection already reflects the job.
+    const resolvedAdapterJobPool = adapterJobPool || pgPool || null;
+    if (resolvedAdapterJobPool) {
+      try {
+        await materializeAdapterJobsFn({
+          pool: resolvedAdapterJobPool,
+          tenantId,
+          events: captured,
+          logger,
+        });
+      } catch (err) {
+        logger.warn(
+          { tenant_id: tenantId, err: err?.message ?? String(err) },
+          'persistentWriteRunner: adapter-jobs materialization failed (non-fatal); events durable + projected',
+        );
+      }
+    }
+
     const makeRunner = createRunner || buildDefaultRunner;
     const runner = makeRunner({
       eventStore: resolvedEventStore,
