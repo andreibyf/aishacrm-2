@@ -31,7 +31,7 @@ jobs:
           CONFIG.MODEL: "openai/qwen-14b"
           CONFIG.MODEL_WEAK: "openai/qwen-14b"
           CONFIG.FALLBACK_MODELS: "[]"
-          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "20000"
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "18000"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
           PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
