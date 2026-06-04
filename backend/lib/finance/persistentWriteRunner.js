@@ -164,8 +164,14 @@ export async function runPersistentWrite({
   const captured = [];
   const capturingEventStore = {
     append: async (envelope) => {
+      // Codex PR #633 P1: capture ONLY after the durable append RESOLVES. If the
+      // append rejects, the envelope is non-durable, so it must NOT be advanced
+      // into projections or materialized into finance.adapter_jobs (which would
+      // let the SQL worker claim a job with no event-store fact). Capturing first
+      // and then awaiting would record a phantom on append failure.
+      const appended = await resolvedEventStore.append(envelope);
       captured.push(envelope);
-      return resolvedEventStore.append(envelope);
+      return appended;
     },
     query: (...args) => resolvedEventStore.query(...args),
     replay: (...args) => resolvedEventStore.replay(...args),
