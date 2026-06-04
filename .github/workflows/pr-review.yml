@@ -13,6 +13,11 @@ permissions:
   contents: read
   issues: write
 
+# Tunable parameters — adjust without editing this file:
+# GitHub repo → Settings → Secrets and variables → Variables
+# PR_AGENT_MAX_TOKENS  : max input tokens sent to model (default 18000)
+# PR_AGENT_SUGGESTIONS : number of code suggestions per review (default 3)
+
 jobs:
   pr_review:
     if: |
@@ -31,10 +36,10 @@ jobs:
           CONFIG.MODEL: "openai/qwen-14b"
           CONFIG.MODEL_WEAK: "openai/qwen-14b"
           CONFIG.FALLBACK_MODELS: "[]"
-          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "18000"
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: ${{ vars.PR_AGENT_MAX_TOKENS || '18000' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
-          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
+          PR_REVIEWER.NUM_CODE_SUGGESTIONS: ${{ vars.PR_AGENT_SUGGESTIONS || '3' }}
           PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
           PR_REVIEWER.EXTRA_INSTRUCTIONS: |
             This is AiSHA CRM, a multi-tenant Node.js/React CRM. Apply these rules:
