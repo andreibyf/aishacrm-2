@@ -465,11 +465,11 @@ describe('finance.v2 routes', () => {
       assert.equal(rebuildArgs.isTestData, false);
     });
 
-    test('in-memory mode (persistent=false) persists but SKIPS the rebuild', async () => {
+    test('in-memory mode (persistent=false) persists TEST but SKIPS the rebuild', async () => {
       let rebuilt = false;
       const result = await applyFinanceDataModeChange({
         tenantId: TENANT_ID,
-        mode: 'live',
+        mode: 'test',
         persistent: false,
         setFinanceDataMode: async ({ mode }) => mode,
         rebuildFinanceProjections: async () => {
@@ -479,8 +479,30 @@ describe('finance.v2 routes', () => {
         storeProvider: {},
         logger: NOOP_LOGGER,
       });
-      assert.equal(result, 'live');
+      assert.equal(result, 'test');
       assert.equal(rebuilt, false);
+    });
+
+    test('in-memory mode REFUSES live (no isolation) — throws FINANCE_LIVE_REQUIRES_PERSISTENT [Codex PR #634 P2]', async () => {
+      let persisted = false;
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: false,
+          setFinanceDataMode: async () => {
+            persisted = true;
+            return 'live';
+          },
+          rebuildFinanceProjections: async () => {},
+          eventStore: {},
+          storeProvider: {},
+          logger: NOOP_LOGGER,
+        }),
+        (err) => err.code === 'FINANCE_LIVE_REQUIRES_PERSISTENT' && err.statusCode === 409,
+      );
+      // Refused BEFORE persisting — the in-memory tenant stays test-only.
+      assert.equal(persisted, false, 'live must not be persisted in in-memory mode');
     });
 
     test('skips rebuild when stores are absent even if persistent', async () => {

@@ -106,6 +106,23 @@ export async function applyFinanceDataModeChange({
   storeProvider,
   logger: log = logger,
 }) {
+  // Slice 6 (Codex PR #634 P2): in-memory deployments have NO test/live isolation
+  // — runWrite() and the read adapter share one un-partitioned domain-service
+  // bucket, so switching TEST→LIVE would expose sandbox test entries through the
+  // live read endpoints (and let them be acted on as live data). Refuse to
+  // advertise an isolation the in-memory path can't provide: LIVE requires
+  // persistent events. TEST stays available — it is the safe default.
+  if (!persistent && mode === FINANCE_DATA_MODES.LIVE) {
+    const err = new Error(
+      'Live data mode requires persistent events (ENABLE_FINANCE_PERSISTENT_EVENTS). ' +
+        'In-memory deployments are test-only — there is no test/live data isolation, ' +
+        'so live mode would expose sandbox test entries as live data.',
+    );
+    err.statusCode = 409;
+    err.code = 'FINANCE_LIVE_REQUIRES_PERSISTENT';
+    throw err;
+  }
+
   const willRebuild = persistent && eventStore && storeProvider;
 
   // Capture the pre-switch mode up front so a failed rebuild can roll back to it.

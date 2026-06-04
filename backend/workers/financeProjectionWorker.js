@@ -55,6 +55,22 @@ import {
   writeWorkerHeartbeat as commonWriteWorkerHeartbeat,
   installSignalHandlers as commonInstallSignalHandlers,
 } from '../lib/finance/financeWorkerCommon.js';
+// Slice 6: the worker must replay only the tenant's ACTIVE Test/Live partition,
+// or it undoes a partitioned mode-switch rebuild.
+import { fetchFinanceDataMode, FINANCE_DATA_MODES } from '../lib/finance/financeDataMode.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
+
+/**
+ * Production per-tenant partition resolver: returns `true` when the tenant's
+ * finance data mode is `test`, `false` for `live`. Used so the poll cycle
+ * replays only the active partition's events. Injectable into
+ * `runProjectionPollCycle` / `startFinanceProjectionWorker` so tests drive it
+ * without Supabase.
+ */
+export async function defaultResolveIsTestData(tenantId) {
+  const mode = await fetchFinanceDataMode({ tenantId, getSupabaseClient });
+  return mode === FINANCE_DATA_MODES.TEST;
+}
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -116,13 +132,39 @@ export const parseControlledTenantIds = commonParseControlledTenantIds;
  * `event_count` reflects events successfully dispatched before any failure
  * for that tenant — useful operator signal when a partial cycle ran.
  */
-export async function runProjectionPollCycle({ runner, eventStore, tenantIds }) {
+export async function runProjectionPollCycle({
+  runner,
+  eventStore,
+  tenantIds,
+  resolveIsTestData = null,
+}) {
   const summary = [];
 
   for (const tenantId of tenantIds) {
+    // Slice 6 (Codex PR #634 P1): replay only the tenant's ACTIVE Test/Live
+    // partition. Without this the worker re-projects BOTH partitions into the
+    // shared projection_state, undoing a partitioned mode-switch rebuild — e.g.
+    // switching to TEST with no test events would let the next poll replay LIVE
+    // events into the test projections (or vice-versa). With no resolver injected
+    // the filter is `null` (replay all) — the back-compatible Slice-1 behavior.
+    let isTestData = null;
+    if (resolveIsTestData) {
+      try {
+        isTestData = await resolveIsTestData(tenantId);
+      } catch (error) {
+        // FAIL-SAFE to TEST: never replay live events into a tenant whose mode
+        // could not be resolved (that would leak live data into test projections).
+        isTestData = true;
+        logger.warn(
+          { tenant_id: tenantId, error: error?.message || String(error) },
+          '[finance-projection-worker] data-mode resolve failed; defaulting to TEST partition',
+        );
+      }
+    }
+
     let events;
     try {
-      events = await eventStore.replay(tenantId);
+      events = await eventStore.replay(tenantId, isTestData);
     } catch (error) {
       logger.error(
         {
@@ -255,6 +297,7 @@ export function startFinanceProjectionWorker({
   runner,
   eventStore,
   tenantIds = parseControlledTenantIds(),
+  resolveIsTestData = defaultResolveIsTestData,
 } = {}) {
   if (!isFinanceProjectionWorkerEnabled()) {
     logger.info('[finance-projection-worker] disabled — idling');
@@ -304,7 +347,12 @@ export function startFinanceProjectionWorker({
     }
 
     try {
-      const summary = await runProjectionPollCycle({ runner, eventStore, tenantIds });
+      const summary = await runProjectionPollCycle({
+        runner,
+        eventStore,
+        tenantIds,
+        resolveIsTestData,
+      });
       const successCount = summary.filter((row) => row.ok).length;
       const failureCount = summary.length - successCount;
       const eventCount = summary.reduce((acc, row) => acc + row.event_count, 0);
