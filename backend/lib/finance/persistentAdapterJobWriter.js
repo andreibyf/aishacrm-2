@@ -87,6 +87,11 @@ export function adapterJobRowFromEvent(event) {
   };
 }
 
+// NOTE (Codex PR #633 P1): `id` and `aggregate_id` are written as the app's
+// PREFIXED string IDs (`adapter_job_<uuid>` / `journal_<uuid>`). Migration
+// 177_finance_adapter_jobs_text_ids.sql widens those two columns from `uuid` to
+// `text` so this insert is not rejected (22P02) — otherwise the per-row insert
+// fails silently (non-fatal) and the SQL worker never gets a runnable row.
 const UPSERT_SQL = `
   INSERT INTO finance.adapter_jobs
     (id, tenant_id, provider, aggregate_type, aggregate_id, operation, mode,
