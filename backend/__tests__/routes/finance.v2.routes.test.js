@@ -601,5 +601,31 @@ describe('finance.v2 routes', () => {
       // Persisted live, then reverted to the pre-switch test on the degraded result.
       assert.deepEqual(setCalls, ['live', 'test']);
     });
+
+    test('aborts BEFORE persisting when the current mode cannot be read (no rollback path) [Codex PR #634 P1]', async () => {
+      let persisted = false;
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // The pre-switch mode lookup throws — we'd have no value to roll back to.
+          getFinanceDataMode: async () => {
+            throw new Error('supabase down');
+          },
+          setFinanceDataMode: async () => {
+            persisted = true;
+            return 'live';
+          },
+          rebuildFinanceProjections: async () => ({ rebuilt: [], degraded: [] }),
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_PRECHECK_FAILED' && err.statusCode === 503,
+      );
+      // Failed the precheck → nothing persisted (no half-applied switch).
+      assert.equal(persisted, false, 'mode is not persisted when the pre-switch read fails');
+    });
   });
 });

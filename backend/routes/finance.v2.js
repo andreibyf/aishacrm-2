@@ -126,12 +126,23 @@ export async function applyFinanceDataModeChange({
   const willRebuild = persistent && eventStore && storeProvider;
 
   // Capture the pre-switch mode up front so a failed rebuild can roll back to it.
+  // Codex PR #634 P1: if we CAN'T read the current mode, we have no rollback path
+  // — so fail the switch BEFORE persisting, rather than persist a new mode we
+  // could never revert (which would leave /runtime/status on the new mode while
+  // the projections stay on the old partition if the rebuild then fails).
   let previousMode = null;
   if (willRebuild && typeof getFinanceDataModeFn === 'function') {
     try {
       previousMode = await getFinanceDataModeFn({ tenantId });
-    } catch {
-      previousMode = null;
+    } catch (err) {
+      const e = new Error(
+        'Finance data-mode switch aborted: could not read the current mode to enable ' +
+          'rollback on a failed rebuild. Nothing was changed. Retry the switch.',
+      );
+      e.statusCode = 503;
+      e.code = 'FINANCE_MODE_SWITCH_PRECHECK_FAILED';
+      e.cause = err;
+      throw e;
     }
   }
 

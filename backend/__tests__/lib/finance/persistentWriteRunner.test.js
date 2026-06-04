@@ -285,6 +285,30 @@ test('skips adapter-jobs materialization when no pool is available (in-memory/te
   assert.equal(called, false, 'no pool → the materializer is not invoked');
 });
 
+test('TEST-mode writes do NOT materialize finance.adapter_jobs (keep test jobs out of the provider worker) (Codex PR #634 P1)', async () => {
+  let called = false;
+  const { logger } = makeFakeLogger();
+
+  await runPersistentWrite({
+    eventStore: makeFakeEventStore([seedApprovalRequestedEvent('A')]),
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner: makeSpyRunnerFactory(),
+    adapterJobPool: { query: async () => ({ rowCount: 0 }) },
+    isTestData: true,
+    materializeAdapterJobs: async () => {
+      called = true;
+      return { written: 0 };
+    },
+    logger,
+  });
+
+  // finance.adapter_jobs has no is_test_data column and claimPersistent claims any
+  // queued row, so a test job must NEVER enter the claimable table.
+  assert.equal(called, false, 'test adapter jobs are not materialized into the claimable table');
+});
+
 test('a non-durable event (append REJECTS) is NOT captured — no advance, no materialization (Codex PR #633 P1)', async () => {
   const materializeCalls = [];
   const replayed = [];

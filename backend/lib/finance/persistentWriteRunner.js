@@ -215,8 +215,14 @@ export async function runPersistentWrite({
     // them — the in-memory promote path emits sync_queued but never writes the
     // canonical table. Best-effort and NON-FATAL: the events are already durable
     // and the adapter_queue projection already reflects the job.
+    // Codex PR #634 P1: do NOT materialize TEST adapter jobs into
+    // finance.adapter_jobs. That table has no is_test_data column and
+    // adapterJobProcessor.claimPersistent claims ANY queued row by tenant/status,
+    // so a materialized test job could be claimed and pushed to a provider as a
+    // REAL write. Test adapter jobs stay visible via the (partitioned) projection
+    // but never enter the claimable canonical table.
     const resolvedAdapterJobPool = adapterJobPool || pgPool || null;
-    if (resolvedAdapterJobPool) {
+    if (resolvedAdapterJobPool && !isTestData) {
       try {
         await materializeAdapterJobsFn({
           pool: resolvedAdapterJobPool,
