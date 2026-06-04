@@ -573,5 +573,33 @@ describe('finance.v2 routes', () => {
       );
       assert.deepEqual(setCalls, ['live'], 'no revert when previous mode is unknown');
     });
+
+    test('a DEGRADED rebuild (resolves, not throws) also fails the switch — reverts + 503 [Codex PR #634 P1]', async () => {
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          getFinanceDataMode: async () => 'test',
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          // Rebuild RESOLVES (no throw) but a projection degraded — the live store
+          // was left on the old partition, same leak hazard as a throw.
+          rebuildFinanceProjections: async () => ({
+            rebuilt: [],
+            degraded: ['finance.projection.ledger'],
+          }),
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED' && err.statusCode === 503,
+      );
+      // Persisted live, then reverted to the pre-switch test on the degraded result.
+      assert.deepEqual(setCalls, ['live', 'test']);
+    });
   });
 });

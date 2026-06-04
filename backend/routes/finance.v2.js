@@ -138,17 +138,11 @@ export async function applyFinanceDataModeChange({
   const persisted = await setFinanceDataModeFn({ tenantId, mode });
 
   if (willRebuild) {
-    try {
-      await rebuildFinanceProjectionsFn({
-        eventStore,
-        storeProvider,
-        tenantId,
-        isTestData: mode === FINANCE_DATA_MODES.TEST,
-        logger: log,
-      });
-    } catch (err) {
-      log.error('[finance.v2] post-switch projection rebuild failed:', err?.message);
-      // Revert the persisted mode so status matches the un-rebuilt projections.
+    // Shared revert+fail used by BOTH a thrown rebuild and a degraded outcome:
+    // revert the persisted mode so /runtime/status stays consistent with the
+    // un-rebuilt projections, then throw 503 so the operator retries.
+    const failSwitch = async (reason) => {
+      log.error('[finance.v2] post-switch projection rebuild failed:', reason);
       if (previousMode && previousMode !== mode) {
         try {
           await setFinanceDataModeFn({ tenantId, mode: previousMode });
@@ -165,6 +159,30 @@ export async function applyFinanceDataModeChange({
       e.statusCode = 503;
       e.code = 'FINANCE_MODE_SWITCH_REBUILD_FAILED';
       throw e;
+    };
+
+    let rebuildResult;
+    try {
+      rebuildResult = await rebuildFinanceProjectionsFn({
+        eventStore,
+        storeProvider,
+        tenantId,
+        isTestData: mode === FINANCE_DATA_MODES.TEST,
+        logger: log,
+      });
+    } catch (err) {
+      await failSwitch(err?.message);
+    }
+    // Codex PR #634 P1: a DEGRADED projection (replay RESOLVED `{outcome:'degraded'}`
+    // rather than throwing) discarded its shadow and left the live store on the OLD
+    // partition — the same test↔live leak hazard as a throw. Treat a non-empty
+    // degraded result as a failed switch, not a success.
+    if (
+      rebuildResult &&
+      Array.isArray(rebuildResult.degraded) &&
+      rebuildResult.degraded.length > 0
+    ) {
+      await failSwitch(`degraded projections: ${rebuildResult.degraded.join(', ')}`);
     }
   }
   return persisted;
@@ -304,15 +322,26 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     if (persistentEvents) {
       // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
       // into the durable write runner so HYDRATE + the projection REBUILD both
-      // operate on the active mode's partition only. FAIL-SAFE to TEST: a
-      // mode-lookup error must never silently write/rebuild over live data.
-      let isTestData = true;
+      // operate on the active mode's partition only. Codex PR #634 P1: FAIL-CLOSED
+      // — `runPersistentWrite` stamps every captured envelope with this flag, so a
+      // guessed partition would persist a live write as `is_test_data=true`
+      // (omitted from live reads, deletable by test cleanup) or vice-versa. If the
+      // mode can't be resolved, REFUSE the write rather than acknowledge it in the
+      // wrong partition.
+      let isTestData;
       try {
         isTestData =
           (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
           FINANCE_DATA_MODES.TEST;
-      } catch {
-        isTestData = true;
+      } catch (err) {
+        const e = new Error(
+          'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
+            'avoid persisting it in the wrong (test/live) partition.',
+        );
+        e.statusCode = 503;
+        e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+        e.cause = err;
+        throw e;
       }
       return runPersistentWriteFn({
         tenantId: req.financeTenantId,
@@ -419,17 +448,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/runtime/status', async (req, res) => {
     try {
-      const status = await readAdapter.getRuntimeStatus(req.financeTenantId);
-      // Surface the authoritative per-tenant Test/Live data mode as `runtime.mode`
-      // (replacing the legacy `mock_read_only` placeholder). `runtime.persistence`
-      // continues to report the engine (in_memory vs persistent). Resolve failures
-      // fail-safe to `test` — never expose a tenant as `live` on a lookup error.
+      // Resolve the authoritative per-tenant Test/Live data mode FIRST (replacing
+      // the legacy `mock_read_only` placeholder). Resolve failures fail-safe to
+      // `test` — never expose a tenant as `live` on a lookup error.
       let dataMode = FINANCE_DATA_MODES.TEST;
       try {
         dataMode = await getFinanceDataMode({ tenantId: req.financeTenantId, req });
       } catch (err) {
         logger.warn('[finance.v2] data-mode resolve failed; defaulting to test:', err?.message);
       }
+      // Codex PR #634 P2: count audit events for the ACTIVE partition only, so
+      // `counts.audit_events` / `persistence_lag.audit_events_total` match the
+      // (partitioned) /audit-events read instead of counting the opposite partition.
+      // PERSISTENT-only — in-memory has no durable partition (null = count all).
+      const runtimeIsTestData = persistentEvents ? dataMode === FINANCE_DATA_MODES.TEST : null;
+      const status = await readAdapter.getRuntimeStatus(req.financeTenantId, {
+        isTestData: runtimeIsTestData,
+      });
       status.runtime = { ...status.runtime, mode: dataMode, data_mode: dataMode };
       // Slice 6d: attach the count of dormant TEST finance events. FAIL-SAFE:
       // never break /runtime/status — default to 0 on any error.

@@ -235,7 +235,7 @@ test('runProjectionPollCycle — replays only the ACTIVE partition per tenant (C
   ]);
 });
 
-test('runProjectionPollCycle — a failing mode resolver fails SAFE to the test partition (Codex PR #634 P1)', async () => {
+test('runProjectionPollCycle — a failing mode resolver SKIPS the tenant (fail-closed) (Codex PR #634 P2)', async () => {
   const replayCalls = [];
   const eventStore = {
     async replay(tenantId, isTestData) {
@@ -251,13 +251,22 @@ test('runProjectionPollCycle — a failing mode resolver fails SAFE to the test 
   const summary = await runProjectionPollCycle({
     runner,
     eventStore,
-    tenantIds: [TENANT_A],
-    resolveIsTestData,
+    tenantIds: [TENANT_A, TENANT_B],
+    // TENANT_B resolves fine — proves the skip is per-tenant, not a whole-cycle abort.
+    resolveIsTestData: async (t) => {
+      if (t === TENANT_A) return resolveIsTestData();
+      return false;
+    },
   });
 
-  // Resolver threw → defaults to the TEST partition (never replays live into test).
-  assert.deepEqual(replayCalls, [{ tenantId: TENANT_A, isTestData: true }]);
-  assert.equal(summary[0].ok, true);
+  // FAIL-CLOSED: the unresolvable tenant is skipped (no replay, never an arbitrary
+  // partition); TENANT_B still runs on its active (live) partition.
+  assert.deepEqual(replayCalls, [{ tenantId: TENANT_B, isTestData: false }]);
+  assert.equal(summary[0].tenant_id, TENANT_A);
+  assert.equal(summary[0].ok, false);
+  assert.match(summary[0].error, /data-mode resolve failed/);
+  assert.equal(summary[1].tenant_id, TENANT_B);
+  assert.equal(summary[1].ok, true);
 });
 
 test('runProjectionPollCycle — with NO resolver injected, replays all events (isTestData=null, back-compat)', async () => {

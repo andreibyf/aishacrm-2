@@ -194,11 +194,13 @@ export function createProjectionBackedFinanceReadAdapter({
       return balanceSheetFromLedger(await ledgerReadModel(createStoreProvider(), tenantId));
     },
 
-    async getRuntimeStatus(tenantId) {
+    async getRuntimeStatus(tenantId, { isTestData = null } = {}) {
       const storeProvider = createStoreProvider();
       let auditCount;
       try {
-        auditCount = await auditEventsReader.count(tenantId);
+        // Codex PR #634 P2: partition the audit count by the active mode so it
+        // matches the (partitioned) /audit-events read. `null` = all (back-compat).
+        auditCount = await auditEventsReader.count(tenantId, isTestData);
       } catch (err) {
         throw new FinanceReadDegradedError('audit_events read failed', err);
       }

@@ -48,7 +48,7 @@ afterEach(() => {
 // Build a persistent-mode app over a SHARED in-memory event store + projection
 // store provider. Returning the SAME provider instance from createStoreProvider
 // means the read adapter and the write runner advance/read the same live store.
-function buildPersistentApp({ user, dataMode = 'live' } = {}) {
+function buildPersistentApp({ user, dataMode = 'live', getFinanceDataMode } = {}) {
   const eventStore = createFinanceEventStore();
   const storeProvider = createMemoryProjectionStoreProvider();
 
@@ -76,7 +76,7 @@ function buildPersistentApp({ user, dataMode = 'live' } = {}) {
       // write path does NOT fall back to the real Supabase-backed resolver. The
       // acceptance suite seeds default-live (is_test_data=false) events, so the
       // default app builds in 'live' mode (isTestData=false).
-      getFinanceDataMode: async () => dataMode,
+      getFinanceDataMode: getFinanceDataMode || (async () => dataMode),
     }),
   );
 
@@ -320,5 +320,32 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       1,
       'live-mode pack counts only the 1 live event',
     );
+  });
+
+  // Codex PR #634 P1 — a persistent write FAILS CLOSED when the tenant's Test/Live
+  // mode cannot be resolved, rather than silently stamping the wrong partition.
+  test('a mutating write is refused (503) when the data mode cannot be resolved', async () => {
+    const { app } = buildPersistentApp({
+      getFinanceDataMode: async () => {
+        throw new Error('supabase lookup failed');
+      },
+    });
+
+    const res = await request(app)
+      .post('/api/v2/finance/journal-drafts')
+      .send({
+        lines: [
+          { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
+          {
+            account_name: 'Revenue',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: 1000,
+          },
+        ],
+      });
+
+    assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
   });
 });

@@ -152,13 +152,21 @@ export async function runProjectionPollCycle({
       try {
         isTestData = await resolveIsTestData(tenantId);
       } catch (error) {
-        // FAIL-SAFE to TEST: never replay live events into a tenant whose mode
-        // could not be resolved (that would leak live data into test projections).
-        isTestData = true;
+        // Codex PR #634 P2: FAIL-CLOSED. Forcing a partition could replay the WRONG
+        // partition's events into the shared projection rows (e.g. dormant test
+        // events newer than the live cursor dispatched into live projections). SKIP
+        // this tenant's poll until the mode lookup succeeds — the next cycle retries.
         logger.warn(
           { tenant_id: tenantId, error: error?.message || String(error) },
-          '[finance-projection-worker] data-mode resolve failed; defaulting to TEST partition',
+          '[finance-projection-worker] data-mode resolve failed; SKIPPING tenant this cycle',
         );
+        summary.push({
+          tenant_id: tenantId,
+          ok: false,
+          event_count: 0,
+          error: `data-mode resolve failed: ${error?.message || String(error)}`,
+        });
+        continue;
       }
     }
 
