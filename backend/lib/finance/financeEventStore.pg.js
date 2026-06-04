@@ -143,7 +143,9 @@ export function createFinancePgEventStore({ pool } = {}) {
 
   /**
    * Query tenant-scoped events with optional equality filters, ordered
-   * created_at ASC, id ASC.
+   * created_at ASC, seq ASC (Codex PR #633 — `seq` is the monotonic append-order
+   * tie-break; ordering by the random `id` UUID could replay same-timestamp events
+   * out of append order. Mirrors the in-memory store's `_seq` tie-break.).
    */
   async function query({
     tenant_id,
@@ -177,7 +179,7 @@ export function createFinancePgEventStore({ pool } = {}) {
     }
     let text =
       `select * from ${AUDIT_EVENTS_TABLE} where ${conditions.join(' and ')} ` +
-      `order by created_at asc, id asc`;
+      `order by created_at asc, seq asc`;
     if (limit !== undefined && limit !== null) {
       values.push(limit);
       text += ` limit $${values.length}`;
@@ -193,7 +195,10 @@ export function createFinancePgEventStore({ pool } = {}) {
 
   /**
    * Replay the full tenant event stream in deterministic order:
-   * created_at ASC, with id (uuid) as the tie-break.
+   * created_at ASC, with the monotonic `seq` as the append-order tie-break
+   * (Codex PR #633 — NOT the random `id` UUID, which could reorder events a
+   * single command appended in the same instant, e.g. draft_created before
+   * approval.requested).
    */
   async function replay(tenant_id, isTestData = null) {
     if (!tenant_id) {
@@ -208,7 +213,7 @@ export function createFinancePgEventStore({ pool } = {}) {
       where += ` and is_test_data = $${values.length}`;
     }
     const text =
-      `select * from ${AUDIT_EVENTS_TABLE} where ${where} ` + `order by created_at asc, id asc`;
+      `select * from ${AUDIT_EVENTS_TABLE} where ${where} ` + `order by created_at asc, seq asc`;
     try {
       const result = await pool.query(text, values);
       return result.rows;
