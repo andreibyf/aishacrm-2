@@ -31,6 +31,11 @@ function adapterEvent(
     errorMessage = null,
     correlationId = `corr-${id}`,
     causationId = `cause-${id}`,
+    // sync_failed classification (mirrors buildSyncFailedEvent). `permanent`
+    // omitted => not added to the payload (the conservative terminal default);
+    // `permanent: false` + `nextAttemptAt` models a transient/retryable failure.
+    permanent = undefined,
+    nextAttemptAt = null,
   } = {},
 ) {
   return {
@@ -43,6 +48,8 @@ function adapterEvent(
     correlation_id: correlationId,
     causation_id: causationId,
     payload: {
+      ...(permanent !== undefined ? { permanent } : {}),
+      next_attempt_at: nextAttemptAt,
       adapter_job: {
         id: adapterJobId,
         tenant_id: tenant,
@@ -175,6 +182,7 @@ test('a finance.adapter.sync_queued event adds an item to the queued bucket', as
     mode: 'draft_only',
     status: 'queued',
     attempts: 0,
+    next_attempt_at: null,
     error_message: null,
     created_at: '2026-05-21T01:00:00.000Z',
     updated_at: '2026-05-21T01:00:00.000Z',
@@ -219,6 +227,7 @@ test('a finance.approval.requested with a draft adapter_job materializes it in t
     mode: 'draft_only',
     status: 'draft',
     attempts: 0,
+    next_attempt_at: null,
     error_message: null,
     created_at: '2026-05-21T01:00:00.000Z',
     updated_at: '2026-05-21T01:00:00.000Z',
@@ -333,6 +342,92 @@ test('a finance.adapter.sync_failed event places the item in the failed bucket w
   assert.equal(queue.failed[0].status, 'failed');
   assert.equal(queue.failed[0].error_message, 'provider timeout');
   assert.equal(queue.failed[0].attempts, 2);
+});
+
+// ── sync_failed: transient (retryable) vs permanent (terminal) (Codex PR #633 P2) ─
+
+test('a TRANSIENT sync_failed (permanent:false) projects QUEUED, not failed, and carries next_attempt_at', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_failed', 'e1', {
+      adapterJobId: 'adapter_job_1',
+      attempts: 1,
+      errorMessage: 'provider 503 (retryable)',
+      permanent: false,
+      nextAttemptAt: '2026-05-21T01:05:00.000Z',
+      createdAt: '2026-05-21T01:00:00.000Z',
+    }),
+  );
+
+  const queue = queueOf(worker, provider, TENANT_A);
+  // The processor re-queued the row (status 'queued' + next_attempt_at) and emits
+  // no follow-up sync_queued, so the projection must keep it QUEUED — otherwise
+  // /adapter-jobs?status=queued drops a still-retryable job.
+  assert.equal(queue.failed.length, 0, 'a transient failure is not terminal');
+  assert.equal(queue.queued.length, 1);
+  assert.equal(queue.queued[0].status, 'queued');
+  assert.equal(queue.queued[0].next_attempt_at, '2026-05-21T01:05:00.000Z');
+  assert.equal(queue.queued[0].error_message, 'provider 503 (retryable)');
+  assert.equal(queue.queued[0].attempts, 1);
+});
+
+test('a PERMANENT sync_failed (permanent:true) is terminal (failed bucket, no next_attempt_at)', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_failed', 'e1', {
+      adapterJobId: 'adapter_job_1',
+      attempts: 5,
+      errorMessage: 'invalid credentials (permanent)',
+      permanent: true,
+      createdAt: '2026-05-21T01:00:00.000Z',
+    }),
+  );
+
+  const queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.queued.length, 0);
+  assert.equal(queue.failed.length, 1);
+  assert.equal(queue.failed[0].status, 'failed');
+  assert.equal(queue.failed[0].next_attempt_at, null);
+});
+
+test('retries-exhausted: a transient sync_failed then a permanent one moves queued -> failed', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createAdapterQueueProjectionWorker();
+  runner.register(worker);
+
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_failed', 'e1', {
+      adapterJobId: 'adapter_job_1',
+      attempts: 1,
+      permanent: false,
+      nextAttemptAt: '2026-05-21T01:05:00.000Z',
+      createdAt: '2026-05-21T01:00:00.000Z',
+    }),
+  );
+  let queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.queued.length, 1);
+  assert.equal(queue.failed.length, 0);
+
+  await runner.dispatch(
+    adapterEvent('finance.adapter.sync_failed', 'e2', {
+      adapterJobId: 'adapter_job_1',
+      attempts: 5,
+      permanent: true,
+      createdAt: '2026-05-21T02:00:00.000Z',
+    }),
+  );
+  queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.queued.length, 0, 'left queued once the failure is permanent');
+  assert.equal(queue.failed.length, 1);
 });
 
 // ── Status transitions ────────────────────────────────────────────────────────

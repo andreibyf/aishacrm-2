@@ -53,12 +53,29 @@ const CONSUMED_EVENTS = [
  */
 
 // Status stamped on the queue item, derived from the event type — the
-// authoritative signal of what happened (never trusted from the payload).
+// authoritative signal of what happened (never trusted from the snapshot).
 const EVENT_STATUS = {
   'finance.adapter.sync_queued': 'queued',
   'finance.adapter.sync_succeeded': 'succeeded',
   'finance.adapter.sync_failed': 'failed',
 };
+
+// Resolve the queue-item status for an event. For most events the status is the
+// pure event-type mapping above. The one refinement is `sync_failed`: a TRANSIENT
+// (retryable) failure does NOT terminate the job — the processor writes the row
+// back to `status: 'queued'` with a `next_attempt_at` and emits NO follow-up
+// `sync_queued` (adapterJobProcessor.js). The event itself carries the
+// authoritative classification in `payload.permanent`, so projecting every
+// sync_failed as terminal `failed` would hide still-retryable jobs from
+// `/adapter-jobs?status=queued`. Only a PERMANENT failure is terminal; a transient
+// one is projected back to `queued`. (Absent flag ⇒ terminal — the conservative,
+// back-compatible default for any pre-flag/synthetic event.)
+function statusForEvent(event) {
+  if (event.event_type === 'finance.adapter.sync_failed') {
+    return event.payload && event.payload.permanent === false ? 'queued' : 'failed';
+  }
+  return EVENT_STATUS[event.event_type];
+}
 
 /**
  * Maps an adapter-job status to its read-model bucket. `running` has no
@@ -123,6 +140,11 @@ function upsertAdapterJob(event, job, status, store) {
     mode: job.mode ?? null,
     status,
     attempts: job.attempts ?? 0,
+    // Transient sync_failed re-queues the job with a backoff; carry the
+    // authoritative `payload.next_attempt_at` so the read model (and
+    // `/adapter-jobs`) shows when a queued retry will next run.
+    next_attempt_at:
+      (event.payload && event.payload.next_attempt_at) ?? job.next_attempt_at ?? null,
     error_message: job.error_message ?? null,
     created_at: job.created_at ?? event.created_at ?? null,
     updated_at: job.updated_at ?? event.created_at ?? null,
@@ -145,9 +167,12 @@ function upsertAdapterJob(event, job, status, store) {
  * For the three adapter sync events, every event carries the full
  * `payload.adapter_job` snapshot (self-describing), and a missing snapshot is a
  * malformed adapter event — `readAdapterJob` throws, which the runtime surfaces
- * as a degraded projection. The status is stamped from the event type (never
- * trusted from the payload). `sync_queued` after `sync_failed` is the
- * legitimate retry re-queue path.
+ * as a degraded projection. The status is derived from the event type via
+ * `statusForEvent` (never from the snapshot's `status` field), with one
+ * refinement: a TRANSIENT `sync_failed` (`payload.permanent === false`) projects
+ * back to `queued`, because the processor re-queues retryable jobs and emits no
+ * follow-up `sync_queued`. A `sync_queued` after a permanent `sync_failed`
+ * remains the legitimate retry re-queue path.
  */
 function applyAdapterEvent(event, store) {
   if (event.event_type === 'finance.approval.requested') {
@@ -161,7 +186,7 @@ function applyAdapterEvent(event, store) {
   // CONSUMED_EVENTS gates dispatch and replay, so event_type is one of the
   // three consumed sync events here.
   const job = readAdapterJob(event);
-  upsertAdapterJob(event, job, EVENT_STATUS[event.event_type], store);
+  upsertAdapterJob(event, job, statusForEvent(event), store);
 }
 
 /** Project a stored record into a read-model queue item (a fresh object). */
@@ -176,6 +201,7 @@ function toQueueItem(record) {
     mode: record.mode,
     status: record.status,
     attempts: record.attempts,
+    next_attempt_at: record.next_attempt_at ?? null,
     error_message: record.error_message,
     created_at: record.created_at,
     updated_at: record.updated_at,
