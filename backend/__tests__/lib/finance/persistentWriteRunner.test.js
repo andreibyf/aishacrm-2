@@ -285,6 +285,56 @@ test('skips adapter-jobs materialization when no pool is available (in-memory/te
   assert.equal(called, false, 'no pool → the materializer is not invoked');
 });
 
+test('a non-durable event (append REJECTS) is NOT captured — no advance, no materialization (Codex PR #633 P1)', async () => {
+  const materializeCalls = [];
+  const replayed = [];
+  const failingStore = {
+    replay: async () => [],
+    query: async () => [],
+    append: async () => {
+      throw new Error('durable append rejected');
+    },
+  };
+  const createRunner = () => ({
+    register: () => {},
+    replay: async (p) => {
+      replayed.push(p);
+      return { outcome: 'rebuilt', cursor: null };
+    },
+  });
+  const { logger } = makeFakeLogger();
+
+  await assert.rejects(
+    runPersistentWrite({
+      eventStore: failingStore,
+      storeProvider: {},
+      tenantId: TENANT,
+      // createDraftInvoice appends finance.invoice.draft_created (append-before-mutate),
+      // so a rejecting durable append makes the command throw before anything is captured.
+      command: (svc) =>
+        svc.createDraftInvoice({
+          tenantId: TENANT,
+          actor: { id: 'u', type: 'human' },
+          payload: { customer_id: 'c1', subtotal_cents: 100, total_cents: 100 },
+        }),
+      createRunner,
+      adapterJobPool: { query: async () => ({ rowCount: 0 }) },
+      materializeAdapterJobs: async (args) => {
+        materializeCalls.push(args);
+        return { written: 0 };
+      },
+      logger,
+    }),
+    /durable append rejected/,
+  );
+
+  // Append rejected ⇒ nothing captured ⇒ no projection advance, no adapter-jobs
+  // materialization (a phantom finance.adapter_jobs row for a non-durable event
+  // would let the SQL worker claim a job with no event-store fact).
+  assert.equal(replayed.length, 0, 'no projection rebuild for a non-durable event');
+  assert.equal(materializeCalls.length, 0, 'no materialization for a non-durable event');
+});
+
 test('advance failure (infra: replay REJECTS) is non-fatal: resolves with command result, rebuilds each affected projection once, logs warn', async () => {
   const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
   const createRunner = makeSpyRunnerFactory({ failAlways: true });

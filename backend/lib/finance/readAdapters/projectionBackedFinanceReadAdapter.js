@@ -169,6 +169,10 @@ export function createProjectionBackedFinanceReadAdapter({
         mode: item.mode,
         status: item.status,
         attempts: item.attempts,
+        // Codex PR #633 P2: the projection now stores a retryable failure's backoff
+        // ETA on the queue item; the route serializes `j.next_attempt_at`. Carry it
+        // through or `/adapter-jobs?status=queued` reports `next_attempt_at: null`.
+        next_attempt_at: item.next_attempt_at ?? null,
         // The route serializer (finance.v2.js GET /adapter-jobs) reads `last_error`
         // — the in-memory contract's field name. The adapter_queue projection
         // stores the error under `error_message`, so map it back to `last_error`

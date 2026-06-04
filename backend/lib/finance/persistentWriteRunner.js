@@ -169,11 +169,16 @@ export async function runPersistentWrite({
   const captured = [];
   const capturingEventStore = {
     append: async (envelope) => {
-      // Slice 6a: stamp the current data-mode onto every appended envelope so
-      // the command's parent + all spawned events are tagged for the partition.
+      // Slice 6a: stamp the current data-mode onto every appended envelope so the
+      // command's parent + all spawned events are tagged for the partition.
+      // Codex PR #633 P1: capture ONLY after the durable append RESOLVES — a
+      // rejected append leaves a non-durable envelope that must NOT be advanced
+      // into projections or materialized into finance.adapter_jobs (which would
+      // let the SQL worker claim a job with no event-store fact).
       const stamped = { ...envelope, is_test_data: isTestData };
+      const appended = await resolvedEventStore.append(stamped);
       captured.push(stamped);
-      return resolvedEventStore.append(stamped);
+      return appended;
     },
     query: (...args) => resolvedEventStore.query(...args),
     replay: (...args) => resolvedEventStore.replay(...args),

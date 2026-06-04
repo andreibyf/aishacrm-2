@@ -386,4 +386,52 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     assert.equal(job.last_error, 'provider sync timed out');
     assert.equal('error_message' in job, false, 'reconstruct to last_error, not error_message');
   });
+
+  test('listAdapterJobs surfaces next_attempt_at for a retryable (queued) job (Codex PR #633 P2)', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    // A TRANSIENT failure: the projection keeps the job queued with a backoff ETA.
+    await runner.dispatch({
+      id: 'evt_sync_failed_transient',
+      tenant_id: T,
+      event_type: 'finance.adapter.sync_failed',
+      created_at: '2026-06-01T00:05:00Z',
+      payload: {
+        permanent: false,
+        next_attempt_at: '2026-06-01T00:10:00Z',
+        error: { message: 'provider 503', code: null },
+        adapter_job: {
+          id: 'aj_retry',
+          tenant_id: T,
+          provider: 'quickbooks',
+          operation: 'push_draft',
+          mode: 'draft_only',
+          status: 'failed',
+          attempts: 1,
+        },
+      },
+    });
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const [job] = await adapter.listAdapterJobs(T);
+    assert.equal(job.id, 'aj_retry');
+    assert.equal(job.status, 'queued', 'a transient failure stays queued, not failed');
+    assert.equal(
+      job.next_attempt_at,
+      '2026-06-01T00:10:00Z',
+      'the backoff ETA is surfaced, not dropped to null',
+    );
+    assert.equal(job.last_error, 'provider 503');
+  });
 });
