@@ -326,14 +326,22 @@ export async function rebuildFinanceProjections({
   try {
     results = await runner.replayAll(tenantId, isTestData);
   } catch (err) {
+    // RE-THROW (Codex PR #634 P1): the rebuild could not run, so the shared
+    // projection_state is left on the PREVIOUS partition. Swallowing this here
+    // would let a mode switch report success while reads still serve the old
+    // partition — `applyFinanceDataModeChange` only reverts+fails when this
+    // throws. Each caller owns the policy: the mode switch reverts the mode and
+    // returns 503; `clearFinanceTestData` catches and stays non-fatal (its delete
+    // already committed). The async worker re-drive is a backstop, not a license
+    // to report success on a half-applied switch.
     logger.warn(
       {
         tenant_id: tenantId,
         err: err?.message ?? String(err),
       },
-      'rebuildFinanceProjections: replayAll failed (infra) on mode switch; reads of stale projections fail-closed — async worker will re-drive',
+      'rebuildFinanceProjections: replayAll failed (infra); rethrowing so the caller decides (mode-switch reverts+fails; clear stays non-fatal)',
     );
-    return { rebuilt, degraded };
+    throw err;
   }
 
   for (const result of results || []) {

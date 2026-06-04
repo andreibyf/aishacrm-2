@@ -559,22 +559,28 @@ test('rebuildFinanceProjections: a degraded projection is NON-FATAL — logged, 
   assert.ok(flat.includes('degraded'));
 });
 
-test('rebuildFinanceProjections: a THROWING replayAll (infra) is NON-FATAL — resolves, logs warn, empty summary', async () => {
+test('rebuildFinanceProjections: a THROWING replayAll (infra) RE-THROWS so the caller decides (Codex PR #634 P1)', async () => {
   const eventStore = makeFakeEventStore([]);
   const createRunner = makeReplayAllRunnerFactory({ failAll: true });
   const { logger, warns } = makeFakeLogger();
 
-  const summary = await rebuildFinanceProjections({
-    eventStore,
-    storeProvider: {},
-    createRunner,
-    tenantId: TENANT,
-    isTestData: true,
-    logger,
-  });
-
-  // Did not throw; nothing rebuilt; warn logged with the tenant.
-  assert.deepEqual(summary, { rebuilt: [], degraded: [] });
+  // Re-throws (was swallowed): the shared projection_state is left on the OLD
+  // partition, so the caller must be able to react — applyFinanceDataModeChange
+  // reverts the mode + returns 503; clearFinanceTestData catches and stays
+  // non-fatal. Reporting success here would hide a half-applied mode switch.
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        storeProvider: {},
+        createRunner,
+        tenantId: TENANT,
+        isTestData: true,
+        logger,
+      }),
+    /replayAll boom/,
+  );
+  // The warn still fires for observability before the re-throw.
   assert.ok(warns.length >= 1);
   assert.ok(JSON.stringify(warns).includes(TENANT));
 });
