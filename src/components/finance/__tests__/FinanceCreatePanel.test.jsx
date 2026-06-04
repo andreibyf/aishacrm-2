@@ -33,6 +33,18 @@ describe('FinanceCreatePanel', () => {
     expect(screen.getByTestId('finance-create-feedback')).toBeInTheDocument();
   });
 
+  it('settles the feedback after the refresh resolves (no perpetual "Refreshing…")', async () => {
+    const onCreated = vi.fn(() => Promise.resolve());
+    render(<FinanceCreatePanel tenantId={T} onCreated={onCreated} />);
+    fireEvent.click(screen.getByTestId('finance-create-deal-btn'));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => {
+      const fb = screen.getByTestId('finance-create-feedback');
+      expect(fb).toHaveTextContent(/check the tabs/i);
+      expect(fb).not.toHaveTextContent(/Refreshing/i);
+    });
+  });
+
   it('journal draft builds balanced debit/credit lines', async () => {
     render(<FinanceCreatePanel tenantId={T} onCreated={vi.fn()} />);
     fireEvent.change(screen.getByTestId('finance-create-journal-amount'), {

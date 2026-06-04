@@ -271,7 +271,9 @@ export default function FinanceOpsPage() {
   }, [fetchStatus]);
 
   const handleRefresh = useCallback(() => {
-    fetchStatus();
+    // Return the promise so awaiters (e.g. FinanceCreatePanel) actually wait for
+    // the refetch before settling their own UI state.
+    return fetchStatus();
   }, [fetchStatus]);
 
   // Superadmin Test/Live data-mode control. The backend also enforces the

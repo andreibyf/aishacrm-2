@@ -42,8 +42,15 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
     setFeedback(null);
     try {
       await fn();
+      // Transient: shown while the page refetches counts/tabs.
       setFeedback({ kind: 'success', message: 'Created sandbox entry. Refreshing…' });
       if (onCreated) await onCreated();
+      // Settled: the refresh finished — replace the "Refreshing…" text so it does
+      // not look like it is perpetually refreshing.
+      setFeedback({
+        kind: 'success',
+        message: 'Created sandbox entry ✓ — check the tabs to review it.',
+      });
     } catch (err) {
       setFeedback({ kind: 'error', message: err?.message || 'Create failed.' });
     } finally {
