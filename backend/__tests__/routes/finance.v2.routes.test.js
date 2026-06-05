@@ -2,7 +2,10 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import createFinanceV2Routes, { applyFinanceDataModeChange } from '../../routes/finance.v2.js';
+import createFinanceV2Routes, {
+  applyFinanceDataModeChange,
+  assertPostedSandboxAllowed,
+} from '../../routes/finance.v2.js';
 import createFinanceDomainService from '../../lib/finance/financeDomainService.js';
 
 const NOOP_LOGGER = { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} };
@@ -448,6 +451,53 @@ describe('finance.v2 routes', () => {
     assert.equal(approveRes.body.data.approval.id, approvalId);
     assert.equal(approveRes.body.data.approval.status, 'approved');
     assert.equal(approveRes.body.data.approval.approved_by, 'human-user-2');
+  });
+
+  // ── Codex PR #650 P1: posted-deal sandbox is server-enforced test-only ──────
+  describe('assertPostedSandboxAllowed', () => {
+    const T = TENANT_ID;
+    test('in-memory mode is always allowed (even if the persisted mode is live)', async () => {
+      await assertPostedSandboxAllowed({
+        persistentEvents: false,
+        getFinanceDataMode: async () => 'live',
+        tenantId: T,
+        req: {},
+      });
+    });
+    test('persistent + test → allowed', async () => {
+      await assertPostedSandboxAllowed({
+        persistentEvents: true,
+        getFinanceDataMode: async () => 'test',
+        tenantId: T,
+        req: {},
+      });
+    });
+    test('persistent + live → 409 FINANCE_TEST_MODE_REQUIRED', async () => {
+      await assert.rejects(
+        () =>
+          assertPostedSandboxAllowed({
+            persistentEvents: true,
+            getFinanceDataMode: async () => 'live',
+            tenantId: T,
+            req: {},
+          }),
+        (e) => e.statusCode === 409 && e.code === 'FINANCE_TEST_MODE_REQUIRED',
+      );
+    });
+    test('persistent + unresolvable mode → 503 (fail-closed, never assume test)', async () => {
+      await assert.rejects(
+        () =>
+          assertPostedSandboxAllowed({
+            persistentEvents: true,
+            getFinanceDataMode: async () => {
+              throw new Error('db down');
+            },
+            tenantId: T,
+            req: {},
+          }),
+        (e) => e.statusCode === 503 && e.code === 'FINANCE_DATA_MODE_UNRESOLVED',
+      );
+    });
   });
 
   // ── slice 6b-2: applyFinanceDataModeChange orchestration (no Express/DB) ─────

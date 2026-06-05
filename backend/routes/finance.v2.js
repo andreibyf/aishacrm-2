@@ -295,6 +295,46 @@ function decodeAuditCursor(cursor, tenantId) {
   return parsed;
 }
 
+/**
+ * Server-enforced test-only guard for the posted-deal SANDBOX endpoint (Codex
+ * PR #650 P1). `POST /simulate/posted-deal-won` auto-creates AND posts a journal;
+ * the UI only hides the create panel outside test mode, which is not a backend
+ * boundary. In persistent mode a write is stamped by the tenant's resolved
+ * data mode, so a live tenant would persist this as LIVE finance data (and could
+ * materialize claimable adapter jobs). This guard refuses that:
+ *   - in-memory mode → always allowed (the effective mode is test-only; runtime
+ *     status is clamped to test, writes are unpartitioned/ephemeral);
+ *   - persistent + test → allowed;
+ *   - persistent + live → 409 FINANCE_TEST_MODE_REQUIRED;
+ *   - persistent + unresolvable mode → 503 (fail-closed; never assume test).
+ * Exported for unit testing (like applyFinanceDataModeChange).
+ */
+export async function assertPostedSandboxAllowed({
+  persistentEvents,
+  getFinanceDataMode,
+  tenantId,
+  req,
+}) {
+  if (!persistentEvents) return;
+  let dataMode;
+  try {
+    dataMode = await getFinanceDataMode({ tenantId, req });
+  } catch {
+    const e = new Error('Could not resolve the finance data mode for the test-only sandbox.');
+    e.statusCode = 503;
+    e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+    throw e;
+  }
+  if (dataMode !== FINANCE_DATA_MODES.TEST) {
+    const e = new Error(
+      'The posted-deal sandbox is test-mode only; this tenant is in live finance data mode.',
+    );
+    e.statusCode = 409;
+    e.code = 'FINANCE_TEST_MODE_REQUIRED';
+    throw e;
+  }
+}
+
 export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
   // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
@@ -961,6 +1001,13 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // test-mode create panel is the only caller. Human-gated (approve blocks AI).
   router.post('/simulate/posted-deal-won', async (req, res) => {
     try {
+      // Codex PR #650 P1: server-enforced test-only — refuse in live persistent mode.
+      await assertPostedSandboxAllowed({
+        persistentEvents,
+        getFinanceDataMode,
+        tenantId: req.financeTenantId,
+        req,
+      });
       const command = (svc) =>
         svc.simulatePostedDealWon({
           tenantId: req.financeTenantId,

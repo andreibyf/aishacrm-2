@@ -198,10 +198,11 @@ export function updateFinanceDataMode(tenantId, mode, { signal } = {}) {
 /**
  * GET /api/v2/finance/journal-entries
  *
- * Returns posted journal entries for the tenant. The in-memory domain service
- * guarantees `id`, `aggregate_id`, `status`, `created_at` per row; additional
- * fields (account_code, amount, currency, posted_at) may appear if the
- * underlying state has them and are forwarded as-is.
+ * Returns journal entries for the tenant across ALL statuses (`draft`,
+ * `pending_approval`, `posted`, `reversed`) — not posted-only (Codex PR #650 P3).
+ * The in-memory domain service guarantees `id`, `aggregate_id`, `status`,
+ * `created_at` per row; additional fields (account_code, amount, currency,
+ * posted_at) may appear if the underlying state has them and are forwarded as-is.
  *
  * Drives: §7.5 Journal entries tab.
  *
