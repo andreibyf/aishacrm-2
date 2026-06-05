@@ -369,7 +369,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // persistent mode the command runs through the durable write runner (hydrate →
   // run → advance); in default mode it runs directly against the in-memory
   // domain service. Behaviour is identical to the per-handler branch it replaces.
-  async function runWrite(req, command) {
+  async function runWrite(req, command, { isTestData: isTestDataOverride } = {}) {
     if (persistentEvents) {
       // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
       // into the durable write runner so HYDRATE + the projection REBUILD both
@@ -380,19 +380,28 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       // mode can't be resolved, REFUSE the write rather than acknowledge it in the
       // wrong partition.
       let isTestData;
-      try {
-        isTestData =
-          (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
-          FINANCE_DATA_MODES.TEST;
-      } catch (err) {
-        const e = new Error(
-          'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
-            'avoid persisting it in the wrong (test/live) partition.',
-        );
-        e.statusCode = 503;
-        e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
-        e.cause = err;
-        throw e;
+      if (isTestDataOverride !== undefined) {
+        // Caller pre-resolved AND bound the partition (the test-only sandbox,
+        // Codex PR #650 P2). Use it directly and do NOT re-resolve the mode here —
+        // re-resolving opens a TOCTOU window where a superadmin test→live flip
+        // between the caller's check and this lookup would persist the write into
+        // the live partition. Binding to the verified partition closes it.
+        isTestData = isTestDataOverride;
+      } else {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch (err) {
+          const e = new Error(
+            'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
+              'avoid persisting it in the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          e.cause = err;
+          throw e;
+        }
       }
       return runPersistentWriteFn({
         tenantId: req.financeTenantId,
@@ -1016,7 +1025,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           requestId: req.headers['x-request-id'] || null,
           braidTraceId: req.body?.braid_trace_id || null,
         });
-      const result = await runWrite(req, command);
+      // Codex PR #650 P2: bind the sandbox write to the verified TEST partition so
+      // a concurrent test→live flip can never persist it into the live partition.
+      const result = await runWrite(req, command, { isTestData: true });
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] simulate posted deal won failed:', error);

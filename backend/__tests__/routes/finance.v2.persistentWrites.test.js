@@ -348,4 +348,35 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
     assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
   });
+
+  // Codex PR #650 P1 — the posted-deal SANDBOX is server-enforced test-only.
+  test('POST /simulate/posted-deal-won is refused (409) for a LIVE persistent tenant', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'live' });
+    const res = await request(app)
+      .post('/api/v2/finance/simulate/posted-deal-won')
+      .send({ amount_cents: 250000, currency: 'usd' });
+    assert.equal(res.status, 409, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'FINANCE_TEST_MODE_REQUIRED');
+    const events = await eventStore.query({ tenant_id: TENANT_ID });
+    assert.equal(events.length, 0, 'the command must not run / no events appended in live mode');
+  });
+
+  // Codex PR #650 P2 — the sandbox write is BOUND to the verified test partition,
+  // so a test→live flip between the guard check and the write cannot persist live.
+  test('POST /simulate/posted-deal-won stamps TEST even if the mode flips to live mid-request', async () => {
+    let call = 0;
+    // 'test' at the guard check (call 1); 'live' on any later resolution (the flip)
+    const getFinanceDataMode = async () => (++call === 1 ? 'test' : 'live');
+    const { app, eventStore } = buildPersistentApp({ getFinanceDataMode });
+    const res = await request(app)
+      .post('/api/v2/finance/simulate/posted-deal-won')
+      .send({ amount_cents: 250000, currency: 'usd' });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    const events = await eventStore.query({ tenant_id: TENANT_ID });
+    assert.ok(events.length > 0, 'the sandbox write appended events');
+    assert.ok(
+      events.every((e) => e.is_test_data === true),
+      'sandbox write bound to the verified TEST partition (not re-resolved to live)',
+    );
+  });
 });
