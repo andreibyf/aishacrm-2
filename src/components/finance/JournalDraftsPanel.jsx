@@ -8,13 +8,16 @@
 
 import * as finance from '@/api/finance';
 import FinanceTablePanel from './FinanceTablePanel';
+import { formatCentsAmount } from './financeFormat';
 
 const COLUMNS = [
   { key: 'id', label: 'ID' },
   { key: 'aggregate_id', label: 'Aggregate ID' },
   { key: 'status', label: 'Status' },
   { key: 'account_code', label: 'Account Code' },
-  { key: 'amount_cents', label: 'Amount (cents)' },
+  // Stored as integer cents; displayed with the decimal placed (250000 -> 2,500.00).
+  // Currency is rendered in its own column, so no symbol here.
+  { key: 'amount_cents', label: 'Amount', render: (r) => formatCentsAmount(r.amount_cents) },
   { key: 'currency', label: 'Currency' },
   { key: 'created_at', label: 'Created' },
 ];
