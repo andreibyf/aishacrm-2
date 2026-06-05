@@ -943,6 +943,27 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     }
   });
 
+  // Cash Flow Slice 2 — test-mode sandbox: simulate a won deal AND post it (auto
+  // approve), so the statements show sample data. Composes simulate + approve; the
+  // test-mode create panel is the only caller. Human-gated (approve blocks AI).
+  router.post('/simulate/posted-deal-won', async (req, res) => {
+    try {
+      const command = (svc) =>
+        svc.simulatePostedDealWon({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] simulate posted deal won failed:', error);
+      sendError(res, error);
+    }
+  });
+
   router.post('/journal-entries/:id/reverse', async (req, res) => {
     try {
       const command = (svc) =>

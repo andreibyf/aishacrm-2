@@ -147,8 +147,11 @@ describe('finance.v2 routes', () => {
     assert.match(res.body.message, /access denied/i);
   });
 
-  // Phase 4-1 §9 row 10: the route lift must NOT expand the mutating surface.
-  test('route surface exposes exactly the 6 finance-data mutations + the settings endpoint (no expansion)', () => {
+  // Phase 4-1 §9 row 10: the mutating surface is intentionally bounded. Cash Flow
+  // Slice 2 adds ONE: POST /simulate/posted-deal-won (a test-mode sandbox helper
+  // that composes the already-present simulate + approve so the statements show
+  // sample data — not a new general mutation primitive).
+  test('route surface exposes exactly the 7 finance-data mutations + the settings endpoint (no unplanned expansion)', () => {
     const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
     const mutating = [];
     for (const layer of router.stack) {
@@ -157,18 +160,28 @@ describe('finance.v2 routes', () => {
       if (methods.length) mutating.push(`${methods.join(',').toUpperCase()} ${layer.route.path}`);
     }
     // The superadmin Test/Live data-mode setter is a config mutation, not a
-    // finance-DATA write — allowed, and excluded from the §9 row-10 count of
-    // exactly-6 data mutations.
+    // finance-DATA write — allowed, and excluded from the data-mutation count.
     const dataMutations = mutating.filter((m) => m !== 'PUT /settings/data-mode');
     assert.equal(
       dataMutations.length,
-      6,
-      `expected 6 finance-data mutations, got: ${dataMutations.join(' | ')}`,
+      7,
+      `expected 7 finance-data mutations, got: ${dataMutations.join(' | ')}`,
     );
     assert.ok(
       mutating.includes('PUT /settings/data-mode'),
       'the superadmin data-mode settings endpoint must be present',
     );
+  });
+
+  test('POST /simulate/posted-deal-won creates AND posts the journal (Cash Flow Slice 2)', async () => {
+    const { app, service } = buildApp();
+    const res = await request(app)
+      .post('/api/v2/finance/simulate/posted-deal-won')
+      .send({ amount_cents: 250000, currency: 'usd' });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.posted_entry.status, 'posted');
+    const entry = service.listJournalEntries(TENANT_ID).find((e) => e.status === 'posted');
+    assert.ok(entry, 'a posted journal entry now exists');
   });
 
   test('POST /journal-drafts rejects unbalanced journals', async () => {

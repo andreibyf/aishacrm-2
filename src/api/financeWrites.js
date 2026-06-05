@@ -48,6 +48,16 @@ export function simulateDealWon(tenantId, payload = {}, { signal } = {}) {
   return mutate('/simulate/deal-won', { tenantId, method: 'POST', body: payload, signal });
 }
 
+/**
+ * POST /simulate/posted-deal-won — test-mode sandbox: create a won-deal journal
+ * AND post it (auto-approve), so the ledger / P&L / balance-sheet / cash-flow
+ * show sample data. Used only by the test-mode create panel; not a general
+ * approve control.
+ */
+export function simulatePostedDealWon(tenantId, payload = {}, { signal } = {}) {
+  return mutate('/simulate/posted-deal-won', { tenantId, method: 'POST', body: payload, signal });
+}
+
 /** POST /journal-drafts — create a balanced journal draft. */
 export function createJournalDraft(tenantId, payload = {}, { signal } = {}) {
   return mutate('/journal-drafts', { tenantId, method: 'POST', body: payload, signal });

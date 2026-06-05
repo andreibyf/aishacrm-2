@@ -704,6 +704,30 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
+    // Cash Flow Slice 2 — test-mode sandbox convenience: simulate a won deal AND
+    // immediately approve it so the journal POSTS, populating the ledger / P&L /
+    // balance-sheet / cash-flow with sample data. Composes the two real operations
+    // (simulateDealWon → approveFinanceAction) on the same bucket; it does NOT add
+    // a general approve control. Surfaced ONLY by the test-mode create panel; live
+    // posting still goes through the real human approval flow. Human-gated:
+    // approveFinanceAction blocks AI actors.
+    async simulatePostedDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+      const sim = await this.simulateDealWon({ tenantId, actor, payload, requestId, braidTraceId });
+      const approved = await this.approveFinanceAction({
+        tenantId,
+        approvalId: sim.approval.id,
+        actor,
+        requestId,
+        braidTraceId,
+      });
+      return {
+        journal_entry: approved.posted_entry || sim.journal_entry,
+        approval: approved.approval,
+        posted_entry: approved.posted_entry,
+        governance_decision: sim.governance_decision,
+      };
+    },
+
     async reverseJournalEntry({
       tenantId,
       journalEntryId,
