@@ -556,6 +556,19 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     }
   });
 
+  // COA Slice 1 — read-only chart of accounts (baseline + auto-created). In-memory
+  // returns the running domain-service chart; persistent reads it event-sourced
+  // (fail-closed → 503 on a reader error). No create/edit/deactivate here.
+  router.get('/accounts', async (req, res) => {
+    try {
+      const accounts = await readAdapter.listAccounts(req.financeTenantId);
+      res.json({ status: 'success', data: { accounts } });
+    } catch (error) {
+      logger.error('[finance.v2] list accounts failed:', error);
+      sendError(res, error);
+    }
+  });
+
   router.get('/ledger', async (req, res) => {
     try {
       const ledger = await readAdapter.getLedger(req.financeTenantId);

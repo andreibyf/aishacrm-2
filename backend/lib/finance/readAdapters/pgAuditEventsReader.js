@@ -29,6 +29,19 @@ export function createPgAuditEventsReader({ pool }) {
       );
       return Number(result?.rows?.[0]?.n ?? 0);
     },
+
+    // COA Slice 1: fold a single event_type in append order (created_at, seq).
+    // Used to reconstruct the tenant chart of accounts from finance.account.created
+    // events in persistent mode. Returns the parsed payloads in order.
+    async listByType(tenantId, eventType) {
+      const result = await pool.query(
+        'SELECT payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = $2 ORDER BY created_at ASC, seq ASC',
+        [tenantId, eventType],
+      );
+      return (result?.rows ?? []).map((r) =>
+        typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload || {},
+      );
+    },
   };
 }
 

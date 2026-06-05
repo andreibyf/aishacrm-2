@@ -55,6 +55,11 @@ export function createInMemoryFinanceReadAdapter({ service }) {
       return service.listInvoices(tenantId);
     },
 
+    // COA Slice 1: tenant chart of accounts (baseline + auto-created).
+    async listAccounts(tenantId) {
+      return service.listAccounts(tenantId);
+    },
+
     async listApprovals(tenantId) {
       return service.listApprovals(tenantId);
     },
