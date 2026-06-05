@@ -70,7 +70,8 @@ export default defineConfig({
   build: {
     sourcemap: false,
     cssCodeSplit: true,
-    chunkSizeWarningLimit: 600,
+    // pdfjs-dist emits a large worker file; set a realistic threshold so warnings stay actionable.
+    chunkSizeWarningLimit: 2300,
     rollupOptions: {
       output: {
         chunkFileNames: 'assets/[name]-[hash].js',
@@ -78,6 +79,7 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash][extname]',
         manualChunks: (id) => {
           if (id.includes('node_modules/recharts')) return 'recharts';
+          if (id.includes('node_modules/@dnd-kit/')) return 'dnd-kit';
           if (
             id.includes('node_modules/react/') ||
             id.includes('node_modules/react-dom/') ||
@@ -91,8 +93,17 @@ export default defineConfig({
           if (id.includes('node_modules/react-hook-form') || id.includes('node_modules/@hookform/')) {
             return 'forms';
           }
+          if (id.includes('node_modules/zod')) return 'validation';
           if (id.includes('node_modules/lucide-react')) return 'icons';
           if (id.includes('node_modules/framer-motion')) return 'motion';
+          if (
+            id.includes('node_modules/embla-carousel-react') ||
+            id.includes('node_modules/react-rnd') ||
+            id.includes('node_modules/react-resizable-panels') ||
+            id.includes('node_modules/vaul')
+          ) {
+            return 'ui-interactions';
+          }
           if (id.includes('node_modules/@supabase')) return 'supabase';
           if (id.includes('node_modules/socket.io-client')) return 'realtime';
           if (
@@ -102,6 +113,13 @@ export default defineConfig({
             return 'docs-viewer';
           }
           if (id.includes('node_modules/date-fns')) return 'date-utils';
+          if (
+            id.includes('node_modules/react-hot-toast') ||
+            id.includes('node_modules/sonner')
+          ) {
+            return 'notifications';
+          }
+          if (id.includes('node_modules/@calcom/embed-react')) return 'scheduler';
           if (id.includes('node_modules/')) return 'vendor';
         },
       },
