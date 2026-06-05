@@ -96,6 +96,7 @@ describe('chartOfAccounts — resolveAccount', () => {
     assert.equal(created, true);
     assert.equal(account.is_system, false);
     assert.equal(account.account_code, '4500'); // first free in Revenue range
+    assert.notEqual(account.account_code, '4000'); // distinct from the seeded Revenue code
     assert.equal(account.classification, 'Revenue');
     // special seeded types are NEVER auto-assigned — generic per classification
     assert.equal(account.account_type, 'Revenue');

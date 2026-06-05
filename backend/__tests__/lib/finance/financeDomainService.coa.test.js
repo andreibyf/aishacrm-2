@@ -76,10 +76,29 @@ describe('financeDomainService — COA wiring', () => {
         ],
       },
     });
-    const line = service.listJournalEntries(TENANT)[0].lines.find((l) => l.classification === 'Asset');
+    const line = service.listJournalEntries(TENANT)[0].lines.find((l) => l.account_code === '1000');
     assert.equal(line.account_code, '1000');
     assert.ok(!service.listAccounts(TENANT).find((a) => a.name === 'Mislabeled'));
     assert.equal((await accountCreatedEvents(service)).length, 0);
+  });
+
+  test('a code-resolved line is canonicalized to the resolved account classification + name (Codex PR #647 review)', async () => {
+    const service = createFinanceDomainService();
+    await service.createJournalDraft({
+      tenantId: TENANT,
+      actor,
+      payload: {
+        lines: [
+          // explicit code 1100 (Accounts Receivable / Asset) but a WRONG classification + name
+          { account_code: '1100', account_name: 'whatever', classification: 'Expense', debit_cents: 5000, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+        ],
+      },
+    });
+    const line = service.listJournalEntries(TENANT)[0].lines.find((l) => l.account_code === '1100');
+    // ledger / P&L / balance-sheet read these — must reflect the resolved account, not the input
+    assert.equal(line.classification, 'Asset');
+    assert.equal(line.account_name, 'Accounts Receivable');
   });
 
   // Codex PR #647 P1 regression: in persistent mode the bucket is rebuilt from

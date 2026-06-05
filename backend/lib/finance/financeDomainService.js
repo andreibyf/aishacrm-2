@@ -475,7 +475,20 @@ export function createFinanceDomainService(opts = {}) {
             }),
           );
         }
-        resolvedLines.push({ ...line, account_id: account.id, account_code: account.account_code });
+        // Canonicalize the line's name + classification FROM the resolved account
+        // (Codex PR #647 review). On an explicit account_code/account_id match the
+        // input name/classification can be wrong or normalizeLine-defaulted
+        // (Uncategorized/Expense); the ledger / P&L / balance-sheet read these
+        // fields, so a line resolved to AR (1100, Asset) must not stay an Expense.
+        // For name-matched + auto-created lines this is a no-op (already aligned).
+        // Balance is unaffected (debit/credit sums don't depend on classification).
+        resolvedLines.push({
+          ...line,
+          account_id: account.id,
+          account_code: account.account_code,
+          account_name: account.name,
+          classification: account.classification,
+        });
       }
 
       const journalEntry = {
