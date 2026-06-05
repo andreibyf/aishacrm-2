@@ -155,12 +155,13 @@ The console mounts as a **single new primary-nav entry** in the existing left si
 
 The `FinanceOps` page hosts **10 read-only screens** (§7). They are exposed as **tabs** inside the page rather than separate top-level nav entries — adding 10 new top-level entries would dwarf the rest of the sidebar.
 
-Proposed tab layout (left-to-right) — frozen for UI-1A:
+Proposed tab layout (left-to-right) — frozen for UI-1A; **amended 2026-06-05** (COA Slice 1) to insert "Chart of accounts" after Ledger summary (the master the ledger aggregates over). See `finance-coa-wiring-and-cashflow-bridge-design.md` §5.
 
 | #   | Tab label              | Screen ref | Default? |
 | --- | ---------------------- | ---------- | -------- |
 | 1   | Runtime overview       | §7.1       | **Yes**  |
 | 2   | Ledger summary         | §7.2       | No       |
+| 2a  | Chart of accounts      | COA Slice 1 | No      |
 | 3   | Draft invoices         | §7.3       | No       |
 | 4   | Journal drafts         | §7.4       | No       |
 | 5   | Journal entries        | §7.5       | No       |

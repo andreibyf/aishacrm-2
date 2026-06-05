@@ -71,6 +71,7 @@ const mockFinance = {
   getAuditEvents: vi.fn(),
   getAdapters: vi.fn(),
   getEvidencePack: vi.fn(),
+  getAccounts: vi.fn(),
 };
 vi.mock('@/api/finance', async () => {
   const actual = await vi.importActual('@/api/finance');
@@ -88,6 +89,7 @@ vi.mock('@/api/finance', async () => {
     getAuditEvents: (...args) => mockFinance.getAuditEvents(...args),
     getAdapters: (...args) => mockFinance.getAdapters(...args),
     getEvidencePack: (...args) => mockFinance.getEvidencePack(...args),
+    getAccounts: (...args) => mockFinance.getAccounts(...args),
   };
 });
 
@@ -126,6 +128,7 @@ beforeEach(() => {
   mockFinance.getAuditEvents.mockResolvedValue({ events: [], next_cursor: null });
   mockFinance.getAdapters.mockResolvedValue({ adapters: [] });
   mockFinance.getEvidencePack.mockResolvedValue({ pack: null });
+  mockFinance.getAccounts.mockResolvedValue({ accounts: [] });
   if (typeof window !== 'undefined') {
     try {
       window.sessionStorage?.clear();
@@ -140,10 +143,11 @@ afterEach(() => {
 });
 
 describe('FinanceOps — tab inventory and structure', () => {
-  it('exports a frozen FINANCE_OPS_TABS list with the 11 design-freeze tabs in order', () => {
+  it('exports a frozen FINANCE_OPS_TABS list with the 12 design-freeze tabs in order', () => {
     expect(FINANCE_OPS_TABS.map((t) => t.id)).toEqual([
       'runtime-overview',
       'ledger',
+      'accounts',
       'invoices',
       'journal-drafts',
       'journal-entries',
@@ -187,6 +191,7 @@ describe('FinanceOps — happy path (healthy runtime status)', () => {
     // tab is the one materialised in the DOM.
     const TAB_TO_PANEL_TESTID = {
       ledger: 'finance-ledger-summary',
+      accounts: 'finance-chart-of-accounts-panel',
       invoices: 'finance-draft-invoices-panel',
       'journal-drafts': 'finance-journal-drafts-panel',
       'journal-entries': 'finance-journal-entries',

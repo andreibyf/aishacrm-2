@@ -431,6 +431,8 @@ describe('finance API client -- read-only safety (no mutating exports)', () => {
       'getAuditEvents',
       'getAdapters',
       'getEvidencePack',
+      // COA Slice 1 — read-only chart of accounts.
+      'getAccounts',
       'FINANCE_API_GAPS',
       'getFinanceApiGap',
       // Test/Live data-mode feature — the ONE intentional mutation in this
