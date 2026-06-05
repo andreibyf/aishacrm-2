@@ -50,21 +50,33 @@ export function buildCashFlowStatement(journalEntries = [], accounts = []) {
   for (const entry of Array.isArray(journalEntries) ? journalEntries : []) {
     if (!POSTED_STATUSES.has(entry?.status)) continue;
     const lines = Array.isArray(entry.lines) ? entry.lines : [];
-    const cashLines = lines.filter((l) => l.account_id && cashIds.has(l.account_id));
+    const isCash = (l) => l.account_id && cashIds.has(l.account_id);
+    const cashLines = lines.filter(isCash);
     if (cashLines.length === 0) continue;
+
+    // Authoritative period totals — the NET cash change for this entry across ALL
+    // cash lines. Computing the net (rather than summing each cash line's debit as
+    // an inflow and credit as an outflow separately) means an internal cash↔cash
+    // transfer (e.g. Debit Bank / Credit Cash, both account_type ∈ {Cash, Bank})
+    // nets to zero and does NOT inflate gross inflow/outflow (Codex PR #650 P2).
+    let entryNetCents = 0;
+    for (const l of cashLines) {
+      entryNetCents += cents(l.debit_cents) - cents(l.credit_cents);
+    }
+    const nonCashLines = lines.filter((l) => !isCash(l));
+
+    // A pure internal cash↔cash transfer (zero net cash effect, no non-cash contra)
+    // is not a cash flow — skip it entirely so it adds no (empty) period.
+    if (entryNetCents === 0 && nonCashLines.length === 0) continue;
 
     const period = String(entry.posted_at || entry.created_at || '').slice(0, 7) || 'unknown';
     const p = ensurePeriod(period);
 
-    // Authoritative period totals — from the cash lines.
-    for (const l of cashLines) {
-      p.inflow_cents += cents(l.debit_cents);
-      p.outflow_cents += cents(l.credit_cents);
-    }
+    if (entryNetCents > 0) p.inflow_cents += entryNetCents;
+    else if (entryNetCents < 0) p.outflow_cents += -entryNetCents;
 
     // Contra breakdown — from the non-cash lines.
-    for (const l of lines) {
-      if (l.account_id && cashIds.has(l.account_id)) continue;
+    for (const l of nonCashLines) {
       const cls = l.classification || 'Uncategorized';
       if (!p.categories.has(cls)) p.categories.set(cls, { inflow_cents: 0, outflow_cents: 0 });
       const cat = p.categories.get(cls);

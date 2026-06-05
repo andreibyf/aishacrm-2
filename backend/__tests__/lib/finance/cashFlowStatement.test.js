@@ -6,7 +6,8 @@ const cash = { id: 'a_cash', account_code: '1000', account_type: 'Cash', classif
 const rev = { id: 'a_rev', account_code: '4000', account_type: 'Revenue', classification: 'Revenue', name: 'Revenue' };
 const exp = { id: 'a_exp', account_code: '5000', account_type: 'Expense', classification: 'Expense', name: 'Expenses' };
 const ar = { id: 'a_ar', account_code: '1100', account_type: 'Receivable', classification: 'Asset', name: 'Accounts Receivable' };
-const accounts = [cash, rev, exp, ar];
+const bank = { id: 'a_bank', account_code: '1050', account_type: 'Bank', classification: 'Asset', name: 'Bank' };
+const accounts = [cash, rev, exp, ar, bank];
 
 const posted = (lines, over = {}) => ({ status: 'posted', posted_at: '2026-06-15T00:00:00Z', lines, ...over });
 const cashRevenue = (amt) => [
@@ -30,7 +31,8 @@ describe('buildCashFlowStatement', () => {
     assert.equal(p.net_cents, 250000);
     assert.equal(p.by_category.find((c) => c.classification === 'Revenue').inflow_cents, 250000);
     assert.equal(stmt.totals.net_cents, 250000);
-    assert.deepEqual(stmt.cash_account_codes, ['1000']);
+    // cash/bank accounts (account_type ∈ {Cash, Bank}) — Bank 1050 + Cash 1000
+    assert.deepEqual(stmt.cash_account_codes, ['1000', '1050']);
   });
 
   test('Debit Expense / Credit Cash → outflow categorized as Expense', () => {
@@ -63,6 +65,38 @@ describe('buildCashFlowStatement', () => {
     }
     assert.equal(buildCashFlowStatement([posted(cashRevenue(10000), { status: 'posted' })], accounts).periods.length, 1);
     assert.equal(buildCashFlowStatement([posted(cashRevenue(10000), { status: 'reversed' })], accounts).periods.length, 1);
+  });
+
+  test('an internal cash↔bank transfer nets to zero — no gross inflation (Codex PR #650 P2)', () => {
+    // Debit Bank / Credit Cash: money moves between two cash-equivalent accounts;
+    // total cash is unchanged, so it must NOT inflate gross inflow/outflow.
+    const stmt = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_bank', classification: 'Asset', debit_cents: 75000, credit_cents: 0 },
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 0, credit_cents: 75000 },
+      ])],
+      accounts,
+    );
+    assert.deepEqual(stmt.periods, []);
+    assert.equal(stmt.totals.inflow_cents, 0);
+    assert.equal(stmt.totals.outflow_cents, 0);
+  });
+
+  test('a mixed entry nets the internal transfer and keeps the real cash movement', () => {
+    // Debit Bank 100 / Credit Cash 60 / Credit Revenue 40 → net cash +40 (inflow),
+    // the 60 cash→bank move nets out; categorized as Revenue.
+    const p = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_bank', classification: 'Asset', debit_cents: 100000, credit_cents: 0 },
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 0, credit_cents: 60000 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 40000 },
+      ])],
+      accounts,
+    ).periods[0];
+    assert.equal(p.inflow_cents, 40000);
+    assert.equal(p.outflow_cents, 0);
+    assert.equal(p.net_cents, 40000);
+    assert.equal(p.by_category.find((c) => c.classification === 'Revenue').inflow_cents, 40000);
   });
 
   test('buckets by period (posted_at month) in order', () => {
