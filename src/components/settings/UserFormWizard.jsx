@@ -593,7 +593,7 @@ export default function UserFormWizard({
           `${BACKEND_URL}/api/v2/teams/${id}?hard=true${tenantId ? `&tenant_id=${tenantId}` : ''}`,
           {
             method: 'DELETE',
-            credentials: 'include',
+            ...(await getAuthFetchOptions()),
           },
         );
         if (res.ok) {
@@ -696,8 +696,7 @@ export default function UserFormWizard({
 
         const res = await fetch(`${BACKEND_URL}/api/users/invite`, {
           method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          ...(await getAuthFetchOptions()),
           body: JSON.stringify(createPayload),
         });
 
