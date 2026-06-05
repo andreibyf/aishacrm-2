@@ -17,6 +17,7 @@
  * contract: single RuntimeStatusContext).
  */
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
@@ -81,9 +82,35 @@ export default function RuntimeOverview({
   error = null,
   onRefresh,
   lastRefreshedAt = null,
+  // Test/Live data mode control (superadmin only). Presentation-only: the page
+  // owns the API call + user-role gate and passes these down. The toggle renders
+  // only when both `canEditMode` and `onChangeMode` are provided.
+  dataMode = null,
+  canEditMode = false,
+  onChangeMode = null,
+  modeUpdating = false,
+  modeError = null,
+  // Slice 6d: count of dormant TEST finance events for this tenant (from
+  // /runtime/status `test_data_count`). When > 0 a dormant indicator is shown
+  // and switching modes asks for confirmation first. Optional / backward-compatible.
+  testDataCount = 0,
 }) {
   const runtime = status?.runtime || {};
   const counts = status?.counts || {};
+
+  // Slice 6d: the mode awaiting switch confirmation (null = no pending confirm).
+  const [pendingMode, setPendingMode] = useState(null);
+  const dormantCount = Number(testDataCount) || 0;
+
+  const handleModeClick = (targetMode) => {
+    // With dormant test data, confirm the switch first (it keeps the test data);
+    // otherwise switch immediately.
+    if (dormantCount > 0) {
+      setPendingMode(targetMode);
+    } else {
+      onChangeMode?.(targetMode);
+    }
+  };
 
   return (
     <Card
@@ -143,6 +170,91 @@ export default function RuntimeOverview({
             >
               The {`"${MODE_PLACEHOLDER}"`} value is a backend placeholder, not an authoritative
               mode signal — see gap {FINANCE_API_GAPS.runtimeMode.designRef}.
+            </p>
+          ) : null}
+
+          {canEditMode && onChangeMode ? (
+            <div
+              className="flex items-center justify-between gap-3 border-b border-slate-700/40 py-2"
+              data-testid="runtime-overview-mode-toggle"
+            >
+              <span className="text-xs uppercase tracking-wide text-slate-400">
+                Data mode (superadmin)
+              </span>
+              <div className="inline-flex overflow-hidden rounded-md border border-slate-600">
+                {['test', 'live'].map((m) => {
+                  const active = (dataMode || runtime.mode) === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={modeUpdating || active}
+                      onClick={() => handleModeClick(m)}
+                      aria-pressed={active}
+                      data-testid={`runtime-overview-mode-set-${m}`}
+                      className={`px-3 py-1 text-xs font-medium transition-colors disabled:cursor-default ${
+                        active
+                          ? m === 'test'
+                            ? 'bg-amber-500/90 text-slate-900'
+                            : 'bg-emerald-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      } ${modeUpdating ? 'opacity-60' : ''}`}
+                    >
+                      {m === 'test' ? 'Test' : 'Live'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {dormantCount > 0 ? (
+            <p
+              className="pb-1 text-[10px] text-amber-300"
+              data-testid="runtime-overview-dormant-test"
+            >
+              ⚠ {dormantCount} test record{dormantCount === 1 ? '' : 's'} exist for this tenant.
+            </p>
+          ) : null}
+
+          {pendingMode ? (
+            <div
+              className="rounded-md border border-amber-700/50 bg-amber-900/20 p-2"
+              data-testid="runtime-overview-switch-confirm"
+            >
+              <p className="text-[11px] text-amber-100">
+                This tenant has {dormantCount} test record{dormantCount === 1 ? '' : 's'}. Switching
+                to {pendingMode === 'test' ? 'Test' : 'Live'} keeps them (they stay until cleared).
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={modeUpdating}
+                  onClick={() => {
+                    const target = pendingMode;
+                    setPendingMode(null);
+                    onChangeMode?.(target);
+                  }}
+                  data-testid="runtime-overview-switch-confirm-yes"
+                  className="rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
+                >
+                  Switch to {pendingMode === 'test' ? 'Test' : 'Live'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingMode(null)}
+                  data-testid="runtime-overview-switch-confirm-cancel"
+                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {modeError ? (
+            <p className="pb-1 text-[10px] text-red-300" data-testid="runtime-overview-mode-error">
+              {modeError}
             </p>
           ) : null}
           <PostureRow label="Persistence" value={runtime.persistence} dataTestKey="persistence" />

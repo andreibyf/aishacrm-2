@@ -349,6 +349,43 @@ export default function createTestingRoutes(_pgPool) {
         }
       }
 
+      // Pass 3: Finance event stream (per-tenant, best-effort). Finance is
+      // event-sourced; test events live on finance.audit_events (is_test_data).
+      // The clear is PER-TENANT — without a tenant_id we cannot scope it, so we
+      // skip rather than risk clearing across tenants. Never fail the whole
+      // cleanup: a finance error is recorded and we continue.
+      if (tenant_id) {
+        try {
+          const { clearFinanceTestData } = await import('../lib/finance/clearFinanceTestData.js');
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+
+          const financeResult = await clearFinanceTestData({
+            pool: _pgPool,
+            getSupabaseClient,
+            tenantId: tenant_id,
+            logger,
+          });
+
+          results['finance.audit_events'] = {
+            deleted: financeResult.deleted,
+            rebuilt: financeResult.rebuilt,
+            success: true,
+          };
+          totalDeleted += financeResult.deleted;
+        } catch (financeErr) {
+          logger.error('Error clearing finance test data:', financeErr);
+          results['finance.audit_events'] = {
+            deleted: 0,
+            success: false,
+            error: financeErr.message,
+          };
+        }
+      } else {
+        results['finance.audit_events'] = {
+          skipped: 'tenant_id required for finance clear',
+        };
+      }
+
       // Optional follow-up: remove recent unflagged test data (example.com emails) for safety
       if (unflagged_cleanup?.enabled) {
         try {

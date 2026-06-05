@@ -13,7 +13,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runPersistentWrite } from '../../../lib/finance/persistentWriteRunner.js';
+import {
+  runPersistentWrite,
+  rebuildFinanceProjections,
+} from '../../../lib/finance/persistentWriteRunner.js';
 
 const TENANT = 'tenant-7';
 
@@ -58,10 +61,15 @@ function seedApprovalRequestedEvent(approvalId = 'A') {
 // Fake eventStore mirroring the PG store surface used by the runner.
 function makeFakeEventStore(seedEvents = []) {
   const appended = [];
+  const replayCalls = []; // [{ tenantId, isTestData }] — proves hydrate's mode arg
   return {
     appended,
+    replayCalls,
     seedEvents,
-    replay: async (_tenantId) => [...seedEvents],
+    replay: async (_tenantId, isTestData) => {
+      replayCalls.push({ tenantId: _tenantId, isTestData });
+      return [...seedEvents];
+    },
     append: async (e) => {
       appended.push(e);
       return e;
@@ -80,8 +88,10 @@ function makeSpyRunnerFactory({ failAlways = false, degradeAlways = false } = {}
   const registered = [];
   const factory = () => ({
     register: (worker) => registered.push(worker),
-    replay: async (projectionName, tenantId) => {
-      replayed.push({ projectionName, tenantId });
+    replay: async (projectionName, tenantId, isTestData) => {
+      // Slice 6b-1: capture the data-mode arg so tests can assert the active
+      // mode is threaded into each affected projection's rebuild.
+      replayed.push({ projectionName, tenantId, isTestData });
       if (failAlways) {
         throw new Error('projection rebuild boom');
       }
@@ -275,6 +285,30 @@ test('skips adapter-jobs materialization when no pool is available (in-memory/te
   assert.equal(called, false, 'no pool → the materializer is not invoked');
 });
 
+test('TEST-mode writes do NOT materialize finance.adapter_jobs (keep test jobs out of the provider worker) (Codex PR #634 P1)', async () => {
+  let called = false;
+  const { logger } = makeFakeLogger();
+
+  await runPersistentWrite({
+    eventStore: makeFakeEventStore([seedApprovalRequestedEvent('A')]),
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner: makeSpyRunnerFactory(),
+    adapterJobPool: { query: async () => ({ rowCount: 0 }) },
+    isTestData: true,
+    materializeAdapterJobs: async () => {
+      called = true;
+      return { written: 0 };
+    },
+    logger,
+  });
+
+  // finance.adapter_jobs has no is_test_data column and claimPersistent claims any
+  // queued row, so a test job must NEVER enter the claimable table.
+  assert.equal(called, false, 'test adapter jobs are not materialized into the claimable table');
+});
+
 test('a non-durable event (append REJECTS) is NOT captured — no advance, no materialization (Codex PR #633 P1)', async () => {
   const materializeCalls = [];
   const replayed = [];
@@ -432,6 +466,88 @@ test('durable hydration proof: seeded PG approval is visible to the command (no 
   assert.equal(result.approval.status, 'approved');
 });
 
+// ── slice 6a: Test/Live data-mode stamping ────────────────────────────────────
+
+test('isTestData=true: hydrate replays the test partition and every captured envelope is stamped is_test_data=true', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const result = await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    logger,
+    isTestData: true,
+  });
+
+  assert.equal(result.approval.status, 'approved');
+
+  // (a) HYDRATE replayed with the current mode (test ⇒ true).
+  assert.ok(eventStore.replayCalls.length >= 1, 'hydrate must call replay');
+  assert.equal(
+    eventStore.replayCalls[0].isTestData,
+    true,
+    'hydrate must replay(tenantId, true) for test mode',
+  );
+
+  // (b) Every appended/captured envelope is stamped is_test_data=true.
+  assert.ok(eventStore.appended.length >= 1, 'at least one event appended');
+  assert.ok(
+    eventStore.appended.every((e) => e.is_test_data === true),
+    'every captured envelope must be stamped is_test_data=true',
+  );
+
+  // (c) Slice 6b-1: the ADVANCE rebuild forwards the active mode (test ⇒ true)
+  // to runner.replay for EVERY affected projection — projections are rebuilt
+  // from the test partition only.
+  assert.ok(createRunner.replayed.length >= 1, 'at least one projection rebuilt');
+  assert.ok(
+    createRunner.replayed.every((r) => r.isTestData === true),
+    'every affected projection must be rebuilt with isTestData=true',
+  );
+});
+
+test('default (no isTestData): hydrate replays live partition and envelopes are stamped is_test_data=false', async () => {
+  const eventStore = makeFakeEventStore([seedApprovalRequestedEvent('A')]);
+  const createRunner = makeSpyRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const result = await runPersistentWrite({
+    eventStore,
+    storeProvider: {},
+    tenantId: TENANT,
+    command: approveCommand('A'),
+    createRunner,
+    logger,
+  });
+
+  assert.equal(result.approval.status, 'approved');
+
+  // Hydrate replays with the default live mode (false).
+  assert.equal(
+    eventStore.replayCalls[0].isTestData,
+    false,
+    'default hydrate must replay(tenantId, false)',
+  );
+  // Every captured envelope stamped live (false).
+  assert.ok(eventStore.appended.length >= 1);
+  assert.ok(
+    eventStore.appended.every((e) => e.is_test_data === false),
+    'default mode must stamp envelopes is_test_data=false',
+  );
+
+  // Slice 6b-1: the ADVANCE rebuild forwards the default live mode (false) to
+  // runner.replay for every affected projection.
+  assert.ok(createRunner.replayed.length >= 1, 'at least one projection rebuilt');
+  assert.ok(
+    createRunner.replayed.every((r) => r.isTestData === false),
+    'default mode must rebuild every affected projection with isTestData=false',
+  );
+});
+
 test('validation: missing tenantId / command / deps throw a clear error', async () => {
   const eventStore = makeFakeEventStore([]);
   const createRunner = makeSpyRunnerFactory();
@@ -467,5 +583,173 @@ test('validation: missing tenantId / command / deps throw a clear error', async 
   await assert.rejects(
     () => runPersistentWrite({ tenantId: TENANT, command: approveCommand('A') }),
     /pgPool|eventStore|storeProvider/,
+  );
+});
+
+// ── slice 6b-2: rebuildFinanceProjections (mode-switch projection rebuild) ─────
+
+// A spy runner factory exposing replayAll (the mode-switch rebuild path). Records
+// every replayAll(tenantId, isTestData) call. `failAll` makes replayAll REJECT
+// (infra error). `degradeNames` is a set of projection names that come back with
+// a degraded outcome; everything else is 'rebuilt'.
+function makeReplayAllRunnerFactory({ failAll = false, degradeNames = [] } = {}) {
+  const replayAllCalls = []; // [{ tenantId, isTestData }]
+  const allProjections = [
+    'finance.projection.ledger',
+    'finance.projection.journal_entries',
+    'finance.projection.approval_queue',
+    'finance.projection.adapter_queue',
+    'finance.projection.invoices',
+  ];
+  const degraded = new Set(degradeNames);
+  const factory = () => ({
+    register: () => {},
+    replayAll: async (tenantId, isTestData) => {
+      replayAllCalls.push({ tenantId, isTestData });
+      if (failAll) {
+        throw new Error('replayAll boom');
+      }
+      return allProjections.map((projectionName) => ({
+        projectionName,
+        outcome: degraded.has(projectionName) ? 'degraded' : 'rebuilt',
+        cursor: null,
+      }));
+    },
+  });
+  factory.replayAllCalls = replayAllCalls;
+  factory.allProjections = allProjections;
+  return factory;
+}
+
+test('rebuildFinanceProjections: rebuilds EVERY projection via replayAll(tenantId, isTestData=true) for test mode', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  const summary = await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: true,
+    logger,
+  });
+
+  // replayAll called exactly once with the NEW mode's partition (test ⇒ true).
+  assert.equal(createRunner.replayAllCalls.length, 1);
+  assert.equal(createRunner.replayAllCalls[0].tenantId, TENANT);
+  assert.equal(createRunner.replayAllCalls[0].isTestData, true);
+
+  // Every registered projection reported as rebuilt; none degraded.
+  assert.deepEqual(new Set(summary.rebuilt), new Set(createRunner.allProjections));
+  assert.deepEqual(summary.degraded, []);
+});
+
+test('rebuildFinanceProjections: live mode threads isTestData=false', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: false,
+    logger,
+  });
+
+  assert.equal(createRunner.replayAllCalls[0].isTestData, false);
+});
+
+test('rebuildFinanceProjections: a degraded projection is NON-FATAL — logged, surfaced in summary.degraded', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory({
+    degradeNames: ['finance.projection.ledger'],
+  });
+  const { logger, warns } = makeFakeLogger();
+
+  const summary = await rebuildFinanceProjections({
+    eventStore,
+    storeProvider: {},
+    createRunner,
+    tenantId: TENANT,
+    isTestData: true,
+    logger,
+  });
+
+  // Resolves (no throw); the degraded projection is reported, the rest rebuilt.
+  assert.deepEqual(summary.degraded, ['finance.projection.ledger']);
+  assert.ok(summary.rebuilt.length === createRunner.allProjections.length - 1);
+  assert.ok(!summary.rebuilt.includes('finance.projection.ledger'));
+
+  // logger.warn fired, naming the tenant + degraded projection.
+  const flat = JSON.stringify(warns);
+  assert.ok(flat.includes(TENANT));
+  assert.ok(flat.includes('finance.projection.ledger'));
+  assert.ok(flat.includes('degraded'));
+});
+
+test('rebuildFinanceProjections: a THROWING replayAll (infra) RE-THROWS so the caller decides (Codex PR #634 P1)', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory({ failAll: true });
+  const { logger, warns } = makeFakeLogger();
+
+  // Re-throws (was swallowed): the shared projection_state is left on the OLD
+  // partition, so the caller must be able to react — applyFinanceDataModeChange
+  // reverts the mode + returns 503; clearFinanceTestData catches and stays
+  // non-fatal. Reporting success here would hide a half-applied mode switch.
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        storeProvider: {},
+        createRunner,
+        tenantId: TENANT,
+        isTestData: true,
+        logger,
+      }),
+    /replayAll boom/,
+  );
+  // The warn still fires for observability before the re-throw.
+  assert.ok(warns.length >= 1);
+  assert.ok(JSON.stringify(warns).includes(TENANT));
+});
+
+test('rebuildFinanceProjections: missing eventStore / storeProvider / tenantId throws a clear error', async () => {
+  const eventStore = makeFakeEventStore([]);
+  const createRunner = makeReplayAllRunnerFactory();
+  const { logger } = makeFakeLogger();
+
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        storeProvider: {},
+        createRunner,
+        tenantId: TENANT,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
+  );
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        createRunner,
+        tenantId: TENANT,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
+  );
+  await assert.rejects(
+    () =>
+      rebuildFinanceProjections({
+        eventStore,
+        storeProvider: {},
+        createRunner,
+        tenantId: null,
+        logger,
+      }),
+    /eventStore|storeProvider|tenantId/,
   );
 });

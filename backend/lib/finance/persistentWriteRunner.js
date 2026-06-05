@@ -118,6 +118,10 @@ export async function runPersistentWrite({
   logger = defaultLogger,
   maxAttempts = 3,
   retryBackoffMs = 20,
+  // Test/Live data-mode partition (slice 6a): hydrate replays only the current
+  // mode's events, and every appended envelope is stamped with this mode.
+  // Live (false) by default so existing behaviour is preserved.
+  isTestData = false,
   // Codex PR #633 P1: pool used to materialize finance.adapter_jobs rows (so the
   // SQL adapter worker can claim them). Injectable writer for tests.
   adapterJobPool,
@@ -150,7 +154,8 @@ export async function runPersistentWrite({
   // event store's replay(tenantId) returns the tenant's ordered events; the
   // projection runner consumes replay() the same way (see projectionRunner.js
   // doReplay → eventStore.replay(tenantId)), so we mirror that call shape.
-  const events = await resolvedEventStore.replay(tenantId);
+  // Slice 6a: replay only the current mode's partition (test ⇒ true).
+  const events = await resolvedEventStore.replay(tenantId, isTestData);
   const bucket = rebuildBucketFromEvents(events);
 
   // 2. RUN — a per-request domain service over the hydrated bucket and a
@@ -164,13 +169,15 @@ export async function runPersistentWrite({
   const captured = [];
   const capturingEventStore = {
     append: async (envelope) => {
-      // Codex PR #633 P1: capture ONLY after the durable append RESOLVES. If the
-      // append rejects, the envelope is non-durable, so it must NOT be advanced
+      // Slice 6a: stamp the current data-mode onto every appended envelope so the
+      // command's parent + all spawned events are tagged for the partition.
+      // Codex PR #633 P1: capture ONLY after the durable append RESOLVES — a
+      // rejected append leaves a non-durable envelope that must NOT be advanced
       // into projections or materialized into finance.adapter_jobs (which would
-      // let the SQL worker claim a job with no event-store fact). Capturing first
-      // and then awaiting would record a phantom on append failure.
-      const appended = await resolvedEventStore.append(envelope);
-      captured.push(envelope);
+      // let the SQL worker claim a job with no event-store fact).
+      const stamped = { ...envelope, is_test_data: isTestData };
+      const appended = await resolvedEventStore.append(stamped);
+      captured.push(stamped);
       return appended;
     },
     query: (...args) => resolvedEventStore.query(...args),
@@ -208,8 +215,14 @@ export async function runPersistentWrite({
     // them — the in-memory promote path emits sync_queued but never writes the
     // canonical table. Best-effort and NON-FATAL: the events are already durable
     // and the adapter_queue projection already reflects the job.
+    // Codex PR #634 P1: do NOT materialize TEST adapter jobs into
+    // finance.adapter_jobs. That table has no is_test_data column and
+    // adapterJobProcessor.claimPersistent claims ANY queued row by tenant/status,
+    // so a materialized test job could be claimed and pushed to a provider as a
+    // REAL write. Test adapter jobs stay visible via the (partitioned) projection
+    // but never enter the claimable canonical table.
     const resolvedAdapterJobPool = adapterJobPool || pgPool || null;
-    if (resolvedAdapterJobPool) {
+    if (resolvedAdapterJobPool && !isTestData) {
       try {
         await materializeAdapterJobsFn({
           pool: resolvedAdapterJobPool,
@@ -250,7 +263,11 @@ export async function runPersistentWrite({
     for (const projectionName of affected) {
       let replayResult;
       try {
-        replayResult = await runner.replay(projectionName, tenantId);
+        // Slice 6b-1: rebuild each affected projection from the ACTIVE mode's
+        // events only — a test-mode write rebuilds from the test partition,
+        // a live-mode write from the live partition. Default false (live)
+        // preserves existing behaviour.
+        replayResult = await runner.replay(projectionName, tenantId, isTestData);
       } catch (err) {
         // Infra-level failure (projection-store / Postgres error): replay threw.
         // The event is already durably appended — log and continue; the async
@@ -287,6 +304,102 @@ export async function runPersistentWrite({
     throw commandError;
   }
   return result;
+}
+
+/**
+ * Slice 6b-2 — rebuild ALL of a tenant's registered finance projections from the
+ * NEW data mode's events.
+ *
+ * `projection_state` is a SHARED row per (projection, tenant) holding the CURRENT
+ * mode's projection. Writes (6a/6b-1) rebuild AFFECTED projections from the active
+ * mode's events. The gap: when a superadmin SWITCHES the tenant's data mode, the
+ * shared projection_state still holds the OLD mode's data until the next write —
+ * a read right after a switch would show stale (other-mode) data. This helper, run
+ * on a mode switch, rebuilds EVERY registered projection from the NEW mode's events
+ * so reads immediately reflect the new mode.
+ *
+ * PERSISTENT-only: in in-memory mode there are no persistent projections (the
+ * in-memory adapter reads the domain-service bucket directly) — the caller skips
+ * this entirely (no-op). NON-FATAL: a degraded or throwing replay is logged and
+ * does NOT throw — reads of a degraded projection already fail-closed elsewhere
+ * (FinanceReadDegradedError).
+ *
+ * @param {object}   opts
+ * @param {object}   opts.eventStore     persistent event store (required).
+ * @param {object}   opts.storeProvider  projection-store provider (required).
+ * @param {object}  [opts.workers]       injectable five-worker map; default built.
+ * @param {Function}[opts.createRunner]  injectable runner factory (for spies).
+ * @param {string}   opts.tenantId       tenant UUID (required).
+ * @param {boolean} [opts.isTestData]    NEW mode partition (test ⇒ true).
+ * @param {object}  [opts.logger]        injectable logger (default project logger).
+ * @returns {Promise<{rebuilt: string[], degraded: string[]}>} per-projection summary.
+ */
+export async function rebuildFinanceProjections({
+  eventStore,
+  storeProvider,
+  workers,
+  createRunner,
+  tenantId,
+  isTestData,
+  logger = defaultLogger,
+} = {}) {
+  if (!eventStore || !storeProvider || !tenantId) {
+    throw new Error('rebuildFinanceProjections requires eventStore, storeProvider, and tenantId');
+  }
+
+  const resolvedWorkers = workers || buildDefaultWorkers();
+  const runner = (createRunner || buildDefaultRunner)({
+    eventStore,
+    storeProvider,
+    workers: resolvedWorkers,
+  });
+
+  const rebuilt = [];
+  const degraded = [];
+
+  // Rebuild EVERY registered projection from the new mode's events. Prefer the
+  // runner's replayAll (6b-1 added the isTestData arg); collect its per-projection
+  // results. A whole-batch throw OR a per-projection degraded outcome is NON-FATAL.
+  let results;
+  try {
+    results = await runner.replayAll(tenantId, isTestData);
+  } catch (err) {
+    // RE-THROW (Codex PR #634 P1): the rebuild could not run, so the shared
+    // projection_state is left on the PREVIOUS partition. Swallowing this here
+    // would let a mode switch report success while reads still serve the old
+    // partition — `applyFinanceDataModeChange` only reverts+fails when this
+    // throws. Each caller owns the policy: the mode switch reverts the mode and
+    // returns 503; `clearFinanceTestData` catches and stays non-fatal (its delete
+    // already committed). The async worker re-drive is a backstop, not a license
+    // to report success on a half-applied switch.
+    logger.warn(
+      {
+        tenant_id: tenantId,
+        err: err?.message ?? String(err),
+      },
+      'rebuildFinanceProjections: replayAll failed (infra); rethrowing so the caller decides (mode-switch reverts+fails; clear stays non-fatal)',
+    );
+    throw err;
+  }
+
+  for (const result of results || []) {
+    const projection = result?.projectionName ?? null;
+    if (result?.outcome === 'degraded') {
+      degraded.push(projection);
+      logger.warn(
+        {
+          tenant_id: tenantId,
+          projection,
+          outcome: result.outcome,
+        },
+        'rebuildFinanceProjections: projection degraded during mode-switch rebuild; reads fail-closed — async worker will re-drive',
+      );
+    } else {
+      rebuilt.push(projection);
+    }
+  }
+
+  return { rebuilt, degraded };
 }
 
 export default runPersistentWrite;

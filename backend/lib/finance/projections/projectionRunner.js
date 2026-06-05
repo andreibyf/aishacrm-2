@@ -339,7 +339,7 @@ export function createProjectionRunner({
     return { event_id: event.id, dispatched };
   }
 
-  async function doReplay(worker, tenantId) {
+  async function doReplay(worker, tenantId, isTestData = null) {
     const prior = await getState(worker, tenantId);
     // Hydrate the live store before transitioning to 'replaying' so the provider's
     // setState write preserves the existing state_json. Without this, a Postgres
@@ -353,7 +353,9 @@ export function createProjectionRunner({
     });
 
     try {
-      const all = await eventStore.replay(tenantId);
+      // Slice 6b-1: replay only the active data-mode's partition (test ⇒ true,
+      // live ⇒ false). `isTestData = null` ⇒ no filter = all events (unchanged).
+      const all = await eventStore.replay(tenantId, isTestData);
       // Defensively scope to the target tenant — never trust the event store to
       // be perfect about tenant isolation. A foreign-tenant row must never be
       // replayed into another tenant's projection state.
@@ -394,18 +396,20 @@ export function createProjectionRunner({
     }
   }
 
-  async function replay(projectionName, tenantId) {
+  async function replay(projectionName, tenantId, isTestData = null) {
     const worker = workers.get(projectionName);
     if (!worker) {
       throw new ProjectionRuntimeError(`projection not registered: ${projectionName}`, NOT_FOUND);
     }
-    return runExclusive(keyOf(projectionName, tenantId), () => doReplay(worker, tenantId));
+    return runExclusive(keyOf(projectionName, tenantId), () =>
+      doReplay(worker, tenantId, isTestData),
+    );
   }
 
-  async function replayAll(tenantId) {
+  async function replayAll(tenantId, isTestData = null) {
     const results = [];
     for (const worker of workers.values()) {
-      results.push(await replay(worker.projectionName, tenantId));
+      results.push(await replay(worker.projectionName, tenantId, isTestData));
     }
     return results;
   }

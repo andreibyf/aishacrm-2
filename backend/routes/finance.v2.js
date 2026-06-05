@@ -4,6 +4,11 @@ import { getSupabaseClient as defaultGetSupabaseClient } from '../lib/supabase-d
 import { validateTenantAccess } from '../middleware/validateTenant.js';
 import createFinanceDomainService from '../lib/finance/financeDomainService.js';
 import { checkFinanceOpsEnabled } from '../lib/finance/financeModuleGate.js';
+import {
+  fetchFinanceDataMode,
+  setFinanceDataMode,
+  FINANCE_DATA_MODES,
+} from '../lib/finance/financeDataMode.js';
 import { buildEvidencePack } from '../lib/finance/auditEvidenceBuilder.js';
 import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
 import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
@@ -11,7 +16,10 @@ import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAda
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
-import { runPersistentWrite as defaultRunPersistentWrite } from '../lib/finance/persistentWriteRunner.js';
+import {
+  runPersistentWrite as defaultRunPersistentWrite,
+  rebuildFinanceProjections as defaultRebuildFinanceProjections,
+} from '../lib/finance/persistentWriteRunner.js';
 import { createLedgerProjectionWorker } from '../lib/finance/projections/ledgerProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
 import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/approvalQueueProjection.js';
@@ -63,6 +71,134 @@ export function defaultFinanceReadAdapterFactory({
   });
 }
 
+/**
+ * Slice 6b-2 — orchestrate a finance Test/Live data-mode change: persist the new
+ * mode, then (PERSISTENT-only) rebuild the tenant's projections from the NEW mode's
+ * events so reads immediately reflect the switch (the shared projection_state row
+ * otherwise holds the OLD mode's data until the next write).
+ *
+ * Extracted as a thin, exported helper so the persist+rebuild orchestration is
+ * unit-testable WITHOUT going through validateTenantAccess (a superadmin write
+ * there needs a Supabase canonical-tenant lookup).
+ *
+ * FAIL-LOUD (Codex P2): the rebuild is what makes reads reflect the new mode.
+ * Because `projection_state` is shared per (projection, tenant), a FAILED rebuild
+ * leaves the OLD partition's projection rows in place — so returning success would
+ * let reads serve the opposite partition while /runtime/status reports the new
+ * mode (a silent test↔live leak). On rebuild failure we therefore REVERT the
+ * persisted mode back to the pre-switch value (so status stays consistent with the
+ * un-rebuilt projections) and THROW so the operator retries — never a silent
+ * success. In-memory mode (persistent=false, or no stores) skips the rebuild
+ * entirely — there are no persistent projections to rebuild.
+ *
+ * @returns {Promise<*>} the persisted mode (whatever setFinanceDataMode returned).
+ * @throws  {Error} code FINANCE_MODE_SWITCH_REBUILD_FAILED (statusCode 503) when
+ *          the persistent post-switch rebuild fails.
+ */
+export async function applyFinanceDataModeChange({
+  tenantId,
+  mode,
+  persistent,
+  setFinanceDataMode: setFinanceDataModeFn,
+  rebuildFinanceProjections: rebuildFinanceProjectionsFn,
+  getFinanceDataMode: getFinanceDataModeFn = null,
+  eventStore,
+  storeProvider,
+  logger: log = logger,
+}) {
+  // Slice 6 (Codex PR #634 P2): in-memory deployments have NO test/live isolation
+  // — runWrite() and the read adapter share one un-partitioned domain-service
+  // bucket, so switching TEST→LIVE would expose sandbox test entries through the
+  // live read endpoints (and let them be acted on as live data). Refuse to
+  // advertise an isolation the in-memory path can't provide: LIVE requires
+  // persistent events. TEST stays available — it is the safe default.
+  if (!persistent && mode === FINANCE_DATA_MODES.LIVE) {
+    const err = new Error(
+      'Live data mode requires persistent events (ENABLE_FINANCE_PERSISTENT_EVENTS). ' +
+        'In-memory deployments are test-only — there is no test/live data isolation, ' +
+        'so live mode would expose sandbox test entries as live data.',
+    );
+    err.statusCode = 409;
+    err.code = 'FINANCE_LIVE_REQUIRES_PERSISTENT';
+    throw err;
+  }
+
+  const willRebuild = persistent && eventStore && storeProvider;
+
+  // Capture the pre-switch mode up front so a failed rebuild can roll back to it.
+  // Codex PR #634 P1: if we CAN'T read the current mode, we have no rollback path
+  // — so fail the switch BEFORE persisting, rather than persist a new mode we
+  // could never revert (which would leave /runtime/status on the new mode while
+  // the projections stay on the old partition if the rebuild then fails).
+  let previousMode = null;
+  if (willRebuild && typeof getFinanceDataModeFn === 'function') {
+    try {
+      previousMode = await getFinanceDataModeFn({ tenantId });
+    } catch (err) {
+      const e = new Error(
+        'Finance data-mode switch aborted: could not read the current mode to enable ' +
+          'rollback on a failed rebuild. Nothing was changed. Retry the switch.',
+      );
+      e.statusCode = 503;
+      e.code = 'FINANCE_MODE_SWITCH_PRECHECK_FAILED';
+      e.cause = err;
+      throw e;
+    }
+  }
+
+  const persisted = await setFinanceDataModeFn({ tenantId, mode });
+
+  if (willRebuild) {
+    // Shared revert+fail used by BOTH a thrown rebuild and a degraded outcome:
+    // revert the persisted mode so /runtime/status stays consistent with the
+    // un-rebuilt projections, then throw 503 so the operator retries.
+    const failSwitch = async (reason) => {
+      log.error('[finance.v2] post-switch projection rebuild failed:', reason);
+      if (previousMode && previousMode !== mode) {
+        try {
+          await setFinanceDataModeFn({ tenantId, mode: previousMode });
+        } catch (revertErr) {
+          log.error(
+            '[finance.v2] mode revert after failed rebuild ALSO failed:',
+            revertErr?.message,
+          );
+        }
+      }
+      const e = new Error(
+        'Finance data-mode switch failed: projection rebuild error — mode reverted, reads unchanged. Retry the switch.',
+      );
+      e.statusCode = 503;
+      e.code = 'FINANCE_MODE_SWITCH_REBUILD_FAILED';
+      throw e;
+    };
+
+    let rebuildResult;
+    try {
+      rebuildResult = await rebuildFinanceProjectionsFn({
+        eventStore,
+        storeProvider,
+        tenantId,
+        isTestData: mode === FINANCE_DATA_MODES.TEST,
+        logger: log,
+      });
+    } catch (err) {
+      await failSwitch(err?.message);
+    }
+    // Codex PR #634 P1: a DEGRADED projection (replay RESOLVED `{outcome:'degraded'}`
+    // rather than throwing) discarded its shadow and left the live store on the OLD
+    // partition — the same test↔live leak hazard as a throw. Treat a non-empty
+    // degraded result as a failed switch, not a success.
+    if (
+      rebuildResult &&
+      Array.isArray(rebuildResult.degraded) &&
+      rebuildResult.degraded.length > 0
+    ) {
+      await failSwitch(`degraded projections: ${rebuildResult.degraded.join(', ')}`);
+    }
+  }
+  return persisted;
+}
+
 function resolveTenantId(req) {
   // M-5: Trust only server-injected sources. req.body?.tenant_id and req.query?.tenant_id
   // are attacker-controlled; a manipulated body can supply a foreign tenant_id that
@@ -79,6 +215,12 @@ function buildActor(req) {
     id: req.user?.id || null,
     type: isAiAgent ? 'ai_agent' : 'human',
   };
+}
+
+// The authenticate middleware normalizes super_admin/super-admin/etc. → 'superadmin'
+// and sets an is_superadmin flag. Honor either; never trust body-supplied roles.
+function isSuperAdmin(req) {
+  return req.user?.role === 'superadmin' || req.user?.is_superadmin === true;
 }
 
 function sendError(res, error) {
@@ -178,6 +320,10 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     opts.createStoreProvider ||
     (persistentEvents && pgPool ? () => createPgProjectionStoreProvider({ pool: pgPool }) : null);
   const runPersistentWriteFn = opts.runPersistentWrite || defaultRunPersistentWrite;
+  // Slice 6b-2: on a data-mode SWITCH, rebuild the tenant's projections from the
+  // NEW mode's events (PERSISTENT-only; injectable for tests).
+  const rebuildFinanceProjectionsFn =
+    opts.rebuildFinanceProjections || defaultRebuildFinanceProjections;
 
   // Single mutation dispatch path shared by all 6 mutating handlers. In
   // persistent mode the command runs through the durable write runner (hydrate →
@@ -185,6 +331,29 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // domain service. Behaviour is identical to the per-handler branch it replaces.
   async function runWrite(req, command) {
     if (persistentEvents) {
+      // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
+      // into the durable write runner so HYDRATE + the projection REBUILD both
+      // operate on the active mode's partition only. Codex PR #634 P1: FAIL-CLOSED
+      // — `runPersistentWrite` stamps every captured envelope with this flag, so a
+      // guessed partition would persist a live write as `is_test_data=true`
+      // (omitted from live reads, deletable by test cleanup) or vice-versa. If the
+      // mode can't be resolved, REFUSE the write rather than acknowledge it in the
+      // wrong partition.
+      let isTestData;
+      try {
+        isTestData =
+          (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+          FINANCE_DATA_MODES.TEST;
+      } catch (err) {
+        const e = new Error(
+          'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
+            'avoid persisting it in the wrong (test/live) partition.',
+        );
+        e.statusCode = 503;
+        e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+        e.cause = err;
+        throw e;
+      }
       return runPersistentWriteFn({
         tenantId: req.financeTenantId,
         eventStore: persistentEventStore,
@@ -194,9 +363,28 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         adapterJobPool: pgPool,
         logger,
         command,
+        isTestData,
       });
     }
     return command(service);
+  }
+
+  // Slice 6 (Codex P1): resolve the Test/Live read partition for the two raw
+  // event-stream endpoints (/audit-events, /evidence-packs), which read the
+  // durable event stream DIRECTLY (not via the projection rebuild that segregates
+  // the other reads). Mirrors runWrite's mode resolution. In in-memory mode events
+  // are unstamped → return null (NO filter; behaviour unchanged). FAIL-SAFE to
+  // TEST so an unresolved mode never exposes live events on these endpoints.
+  async function resolveReadIsTestData(req) {
+    if (!persistentEvents) return null;
+    try {
+      return (
+        (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+        FINANCE_DATA_MODES.TEST
+      );
+    } catch {
+      return true;
+    }
   }
 
   // The domain service's eventStore is the SAME persistent event store in
@@ -224,6 +412,25 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   const isFinanceModuleEnabled =
     opts.isFinanceModuleEnabled ||
     (({ tenantId }) => checkFinanceOpsEnabled({ tenantId, getSupabaseClient }));
+  // Per-tenant Test/Live data mode (superadmin-controlled). Injectable for tests;
+  // defaults to reading the financeOps modulesettings row.
+  const getFinanceDataMode =
+    opts.getFinanceDataMode ||
+    (({ tenantId }) => fetchFinanceDataMode({ tenantId, getSupabaseClient }));
+  const setFinanceDataModeFn =
+    opts.setFinanceDataMode ||
+    (({ tenantId, mode }) => setFinanceDataMode({ tenantId, mode, getSupabaseClient }));
+
+  // Slice 6d: count of the tenant's dormant TEST finance events, surfaced on
+  // /runtime/status so the console can warn that test data exists (in any mode).
+  // Injectable for tests; defaults to the persistent event store's partitioned
+  // getCount. In-memory mode has no durable test partition → reports 0.
+  const getTestDataCount =
+    opts.getTestDataCount ||
+    (async ({ tenantId, isTestData }) => {
+      if (!persistentEventStore) return 0;
+      return persistentEventStore.getCount(tenantId, isTestData);
+    });
 
   router.use(validateTenantAccess);
 
@@ -252,12 +459,89 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.get('/runtime/status', async (req, res) => {
     try {
-      res.json({
-        status: 'success',
-        data: await readAdapter.getRuntimeStatus(req.financeTenantId),
+      // Resolve the authoritative per-tenant Test/Live data mode FIRST (replacing
+      // the legacy `mock_read_only` placeholder). Resolve failures fail-safe to
+      // `test` — never expose a tenant as `live` on a lookup error.
+      let dataMode = FINANCE_DATA_MODES.TEST;
+      try {
+        dataMode = await getFinanceDataMode({ tenantId: req.financeTenantId, req });
+      } catch (err) {
+        logger.warn('[finance.v2] data-mode resolve failed; defaulting to test:', err?.message);
+      }
+      // Codex PR #634 P2: in-memory deployments have NO test/live isolation, so the
+      // EFFECTIVE mode is always `test` — even for a tenant whose persisted setting
+      // is `live` (e.g. a copied DB or a downgrade from a persistent deploy). The
+      // PUT setter already refuses live in-memory; clamp the reported mode here too
+      // so the API never advertises `live` while serving the unpartitioned bucket.
+      if (!persistentEvents) {
+        dataMode = FINANCE_DATA_MODES.TEST;
+      }
+      // Codex PR #634 P2: count audit events for the ACTIVE partition only, so
+      // `counts.audit_events` / `persistence_lag.audit_events_total` match the
+      // (partitioned) /audit-events read instead of counting the opposite partition.
+      // PERSISTENT-only — in-memory has no durable partition (null = count all).
+      const runtimeIsTestData = persistentEvents ? dataMode === FINANCE_DATA_MODES.TEST : null;
+      const status = await readAdapter.getRuntimeStatus(req.financeTenantId, {
+        isTestData: runtimeIsTestData,
       });
+      status.runtime = { ...status.runtime, mode: dataMode, data_mode: dataMode };
+      // Slice 6d: attach the count of dormant TEST finance events. FAIL-SAFE:
+      // never break /runtime/status — default to 0 on any error.
+      let testDataCount = 0;
+      try {
+        testDataCount = await getTestDataCount({ tenantId: req.financeTenantId, isTestData: true });
+      } catch (err) {
+        logger.warn('[finance.v2] test-data count failed; defaulting to 0:', err?.message);
+      }
+      status.test_data_count = Number.isFinite(testDataCount) ? testDataCount : 0;
+      res.json({ status: 'success', data: status });
     } catch (error) {
       logger.error('[finance.v2] runtime status failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // Superadmin-only: flip the per-tenant Test/Live finance data mode. Admins and
+  // below cannot change it (stricter than the modulesettings admin gate). The
+  // module gate above already required Finance Ops to be enabled for the tenant.
+  router.put('/settings/data-mode', async (req, res) => {
+    try {
+      if (!isSuperAdmin(req)) {
+        const err = new Error('Only a superadmin can change the finance data mode');
+        err.statusCode = 403;
+        err.code = 'FINANCE_DATA_MODE_FORBIDDEN';
+        throw err;
+      }
+      const mode = req.body?.mode;
+      if (mode !== FINANCE_DATA_MODES.TEST && mode !== FINANCE_DATA_MODES.LIVE) {
+        const err = new Error("Finance data mode must be 'test' or 'live'");
+        err.statusCode = 400;
+        err.code = 'FINANCE_DATA_MODE_INVALID';
+        throw err;
+      }
+      // Persist the new mode, then (PERSISTENT-only) rebuild the tenant's
+      // projections from the NEW mode's events so the very next read reflects the
+      // switch. FAIL-LOUD: if the rebuild fails, applyFinanceDataModeChange reverts
+      // the mode and throws (503) rather than reporting a success while reads still
+      // serve the old partition (Codex P2). In-memory mode skips the rebuild (no
+      // persistent projections). The helper keeps this handler thin and makes the
+      // persist+rebuild orchestration unit-testable without Express.
+      const updated = await applyFinanceDataModeChange({
+        tenantId: req.financeTenantId,
+        mode,
+        persistent: persistentEvents,
+        setFinanceDataMode: ({ tenantId, mode: m }) =>
+          setFinanceDataModeFn({ tenantId, mode: m, req }),
+        rebuildFinanceProjections: rebuildFinanceProjectionsFn,
+        // Needed to roll the mode back if the post-switch rebuild fails.
+        getFinanceDataMode: ({ tenantId }) => getFinanceDataMode({ tenantId, req }),
+        eventStore: persistentEventStore,
+        storeProvider: createStoreProvider ? createStoreProvider() : null,
+        logger,
+      });
+      res.json({ status: 'success', data: { mode: updated } });
+    } catch (error) {
+      logger.error('[finance.v2] set data mode failed:', error);
       sendError(res, error);
     }
   });
@@ -442,7 +726,8 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         ? decodeAuditCursor(req.query.cursor, req.financeTenantId)
         : null;
 
-      const events = (await service.listAuditEvents(req.financeTenantId))
+      const isTestData = await resolveReadIsTestData(req);
+      const events = (await service.listAuditEvents(req.financeTenantId, isTestData))
         .filter((e) => (eventTypePrefix ? String(e.event_type).startsWith(eventTypePrefix) : true))
         .slice()
         .sort((a, b) => {
@@ -526,11 +811,13 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // no pagination. buildEvidencePack is pure/read-only.
   router.get('/evidence-packs', async (req, res) => {
     try {
+      const isTestData = await resolveReadIsTestData(req);
       const built = await buildEvidencePack(service.getEventStore(), {
         tenantId: req.financeTenantId,
         fromDate: req.query.from || null,
         toDate: req.query.to || null,
         targetId: req.query.target_id || null,
+        isTestData,
         generatedBy: { actor_id: req.user?.id || null, actor_type: buildActor(req).type },
       });
       res.json({

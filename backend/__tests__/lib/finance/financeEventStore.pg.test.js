@@ -72,14 +72,20 @@ function createFakePool() {
       }
 
       if (lower.includes('count(')) {
-        const n = pool.rows.filter((r) => r.tenant_id === params[0]).length;
-        return { rows: [{ count: n }], rowCount: 1 };
+        let counted = pool.rows.filter((r) => r.tenant_id === params[0]);
+        // Optional is_test_data filter (parameterized at $2 when present).
+        if (/is_test_data\s*=\s*\$/.test(lower)) {
+          counted = counted.filter((r) => r.is_test_data === params[1]);
+        }
+        return { rows: [{ count: counted.length }], rowCount: 1 };
       }
 
       // SELECT — tenant scope is always $1; optional equality filters follow.
       let result = pool.rows.filter((r) => r.tenant_id === params[0]);
       let pIdx = 1;
-      for (const col of ['event_type', 'aggregate_type', 'aggregate_id']) {
+      // is_test_data may appear among the parameterized equality filters
+      // (replay binds it at $2; query appends it after the other filters).
+      for (const col of ['event_type', 'aggregate_type', 'aggregate_id', 'is_test_data']) {
         if (new RegExp(`${col}\\s*=\\s*\\$`).test(lower)) {
           result = result.filter((r) => r[col] === params[pIdx]);
           pIdx += 1;
@@ -430,4 +436,117 @@ test('query filters by event_type', async () => {
   });
   assert.equal(invoiceEvents.length, 2);
   assert.ok(invoiceEvents.every((e) => e.event_type === 'finance.invoice.draft_created'));
+});
+
+// ── slice 6a: is_test_data partition ──────────────────────────────────────────
+
+test('append names is_test_data in the INSERT and passes the supplied value', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.append(validEvent({ is_test_data: true }));
+
+  const insertCall = pool.calls.find((c) => /insert into/i.test(c.text));
+  // is_test_data must be one of the named INSERT columns.
+  const colMatch = insertCall.text.match(/insert\s+into\s+[^(]+\(([^)]+)\)/i);
+  const cols = colMatch[1].split(',').map((c) => c.trim());
+  assert.ok(cols.includes('is_test_data'), 'INSERT column list must name is_test_data');
+  // And its parameter (positional) must carry the true value.
+  const paramIdx = cols.indexOf('is_test_data');
+  assert.equal(insertCall.params[paramIdx], true, 'is_test_data param must be true');
+  assert.equal(pool.rows[0].is_test_data, true, 'persisted row must carry is_test_data=true');
+});
+
+test('append defaults is_test_data to false when not supplied', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.append(validEvent());
+
+  const insertCall = pool.calls.find((c) => /insert into/i.test(c.text));
+  const colMatch = insertCall.text.match(/insert\s+into\s+[^(]+\(([^)]+)\)/i);
+  const cols = colMatch[1].split(',').map((c) => c.trim());
+  const paramIdx = cols.indexOf('is_test_data');
+  assert.equal(insertCall.params[paramIdx], false, 'is_test_data param must default to false');
+  assert.equal(pool.rows[0].is_test_data, false, 'persisted row must default is_test_data=false');
+});
+
+test('replay(t) without isTestData does NOT add an is_test_data filter (all events)', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.replay(TENANT_A);
+
+  const replayCall = pool.calls.find(
+    (c) => /select \* from/i.test(c.text) && /tenant_id = \$1/i.test(c.text),
+  );
+  assert.doesNotMatch(
+    replayCall.text,
+    /is_test_data/i,
+    'replay() with no mode arg must not filter by is_test_data',
+  );
+  assert.deepEqual(replayCall.params, [TENANT_A], 'only the tenant param is bound');
+});
+
+test('replay(t, true) adds a parameterized is_test_data = true filter', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.replay(TENANT_A, true);
+
+  const replayCall = pool.calls.find((c) => /select \* from/i.test(c.text));
+  assert.match(replayCall.text, /is_test_data\s*=\s*\$2/i, 'replay must add is_test_data = $2');
+  assert.deepEqual(replayCall.params, [TENANT_A, true], 'tenant + true are bound');
+});
+
+test('replay(t, false) adds a parameterized is_test_data = false filter', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.replay(TENANT_A, false);
+
+  const replayCall = pool.calls.find((c) => /select \* from/i.test(c.text));
+  assert.match(replayCall.text, /is_test_data\s*=\s*\$2/i, 'replay must add is_test_data = $2');
+  assert.deepEqual(replayCall.params, [TENANT_A, false], 'tenant + false are bound');
+});
+
+test('replay partitions rows by is_test_data', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.append(validEvent({ is_test_data: true }));
+  await store.append(validEvent({ is_test_data: true }));
+  await store.append(validEvent({ is_test_data: false }));
+
+  assert.equal((await store.replay(TENANT_A, true)).length, 2, 'two test events');
+  assert.equal((await store.replay(TENANT_A, false)).length, 1, 'one live event');
+  assert.equal((await store.replay(TENANT_A)).length, 3, 'no filter → all events');
+});
+
+test('query accepts is_test_data and adds a parameterized filter', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.append(validEvent({ is_test_data: true }));
+  await store.append(validEvent({ is_test_data: false }));
+
+  const testEvents = await store.query({ tenant_id: TENANT_A, is_test_data: true });
+  assert.equal(testEvents.length, 1, 'query filters to test events');
+  assert.ok(testEvents.every((e) => e.is_test_data === true));
+
+  const queryCall = pool.calls.find((c) => /is_test_data\s*=\s*\$/i.test(c.text));
+  assert.ok(queryCall, 'query must emit a parameterized is_test_data filter');
+});
+
+test('getCount(t, isTestData) filters by mode when supplied', async () => {
+  const pool = createFakePool();
+  const store = createFinancePgEventStore({ pool });
+
+  await store.append(validEvent({ is_test_data: true }));
+  await store.append(validEvent({ is_test_data: false }));
+  await store.append(validEvent({ is_test_data: false }));
+
+  assert.equal(await store.getCount(TENANT_A), 3, 'no mode arg → all events');
+  assert.equal(await store.getCount(TENANT_A, true), 1, 'test events');
+  assert.equal(await store.getCount(TENANT_A, false), 2, 'live events');
 });

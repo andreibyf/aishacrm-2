@@ -1,16 +1,16 @@
 /// <reference types="node" />
 /* global process */
 
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import { fileURLToPath } from "url";
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const isWindows = process.platform === "win32";
+const isWindows = process.platform === 'win32';
 // forks pool on Windows times out starting worker processes when 6 projects run
 // concurrently; vmForks uses Node VM context which starts significantly faster.
-const testPool = isWindows ? "vmForks" : "threads";
+const testPool = isWindows ? 'vmForks' : 'threads';
 const poolOptions = isWindows
   ? {
       vmForks: {
@@ -25,14 +25,14 @@ const poolOptions = isWindows
     };
 
 export const SUBSYSTEM_TAGS = [
-  "PLATFORM",
-  "CRM",
-  "AISHA_CHAT",
-  "CARE",
-  "WORKFLOWS",
-  "REPORTS",
-  "INTEGRATIONS",
-  "PERFORMANCE"
+  'PLATFORM',
+  'CRM',
+  'AISHA_CHAT',
+  'CARE',
+  'WORKFLOWS',
+  'REPORTS',
+  'INTEGRATIONS',
+  'PERFORMANCE',
 ] as const;
 
 // ─── Shared resolve config ────────────────────────────────────────────────────
@@ -41,17 +41,13 @@ export const SUBSYSTEM_TAGS = [
 // via CJS but Vite's SSR module runner resolves the 'module' export condition
 // which points to an ESM .modern.mjs file, causing "Unexpected token 'export'".
 const sharedAlias = {
-  "@": path.resolve(__dirname, "./src"),
-  "@reduxjs/toolkit": path.resolve(
-    __dirname,
-    "node_modules/@reduxjs/toolkit/dist/cjs/index.js"
-  ),
+  '@': path.resolve(__dirname, './src'),
+  '@reduxjs/toolkit': path.resolve(__dirname, 'node_modules/@reduxjs/toolkit/dist/cjs/index.js'),
 };
 
 const sharedResolve = {
   alias: sharedAlias,
 };
-
 
 // ─── Shared test env ──────────────────────────────────────────────────────────
 // NODE_ENV='test' is required so React loads the development build (act() only
@@ -230,6 +226,7 @@ export default defineConfig({
             'src/lib/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/api/__tests__/billing.test.{js,jsx,ts,tsx}',
             'src/api/__tests__/finance.test.{js,jsx,ts,tsx}',
+            'src/api/__tests__/financeWrites.test.{js,jsx,ts,tsx}',
             'src/components/finance/**/*.test.{js,jsx,ts,tsx}',
             'src/components/finance/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/__tests__/package-validation.test.js',

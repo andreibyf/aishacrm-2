@@ -48,7 +48,7 @@ afterEach(() => {
 // Build a persistent-mode app over a SHARED in-memory event store + projection
 // store provider. Returning the SAME provider instance from createStoreProvider
 // means the read adapter and the write runner advance/read the same live store.
-function buildPersistentApp({ user } = {}) {
+function buildPersistentApp({ user, dataMode = 'live', getFinanceDataMode } = {}) {
   const eventStore = createFinanceEventStore();
   const storeProvider = createMemoryProjectionStoreProvider();
 
@@ -71,6 +71,12 @@ function buildPersistentApp({ user } = {}) {
       isFinanceModuleEnabled: async () => true,
       eventStore,
       createStoreProvider: () => storeProvider,
+      // Slice 6b-1: runWrite now resolves the tenant data mode to thread the
+      // active partition into HYDRATE + the projection REBUILD. Inject it so the
+      // write path does NOT fall back to the real Supabase-backed resolver. The
+      // acceptance suite seeds default-live (is_test_data=false) events, so the
+      // default app builds in 'live' mode (isTestData=false).
+      getFinanceDataMode: getFinanceDataMode || (async () => dataMode),
     }),
   );
 
@@ -183,5 +189,163 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       `just-created draft ${createdId} should be visible via GET; got ${JSON.stringify(drafts)}`,
     );
     assert.equal(found.status, 'draft');
+  });
+
+  // Slice 6b-1 — WRITE-SIDE SEGREGATION. In TEST mode, HYDRATE replays only the
+  // test partition, so a test approval is visible (approvable) while a live
+  // approval is NOT (the bucket never sees it ⇒ 404). This proves the active
+  // data mode partitions the durable hydrate on the write path.
+  test('test mode: approves a TEST approval but a LIVE approval is invisible (404)', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'test' });
+
+    function seedApprovalRequested(approvalId, isTestData) {
+      eventStore.append(
+        createFinanceEventEnvelope({
+          tenantId: TENANT_ID,
+          eventType: 'finance.approval.requested',
+          aggregateType: 'approval',
+          aggregateId: approvalId,
+          actorId: 'requester',
+          actorType: 'human',
+          isTestData,
+          payload: {
+            approval: {
+              id: approvalId,
+              tenant_id: TENANT_ID,
+              target_type: 'journal_entry',
+              target_id: `j-${approvalId}`,
+              status: 'pending',
+              requested_by: 'requester',
+              requested_at: new Date().toISOString(),
+            },
+          },
+        }),
+      );
+    }
+
+    // Approval A is a TEST event; approval B is a LIVE event.
+    seedApprovalRequested('A', true);
+    seedApprovalRequested('B', false);
+
+    // In test mode, HYDRATE replays the test partition only ⇒ A is visible.
+    const resA = await request(app).post('/api/v2/finance/approvals/A/approve').send({});
+    assert.equal(
+      resA.status,
+      200,
+      `expected 200 approving TEST approval A, got ${resA.status}: ${JSON.stringify(resA.body)}`,
+    );
+    assert.equal(resA.body.data.approval.id, 'A');
+    assert.equal(resA.body.data.approval.status, 'approved');
+
+    // The LIVE approval B is NOT in the test partition ⇒ the hydrated bucket
+    // never sees it ⇒ approveFinanceAction 404s. This is the segregation proof:
+    // a test-mode write cannot touch live data.
+    const resB = await request(app).post('/api/v2/finance/approvals/B/approve').send({});
+    assert.equal(
+      resB.status,
+      404,
+      `expected 404 approving LIVE approval B in test mode, got ${resB.status}: ${JSON.stringify(
+        resB.body,
+      )}`,
+    );
+  });
+
+  // Slice 6 (Codex P1) — READ-SIDE SEGREGATION. /audit-events and /evidence-packs
+  // read the durable event stream DIRECTLY (not via the projection rebuild that
+  // segregates the other reads), so they must filter by the active mode's
+  // partition. Without the fix a `live` tenant receives dormant `test` events and
+  // a `test` tenant receives live events on exactly these two endpoints.
+  function seedAuditEvent(eventStore, { aggregateId, isTestData }) {
+    eventStore.append(
+      createFinanceEventEnvelope({
+        tenantId: TENANT_ID,
+        eventType: 'finance.journal.created',
+        aggregateType: 'journal_entry',
+        aggregateId,
+        actorId: 'requester',
+        actorType: 'human',
+        isTestData,
+        payload: { note: aggregateId },
+      }),
+    );
+  }
+
+  test('test mode: GET /audit-events returns only TEST events (no live leak) [Codex P1]', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'test' });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-test', isTestData: true });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-live', isTestData: false });
+
+    const res = await request(app).get('/api/v2/finance/audit-events');
+    assert.equal(res.status, 200);
+    const aggIds = res.body.data.events.map((e) => e.aggregate_id);
+    assert.ok(aggIds.includes('evt-test'), 'test event present in test mode');
+    assert.ok(!aggIds.includes('evt-live'), 'live event must NOT leak into test mode');
+  });
+
+  test('live mode: GET /audit-events returns only LIVE events (no test leak) [Codex P1]', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'live' });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-test', isTestData: true });
+    seedAuditEvent(eventStore, { aggregateId: 'evt-live', isTestData: false });
+
+    const res = await request(app).get('/api/v2/finance/audit-events');
+    assert.equal(res.status, 200);
+    const aggIds = res.body.data.events.map((e) => e.aggregate_id);
+    assert.ok(aggIds.includes('evt-live'), 'live event present in live mode');
+    assert.ok(!aggIds.includes('evt-test'), 'dormant test event must NOT leak into live mode');
+  });
+
+  test('GET /evidence-packs counts only the active-mode partition [Codex P1]', async () => {
+    // Same durable stream (2 test + 1 live), built once in test mode and once in
+    // live mode. The pack must reflect only the active partition.
+    const testApp = buildPersistentApp({ dataMode: 'test' });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-test-1', isTestData: true });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-test-2', isTestData: true });
+    seedAuditEvent(testApp.eventStore, { aggregateId: 'p-live-1', isTestData: false });
+    const testRes = await request(testApp.app).get('/api/v2/finance/evidence-packs');
+    assert.equal(testRes.status, 200);
+    assert.equal(
+      testRes.body.data.pack.artifact_count,
+      2,
+      'test-mode pack counts only the 2 test events',
+    );
+
+    const liveApp = buildPersistentApp({ dataMode: 'live' });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-test-1', isTestData: true });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-test-2', isTestData: true });
+    seedAuditEvent(liveApp.eventStore, { aggregateId: 'p-live-1', isTestData: false });
+    const liveRes = await request(liveApp.app).get('/api/v2/finance/evidence-packs');
+    assert.equal(liveRes.status, 200);
+    assert.equal(
+      liveRes.body.data.pack.artifact_count,
+      1,
+      'live-mode pack counts only the 1 live event',
+    );
+  });
+
+  // Codex PR #634 P1 — a persistent write FAILS CLOSED when the tenant's Test/Live
+  // mode cannot be resolved, rather than silently stamping the wrong partition.
+  test('a mutating write is refused (503) when the data mode cannot be resolved', async () => {
+    const { app } = buildPersistentApp({
+      getFinanceDataMode: async () => {
+        throw new Error('supabase lookup failed');
+      },
+    });
+
+    const res = await request(app)
+      .post('/api/v2/finance/journal-drafts')
+      .send({
+        lines: [
+          { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
+          {
+            account_name: 'Revenue',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: 1000,
+          },
+        ],
+      });
+
+    assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
   });
 });

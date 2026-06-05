@@ -378,6 +378,40 @@ describe('finance API client -- API gap registry (design freeze §8.2)', () => {
   });
 });
 
+describe('finance API client -- updateFinanceDataMode (the one mutation)', () => {
+  it('PUTs /settings/data-mode with the mode body + tenant header and unwraps data', async () => {
+    const fetchMock = mockFetch({ body: { status: 'success', data: { mode: 'live' } } });
+    const result = await finance.updateFinanceDataMode(TENANT_ID, 'live');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BACKEND}/api/v2/finance/settings/data-mode`);
+    expect(init.method).toBe('PUT');
+    expect(init.credentials).toBe('include');
+    expect(init.headers['x-tenant-id']).toBe(TENANT_ID);
+    expect(init.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body)).toEqual({ mode: 'live' });
+    expect(result).toEqual({ mode: 'live' });
+  });
+
+  it('requires a tenant id client-side', async () => {
+    await expect(finance.updateFinanceDataMode(undefined, 'live')).rejects.toMatchObject({
+      code: 'CLIENT_MISSING_TENANT',
+    });
+  });
+
+  it('propagates a backend error (e.g. 403 for a non-superadmin)', async () => {
+    mockFetch({
+      ok: false,
+      status: 403,
+      body: { code: 'FINANCE_DATA_MODE_FORBIDDEN', message: 'nope' },
+    });
+    await expect(finance.updateFinanceDataMode(TENANT_ID, 'live')).rejects.toMatchObject({
+      status: 403,
+      code: 'FINANCE_DATA_MODE_FORBIDDEN',
+    });
+  });
+});
+
 describe('finance API client -- read-only safety (no mutating exports)', () => {
   it('exposes only GET wrappers + the gap registry + getFinanceApiGap helper', () => {
     const exportNames = Object.keys(finance);
@@ -399,16 +433,21 @@ describe('finance API client -- read-only safety (no mutating exports)', () => {
       'getEvidencePack',
       'FINANCE_API_GAPS',
       'getFinanceApiGap',
+      // Test/Live data-mode feature — the ONE intentional mutation in this
+      // otherwise GET-only module (superadmin-gated server-side).
+      'updateFinanceDataMode',
     ];
     expect(new Set(exportNames)).toEqual(new Set(allowedExports));
   });
 
-  it('does not export any function whose name suggests mutation', () => {
+  it('exposes only GET reads plus the single intentional Test/Live data-mode setter', () => {
     const mutatingPrefixes =
-      /^(create|update|delete|patch|post|reverse|approve|reject|retry|cancel|trigger|sync|enable|disable|activate|deactivate|set)/i;
+      /^(create|delete|patch|post|reverse|approve|reject|retry|cancel|trigger|sync|enable|disable|activate|deactivate)/i;
     for (const name of Object.keys(finance)) {
       // Allow the read-only GAPS table and the gap-lookup helper.
       if (name === 'FINANCE_API_GAPS' || name === 'getFinanceApiGap') continue;
+      // The ONE sanctioned mutation: the superadmin Test/Live data-mode setter.
+      if (name === 'updateFinanceDataMode') continue;
       expect(name).toMatch(/^get/i);
       expect(name).not.toMatch(mutatingPrefixes);
     }

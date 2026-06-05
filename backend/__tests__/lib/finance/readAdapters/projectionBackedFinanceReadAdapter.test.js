@@ -150,6 +150,28 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     assert.ok(status.persistence_lag.projections['finance.projection.invoices']);
   });
 
+  test('runtime/status partitions the audit count by the active mode (Codex PR #634 P2)', async () => {
+    const w = workers();
+    const storeProvider = await seededProvider(w);
+    const countCalls = [];
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: {
+        count: async (tenantId, isTestData) => {
+          countCalls.push({ tenantId, isTestData });
+          return 3;
+        },
+      },
+      workers: w,
+    });
+
+    const status = await adapter.getRuntimeStatus(T, { isTestData: true });
+    // The audit count is scoped to the active (test) partition, not all rows.
+    assert.deepEqual(countCalls, [{ tenantId: T, isTestData: true }]);
+    assert.equal(status.counts.audit_events, 3);
+    assert.equal(status.persistence_lag.audit_events_total, 3);
+  });
+
   test('no silent fallback: a projection-store read failure throws FinanceReadDegradedError', async () => {
     const w = workers();
     const failingProvider = {
