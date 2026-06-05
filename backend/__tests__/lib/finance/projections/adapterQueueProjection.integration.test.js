@@ -173,7 +173,7 @@ function adapterEventsOnly(events) {
 // Step-by-step lifecycle proof
 // ---------------------------------------------------------------------------
 
-test('LIFECYCLE: simulateDealWon writes draft adapter_job + emits NO sync_queued; projection has zero items', async () => {
+test('LIFECYCLE: simulateDealWon writes draft adapter_job + emits NO sync_queued; projection materializes it in the draft bucket', async () => {
   const ctx = wireSlice2Chain();
 
   const sim = await ctx.service.simulateDealWon({
@@ -185,7 +185,8 @@ test('LIFECYCLE: simulateDealWon writes draft adapter_job + emits NO sync_queued
   assert.equal(sim.adapter_job.status, 'draft', 'pre-approval state per §4.1');
 
   // simulateDealWon's emitted events: finance.draft.created (or similar) +
-  // finance.approval.requested. Critically, NO finance.adapter.* event yet.
+  // finance.approval.requested (which carries the draft adapter_job snapshot).
+  // Critically, NO finance.adapter.* event yet.
   const events = ctx.eventStore.replay(TENANT_ID);
   const adapterEvents = adapterEventsOnly(events);
   assert.equal(
@@ -194,12 +195,16 @@ test('LIFECYCLE: simulateDealWon writes draft adapter_job + emits NO sync_queued
     'simulateDealWon must emit no finance.adapter.* events at draft creation',
   );
 
-  // Dispatch the events that ARE there — none consumed by adapter_queue, so
-  // the projection stays empty (the runner skips non-consumed events
-  // silently).
+  // Dispatch the events that ARE there. Task 8b: adapter_queue now consumes
+  // finance.approval.requested for its draft adapter_job snapshot, so the draft
+  // materializes into the `draft` bucket BEFORE any sync event — matching the
+  // in-memory domain service's listAdapterJobs. The non-draft buckets stay empty.
   await ctx.dispatchPending();
 
   const buckets = ctx.bucketsOf();
+  assert.equal(buckets.draft.length, 1, 'draft adapter_job materialized in the draft bucket');
+  assert.equal(buckets.draft[0].adapter_job_id, sim.adapter_job.id);
+  assert.equal(buckets.draft[0].status, 'draft');
   assert.equal(buckets.queued.length, 0);
   assert.equal(buckets.running.length, 0);
   assert.equal(buckets.failed.length, 0);
@@ -214,7 +219,11 @@ test('LIFECYCLE: approveFinanceAction emits sync_queued via promoter; projection
     actor: { id: 'user-1', type: 'human' },
     payload: { provider: 'erpnext', amount_cents: 12345 },
   });
-  await ctx.dispatchPending(); // drain simulateDealWon's non-adapter events
+  await ctx.dispatchPending(); // drain simulateDealWon's events (incl. the draft)
+
+  // Task 8b: the draft adapter_job already materialized from
+  // finance.approval.requested.
+  assert.equal(ctx.bucketsOf().draft.length, 1, 'draft materialized before approval');
 
   // Approve — the promoter in approveFinanceAction emits exactly one
   // sync_queued event per linked adapter_job.
@@ -249,6 +258,7 @@ test('LIFECYCLE: approveFinanceAction emits sync_queued via promoter; projection
   assert.equal(buckets.queued[0].aggregate_type, 'journal_entry');
   assert.equal(buckets.queued[0].operation, 'push_draft');
   assert.equal(buckets.queued[0].mode, 'draft_only');
+  assert.equal(buckets.draft.length, 0, 'draft → queued transition left no duplicate in draft');
   assert.equal(buckets.running.length, 0);
   assert.equal(buckets.failed.length, 0);
   assert.equal(buckets.completed.length, 0);
@@ -628,17 +638,17 @@ test('SAFETY: with FINANCE_PROVIDER_WRITES_ENABLED=false (default), processor re
 });
 
 // ---------------------------------------------------------------------------
-// Projection scope check — only consumes canonical finance.adapter.sync_*
-// (other event types are silently skipped by the runner per the dispatch
-// filter, NOT degraded).
+// Projection scope check — consumes the canonical finance.adapter.sync_* events
+// plus finance.approval.requested (Task 8b: for its draft adapter_job snapshot).
+// Other event types are silently skipped by the runner per the dispatch filter,
+// NOT degraded.
 // ---------------------------------------------------------------------------
 
-test('PROJECTION SCOPE: non-adapter events flowing through the runner are ignored by adapter_queue', async () => {
+test('PROJECTION SCOPE: a non-consumed event flowing through the runner is ignored by adapter_queue', async () => {
   const ctx = wireSlice2Chain();
 
-  // simulateDealWon emits non-adapter events (e.g., finance.approval.requested).
-  // The runner's dispatch filter (workerConsumes) skips events whose
-  // event_type is NOT in CONSUMED_EVENTS for this worker.
+  // simulateDealWon emits finance.approval.requested, which adapter_queue NOW
+  // consumes (Task 8b) — it materializes the draft adapter_job.
   await ctx.service.simulateDealWon({
     tenantId: TENANT_ID,
     actor: { id: 'user-1', type: 'human' },
@@ -646,7 +656,8 @@ test('PROJECTION SCOPE: non-adapter events flowing through the runner are ignore
   });
   await ctx.dispatchPending();
 
-  const buckets = ctx.bucketsOf();
+  let buckets = ctx.bucketsOf();
+  assert.equal(buckets.draft.length, 1, 'finance.approval.requested materialized the draft');
   assert.equal(buckets.queued.length, 0);
   assert.equal(buckets.completed.length, 0);
   assert.equal(buckets.failed.length, 0);
@@ -655,4 +666,22 @@ test('PROJECTION SCOPE: non-adapter events flowing through the runner are ignore
     0,
     'running bucket stays empty — no in-flight event canonicalized yet',
   );
+
+  // A genuinely non-consumed event (finance.journal.posted is NOT in this
+  // worker's CONSUMED_EVENTS) is skipped by the runner's dispatch filter,
+  // leaving the read model unchanged — never degraded.
+  await ctx.runner.dispatch({
+    id: 'jp-scope-1',
+    tenant_id: TENANT_ID,
+    event_type: 'finance.journal.posted',
+    created_at: '2026-05-21T05:00:00.000Z',
+    payload: {},
+  });
+
+  buckets = ctx.bucketsOf();
+  assert.equal(buckets.draft.length, 1, 'non-consumed event did not touch the read model');
+  assert.equal(buckets.queued.length, 0);
+  assert.equal(buckets.completed.length, 0);
+  assert.equal(buckets.failed.length, 0);
+  assert.equal(buckets.running.length, 0);
 });

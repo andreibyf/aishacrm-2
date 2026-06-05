@@ -46,17 +46,29 @@ function positionOf(event) {
 }
 
 /**
- * Compare two events for replay sort. Adds the in-memory store's `_seq`
- * insertion index as an internal tie-break between events sharing the exact
- * same `created_at` — preserves append order for fixtures and production logs
- * that bunch many events into the same millisecond. The `_seq` tie-break is
- * runner-internal; it never enters the persisted cursor (see `positionOf`).
+ * Compare two events for replay sort. Uses a monotonic APPEND-order index as the
+ * tie-break between events sharing the exact same `created_at` — preserving the
+ * order a single command wrote dependent events (draft before approval) even when
+ * many land in the same millisecond. Two stores provide that index: the in-memory
+ * store stamps `_seq` (a number), and the Postgres store provides the `seq`
+ * identity column (Codex PR #633 — pg returns `bigint` as a string, so coerce).
+ * Without consulting `seq`, the runner re-sorted PG-replayed rows by the random
+ * `id` UUID and discarded the store's `(created_at, seq)` ordering. The tie-break
+ * is runner-internal; it never enters the persisted cursor (see `positionOf`).
  */
+function appendIndexOf(event) {
+  if (Number.isFinite(event?._seq)) return event._seq;
+  const seq = Number(event?.seq);
+  return Number.isFinite(seq) ? seq : null;
+}
+
 function compareEvents(a, b) {
   if (a.created_at < b.created_at) return -1;
   if (a.created_at > b.created_at) return 1;
-  if (Number.isFinite(a?._seq) && Number.isFinite(b?._seq) && a._seq !== b._seq) {
-    return a._seq - b._seq;
+  const aSeq = appendIndexOf(a);
+  const bSeq = appendIndexOf(b);
+  if (aSeq !== null && bSeq !== null && aSeq !== bSeq) {
+    return aSeq - bSeq;
   }
   if (a.id < b.id) return -1;
   if (a.id > b.id) return 1;

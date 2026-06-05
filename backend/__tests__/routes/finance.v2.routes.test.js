@@ -263,23 +263,19 @@ describe('finance.v2 routes', () => {
       }
     });
 
-    // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is not yet
-    // activatable. Even WITH a pool, ENABLE_FINANCE_PERSISTENT_EVENTS=true refuses
-    // to mount, because the service-backed read/mutation endpoints
-    // (/journal-drafts, /approvals, /adapter-jobs, /draft-invoices, and the
-    // approve/reverse/update mutations) still read the in-memory buckets, which
-    // start empty per process — a PG-persisted record would be visible via the
-    // projection-backed reads but 404/empty via these. The projection-backed read
-    // adapter + pg event store still SHIP and are unit-tested (see
-    // finance.v2.adapterSelection.test.js); they are simply not activated here.
-    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (even with a pool)', () => {
+    // Phase 4-1 Task 8 — ACTIVATION: persistent mode is now wired end-to-end.
+    // The boot guard is removed; with a Postgres pool present (so the
+    // projection-backed reads + persistent write runner have a way to reach
+    // Postgres), ENABLE_FINANCE_PERSISTENT_EVENTS=true MOUNTS without throwing.
+    // The durable read/write behaviour is exercised in
+    // finance.v2.persistentWrites.test.js with injected in-memory doubles.
+    test('mounts when ENABLE_FINANCE_PERSISTENT_EVENTS=true and a pool is present', () => {
       const pool = buildSpyPool();
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
-        assert.throws(
-          () => createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
-          /not yet supported|ENABLE_FINANCE_PERSISTENT_EVENTS/i,
+        assert.doesNotThrow(() =>
+          createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
         );
       } finally {
         if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;

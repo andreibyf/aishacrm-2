@@ -6,6 +6,7 @@ import { createLedgerProjectionWorker } from '../../../../lib/finance/projection
 import { createApprovalQueueProjectionWorker } from '../../../../lib/finance/projections/approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from '../../../../lib/finance/projections/adapterQueueProjection.js';
 import { createJournalEntriesProjectionWorker } from '../../../../lib/finance/projections/journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from '../../../../lib/finance/projections/invoiceProjection.js';
 import {
   createProjectionBackedFinanceReadAdapter,
   FinanceReadDegradedError,
@@ -19,6 +20,7 @@ function workers() {
     journalEntries: createJournalEntriesProjectionWorker(),
     approvalQueue: createApprovalQueueProjectionWorker(),
     adapterQueue: createAdapterQueueProjectionWorker(),
+    invoices: createInvoiceProjectionWorker(),
   };
 }
 
@@ -75,8 +77,24 @@ async function seededProvider(w) {
       },
     },
   };
+  const invoiceDraftCreated = {
+    id: 'evt_inv_dc',
+    tenant_id: T,
+    event_type: 'finance.invoice.draft_created',
+    created_at: '2026-06-01T00:00:03Z',
+    payload: {
+      invoice: {
+        id: 'inv1',
+        tenant_id: T,
+        status: 'draft',
+        total_cents: 1000,
+        currency: 'usd',
+      },
+    },
+  };
   await runner.dispatch(draftCreated);
   await runner.dispatch(approvalRequested);
+  await runner.dispatch(invoiceDraftCreated);
   return storeProvider;
 }
 
@@ -125,9 +143,11 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     assert.equal(status.runtime.persistence, 'persistent');
     assert.equal(status.runtime.mode, 'persistent');
     assert.equal(status.counts.journal_entries, 1);
+    assert.equal(status.counts.invoices, 1);
     assert.equal(status.counts.audit_events, 2);
     assert.equal(status.persistence_lag.audit_events_total, 2);
     assert.ok(status.persistence_lag.projections['finance.projection.journal_entries']);
+    assert.ok(status.persistence_lag.projections['finance.projection.invoices']);
   });
 
   test('no silent fallback: a projection-store read failure throws FinanceReadDegradedError', async () => {
@@ -190,6 +210,95 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     await assert.rejects(() => adapter.getRuntimeStatus(T), FinanceReadDegradedError);
   });
 
+  // Fix A: exercise listApprovals' rejected/cancelled reconstruction branches.
+  // The parity test can only produce `approved` (the domain service only exposes
+  // approveFinanceAction), so dispatch the approval lifecycle directly to
+  // materialize one resolved approval per terminal status and assert the adapter
+  // stamps the correct status-specific decision fields.
+  test('listApprovals reconstructs approved / rejected / cancelled decision fields per status', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    // A finance.approval.requested event for the given approval id.
+    const requested = (approvalId, targetId) => ({
+      id: `evt_req_${approvalId}`,
+      tenant_id: T,
+      event_type: 'finance.approval.requested',
+      created_at: '2026-06-01T00:00:01Z',
+      actor_id: 'u_requester',
+      payload: {
+        approval: {
+          id: approvalId,
+          tenant_id: T,
+          status: 'pending',
+          target_type: 'journal_entry',
+          target_id: targetId,
+          requested_by: 'u_requester',
+          requested_at: '2026-06-01T00:00:01Z',
+          created_at: '2026-06-01T00:00:01Z',
+        },
+      },
+    });
+    // A resolution event (approved/rejected/cancelled). The projection stamps
+    // resolved_by from actor_id and resolved_at from created_at.
+    const resolved = (eventType, approvalId, actorId) => ({
+      id: `evt_res_${approvalId}`,
+      tenant_id: T,
+      event_type: eventType,
+      created_at: '2026-06-01T00:01:00Z',
+      actor_id: actorId,
+      payload: { approval: { id: approvalId } },
+    });
+
+    await runner.dispatch(requested('appr_ok', 'j_ok'));
+    await runner.dispatch(requested('appr_rej', 'j_rej'));
+    await runner.dispatch(requested('appr_can', 'j_can'));
+    await runner.dispatch(resolved('finance.approval.approved', 'appr_ok', 'u_boss'));
+    await runner.dispatch(resolved('finance.approval.rejected', 'appr_rej', 'u_boss'));
+    await runner.dispatch(resolved('finance.approval.cancelled', 'appr_can', 'u_alice'));
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const approvals = await adapter.listApprovals(T);
+    const byId = Object.fromEntries(approvals.map((a) => [a.id, a]));
+
+    const approved = byId.appr_ok;
+    assert.equal(approved.status, 'approved');
+    assert.equal(approved.approved_by, 'u_boss');
+    assert.equal(approved.approved_at, '2026-06-01T00:01:00Z');
+    assert.equal(approved.rejected_by, undefined);
+    assert.equal(approved.cancelled_by, undefined);
+    assert.equal(approved.requested_by, 'u_requester');
+    assert.equal(approved.requested_at, '2026-06-01T00:00:01Z');
+
+    const rejected = byId.appr_rej;
+    assert.equal(rejected.status, 'rejected');
+    assert.equal(rejected.rejected_by, 'u_boss');
+    assert.equal(rejected.rejected_at, '2026-06-01T00:01:00Z');
+    assert.equal(rejected.approved_by, undefined);
+    assert.equal(rejected.cancelled_by, undefined);
+    assert.equal(rejected.requested_by, 'u_requester');
+    assert.equal(rejected.requested_at, '2026-06-01T00:00:01Z');
+
+    const cancelled = byId.appr_can;
+    assert.equal(cancelled.status, 'cancelled');
+    assert.equal(cancelled.cancelled_by, 'u_alice');
+    assert.equal(cancelled.cancelled_at, '2026-06-01T00:01:00Z');
+    assert.equal(cancelled.approved_by, undefined);
+    assert.equal(cancelled.rejected_by, undefined);
+    assert.equal(cancelled.requested_by, 'u_requester');
+    assert.equal(cancelled.requested_at, '2026-06-01T00:00:01Z');
+  });
+
   // #2: the route must not serve a snapshot cached for the router lifetime — the
   // adapter builds a FRESH store provider per request.
   test('builds a fresh store provider per request (no cached-for-lifetime snapshot)', async () => {
@@ -208,5 +317,99 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     await adapter.listJournalEntries(T);
     await adapter.getLedger(T);
     assert.equal(providerBuilds, 3, 'a fresh provider is built for every read request');
+  });
+
+  // Codex PR #632-followup P2: a FAILED adapter job's error text must surface on
+  // /adapter-jobs in persistent mode. The route serializer reads `last_error`,
+  // but the adapter_queue projection stores it as `error_message`; the adapter
+  // must map it back to `last_error` or the failure text is silently dropped.
+  test('listAdapterJobs surfaces a failed job error as last_error (route contract)', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    await runner.dispatch({
+      id: 'evt_sync_failed',
+      tenant_id: T,
+      event_type: 'finance.adapter.sync_failed',
+      created_at: '2026-06-01T00:05:00Z',
+      payload: {
+        adapter_job: {
+          id: 'aj_failed',
+          tenant_id: T,
+          provider: 'quickbooks',
+          operation: 'push_draft',
+          mode: 'draft_only',
+          status: 'failed',
+          attempts: 2,
+          error_message: 'provider sync timed out',
+        },
+      },
+    });
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const [job] = await adapter.listAdapterJobs(T);
+    assert.equal(job.id, 'aj_failed');
+    assert.equal(job.status, 'failed');
+    // The error must land on `last_error` (route-consumed), not be dropped.
+    assert.equal(job.last_error, 'provider sync timed out');
+    assert.equal('error_message' in job, false, 'reconstruct to last_error, not error_message');
+  });
+
+  test('listAdapterJobs surfaces next_attempt_at for a retryable (queued) job (Codex PR #633 P2)', async () => {
+    const w = workers();
+    const storeProvider = createMemoryProjectionStoreProvider();
+    const runner = createProjectionRunner({
+      eventStore: { replay: async () => [] },
+      storeProvider,
+    });
+    for (const worker of Object.values(w)) runner.register(worker);
+
+    // A TRANSIENT failure: the projection keeps the job queued with a backoff ETA.
+    await runner.dispatch({
+      id: 'evt_sync_failed_transient',
+      tenant_id: T,
+      event_type: 'finance.adapter.sync_failed',
+      created_at: '2026-06-01T00:05:00Z',
+      payload: {
+        permanent: false,
+        next_attempt_at: '2026-06-01T00:10:00Z',
+        error: { message: 'provider 503', code: null },
+        adapter_job: {
+          id: 'aj_retry',
+          tenant_id: T,
+          provider: 'quickbooks',
+          operation: 'push_draft',
+          mode: 'draft_only',
+          status: 'failed',
+          attempts: 1,
+        },
+      },
+    });
+
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => storeProvider,
+      auditEventsReader: { count: async () => 0 },
+      workers: w,
+    });
+
+    const [job] = await adapter.listAdapterJobs(T);
+    assert.equal(job.id, 'aj_retry');
+    assert.equal(job.status, 'queued', 'a transient failure stays queued, not failed');
+    assert.equal(
+      job.next_attempt_at,
+      '2026-06-01T00:10:00Z',
+      'the backoff ETA is surfaced, not dropped to null',
+    );
+    assert.equal(job.last_error, 'provider 503');
   });
 });

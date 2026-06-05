@@ -51,6 +51,18 @@ export function createInMemoryFinanceReadAdapter({ service }) {
       return service.listJournalEntries(tenantId);
     },
 
+    async listInvoices(tenantId) {
+      return service.listInvoices(tenantId);
+    },
+
+    async listApprovals(tenantId) {
+      return service.listApprovals(tenantId);
+    },
+
+    async listAdapterJobs(tenantId) {
+      return service.listAdapterJobs(tenantId);
+    },
+
     async getLedger(tenantId) {
       return service.getLedger(tenantId);
     },

@@ -15,9 +15,11 @@
  *   worker      = execution
  *   event store = facts
  *
- * Scope (2B-10): consumes the three canonical adapter sync events and
- * maintains a tenant-scoped queued/running/failed/completed queue in a memory
- * ProjectionStore. It is NOT a scheduler, worker, retry engine, or provider
+ * Scope (2B-10, Phase 4-1): consumes the three canonical adapter sync events
+ * plus `finance.approval.requested` (for its optional draft adapter_job
+ * snapshot) and maintains a tenant-scoped draft/queued/running/failed/completed
+ * queue in a memory ProjectionStore. It is NOT a scheduler, worker, retry
+ * engine, or provider
  * client. No DB persistence, no HTTP routes, no worker loops. The full §7 read
  * model (`in_flight`/`running` source events, `totals`, `meta`, `as_of`,
  * `external_id`, the `finance.approval.approved` draft→queued rule, and query
@@ -27,6 +29,15 @@
 export const ADAPTER_QUEUE_PROJECTION_NAME = 'finance.projection.adapter_queue';
 
 const CONSUMED_EVENTS = [
+  // `finance.approval.requested` carries a `draft` adapter_job snapshot (see
+  // `simulateDealWon` in financeDomainService.js). Consuming it materializes the
+  // draft into the queue BEFORE any sync event exists, so persistent-mode
+  // /adapter-jobs and the runtime adapter_jobs count match the in-memory domain
+  // service. A later `finance.adapter.sync_queued` for the SAME adapter_job_id
+  // overwrites the keyed record (draft → queued); getProjection re-buckets by
+  // current status, so the job moves out of `draft` and into `queued` with no
+  // duplicate.
+  'finance.approval.requested',
   'finance.adapter.sync_queued',
   'finance.adapter.sync_succeeded',
   'finance.adapter.sync_failed',
@@ -42,12 +53,29 @@ const CONSUMED_EVENTS = [
  */
 
 // Status stamped on the queue item, derived from the event type — the
-// authoritative signal of what happened (never trusted from the payload).
+// authoritative signal of what happened (never trusted from the snapshot).
 const EVENT_STATUS = {
   'finance.adapter.sync_queued': 'queued',
   'finance.adapter.sync_succeeded': 'succeeded',
   'finance.adapter.sync_failed': 'failed',
 };
+
+// Resolve the queue-item status for an event. For most events the status is the
+// pure event-type mapping above. The one refinement is `sync_failed`: a TRANSIENT
+// (retryable) failure does NOT terminate the job — the processor writes the row
+// back to `status: 'queued'` with a `next_attempt_at` and emits NO follow-up
+// `sync_queued` (adapterJobProcessor.js). The event itself carries the
+// authoritative classification in `payload.permanent`, so projecting every
+// sync_failed as terminal `failed` would hide still-retryable jobs from
+// `/adapter-jobs?status=queued`. Only a PERMANENT failure is terminal; a transient
+// one is projected back to `queued`. (Absent flag ⇒ terminal — the conservative,
+// back-compatible default for any pre-flag/synthetic event.)
+function statusForEvent(event) {
+  if (event.event_type === 'finance.adapter.sync_failed') {
+    return event.payload && event.payload.permanent === false ? 'queued' : 'failed';
+  }
+  return EVENT_STATUS[event.event_type];
+}
 
 /**
  * Maps an adapter-job status to its read-model bucket. `running` has no
@@ -56,6 +84,7 @@ const EVENT_STATUS = {
  * when an in-flight event is canonicalized later.
  */
 const STATUS_BUCKET = {
+  draft: 'draft',
   queued: 'queued',
   running: 'running',
   succeeded: 'completed',
@@ -88,21 +117,16 @@ function readAdapterJob(event) {
 }
 
 /**
- * Apply one adapter sync event to the store. The store is keyed by
- * `adapter_job_id`, so there is structurally exactly one record per adapter
- * job within a tenant-scoped projection — the "one active queue item per
- * adapter_job_id per tenant" invariant holds by construction.
+ * Upsert one adapter-job snapshot into the store under `status`. The store is
+ * keyed by `adapter_job_id`, so there is structurally exactly one record per
+ * adapter job within a tenant-scoped projection — the "one active queue item
+ * per adapter_job_id per tenant" invariant holds by construction.
  *
- * Every adapter event carries the full `payload.adapter_job` snapshot, so each
- * event is self-describing: the handler is an unconditional upsert ("creates
- * or updates"). `sync_queued` after `sync_failed` is the legitimate retry
- * re-queue path. Written immutably — a fresh record is always stored.
+ * Written immutably — a fresh record is always stored — so this is idempotent
+ * under double-apply (set-by-id with an event-derived status): re-applying the
+ * same event yields an identical record.
  */
-function applyAdapterEvent(event, store) {
-  const job = readAdapterJob(event);
-  // CONSUMED_EVENTS gates dispatch and replay, so event_type is always one of
-  // the three consumed sync events here.
-  const status = EVENT_STATUS[event.event_type];
+function upsertAdapterJob(event, job, status, store) {
   store.set(job.id, {
     adapter_job_id: job.id,
     // The runner scopes the store by the event envelope tenant_id, so the
@@ -116,12 +140,60 @@ function applyAdapterEvent(event, store) {
     mode: job.mode ?? null,
     status,
     attempts: job.attempts ?? 0,
-    error_message: job.error_message ?? null,
+    // Transient sync_failed re-queues the job with a backoff; carry the
+    // authoritative `payload.next_attempt_at` so the read model (and
+    // `/adapter-jobs`) shows when a queued retry will next run.
+    next_attempt_at:
+      (event.payload && event.payload.next_attempt_at) ?? job.next_attempt_at ?? null,
+    // For a real `sync_failed`, the provider error is at `payload.error.message`
+    // (buildSyncFailedEvent); the adapter_job snapshot is just `{ ...job, status }`
+    // and does NOT carry it. Prefer the payload error so `/adapter-jobs` surfaces
+    // the actual failure instead of null; fall back to the snapshot field.
+    error_message:
+      (event.payload && event.payload.error && event.payload.error.message) ??
+      job.error_message ??
+      null,
     created_at: job.created_at ?? event.created_at ?? null,
     updated_at: job.updated_at ?? event.created_at ?? null,
     correlation_id: event.correlation_id ?? null,
     causation_id: event.causation_id ?? null,
   });
+}
+
+/**
+ * Apply one consumed event to the store.
+ *
+ * `finance.approval.requested` carries an OPTIONAL `payload.adapter_job` (the
+ * `simulateDealWon` draft job). It is NOT an adapter event — historical and
+ * non-adapter approval.requested events legitimately have no adapter_job — so
+ * the missing case is SKIPPED, never thrown. When present, the draft is upsert
+ * with status `'draft'`. A later `finance.adapter.sync_queued` for the SAME id
+ * overwrites this record (draft → queued); getProjection re-buckets by current
+ * status, so the job moves cleanly out of `draft` into `queued`.
+ *
+ * For the three adapter sync events, every event carries the full
+ * `payload.adapter_job` snapshot (self-describing), and a missing snapshot is a
+ * malformed adapter event — `readAdapterJob` throws, which the runtime surfaces
+ * as a degraded projection. The status is derived from the event type via
+ * `statusForEvent` (never from the snapshot's `status` field), with one
+ * refinement: a TRANSIENT `sync_failed` (`payload.permanent === false`) projects
+ * back to `queued`, because the processor re-queues retryable jobs and emits no
+ * follow-up `sync_queued`. A `sync_queued` after a permanent `sync_failed`
+ * remains the legitimate retry re-queue path.
+ */
+function applyAdapterEvent(event, store) {
+  if (event.event_type === 'finance.approval.requested') {
+    const job = event && event.payload && event.payload.adapter_job;
+    // GUARD — approval.requested without an adapter_job (historical / non-draft
+    // approvals) is a no-op, not a degraded projection.
+    if (!job || !job.id) return;
+    upsertAdapterJob(event, job, 'draft', store);
+    return;
+  }
+  // CONSUMED_EVENTS gates dispatch and replay, so event_type is one of the
+  // three consumed sync events here.
+  const job = readAdapterJob(event);
+  upsertAdapterJob(event, job, statusForEvent(event), store);
 }
 
 /** Project a stored record into a read-model queue item (a fresh object). */
@@ -136,6 +208,7 @@ function toQueueItem(record) {
     mode: record.mode,
     status: record.status,
     attempts: record.attempts,
+    next_attempt_at: record.next_attempt_at ?? null,
     error_message: record.error_message,
     created_at: record.created_at,
     updated_at: record.updated_at,
@@ -184,7 +257,7 @@ export function createAdapterQueueProjectionWorker() {
     },
 
     getProjection(_tenantId, _opts, store) {
-      const buckets = { queued: [], running: [], failed: [], completed: [] };
+      const buckets = { draft: [], queued: [], running: [], failed: [], completed: [] };
       for (const key of store.keys()) {
         const record = store.get(key);
         const bucket = STATUS_BUCKET[record.status];

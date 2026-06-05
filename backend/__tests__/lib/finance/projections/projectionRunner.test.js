@@ -278,6 +278,31 @@ test('replay rebuilds the projection from the event store and sets the cursor', 
   });
 });
 
+test('replay tie-breaks same-timestamp events by PG seq (string), not id (Codex PR #633)', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const t = '2026-05-21T03:00:00.000Z';
+  // Postgres returns the bigint `seq` identity as a STRING. ids DESCEND while seq
+  // ASCENDS, so an id-ASC tie-break would reverse append order — the seq tie-break
+  // must preserve it (e.g. draft before its approval, written in one command).
+  const eventStore = fakeEventStore({
+    [TENANT_A]: [
+      { ...evt('z', { createdAt: t }), seq: '1' },
+      { ...evt('y', { createdAt: t }), seq: '2' },
+      { ...evt('x', { createdAt: t }), seq: '3' },
+    ],
+  });
+  const runner = makeRunner({ eventStore, storeProvider: provider });
+  runner.register(recordingWorker({ projectionName: 'p' }));
+
+  await runner.replay('p', TENANT_A);
+
+  assert.deepEqual(
+    provider.getLiveStore('p', TENANT_A).get('events'),
+    ['z', 'y', 'x'],
+    'tied timestamps replay in APPEND order (seq), not id ASC',
+  );
+});
+
 test('replay applies events in created_at ASC, id ASC order regardless of store order', async () => {
   const provider = createMemoryProjectionStoreProvider();
   const eventStore = fakeEventStore({

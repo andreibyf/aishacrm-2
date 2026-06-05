@@ -9,21 +9,34 @@
  * and docs/architecture/finance/projection-contracts.md §6 (the approval_queue
  * read model).
  *
- * Scope (2B-9): consumes the four approval lifecycle events and maintains a
- * tenant-scoped pending/resolved queue in a memory ProjectionStore. No DB
- * persistence, no HTTP routes. The full §6 read model (totals, meta,
- * ai_initiated, age_seconds, finance.journal.reversal_requested) is deferred to
- * a later phase.
+ * Scope (2B-9): consumes the approval lifecycle events — the four `finance.approval.*`
+ * plus `finance.journal.reversal_requested` (which carries a reversal's pending
+ * approval in `payload.approval`, Codex PR #634) — and maintains a tenant-scoped
+ * pending/resolved queue in a memory ProjectionStore. No DB persistence, no HTTP
+ * routes. The full §6 read model (totals, meta, ai_initiated, age_seconds) is
+ * deferred to a later phase.
  */
 
 export const APPROVAL_QUEUE_PROJECTION_NAME = 'finance.projection.approval_queue';
 
 const CONSUMED_EVENTS = [
   'finance.approval.requested',
+  // Codex PR #634 — reverseJournalEntry emits the reversal's pending approval ONLY
+  // inside finance.journal.reversal_requested (payload.approval), so without this
+  // the reversal approval was missing from /approvals and approving it degraded the
+  // projection (finance.approval.approved referenced an unknown approval). It is a
+  // create-only request, handled identically to finance.approval.requested below.
+  'finance.journal.reversal_requested',
   'finance.approval.approved',
   'finance.approval.rejected',
   'finance.approval.cancelled',
 ];
+
+// Request events that CREATE a pending approval record from payload.approval.
+const REQUEST_EVENTS = new Set([
+  'finance.approval.requested',
+  'finance.journal.reversal_requested',
+]);
 
 /**
  * Maps a resolution event type to the status it stamps on the approval record.
@@ -64,12 +77,12 @@ function applyApprovalEvent(event, store) {
   const approval = readApproval(event);
   const key = approval.id;
 
-  if (event.event_type === 'finance.approval.requested') {
-    // finance.approval.requested is create-only. A second requested event for
-    // an approval that already has a record — pending OR resolved — is a
-    // duplicate (at-least-once delivery, replay) and must be a no-op. Without
-    // this guard a duplicate request would overwrite a resolved record back to
-    // `pending`, reopening an already approved/rejected/cancelled approval.
+  if (REQUEST_EVENTS.has(event.event_type)) {
+    // A request event (finance.approval.requested OR finance.journal.reversal_requested)
+    // is create-only. A second request for an approval that already has a record —
+    // pending OR resolved — is a duplicate (at-least-once delivery, replay) and must
+    // be a no-op. Without this guard a duplicate request would overwrite a resolved
+    // record back to `pending`, reopening an already approved/rejected/cancelled one.
     if (store.get(key)) return;
     store.set(key, {
       approval_id: approval.id,
@@ -91,8 +104,8 @@ function applyApprovalEvent(event, store) {
     return;
   }
 
-  // A resolution event (approved / rejected / cancelled). `CONSUMED_EVENTS`
-  // gates dispatch, so `event_type` is always one of the four here.
+  // A resolution event (approved / rejected / cancelled) — the request events
+  // returned above, so `event_type` is always one of the three resolution types.
   const status = RESOLUTION_STATUS[event.event_type];
   const prev = store.get(key);
   if (!prev) {
@@ -124,7 +137,17 @@ function toPendingEntry(record) {
   };
 }
 
-/** Project a stored record into the `resolved` read-model entry. */
+/**
+ * Project a stored record into the `resolved` read-model entry.
+ *
+ * Phase 4-1 (Task 3): additively carries `requested_by` / `requested_at` so the
+ * persistent-mode `/approvals?status=all` read reproduces the in-memory
+ * `service.listApprovals()` shape for resolved approvals (which keep their
+ * original requester + request timestamp). `requested_at` is sourced from the
+ * stored record's `created_at`, which the requested-event handler set from the
+ * approval's `created_at ?? requested_at` — the same value the in-memory
+ * `buildApprovalRecord()` stamps on both fields.
+ */
 function toResolvedEntry(record) {
   return {
     approval_id: record.approval_id,
@@ -133,6 +156,8 @@ function toResolvedEntry(record) {
     resolved_at: record.resolved_at,
     target_type: record.target_type,
     target_id: record.target_id,
+    requested_by: record.requested_by,
+    requested_at: record.created_at,
   };
 }
 

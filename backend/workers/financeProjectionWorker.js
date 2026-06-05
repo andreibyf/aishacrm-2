@@ -44,6 +44,7 @@ import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/
 import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
 import { createAuditTimelineProjectionWorker } from '../lib/finance/projections/auditTimelineProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from '../lib/finance/projections/invoiceProjection.js';
 // Slice 2C: shared worker process-lifecycle helpers extracted to a common module
 // so finance-adapter-worker (and any future finance-*-worker) follows the same
 // disabled-by-default + heartbeat-file + clean-shutdown contract without
@@ -180,8 +181,9 @@ export async function runProjectionPollCycle({ runner, eventStore, tenantIds }) 
 
 /**
  * Build the production runner: a `createProjectionRunner` wired to the
- * Postgres event store + the Postgres projection-state provider, with all
- * four Slice 1 projections registered.
+ * Postgres event store + the Postgres projection-state provider, with every
+ * business + infrastructure projection registered (ledger, approval_queue,
+ * adapter_queue, audit_timeline, journal_entries, invoices).
  *
  * The audit-timeline worker opts into the reserved internal infrastructure
  * event `finance.audit.event_appended` (the runtime gates infra-event
@@ -199,6 +201,7 @@ export function buildProjectionRunner({ pool }) {
   runner.register(createAdapterQueueProjectionWorker());
   runner.register(createAuditTimelineProjectionWorker({ includeInfrastructureEvents: true }));
   runner.register(createJournalEntriesProjectionWorker());
+  runner.register(createInvoiceProjectionWorker());
 
   return runner;
 }
