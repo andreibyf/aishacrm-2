@@ -141,19 +141,24 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
   }
 
   const cls = safeClassification(classification);
-  const key = normalizeAccountKey(cls, account_name);
+  // Apply the fallback display name BEFORE deriving the match key + id, and store
+  // that SAME name (Codex PR #647). Otherwise a whitespace-only name keys/ids off
+  // "" but is stored as "Unnamed", so the next whitespace-only line never matches
+  // the stored account and re-creates a same-id/different-code account.
+  const displayName = normalizeName(account_name) || 'Unnamed';
+  const key = normalizeAccountKey(cls, displayName);
   const hit = list.find((a) => normalizeAccountKey(a.classification, a.name) === key);
   if (hit) return { account: hit, created: false };
 
   const code = nextCodeForClassification(cls, list.map((a) => a.account_code));
   const account = buildAccount(tenantId, {
     account_code: code,
-    name: normalizeName(account_name) || 'Unnamed',
+    name: displayName,
     classification: cls,
     account_type: AUTO_ACCOUNT_TYPE[cls],
     is_system: false,
     // name-derived id (not code-derived) — concurrency-safe identity, see autoAccountId.
-    id: autoAccountId(tenantId, cls, account_name),
+    id: autoAccountId(tenantId, cls, displayName),
   });
   return { account, created: true };
 }

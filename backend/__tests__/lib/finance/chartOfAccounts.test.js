@@ -105,6 +105,22 @@ describe('chartOfAccounts — resolveAccount', () => {
     assert.equal(account.id, autoAccountId(TENANT, 'Revenue', 'Consulting Fees'));
   });
 
+  test('whitespace-only names reuse one "Unnamed" account — key/id/name aligned (Codex PR #647)', () => {
+    const a = resolveAccount({ tenantId: TENANT, accounts: seed, classification: 'Expense', account_name: '   ' });
+    assert.equal(a.created, true);
+    assert.equal(a.account.name, 'Unnamed');
+    // a second whitespace-only line (account now in the COA) must REUSE it, not re-create
+    const b = resolveAccount({
+      tenantId: TENANT,
+      accounts: [...seed, a.account],
+      classification: 'Expense',
+      account_name: '\t \n',
+    });
+    assert.equal(b.created, false);
+    assert.equal(b.account.id, a.account.id);
+    assert.equal(b.account.account_code, a.account.account_code);
+  });
+
   test('auto-created ids are NAME-derived so two different names never share an id even on the same code', () => {
     // Simulate the concurrent race: both requests see the same pre-write COA and
     // independently allocate the lowest free Revenue code (4500) for DIFFERENT names.
