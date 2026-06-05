@@ -20,6 +20,7 @@ import {
   resolveAccount,
   normalizeAccountKey,
 } from './chartOfAccounts.js';
+import { buildCashFlowStatement } from './cashFlowStatement.js';
 
 function createStore() {
   return {
@@ -181,6 +182,14 @@ export function createFinanceDomainService(opts = {}) {
     listAccounts(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
       return clone(getTenantCoa(bucket, tenantId));
+    },
+
+    // Cash Flow Slice 2 (Bridge B): read-only cash-flow statement derived from
+    // this tenant's posted journal lines on cash/bank accounts. Reconciles to the
+    // ledger (same posted/reversed filter).
+    getCashFlow(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return buildCashFlowStatement(bucket.journalEntries, getTenantCoa(bucket, tenantId));
     },
 
     listAdapterJobs(tenantId) {
@@ -712,7 +721,20 @@ export function createFinanceDomainService(opts = {}) {
     // posting still goes through the real human approval flow. Human-gated:
     // approveFinanceAction blocks AI actors.
     async simulatePostedDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
-      const sim = await this.simulateDealWon({ tenantId, actor, payload, requestId, braidTraceId });
+      // A posted CASH sale (Debit Cash / Credit Revenue) — touches a cash account
+      // so it shows in the cash-flow statement, unlike simulateDealWon's default
+      // Debit-AR credit sale (revenue accrued, cash not yet received). Callers may
+      // still override payload.lines.
+      const amountCents = Number(payload.amount_cents || 0);
+      const simPayload = {
+        ...payload,
+        memo: payload.memo || 'Simulated posted cash sale',
+        lines: payload.lines || [
+          { account_name: 'Cash', classification: 'Asset', debit_cents: amountCents, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: amountCents },
+        ],
+      };
+      const sim = await this.simulateDealWon({ tenantId, actor, payload: simPayload, requestId, braidTraceId });
       const approved = await this.approveFinanceAction({
         tenantId,
         approvalId: sim.approval.id,

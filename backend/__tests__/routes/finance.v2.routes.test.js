@@ -184,6 +184,24 @@ describe('finance.v2 routes', () => {
     assert.ok(entry, 'a posted journal entry now exists');
   });
 
+  test('GET /cash-flow derives a statement from posted journals (Cash Flow Slice 2)', async () => {
+    const { app } = buildApp();
+    // empty before anything posts
+    const empty = await request(app).get('/api/v2/finance/cash-flow');
+    assert.equal(empty.status, 200);
+    assert.deepEqual(empty.body.data.cash_flow.periods, []);
+    // post a sandbox deal → cash inflow appears
+    await request(app)
+      .post('/api/v2/finance/simulate/posted-deal-won')
+      .send({ amount_cents: 250000, currency: 'usd' });
+    const res = await request(app).get('/api/v2/finance/cash-flow');
+    assert.equal(res.status, 200);
+    const cf = res.body.data.cash_flow;
+    assert.equal(cf.totals.inflow_cents, 250000);
+    assert.equal(cf.totals.net_cents, 250000);
+    assert.ok(cf.cash_account_codes.includes('1000'));
+  });
+
   test('POST /journal-drafts rejects unbalanced journals', async () => {
     const { app } = buildApp();
     const res = await request(app)

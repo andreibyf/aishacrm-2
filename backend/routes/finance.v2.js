@@ -603,6 +603,19 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     }
   });
 
+  // Cash Flow Slice 2 (Bridge B) — read-only cash-flow statement derived from
+  // posted journal lines on cash/bank accounts. Partition-aware (persistent only).
+  router.get('/cash-flow', async (req, res) => {
+    try {
+      const isTestData = await resolveReadIsTestData(req);
+      const cashFlow = await readAdapter.getCashFlow(req.financeTenantId, { isTestData });
+      res.json({ status: 'success', data: { cash_flow: cashFlow } });
+    } catch (error) {
+      logger.error('[finance.v2] cash-flow failed:', error);
+      sendError(res, error);
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Read-only GET endpoints — Finance Read API Implementation Slice 1.
   // Contracts frozen in finance-ui-slice-1-api-gaps-design.md §6. Each serves
