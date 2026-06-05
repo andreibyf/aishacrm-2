@@ -10,7 +10,7 @@
 
 ## 1. TL;DR — current posture
 
-- **Read-only Finance Ops console is live** (`/FinanceOps`) — 11 tabs, all read-only, behind the per-tenant `financeOps` module gate + RBAC.
+- **Read-only Finance Ops console is live** (`/FinanceOps`) — 12 tabs, all read-only, behind the per-tenant `financeOps` module gate + RBAC.
 - **The event-sourced accounting core is implemented** (double-entry journals, projections, audit trail, approvals, adapter jobs) and runs in **in-memory mode by default**.
 - **Persistent durability is built but OFF by default.** `ENABLE_FINANCE_PERSISTENT_EVENTS=false` everywhere → ephemeral in-memory event store. Setting it `true` requires a Postgres pool **and** migrations 172–179 applied (the route fail-closes otherwise).
 - **No provider writes.** `FINANCE_PROVIDER_WRITES_ENABLED=false` (dominant kill switch); the ERPNext adapter is sandbox/draft-only.
@@ -90,20 +90,19 @@
 
 ## 6. Frontend console (read-only)
 
-`src/pages/FinanceOps.jsx` + `src/components/finance/`. Tab strip (frozen by design-freeze §6.2): **Runtime overview, Ledger summary, Draft invoices, Journal drafts, Journal entries, Approval queue, Adapter queue, Audit timeline, Projection / degraded, Sandbox adapter, Evidence.** Plus: guardrail banners, the test-mode "Create test entries" panel, per-panel CSV export, and amount formatting (cents → `2,500.00`, #642). Every tab is read-only — no approve/reject/reverse/replay/retry/provider-sync controls.
+`src/pages/FinanceOps.jsx` + `src/components/finance/`. Tab strip (frozen by design-freeze §6.2, amended 2026-06-05): **Runtime overview, Ledger summary, Chart of accounts, Draft invoices, Journal drafts, Journal entries, Approval queue, Adapter queue, Audit timeline, Projection / degraded, Sandbox adapter, Evidence.** Plus: guardrail banners, the test-mode "Create test entries" panel, per-panel CSV export, and amount formatting (cents → `2,500.00`, #642). Every tab is read-only — no approve/reject/reverse/replay/retry/provider-sync controls.
 
 ## 7. Design-only / NOT yet implemented
 
-- **Chart of accounts is NOT wired in.** `finance.accounts` (172) exists with codes/classifications/`account_type`/hierarchy, but is **never populated or referenced** — journal lines key accounts off free-text `account_name` + `classification`, `journal_lines.account_id` left null, so the console shows **ACCOUNT CODE "—"** and accounts are emergent/name-keyed (fragmentation risk). Wiring it is **PR #643 (design only)**. **Beta-scope decision (2026-06-05):** this is a **production-readiness prerequisite + fast-follow**, NOT a read-only-beta blocker — gated alongside persistent-event activation and provider COA mapping. Disclosed as beta limitation #9 (`finance-ops-beta-limitations.md`). The §2 "Consistency" integrity claim covers journal *status* semantics, not account-*identity*; statements stay correct because derivation is `classification`-based.
-- **Cash Flow ↔ Finance bridge** — designed (#643, "Bridge B": read-only cash-flow view derived from posted journals). **Not implemented.** The Cash Flow module (`cash_flow` table, `backend/routes/cashflow.js`) is currently **fully separate** from finance (no shared tables/code; cash_flow uses `DECIMAL` dollars, finance uses integer cents).
-- **Read-only Chart-of-Accounts tab + `GET /api/v2/finance/accounts`** — designed (#643). Not built. Editable COA manager is a further future slice.
+- **Chart of accounts — WIRED (COA Slice 1, done).** `finance.accounts` is now resolved into the write path: `createJournalDraft` (and `simulateDealWon` through it) attaches `account_id` + `account_code` to every line, auto-creating a non-system account on a miss (audit-only `finance.account.created` event). A baseline seed + classification-scoped normalization end the "Cash"/"cash" fragmentation; resolved lines show real codes (no more "—"). Read-only `GET /api/v2/finance/accounts` + a "Chart of accounts" console tab (after Ledger summary). Event-sourced durability; both runtime modes (persistent reads fail-closed). Code: `backend/lib/finance/chartOfAccounts.js`, `financeDomainService.js`, `readAdapters/*`, `src/components/finance/ChartOfAccountsPanel.jsx`. **Editable COA manager** remains deferred (read-only first). The 2026-06-05 beta-scope decision still holds (COA = production-readiness prerequisite + fast-follow; disclosed as beta limitation #9).
+- **Cash Flow ↔ Finance bridge (Slice 2) — NOT implemented.** Designed (#643, "Bridge B": read-only cash-flow view derived from posted journals; cash/bank accounts identified via COA `account_type`). The Cash Flow module (`cash_flow` table, `backend/routes/cashflow.js`) is currently **fully separate** from finance. **This is the next slice.**
 - **ERPNext live / other providers** — sandbox/draft-only today; live provider writes, QuickBooks/Xero, and provider COA mapping are not implemented.
 - **Production activation** — Phase 4 production-pilot is *designed* (`phase-4-*` docs) but nothing is activated; persistent events/provider writes remain operator-gated and off.
 - **Many `phase-3-*` / `staging-*` docs are runbooks/plans**, not executed actions (each says "no live action performed").
 
 ## 8. Known gaps / limitations
 
-- Emergent COA (account codes blank) — see §7.
+- ~~Emergent COA (account codes blank)~~ — RESOLVED in COA Slice 1 (§7). Editable COA management still deferred.
 - Migrations 172–179 not auto-applied; persistent mode is inert until they are.
 - In-memory mode is ephemeral (restart loses finance state) and has no Test/Live partition (segregation is a persistent-mode property; in-memory is always `test`).
 - See `finance-ops-beta-limitations.md` for the curated beta-limitations list.

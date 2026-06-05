@@ -55,6 +55,13 @@ export function createInMemoryFinanceReadAdapter({ service }) {
       return service.listInvoices(tenantId);
     },
 
+    // COA Slice 1: tenant chart of accounts (baseline + auto-created). In-memory
+    // has no durable Test/Live partition, so the isTestData opt is accepted for
+    // interface parity with the persistent adapter and ignored.
+    async listAccounts(tenantId, _opts = {}) {
+      return service.listAccounts(tenantId);
+    },
+
     async listApprovals(tenantId) {
       return service.listApprovals(tenantId);
     },

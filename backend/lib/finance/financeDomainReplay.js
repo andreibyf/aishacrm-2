@@ -65,11 +65,31 @@ export function rebuildBucketFromEvents(events = []) {
   const invoices = new Map();
   const approvals = new Map();
   const adapterJobs = new Map();
+  const accounts = new Map();
 
   for (const event of events || []) {
     const payload = (event && event.payload) || {};
 
     switch (event && event.event_type) {
+      // COA Slice 1: an auto-created chart-of-accounts account. Audit-only event
+      // (no business projection consumes it), but folded into the bucket so the
+      // tenant chart is durable across restarts in persistent mode. The baseline
+      // system accounts are NOT events — getTenantCoa re-seeds those on access.
+      case 'finance.account.created':
+        if (payload.account_id) {
+          accounts.set(payload.account_id, {
+            id: payload.account_id,
+            tenant_id: event.tenant_id,
+            account_code: payload.account_code,
+            name: payload.name,
+            classification: payload.classification,
+            account_type: payload.account_type,
+            parent_account_id: null,
+            is_system: false,
+            is_active: true,
+          });
+        }
+        break;
       // Invoices — both create and update carry the full post-transition invoice
       // under payload.invoice. Mirrors invoiceProjection.js.
       case 'finance.invoice.draft_created':
@@ -149,6 +169,7 @@ export function rebuildBucketFromEvents(events = []) {
     invoices: [...invoices.values()],
     approvals: [...approvals.values()],
     adapterJobs: [...adapterJobs.values()],
+    accounts: [...accounts.values()],
     commands: [],
   };
 }

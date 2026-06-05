@@ -99,6 +99,56 @@ async function seededProvider(w) {
 }
 
 describe('ProjectionBackedFinanceReadAdapter', () => {
+  test('listAccounts folds finance.account.created over the baseline + threads the Test/Live partition (Codex PR #647 P2)', async () => {
+    const w = workers();
+    const calls = [];
+    const auditEventsReader = {
+      count: async () => 0,
+      listByType: async (tenantId, eventType, isTestData) => {
+        calls.push({ tenantId, eventType, isTestData });
+        return [
+          {
+            account_id: 'acct_x_4500',
+            account_code: '4500',
+            name: 'Consulting Fees',
+            classification: 'Revenue',
+            account_type: 'Revenue',
+          },
+        ];
+      },
+    };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => ({}),
+      auditEventsReader,
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    // baseline (7) + the one folded auto-created account
+    assert.equal(accounts.length, 8);
+    assert.ok(accounts.find((a) => a.account_code === '1000' && a.is_system === true));
+    const created = accounts.find((a) => a.account_code === '4500');
+    assert.equal(created.is_system, false);
+    assert.equal(created.name, 'Consulting Fees');
+    // partition threaded through to the reader
+    assert.equal(calls[0].eventType, 'finance.account.created');
+    assert.equal(calls[0].isTestData, true);
+  });
+
+  test('listAccounts fails closed (FinanceReadDegradedError) when the reader throws', async () => {
+    const w = workers();
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => ({}),
+      auditEventsReader: {
+        count: async () => 0,
+        listByType: async () => {
+          throw new Error('db down');
+        },
+      },
+      workers: w,
+    });
+    await assert.rejects(() => adapter.listAccounts(T), /chart of accounts/i);
+  });
+
   test('journal-entries read includes the pending_approval entry from the projection', async () => {
     const w = workers();
     const storeProvider = await seededProvider(w);

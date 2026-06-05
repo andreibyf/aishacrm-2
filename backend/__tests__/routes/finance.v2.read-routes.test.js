@@ -45,6 +45,39 @@ function assertSourceBlock(source) {
   assert.ok('projection' in source);
 }
 
+describe('GET /api/v2/finance/accounts (COA Slice 1)', () => {
+  test('returns the seeded baseline chart (7 system accounts)', async () => {
+    const { app } = buildApp();
+    const res = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(res.status, 200);
+    const accounts = res.body.data.accounts;
+    assert.equal(accounts.length, 7);
+    assert.ok(accounts.find((a) => a.account_code === '1000' && a.account_type === 'Cash'));
+    assert.ok(accounts.every((a) => a.is_system === true));
+  });
+
+  test('surfaces an auto-created account after a journal draft with a new account name', async () => {
+    const service = createFinanceDomainService();
+    const { app } = buildApp({ service });
+    await service.createJournalDraft({
+      tenantId: TENANT_ID,
+      actor: { id: 'u1', type: 'human' },
+      payload: {
+        lines: [
+          { account_name: 'Consulting Fees', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+          { account_name: 'Cash', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+        ],
+      },
+    });
+    const res = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(res.status, 200);
+    const created = res.body.data.accounts.find((a) => a.name === 'Consulting Fees');
+    assert.ok(created);
+    assert.equal(created.is_system, false);
+    assert.equal(created.account_code, '4500');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Shared authorization matrix — every read endpoint runs the same 3-gate stack.
 // ---------------------------------------------------------------------------
@@ -233,7 +266,10 @@ describe('GET /api/v2/finance/journal-drafts', () => {
       'status',
     ]);
     assert.equal(row.aggregate_id, row.id); // aggregate_id <- id
-    assert.equal(row.account_code, null);
+    // COA Slice 1: account_code now surfaces the entry's resolved line codes
+    // (was a hardcoded null placeholder). The draft's lines resolve to seeded
+    // accounts, so at least one 4-digit code is present.
+    assert.match(row.account_code, /\d{4}/);
   });
 
   test('every journal-draft row is also visible via /journal-entries (subset invariant)', async () => {

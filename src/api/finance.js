@@ -212,6 +212,21 @@ export function getJournalEntries(tenantId, { signal } = {}) {
 }
 
 /**
+ * GET /api/v2/finance/accounts
+ *
+ * Returns the tenant chart of accounts (baseline system accounts + any
+ * auto-created accounts). Read-only (COA Slice 1) — there is no create/edit/
+ * deactivate helper here, consistent with the read-only console posture.
+ *
+ * Drives: the Chart of accounts tab.
+ *
+ * @returns {Promise<{ accounts: Array<Object> }>}
+ */
+export function getAccounts(tenantId, { signal } = {}) {
+  return request('/accounts', { tenantId, signal });
+}
+
+/**
  * GET /api/v2/finance/ledger
  *
  * Returns the opaque ledger object for the tenant. Shape is treated as

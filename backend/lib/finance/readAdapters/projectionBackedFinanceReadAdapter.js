@@ -13,6 +13,7 @@
  */
 
 import { profitAndLossFromLedger, balanceSheetFromLedger } from '../accountingEngine.js';
+import { seedAccountsForTenant } from '../chartOfAccounts.js';
 
 export class FinanceReadDegradedError extends Error {
   constructor(message, cause) {
@@ -93,6 +94,48 @@ export function createProjectionBackedFinanceReadAdapter({
     // created_at/updated_at off each record, all present on the snapshot.
     async listInvoices(tenantId) {
       return readProjection(createStoreProvider(), invoices, tenantId);
+    },
+
+    // COA Slice 1: the tenant chart of accounts, event-sourced in persistent mode
+    // — the baseline system accounts (not events; re-seeded deterministically)
+    // merged with the auto-created accounts folded from `finance.account.created`
+    // events in append order. Fail-closed: a reader error propagates → 503
+    // (no in-memory fallback), per the §6 no-silent-fallback contract.
+    async listAccounts(tenantId, { isTestData = null } = {}) {
+      let created;
+      try {
+        const payloads = await auditEventsReader.listByType(
+          tenantId,
+          'finance.account.created',
+          isTestData,
+        );
+        created = payloads.map((p) => ({
+          id: p.account_id,
+          tenant_id: tenantId,
+          account_code: p.account_code,
+          name: p.name,
+          classification: p.classification,
+          account_type: p.account_type,
+          parent_account_id: null,
+          is_system: false,
+          is_active: true,
+        }));
+      } catch (err) {
+        throw new FinanceReadDegradedError('Failed to read chart of accounts', err);
+      }
+      // Dedupe by account_id, NOT account_code (Codex PR #647 P1): auto-created
+      // ids are name-derived + unique, but two different names can transiently
+      // share a display code under a concurrent-create race — deduping by code
+      // would hide one real account; deduping by id keeps both (identity correct).
+      const accounts = seedAccountsForTenant(tenantId);
+      const seenIds = new Set(accounts.map((a) => a.id));
+      for (const acc of created) {
+        if (acc.id && !seenIds.has(acc.id)) {
+          accounts.push(acc);
+          seenIds.add(acc.id);
+        }
+      }
+      return accounts;
     },
 
     // Reconstruct a flat approval list matching `service.listApprovals()` on the

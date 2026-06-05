@@ -15,6 +15,11 @@ import {
 import createFinanceEventStore from './financeEventStore.js';
 import { promoteLinkedAdapterJobs } from './adapterJobPromoter.js';
 import { mapJournalEntryToQuickBooksCanonical } from './accountingAdapters/quickbooksCanonicalAdapter.js';
+import {
+  seedAccountsForTenant,
+  resolveAccount,
+  normalizeAccountKey,
+} from './chartOfAccounts.js';
 
 function createStore() {
   return {
@@ -40,6 +45,22 @@ function getTenantBucket(store, tenantId) {
   }
 
   return store.tenants.get(tenantId);
+}
+
+// In-memory chart of accounts per tenant (COA Slice 1). Ensures the baseline
+// system accounts are present (idempotent by account_code) on every access —
+// robust whether the bucket is fresh OR was rebuilt from events in persistent
+// mode (where `finance.account.created` events replay the auto-created accounts
+// and this fills in the non-event baseline). Auto-created accounts are appended
+// here and emitted as audit-only `finance.account.created` events.
+function getTenantCoa(bucket, tenantId) {
+  if (!Array.isArray(bucket.accounts)) bucket.accounts = [];
+  for (const base of seedAccountsForTenant(tenantId)) {
+    if (!bucket.accounts.some((a) => a.account_code === base.account_code)) {
+      bucket.accounts.push(base);
+    }
+  }
+  return bucket.accounts;
 }
 
 function createActor(actor = {}) {
@@ -153,6 +174,13 @@ export function createFinanceDomainService(opts = {}) {
     listInvoices(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
       return clone(bucket.invoices);
+    },
+
+    // COA Slice 1: the tenant chart of accounts (baseline seed + any accounts
+    // auto-created by journal-draft resolution this process). Read-only.
+    listAccounts(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return clone(getTenantCoa(bucket, tenantId));
     },
 
     listAdapterJobs(tenantId) {
@@ -390,8 +418,81 @@ export function createFinanceDomainService(opts = {}) {
         braidTraceId,
       });
 
+      // COA Slice 1: resolve each validated line to a real chart-of-accounts
+      // account (account_id + denormalized account_code). Auto-create a
+      // non-system account on a miss and emit an audit-only
+      // `finance.account.created` event (no business projection consumes it, so
+      // it never affects ledger totals or statements). Generate the journal id
+      // up front so the account-created events can carry it as provenance.
+      const journalEntryId = `journal_${generateId()}`;
+      const coa = getTenantCoa(bucket, tenantId);
+      // assertBalancedJournal's normalizeLine keeps account_id but DROPS
+      // account_code (Codex PR #647 P2), so read the caller-supplied code from the
+      // raw payload line at the same index (validateJournalLines maps in order).
+      const inputLines = Array.isArray(payload.lines) ? payload.lines : [];
+      const resolvedLines = [];
+      for (let i = 0; i < validation.lines.length; i += 1) {
+        const line = validation.lines[i];
+        const { account, created } = resolveAccount({
+          tenantId,
+          accounts: coa,
+          classification: line.classification,
+          account_name: line.account_name,
+          account_code: inputLines[i]?.account_code,
+          account_id: line.account_id,
+        });
+        if (created) {
+          coa.push(account);
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.account.created',
+              aggregateType: 'account',
+              aggregateId: account.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: {
+                account_id: account.id,
+                account_code: account.account_code,
+                name: account.name,
+                classification: account.classification,
+                account_type: account.account_type,
+                is_system: false,
+                match_key: normalizeAccountKey(account.classification, account.name),
+                source_journal_draft_id: journalEntryId,
+                correlation_id: requestId || null,
+              },
+              policyDecision: createGovernanceDecision({
+                allowed: true,
+                requiresApproval: false,
+                riskLevel: 'low',
+                explanation: 'Auto-created chart-of-accounts account (COA management; not money movement).',
+                braidTraceId,
+              }),
+            }),
+          );
+        }
+        // Canonicalize the line's name + classification FROM the resolved account
+        // (Codex PR #647 review). On an explicit account_code/account_id match the
+        // input name/classification can be wrong or normalizeLine-defaulted
+        // (Uncategorized/Expense); the ledger / P&L / balance-sheet read these
+        // fields, so a line resolved to AR (1100, Asset) must not stay an Expense.
+        // For name-matched + auto-created lines this is a no-op (already aligned).
+        // Balance is unaffected (debit/credit sums don't depend on classification).
+        resolvedLines.push({
+          ...line,
+          account_id: account.id,
+          account_code: account.account_code,
+          account_name: account.name,
+          classification: account.classification,
+        });
+      }
+
       const journalEntry = {
-        id: `journal_${generateId()}`,
+        id: journalEntryId,
         tenant_id: tenantId,
         source_type: payload.source_type || 'finance',
         source_id: payload.source_id || null,
@@ -402,7 +503,7 @@ export function createFinanceDomainService(opts = {}) {
         braid_trace_id: braidTraceId,
         ai_generated: normalizedActor.type === 'ai_agent',
         governance_policy_snapshot: decision,
-        lines: validation.lines,
+        lines: resolvedLines,
         created_at: now(),
         updated_at: now(),
       };

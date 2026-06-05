@@ -556,6 +556,23 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     }
   });
 
+  // COA Slice 1 — read-only chart of accounts (baseline + auto-created). In-memory
+  // returns the running domain-service chart; persistent reads it event-sourced
+  // (fail-closed → 503 on a reader error). No create/edit/deactivate here.
+  router.get('/accounts', async (req, res) => {
+    try {
+      // Codex PR #647 P2: thread the active Test/Live partition so persistent-mode
+      // test-created accounts don't leak into the live chart (or vice versa) —
+      // same posture as /audit-events + /evidence-packs. In-memory ignores it.
+      const isTestData = await resolveReadIsTestData(req);
+      const accounts = await readAdapter.listAccounts(req.financeTenantId, { isTestData });
+      res.json({ status: 'success', data: { accounts } });
+    } catch (error) {
+      logger.error('[finance.v2] list accounts failed:', error);
+      sendError(res, error);
+    }
+  });
+
   router.get('/ledger', async (req, res) => {
     try {
       const ledger = await readAdapter.getLedger(req.financeTenantId);
@@ -635,7 +652,12 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         id: j.id,
         aggregate_id: j.id,
         status: j.status,
-        account_code: null,
+        // COA Slice 1: a journal entry spans multiple accounts — surface its
+        // distinct resolved line codes (e.g. "1100, 4000"). Honest fallback to
+        // null (→ "—") for any legacy entry whose lines carry no resolved code.
+        account_code: Array.isArray(j.lines)
+          ? [...new Set(j.lines.map((l) => l.account_code).filter(Boolean))].join(', ') || null
+          : null,
         amount_cents: Array.isArray(j.lines)
           ? j.lines.reduce((sum, line) => sum + Number(line.debit_cents || 0), 0)
           : 0,
