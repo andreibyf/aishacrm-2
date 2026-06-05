@@ -268,3 +268,27 @@ docker-compose.staging.yml
 scripts/codebase_review.py
 scripts/codebase_review_report.md
 scripts/codebase_review_chunks/
+
+# Local scripts/ artifacts from ad-hoc diagnostics and git helper runs
+scripts/create_prs.ps1
+scripts/gh_diag.ps1
+scripts/gh_diag.txt
+scripts/git_commit2.cmd
+scripts/git_commit_out.txt
+scripts/git_commit_out2.txt
+scripts/git_commit_prod_compose.ps1
+scripts/htz_01_networks.err
+scripts/htz_01_networks.txt
+scripts/htz_02_backend_env.err
+scripts/htz_02_backend_env.txt
+scripts/htz_03_mcp_logs.err
+scripts/htz_03_mcp_logs.txt
+scripts/htz_04_old_mcp_log.err
+scripts/htz_04_old_mcp_log.txt
+scripts/htz_05_ports.err
+scripts/htz_05_ports.txt
+scripts/htz_output.txt
+scripts/htz_probe.ps1
+scripts/pr_output.txt
+scripts/vps2_compose_dump.txt
+scripts/vps2_read_compose.ps1
