@@ -105,6 +105,27 @@ describe('chartOfAccounts — resolveAccount', () => {
     assert.equal(account.id, autoAccountId(TENANT, 'Revenue', 'Consulting Fees'));
   });
 
+  test('a DUPLICATED account_code is not used as an identifier — falls through (Codex PR #647)', () => {
+    // Simulate the persistent concurrent-create residual: two accounts transiently
+    // share display code 4500 (distinct name-derived ids).
+    const dupList = [
+      ...seed,
+      { id: 'acct_a', account_code: '4500', name: 'Consulting', classification: 'Revenue', account_type: 'Revenue', is_system: false, is_active: true },
+      { id: 'acct_b', account_code: '4500', name: 'Marketing', classification: 'Revenue', account_type: 'Revenue', is_system: false, is_active: true },
+    ];
+    // a code-only-ish line referencing 4500 must NOT bind by code; it resolves by NAME
+    const byName = resolveAccount({ tenantId: TENANT, accounts: dupList, classification: 'Revenue', account_name: 'Consulting', account_code: '4500' });
+    assert.equal(byName.account.id, 'acct_a');
+    // a fresh name with the ambiguous code auto-creates rather than mis-binding to a dup
+    const fresh = resolveAccount({ tenantId: TENANT, accounts: dupList, classification: 'Revenue', account_name: 'Brand New', account_code: '4500' });
+    assert.equal(fresh.created, true);
+    assert.notEqual(fresh.account.account_code, '4500');
+    // a UNIQUE code (seeded) still resolves by code as before
+    const unique = resolveAccount({ tenantId: TENANT, accounts: dupList, classification: 'Asset', account_name: 'x', account_code: '1000' });
+    assert.equal(unique.created, false);
+    assert.equal(unique.account.name, 'Cash');
+  });
+
   test('whitespace-only names reuse one "Unnamed" account — key/id/name aligned (Codex PR #647)', () => {
     const a = resolveAccount({ tenantId: TENANT, accounts: seed, classification: 'Expense', account_name: '   ' });
     assert.equal(a.created, true);
