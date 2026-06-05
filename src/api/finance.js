@@ -263,6 +263,17 @@ export function getProfitLoss(tenantId, { signal } = {}) {
  *
  * @returns {Promise<Object>}  opaque balance-sheet object
  */
+/**
+ * GET /api/v2/finance/cash-flow
+ *
+ * Read-only cash-flow statement (Bridge B) derived from posted journal lines on
+ * cash/bank accounts. `{ cash_flow: { cash_account_codes, periods, totals } }`.
+ * Drives: the Cash flow tab.
+ */
+export function getCashFlow(tenantId, { signal } = {}) {
+  return request('/cash-flow', { tenantId, signal });
+}
+
 export function getBalanceSheet(tenantId, { signal } = {}) {
   return request('/balance-sheet', { tenantId, signal });
 }

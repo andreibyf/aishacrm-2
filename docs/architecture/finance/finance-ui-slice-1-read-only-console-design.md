@@ -162,6 +162,7 @@ Proposed tab layout (left-to-right) — frozen for UI-1A; **amended 2026-06-05**
 | 1   | Runtime overview       | §7.1       | **Yes**  |
 | 2   | Ledger summary         | §7.2       | No       |
 | 2a  | Chart of accounts      | COA Slice 1 | No      |
+| 2b  | Cash flow              | Bridge B / Slice 2 | No |
 | 3   | Draft invoices         | §7.3       | No       |
 | 4   | Journal drafts         | §7.4       | No       |
 | 5   | Journal entries        | §7.5       | No       |
