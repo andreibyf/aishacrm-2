@@ -846,16 +846,49 @@ export function createFinanceDomainService(opts = {}) {
       );
       Object.assign(approval, approvedApproval);
 
+      // Cash Flow Slice 2 — JOURNAL POSTING. When the approved approval targets a
+      // journal entry, post it (pending_approval → posted) and emit
+      // `finance.journal.posted` with the full posted entry (the shape
+      // journalEntriesProjection + rebuildBucketFromEvents already expect). This
+      // is what makes the ledger / P&L / balance-sheet / cash-flow reflect the
+      // entry. Human-gated: approveFinanceAction is AI-blocked above
+      // (finance.ai.no_money_movement), so an AI actor can never post. Idempotent:
+      // an already-posted/reversed entry is left untouched.
+      let postedEntry = null;
+      if (approval.target_type === 'journal_entry') {
+        const entry = bucket.journalEntries.find((e) => e.id === approval.target_id);
+        if (entry && entry.status !== 'posted' && entry.status !== 'reversed') {
+          postedEntry = {
+            ...clone(entry),
+            status: 'posted',
+            posted_at: now(),
+            posted_by: normalizedActor.id,
+            updated_at: now(),
+          };
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.journal.posted',
+              aggregateType: 'journal_entry',
+              aggregateId: entry.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: { journal_entry: clone(postedEntry) },
+              policyDecision: decision,
+            }),
+          );
+          Object.assign(entry, postedEntry);
+        }
+      }
+
       // Slice 2B: promote any linked adapter_jobs from `draft → queued` and
       // emit one `finance.adapter.sync_queued` event per promoted job. The
       // linkage is structural via shared `aggregate_id` — see §4.1 of the
       // slice-2 adapter runtime design freeze. The promoter is a no-op for
       // approvals whose target has no linked adapter_jobs.
-      //
-      // IMPORTANT — Phase 3-8 §5.7 contract preserved: this does NOT modify
-      // the journal entry's status. The journal stays at `pending_approval`.
-      // Only the adapter_job transitions. Journal posting is NOT a Slice 2
-      // deliverable.
       const promotion = await promoteLinkedAdapterJobs({
         bucket,
         tenantId,
@@ -871,6 +904,7 @@ export function createFinanceDomainService(opts = {}) {
         approval: clone(approval),
         governance_decision: decision,
         promoted_adapter_jobs: promotion.promoted_jobs,
+        posted_entry: postedEntry ? clone(postedEntry) : null,
       };
     },
 

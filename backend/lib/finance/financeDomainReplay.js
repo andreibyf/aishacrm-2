@@ -147,15 +147,16 @@ export function rebuildBucketFromEvents(events = []) {
         upsert(adapterJobs, payload.adapter_job);
         break;
 
-      // finance.journal.posted / finance.journal.reversed have NO emit-site today
-      // (the projection vocabulary lists them, but no posting slice emits them
-      // yet), so the live bucket can never hold their state and omitting them
-      // preserves equivalence. TODO (journal-posting slice): when those events
-      // start being emitted, add
-      //   case 'finance.journal.posted':
-      //   case 'finance.journal.reversed':
-      //     upsert(journalEntries, payload.journal_entry);
-      // (each will carry the full post-transition entry, like draft_created).
+      // Cash Flow Slice 2 — journal posting now HAS an emit-site
+      // (approveFinanceAction). The posted event carries the full post-transition
+      // entry under payload.journal_entry, so the upsert replaces the
+      // pending_approval entry in place with status 'posted'. finance.journal.reversed
+      // still has no emit-site (reversal is request → approval today); kept here
+      // for replay completeness when a reversal-posting slice lands.
+      case 'finance.journal.posted':
+      case 'finance.journal.reversed':
+        upsert(journalEntries, payload.journal_entry);
+        break;
       //
       // Everything else (sync_succeeded/sync_failed, infrastructure, unknown
       // types) carries no bucket-state record — no-op.

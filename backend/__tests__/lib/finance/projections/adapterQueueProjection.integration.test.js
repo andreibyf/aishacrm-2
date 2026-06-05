@@ -329,10 +329,12 @@ test('LIFECYCLE: runAdapterPollCycle (real ERPNext adapter) emits sync_succeeded
   assert.equal(buckets.running.length, 0);
   assert.equal(buckets.failed.length, 0);
 
-  // Journal stays at pending_approval — Phase 3-8 §5.7 contract preserved.
+  // Cash Flow Slice 2: approving the journal-entry approval posts the journal.
+  // The adapter lifecycle is independent of journal status; this confirms posting
+  // happened on approve and didn't disturb the adapter flow.
   const entries = ctx.service.listJournalEntries(TENANT_ID);
   const je = entries.find((e) => e.id === sim.journal_entry.id);
-  assert.equal(je.status, 'pending_approval', 'journal NEVER auto-posted by Slice 2');
+  assert.equal(je.status, 'posted', 'journal posts on approval (Slice 2)');
 });
 
 test('LIFECYCLE: runAdapterPollCycle (adapter throws permanent) emits sync_failed; projection moves item to failed', async () => {
