@@ -115,20 +115,26 @@ No reconciliation/dedup between manual `cash_flow` rows and ledger-derived cash;
 - **Slice 1 — COA wired + visible:** §4.1 seed + §4.2 resolution into the write path + §5 read endpoint + read-only tab. Acceptance: a posted journal shows real account codes; the Chart-of-Accounts tab lists the COA; ledger groups by `account_id`.
 - **Slice 2 — Bridge B:** §6 derived cash-flow endpoint + the read-only "From Finance ledger" section on the Cash Flow page. Acceptance: a finance tenant sees ledger-derived cash inflow/outflow; a cash-flow-only tenant is unaffected.
 
-## 9. Open questions (decide before/within implementation)
+## 9. Open questions — RESOLVED (review decision, PR #643 comment, 2026-06-05)
 
-1. **Resolution-on-miss policy:** auto-create non-system account (recommended) vs strict reject vs map to `Uncategorized`.
-2. **Default seed contents:** confirm the §4.1 account list, codes, and `account_type` vocabulary.
-3. **Bridge B surface:** Cash Flow page section (recommended) vs a Finance Ops tab.
-4. **`account_type` vocabulary:** which values denote cash/bank (and the full controlled list).
-5. **Backfill:** confirm "none for beta" (start fresh) vs a one-time emergent-name → account_id mapping.
+All five answered by the review (Codex/GPT) on PR #643 (`#issuecomment-4633419140`); each aligns with the design's recommendation.
 
-## 10. Acceptance checklist (this design)
+1. **Resolution-on-miss policy → AUTO-CREATE.** On a miss, auto-create a tenant-scoped **non-system** account (`is_system=false`) from a **deterministically normalized** `account_name` + `classification`, with a **generated reserved-range code** and traceability/audit metadata where available. Do **not** reject by default; do **not** silently map to `Uncategorized`.
+2. **Default seed → LAZY + IDEMPOTENT per tenant.** Persistent mode writes the §4.1 baseline to `finance.accounts`; in-memory mode uses a static ephemeral baseline and **must not pretend persistence exists**.
+3. **COA UI → READ-ONLY FIRST.** Implement `GET /api/v2/finance/accounts` + a read-only Chart-of-Accounts tab. Editable COA manager deferred.
+4. **Bridge → B ONLY.** Finance → read-only derived cash-flow reporting from posted journals. No `cash_flow` → ledger posting; no bidirectional sync.
+5. **Backfill → NONE in Slice 1.** Existing emergent/free-text lines keep fallback display. Any backfill is a **separate reviewed, tenant-scoped, dry-run-capable** packet.
 
-- [ ] COA wiring approach (seed + write-path resolution + persistence split) approved.
-- [ ] Read-only Chart-of-Accounts tab + endpoint placement approved (incl. the §6.2 freeze extension).
-- [ ] Bridge B read-only derivation + surface placement approved.
-- [ ] Open questions §9 answered.
-- [ ] Slicing (§8) accepted as the implementation order.
+**Beta posture (confirmed):** COA wiring is **not** a read-only-beta blocker now that the gap is disclosed (beta limitation #9) — it is a **production-readiness prerequisite + fast-follow** before persistent/live/provider activation.
 
-> No code is written until this design is approved. After approval, the next step is an implementation plan (writing-plans) for Slice 1.
+**`account_type` vocabulary (carried into Slice 1):** the §4.1 baseline uses `Cash, Receivable, Payable, Equity, Revenue, Expense, Suspense`; `account_type ∈ {Cash, Bank}` is the cash discriminator for Bridge B. The full controlled list is finalized in the Slice 1 implementation plan.
+
+## 10. Acceptance — APPROVED (2026-06-05)
+
+- [x] COA wiring approach (seed + write-path resolution + persistence split) approved.
+- [x] Read-only Chart-of-Accounts tab + endpoint placement approved (incl. the §6.2 freeze extension).
+- [x] Bridge B read-only derivation + surface placement approved.
+- [x] Open questions §9 answered (review decision above).
+- [x] Slicing (§8) accepted as the implementation order (Slice 1 = COA seed + resolution + read-only tab; Slice 2 = Bridge B).
+
+> **Design APPROVED.** Next step: an implementation plan (writing-plans) for **Slice 1**, then build. Guardrails hold: no provider writes, no production action, no mutation UI beyond the already-authorized test-mode helpers, no persistent/live/provider activation drift.
