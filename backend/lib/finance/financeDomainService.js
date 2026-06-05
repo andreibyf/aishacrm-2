@@ -15,6 +15,11 @@ import {
 import createFinanceEventStore from './financeEventStore.js';
 import { promoteLinkedAdapterJobs } from './adapterJobPromoter.js';
 import { mapJournalEntryToQuickBooksCanonical } from './accountingAdapters/quickbooksCanonicalAdapter.js';
+import {
+  seedAccountsForTenant,
+  resolveAccount,
+  normalizeAccountKey,
+} from './chartOfAccounts.js';
 
 function createStore() {
   return {
@@ -40,6 +45,14 @@ function getTenantBucket(store, tenantId) {
   }
 
   return store.tenants.get(tenantId);
+}
+
+// In-memory chart of accounts per tenant: lazily seeded with the baseline on
+// first access (COA Slice 1). Auto-created accounts are appended here and also
+// emitted as audit-only `finance.account.created` events.
+function getTenantCoa(bucket, tenantId) {
+  if (!bucket.accounts) bucket.accounts = seedAccountsForTenant(tenantId);
+  return bucket.accounts;
 }
 
 function createActor(actor = {}) {
@@ -153,6 +166,13 @@ export function createFinanceDomainService(opts = {}) {
     listInvoices(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
       return clone(bucket.invoices);
+    },
+
+    // COA Slice 1: the tenant chart of accounts (baseline seed + any accounts
+    // auto-created by journal-draft resolution this process). Read-only.
+    listAccounts(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return clone(getTenantCoa(bucket, tenantId));
     },
 
     listAdapterJobs(tenantId) {
@@ -390,8 +410,63 @@ export function createFinanceDomainService(opts = {}) {
         braidTraceId,
       });
 
+      // COA Slice 1: resolve each validated line to a real chart-of-accounts
+      // account (account_id + denormalized account_code). Auto-create a
+      // non-system account on a miss and emit an audit-only
+      // `finance.account.created` event (no business projection consumes it, so
+      // it never affects ledger totals or statements). Generate the journal id
+      // up front so the account-created events can carry it as provenance.
+      const journalEntryId = `journal_${generateId()}`;
+      const coa = getTenantCoa(bucket, tenantId);
+      const resolvedLines = [];
+      for (const line of validation.lines) {
+        const { account, created } = resolveAccount({
+          tenantId,
+          accounts: coa,
+          classification: line.classification,
+          account_name: line.account_name,
+          account_code: line.account_code,
+          account_id: line.account_id,
+        });
+        if (created) {
+          coa.push(account);
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.account.created',
+              aggregateType: 'account',
+              aggregateId: account.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: {
+                account_id: account.id,
+                account_code: account.account_code,
+                name: account.name,
+                classification: account.classification,
+                account_type: account.account_type,
+                is_system: false,
+                match_key: normalizeAccountKey(account.classification, account.name),
+                source_journal_draft_id: journalEntryId,
+                correlation_id: requestId || null,
+              },
+              policyDecision: createGovernanceDecision({
+                allowed: true,
+                requiresApproval: false,
+                riskLevel: 'low',
+                explanation: 'Auto-created chart-of-accounts account (COA management; not money movement).',
+                braidTraceId,
+              }),
+            }),
+          );
+        }
+        resolvedLines.push({ ...line, account_id: account.id, account_code: account.account_code });
+      }
+
       const journalEntry = {
-        id: `journal_${generateId()}`,
+        id: journalEntryId,
         tenant_id: tenantId,
         source_type: payload.source_type || 'finance',
         source_id: payload.source_id || null,
@@ -402,7 +477,7 @@ export function createFinanceDomainService(opts = {}) {
         braid_trace_id: braidTraceId,
         ai_generated: normalizedActor.type === 'ai_agent',
         governance_policy_snapshot: decision,
-        lines: validation.lines,
+        lines: resolvedLines,
         created_at: now(),
         updated_at: now(),
       };
