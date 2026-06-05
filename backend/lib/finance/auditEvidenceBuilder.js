@@ -68,15 +68,19 @@ export function isCanonicalFinanceEvent(eventType) {
  * awaited either way, so this is always safe for both backends. Resolves to a
  * plain array of events for `tenantId`.
  */
-async function resolveEvents(source, tenantId) {
+async function resolveEvents(source, tenantId, isTestData = null) {
   if (Array.isArray(source)) {
     return source;
   }
+  // Slice 6 (Codex P1): thread the Test/Live partition flag into the store read so
+  // an evidence pack built in persistent mode contains only the active mode's
+  // events. `isTestData` null = no filter (the store treats null/undefined as
+  // "all events"), preserving the array path and the in-memory/unstamped default.
   if (source && typeof source.replay === 'function') {
-    return await source.replay(tenantId);
+    return await source.replay(tenantId, isTestData);
   }
   if (source && typeof source.query === 'function') {
-    return await source.query({ tenant_id: tenantId });
+    return await source.query({ tenant_id: tenantId, is_test_data: isTestData });
   }
   throw new TypeError(
     'auditEvidenceBuilder: events source must be an array of event envelopes ' +
@@ -542,13 +546,17 @@ export async function buildEvidencePack(events, options = {}) {
     idFactory,
     clock,
     includeInfrastructureEvents = false,
+    // Slice 6 (Codex P1): active Test/Live partition (true=test, false=live,
+    // null=no filter). The persistent /evidence-packs route resolves the tenant
+    // mode and threads it in so a pack can't mix dormant test data with live.
+    isTestData = null,
   } = options;
 
   if (!tenantId) {
     throw new TypeError('buildEvidencePack: tenantId is required');
   }
 
-  const resolved = await resolveEvents(events, tenantId);
+  const resolved = await resolveEvents(events, tenantId, isTestData);
 
   // Deterministic injection points: packId / generatedAt are inherently
   // volatile, so they are injectable. With fixed values the whole pack — and

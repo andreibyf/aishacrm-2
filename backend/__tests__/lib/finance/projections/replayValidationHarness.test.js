@@ -21,7 +21,7 @@ const TENANT_B = '00000000-0000-4000-8000-bbbbbbbbbbbb';
 
 // ── Event fixtures — realistic finance.* envelopes ────────────────────────────
 //
-// The harness's default config consumes the three real projection workers, so
+// The harness's default config consumes the real projection workers, so
 // the fixtures must carry the real payload shapes each worker expects.
 
 /** A balanced double-entry finance.journal.posted event (ledger projection). */
@@ -217,10 +217,11 @@ test('checkConvergence passes — dispatch and replay build identical stores', a
   assert.equal(res.passed, true);
   assert.equal(res.detail.event_count, 12);
   assert.equal(res.detail.diverged.length, 0);
-  // All three real projections converged.
+  // All real projections converged.
   assert.deepEqual(res.detail.projections.map((p) => p.projection).sort(), [
     'finance.projection.adapter_queue',
     'finance.projection.approval_queue',
+    'finance.projection.invoices',
     'finance.projection.journal_entries',
     'finance.projection.ledger',
   ]);
@@ -293,12 +294,12 @@ test('checkReplayOrdering resolves a created_at tie deterministically by id ASC'
 
 // ── Per-projection parity ─────────────────────────────────────────────────────
 
-test('checkPerProjectionParity passes for ledger, approval_queue, adapter_queue, journal_entries', async () => {
+test('checkPerProjectionParity passes for ledger, approval_queue, adapter_queue, journal_entries, invoices', async () => {
   const res = await checkPerProjectionParity(healthyStream(), TENANT_A);
 
   assert.equal(res.name, 'per_projection_parity');
   assert.equal(res.passed, true);
-  assert.equal(res.detail.projections.length, 4);
+  assert.equal(res.detail.projections.length, 5);
   assert.ok(res.detail.projections.every((p) => p.converged));
 });
 
@@ -309,7 +310,7 @@ test('checkRepeatedReplayDeterminism passes — replaying twice yields identical
 
   assert.equal(res.name, 'repeated_replay_determinism');
   assert.equal(res.passed, true);
-  assert.equal(res.detail.projections.length, 4);
+  assert.equal(res.detail.projections.length, 5);
   assert.ok(res.detail.projections.every((p) => p.stable));
 });
 
@@ -365,7 +366,7 @@ test('checkInfrastructureEventFiltering passes — infra events never reach busi
   assert.equal(res.passed, true);
   assert.equal(res.detail.coverage_exercised, true, 'the stream actually contained infra events');
   assert.equal(res.detail.infrastructure_event_count, 2);
-  assert.equal(res.detail.projections.length, 4);
+  assert.equal(res.detail.projections.length, 5);
   assert.ok(res.detail.projections.every((p) => p.state_identical && p.cursor_identical));
 });
 
@@ -622,13 +623,14 @@ test('runReplayValidation rejects malformed input', async () => {
 
 // ── Default config wiring ─────────────────────────────────────────────────────
 
-test('createDefaultHarnessConfig wires the three real projection workers', () => {
+test('createDefaultHarnessConfig wires the five real projection workers', () => {
   const cfg = createDefaultHarnessConfig();
   const workers = cfg.createWorkers();
 
   assert.deepEqual(workers.map((w) => w.projectionName).sort(), [
     'finance.projection.adapter_queue',
     'finance.projection.approval_queue',
+    'finance.projection.invoices',
     'finance.projection.journal_entries',
     'finance.projection.ledger',
   ]);

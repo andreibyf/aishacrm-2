@@ -45,6 +45,7 @@ import { createLedgerProjectionWorker } from './ledgerProjection.js';
 import { createApprovalQueueProjectionWorker } from './approvalQueueProjection.js';
 import { createAdapterQueueProjectionWorker } from './adapterQueueProjection.js';
 import { createJournalEntriesProjectionWorker } from './journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from './invoiceProjection.js';
 
 // ── Ordering — the frozen Track A total order ─────────────────────────────────
 
@@ -195,6 +196,7 @@ export function createDefaultHarnessConfig() {
       createApprovalQueueProjectionWorker(),
       createAdapterQueueProjectionWorker(),
       createJournalEntriesProjectionWorker(),
+      createInvoiceProjectionWorker(),
     ],
     // retryBackoffMs 0 keeps degraded-path validation fast — the harness only
     // ever needs the *final* outcome of a handler, never the retry timing.

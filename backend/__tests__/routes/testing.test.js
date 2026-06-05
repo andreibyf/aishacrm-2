@@ -155,6 +155,88 @@ describe('Testing Routes', () => {
     });
   });
 
+  describe('POST /api/testing/cleanup-test-data (finance wiring, slice 6c)', () => {
+    // The cleanup handler closes over _pgPool. Mount a SECOND router with a stub
+    // pool so the finance branch runs without a real DB. The stub pool records
+    // every DELETE and returns a fixed rowCount; the finance rebuild step is
+    // non-fatal (no Supabase env here) so it logs and returns rebuilt:false —
+    // the DELETE row count is still surfaced. No real DB is touched.
+    const financePort = 3098;
+    let financeServer;
+    const poolCalls = [];
+
+    before(async () => {
+      const express = (await import('express')).default;
+      const createTestingRoutes = (await import('../../routes/testing.js')).default;
+
+      const stubPool = {
+        query: async (text, params) => {
+          poolCalls.push({ text, params });
+          // 1 row per finance DELETE; 0 for the CRM tables.
+          const rowCount = /finance\.audit_events/.test(text) ? 4 : 0;
+          return { rowCount, rows: Array.from({ length: rowCount }, (_, i) => ({ id: i })) };
+        },
+      };
+
+      const financeApp = express();
+      financeApp.use(express.json());
+      financeApp.use('/api/testing', createTestingRoutes(stubPool));
+      financeServer = financeApp.listen(financePort);
+      await new Promise((resolve) => financeServer.on('listening', resolve));
+    });
+
+    after(async () => {
+      if (financeServer) {
+        await new Promise((resolve) => financeServer.close(resolve));
+      }
+    });
+
+    timeoutTest('invokes the finance clear for a tenant and reports the result', async () => {
+      const res = await requestLocal({
+        port: financePort,
+        path: '/api/testing/cleanup-test-data',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { confirm: true, tenant_id: '6cb4c008-4847-426a-9a2e-918ad70e7b69' },
+      });
+      assert.strictEqual(res.status, 200);
+
+      const data = await res.json();
+      assert.strictEqual(data.status, 'success');
+
+      const finance = data.data.results['finance.audit_events'];
+      assert.ok(finance, 'finance.audit_events result should be present');
+      assert.strictEqual(finance.success, true);
+      assert.strictEqual(finance.deleted, 4);
+      // No Supabase env in unit tests → rebuild is non-fatal and reports false.
+      assert.strictEqual(finance.rebuilt, false);
+
+      // The finance DELETE must be parameterized + tenant-scoped.
+      const financeDelete = poolCalls.find((c) => /finance\.audit_events/.test(c.text));
+      assert.ok(financeDelete, 'a finance.audit_events DELETE should have run');
+      assert.match(financeDelete.text, /is_test_data = true/);
+      assert.match(financeDelete.text, /tenant_id = \$1/);
+      assert.deepStrictEqual(financeDelete.params, ['6cb4c008-4847-426a-9a2e-918ad70e7b69']);
+    });
+
+    timeoutTest('skips finance clear when no tenant_id is provided', async () => {
+      const res = await requestLocal({
+        port: financePort,
+        path: '/api/testing/cleanup-test-data',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { confirm: true },
+      });
+      assert.strictEqual(res.status, 200);
+
+      const data = await res.json();
+      const finance = data.data.results['finance.audit_events'];
+      assert.ok(finance, 'finance.audit_events result should be present');
+      assert.strictEqual(finance.skipped, 'tenant_id required for finance clear');
+      // No finance DELETE should have run for the no-tenant request.
+    });
+  });
+
   describe('GET /api/testing/workflow-status', () => {
     it('should return workflow runs from GitHub', async () => {
       // Mock GitHub API response

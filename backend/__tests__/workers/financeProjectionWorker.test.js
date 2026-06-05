@@ -209,6 +209,81 @@ test('runProjectionPollCycle — for each tenant, replays and dispatches every e
   assert.deepEqual(summary[1], { tenant_id: TENANT_B, ok: true, event_count: 1, error: null });
 });
 
+test('runProjectionPollCycle — replays only the ACTIVE partition per tenant (Codex PR #634 P1)', async () => {
+  const replayCalls = []; // [{ tenantId, isTestData }]
+  const eventStore = {
+    async replay(tenantId, isTestData) {
+      replayCalls.push({ tenantId, isTestData });
+      return [];
+    },
+  };
+  const runner = fakeRunner();
+  // TENANT_A is in TEST mode, TENANT_B in LIVE mode.
+  const resolveIsTestData = async (tenantId) => tenantId === TENANT_A;
+
+  await runProjectionPollCycle({
+    runner,
+    eventStore,
+    tenantIds: [TENANT_A, TENANT_B],
+    resolveIsTestData,
+  });
+
+  // Each tenant's replay is scoped to its active partition — never the whole stream.
+  assert.deepEqual(replayCalls, [
+    { tenantId: TENANT_A, isTestData: true },
+    { tenantId: TENANT_B, isTestData: false },
+  ]);
+});
+
+test('runProjectionPollCycle — a failing mode resolver SKIPS the tenant (fail-closed) (Codex PR #634 P2)', async () => {
+  const replayCalls = [];
+  const eventStore = {
+    async replay(tenantId, isTestData) {
+      replayCalls.push({ tenantId, isTestData });
+      return [];
+    },
+  };
+  const runner = fakeRunner();
+  const resolveIsTestData = async () => {
+    throw new Error('supabase down');
+  };
+
+  const summary = await runProjectionPollCycle({
+    runner,
+    eventStore,
+    tenantIds: [TENANT_A, TENANT_B],
+    // TENANT_B resolves fine — proves the skip is per-tenant, not a whole-cycle abort.
+    resolveIsTestData: async (t) => {
+      if (t === TENANT_A) return resolveIsTestData();
+      return false;
+    },
+  });
+
+  // FAIL-CLOSED: the unresolvable tenant is skipped (no replay, never an arbitrary
+  // partition); TENANT_B still runs on its active (live) partition.
+  assert.deepEqual(replayCalls, [{ tenantId: TENANT_B, isTestData: false }]);
+  assert.equal(summary[0].tenant_id, TENANT_A);
+  assert.equal(summary[0].ok, false);
+  assert.match(summary[0].error, /data-mode resolve failed/);
+  assert.equal(summary[1].tenant_id, TENANT_B);
+  assert.equal(summary[1].ok, true);
+});
+
+test('runProjectionPollCycle — with NO resolver injected, replays all events (isTestData=null, back-compat)', async () => {
+  const replayCalls = [];
+  const eventStore = {
+    async replay(tenantId, isTestData) {
+      replayCalls.push({ tenantId, isTestData });
+      return [];
+    },
+  };
+  const runner = fakeRunner();
+
+  await runProjectionPollCycle({ runner, eventStore, tenantIds: [TENANT_A] });
+
+  assert.deepEqual(replayCalls, [{ tenantId: TENANT_A, isTestData: null }]);
+});
+
 test('runProjectionPollCycle — empty tenant stream is fine (event_count=0, ok=true)', async () => {
   const eventStore = fakeEventStore({ [TENANT_A]: [] });
   const runner = fakeRunner();

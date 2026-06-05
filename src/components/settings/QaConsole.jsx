@@ -1,19 +1,47 @@
-import { useEffect, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, TestTube2, Trash2 } from "lucide-react";
-import { getBackendUrl } from "@/api/backendUrl";
-import { useConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { toast } from "sonner";
+import { useEffect, useRef, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  TestTube2,
+  Trash2,
+} from 'lucide-react';
+import { getBackendUrl } from '@/api/backendUrl';
+import { getAuthFetchOptions } from '@/api/core/httpClient';
+import { useConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { toast } from 'sonner';
 
 const SUITES = [
-  { id: "metrics", label: "Metrics Smoke", description: "Verify /api/metrics/performance endpoint and basic charts" },
-  { id: "rls", label: "RLS Enforcement", description: "Ensure Supabase RLS blocks cross-tenant access" },
-  { id: "rate-limit", label: "Rate Limiter", description: "Hit the rate limiter and assert 429 behavior" },
-  { id: "notifications", label: "Notifications", description: "Create and fetch notifications end-to-end" },
-  { id: "tenant", label: "Tenant Switching", description: "Validate admin tenant switch and scoped data" },
-  { id: "crud", label: "CRUD Regression", description: "Core create/read/update/delete flows" },
-  { id: "all", label: "Run All Suites", description: "Trigger full Playwright run (long)" },
+  {
+    id: 'metrics',
+    label: 'Metrics Smoke',
+    description: 'Verify /api/metrics/performance endpoint and basic charts',
+  },
+  {
+    id: 'rls',
+    label: 'RLS Enforcement',
+    description: 'Ensure Supabase RLS blocks cross-tenant access',
+  },
+  {
+    id: 'rate-limit',
+    label: 'Rate Limiter',
+    description: 'Hit the rate limiter and assert 429 behavior',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Create and fetch notifications end-to-end',
+  },
+  {
+    id: 'tenant',
+    label: 'Tenant Switching',
+    description: 'Validate admin tenant switch and scoped data',
+  },
+  { id: 'crud', label: 'CRUD Regression', description: 'Core create/read/update/delete flows' },
+  { id: 'all', label: 'Run All Suites', description: 'Trigger full Playwright run (long)' },
 ];
 
 export default function QaConsole() {
@@ -39,8 +67,8 @@ export default function QaConsole() {
       // Use current branch from env or default to main
       const currentBranch = import.meta.env.VITE_CURRENT_BRANCH || 'main'; // Use current branch from env or default to main
       const res = await fetch(`${BACKEND_URL}/api/testing/run-playwright`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           suite: suiteId,
           ref: currentBranch,
@@ -57,10 +85,13 @@ export default function QaConsole() {
           status: res.status,
         });
       } else {
-        const data = json?.data || { message: "Dispatched" };
+        const data = json?.data || { message: 'Dispatched' };
         setResult(data);
         // Start polling for runs after dispatch
-        startPolling({ createdAfter: data.dispatched_at || dispatchedAt, ref: data.ref || currentBranch });
+        startPolling({
+          createdAfter: data.dispatched_at || dispatchedAt,
+          ref: data.ref || currentBranch,
+        });
       }
     } catch (e) {
       setError({ message: e?.message || String(e) });
@@ -75,22 +106,22 @@ export default function QaConsole() {
       try {
         const url = new URL(`${BACKEND_URL}/api/testing/workflow-status`);
         // Poll the same ref we dispatched to (fallback to main if unknown)
-        url.searchParams.set("ref", (ref || 'main'));
-        url.searchParams.set("per_page", "5");
-        if (createdAfter) url.searchParams.set("created_after", createdAfter);
+        url.searchParams.set('ref', ref || 'main');
+        url.searchParams.set('per_page', '5');
+        if (createdAfter) url.searchParams.set('created_after', createdAfter);
         const res = await fetch(url.toString());
         const json = await res.json().catch(() => ({}));
         if (res.ok && json?.data) {
           setRunHistory(json.data);
           // Stop polling if latest run is completed
-          if (json.data.latest?.status === "completed") {
+          if (json.data.latest?.status === 'completed') {
             clearPolling();
           }
         } else {
-          console.warn("Workflow status poll failed:", json?.message || res.statusText);
+          console.warn('Workflow status poll failed:', json?.message || res.statusText);
         }
       } catch (e) {
-        console.warn("Workflow status poll error:", e?.message || e);
+        console.warn('Workflow status poll error:', e?.message || e);
       }
     };
     // immediate check, then interval
@@ -109,22 +140,26 @@ export default function QaConsole() {
 
   const handleCleanupTestData = async () => {
     const confirmed = await confirm({
-      title: "Clean up test data?",
-      description: "This will permanently delete all records where is_test_data = true across all tables (activities, contacts, leads, accounts, opportunities, system_logs). This action cannot be undone.",
-      variant: "destructive",
-      confirmText: "Delete Test Data",
-      cancelText: "Cancel",
+      title: 'Clean up test data?',
+      description:
+        'This will permanently delete all records where is_test_data = true across all tables (activities, contacts, leads, accounts, opportunities, system_logs). This action cannot be undone.',
+      variant: 'destructive',
+      confirmText: 'Delete Test Data',
+      cancelText: 'Cancel',
     });
 
     if (!confirmed) return;
 
     setCleaningData(true);
     setError(null);
-    
+
     try {
+      // cleanup-test-data is superadmin-gated on the backend; send the Supabase
+      // bearer token (getAuthFetchOptions) so a superadmin's request authenticates.
+      // A non-superadmin gets 403, an unauthenticated caller 401.
       const res = await fetch(`${BACKEND_URL}/api/testing/cleanup-test-data`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        ...(await getAuthFetchOptions()),
         body: JSON.stringify({
           confirm: true,
           ...(aggressiveCleanup
@@ -132,9 +167,9 @@ export default function QaConsole() {
             : {}),
         }),
       });
-      
+
       const json = await res.json();
-      
+
       if (!res.ok) {
         setError({
           message: json?.message || `Cleanup failed (${res.status})`,
@@ -145,9 +180,11 @@ export default function QaConsole() {
       } else {
         const data = json?.data || {};
         const totalDeleted = data.total_deleted || 0;
-        
-        toast.success(`Successfully deleted ${totalDeleted} test record${totalDeleted !== 1 ? 's' : ''}`);
-        
+
+        toast.success(
+          `Successfully deleted ${totalDeleted} test record${totalDeleted !== 1 ? 's' : ''}`,
+        );
+
         // Show detailed results
         setResult({
           ...data,
@@ -164,54 +201,80 @@ export default function QaConsole() {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case "completed":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600 text-slate-200">Completed</span>;
-      case "in_progress":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white flex items-center gap-1">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          Running
-        </span>;
-      case "queued":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-600 text-white">Queued</span>;
+      case 'completed':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600 text-slate-200">
+            Completed
+          </span>
+        );
+      case 'in_progress':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-600 text-white flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Running
+          </span>
+        );
+      case 'queued':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-600 text-white">
+            Queued
+          </span>
+        );
       default:
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">{status || "Unknown"}</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">
+            {status || 'Unknown'}
+          </span>
+        );
     }
   };
 
   const getConclusionBadge = (conclusion) => {
     if (!conclusion) return null;
     switch (conclusion) {
-      case "success":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-600 text-white flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Success
-        </span>;
-      case "failure":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3" />
-          Failed
-        </span>;
-      case "cancelled":
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-600 text-white">Cancelled</span>;
+      case 'success':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-600 text-white flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            Success
+          </span>
+        );
+      case 'failure':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            Failed
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-600 text-white">
+            Cancelled
+          </span>
+        );
       default:
-        return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">{conclusion}</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-200">
+            {conclusion}
+          </span>
+        );
     }
   };
 
   const formatTimestamp = (iso) => {
-    if (!iso) return "n/a";
+    if (!iso) return 'n/a';
     try {
       const d = new Date(iso);
       const now = new Date();
       const diffMs = now - d;
       const diffMins = Math.floor(diffMs / 60000);
-      if (diffMins < 1) return "just now";
+      if (diffMins < 1) return 'just now';
       if (diffMins < 60) return `${diffMins}m ago`;
       const diffHrs = Math.floor(diffMins / 60);
       if (diffHrs < 24) return `${diffHrs}h ago`;
       return d.toLocaleDateString();
     } catch {
-      return "n/a";
+      return 'n/a';
     }
   };
 
@@ -224,7 +287,8 @@ export default function QaConsole() {
             QA Console (CI-triggered E2E)
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Triggers GitHub Actions to run Playwright suites via the backend endpoint. Requires configured GITHUB_TOKEN and e2e.yml in the repository.
+            Triggers GitHub Actions to run Playwright suites via the backend endpoint. Requires
+            configured GITHUB_TOKEN and e2e.yml in the repository.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -233,7 +297,9 @@ export default function QaConsole() {
               <Card key={s.id} className="bg-slate-700/50 border-slate-600">
                 <CardHeader>
                   <CardTitle className="text-slate-100 text-base">{s.label}</CardTitle>
-                  <CardDescription className="text-slate-400 text-sm">{s.description}</CardDescription>
+                  <CardDescription className="text-slate-400 text-sm">
+                    {s.description}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Button
@@ -267,7 +333,7 @@ export default function QaConsole() {
                   </div>
                   {result.html_url && (
                     <Button
-                      onClick={() => window.open(result.html_url, "_blank")}
+                      onClick={() => window.open(result.html_url, '_blank')}
                       variant="outline"
                       className="mt-3 bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
                     >
@@ -287,10 +353,12 @@ export default function QaConsole() {
                 <TestTube2 className="w-5 h-5 text-blue-400 mt-0.5" />
                 <div className="flex-1">
                   <div className="text-slate-200 font-medium">Recent Runs</div>
-                  <div className="text-slate-400 text-sm">Last {runHistory.total} workflow run{runHistory.total !== 1 ? "s" : ""}</div>
+                  <div className="text-slate-400 text-sm">
+                    Last {runHistory.total} workflow run{runHistory.total !== 1 ? 's' : ''}
+                  </div>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 {runHistory.runs.map((run) => (
                   <div
@@ -301,7 +369,7 @@ export default function QaConsole() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           {getStatusBadge(run.status)}
-                          {run.status === "completed" && getConclusionBadge(run.conclusion)}
+                          {run.status === 'completed' && getConclusionBadge(run.conclusion)}
                         </div>
                         <div className="text-slate-400 text-xs">
                           Run #{run.run_number} • {formatTimestamp(run.created_at)}
@@ -309,7 +377,7 @@ export default function QaConsole() {
                       </div>
                     </div>
                     <Button
-                      onClick={() => window.open(run.html_url, "_blank")}
+                      onClick={() => window.open(run.html_url, '_blank')}
                       variant="outline"
                       size="sm"
                       className="bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
@@ -329,9 +397,7 @@ export default function QaConsole() {
                 <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
                 <div className="flex-1">
                   <div className="text-red-300 font-medium">Dispatch failed</div>
-                  <div className="text-slate-300 text-sm mt-1 break-words">
-                    {error.message}
-                  </div>
+                  <div className="text-slate-300 text-sm mt-1 break-words">{error.message}</div>
                   {error.status && (
                     <div className="text-slate-400 text-xs mt-1">HTTP {error.status}</div>
                   )}
@@ -355,8 +421,8 @@ export default function QaConsole() {
             Test Data Cleanup
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Remove all test data (records with is_test_data = true) from the database.
-            This affects activities, contacts, leads, accounts, opportunities, and system logs.
+            Remove all test data (records with is_test_data = true) from the database. This affects
+            activities, contacts, leads, accounts, opportunities, and system logs.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -372,17 +438,25 @@ export default function QaConsole() {
             </label>
             {aggressiveCleanup && (
               <div className="flex items-center gap-3 text-sm text-slate-300">
-                <label htmlFor="cleanup-window" className="text-slate-400">Window (days):</label>
+                <label htmlFor="cleanup-window" className="text-slate-400">
+                  Window (days):
+                </label>
                 <input
                   id="cleanup-window"
                   type="number"
                   min={1}
                   max={90}
                   value={cleanupWindowDays}
-                  onChange={(e) => setCleanupWindowDays(Math.max(1, Math.min(90, parseInt(e.target.value || '7', 10))))}
+                  onChange={(e) =>
+                    setCleanupWindowDays(
+                      Math.max(1, Math.min(90, parseInt(e.target.value || '7', 10))),
+                    )
+                  }
                   className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-slate-200"
                 />
-                <span className="text-slate-400">Only deletes contacts/leads with @example.com created within this window.</span>
+                <span className="text-slate-400">
+                  Only deletes contacts/leads with @example.com created within this window.
+                </span>
               </div>
             )}
           </div>
@@ -404,9 +478,11 @@ export default function QaConsole() {
               </>
             )}
           </Button>
-          
+
           <div className="mt-4 text-sm text-slate-400">
-            <p className="mb-2"><strong className="text-slate-300">What gets deleted:</strong></p>
+            <p className="mb-2">
+              <strong className="text-slate-300">What gets deleted:</strong>
+            </p>
             <ul className="list-disc list-inside space-y-1 ml-2">
               <li>All activities marked as test data</li>
               <li>All contacts marked as test data</li>
@@ -415,7 +491,10 @@ export default function QaConsole() {
               <li>All opportunities marked as test data</li>
               <li>All system logs marked as test data</li>
               {aggressiveCleanup && (
-                <li>Contacts and leads with @example.com created in the last {cleanupWindowDays} day(s)</li>
+                <li>
+                  Contacts and leads with @example.com created in the last {cleanupWindowDays}{' '}
+                  day(s)
+                </li>
               )}
             </ul>
             <p className="mt-3 text-yellow-400">
@@ -424,7 +503,7 @@ export default function QaConsole() {
           </div>
         </CardContent>
       </Card>
-        <ConfirmDialogPortal />
+      <ConfirmDialogPortal />
     </div>
   );
 }

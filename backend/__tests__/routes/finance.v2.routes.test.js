@@ -2,8 +2,10 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import createFinanceV2Routes from '../../routes/finance.v2.js';
+import createFinanceV2Routes, { applyFinanceDataModeChange } from '../../routes/finance.v2.js';
 import createFinanceDomainService from '../../lib/finance/financeDomainService.js';
+
+const NOOP_LOGGER = { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} };
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000011';
 const OTHER_TENANT_ID = '00000000-0000-4000-8000-000000000099';
@@ -12,6 +14,9 @@ function buildApp({
   moduleEnabled = true,
   user = { id: 'user-1', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
   service = createFinanceDomainService(),
+  dataMode = 'test',
+  setFinanceDataMode,
+  getTestDataCount,
 } = {}) {
   const app = express();
   app.use(express.json());
@@ -24,13 +29,16 @@ function buildApp({
     createFinanceV2Routes(null, {
       service,
       isFinanceModuleEnabled: async () => moduleEnabled,
+      getFinanceDataMode: async () => dataMode,
+      ...(setFinanceDataMode ? { setFinanceDataMode } : {}),
+      ...(getTestDataCount ? { getTestDataCount } : {}),
     }),
   );
   return { app, service };
 }
 
 describe('finance.v2 routes', () => {
-  test('GET /runtime/status returns mock runtime status', async () => {
+  test('GET /runtime/status reports the tenant Test/Live data mode', async () => {
     const service = createFinanceDomainService();
     await service.createDraftInvoice({
       tenantId: TENANT_ID,
@@ -44,11 +52,81 @@ describe('finance.v2 routes', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.status, 'success');
     assert.equal(res.body.data.tenant_id, TENANT_ID);
-    assert.equal(res.body.data.runtime.mode, 'mock_read_only');
+    // `runtime.mode` is now the authoritative data mode (was the `mock_read_only`
+    // placeholder); the engine is reported separately via `runtime.persistence`.
+    assert.equal(res.body.data.runtime.mode, 'test');
+    assert.equal(res.body.data.runtime.data_mode, 'test');
     assert.equal(res.body.data.runtime.persistence, 'in_memory');
     assert.equal(res.body.data.runtime.provider_sync, 'disabled');
     assert.equal(res.body.data.counts.invoices, 1);
     assert.equal(res.body.data.counts.audit_events, 1);
+    // Slice 6d: the in-memory path has no durable test partition → 0.
+    assert.equal(res.body.data.test_data_count, 0);
+  });
+
+  test('GET /runtime/status clamps a persisted live mode to test in in-memory deployments (Codex PR #634)', async () => {
+    // In-memory has NO test/live partition — the bucket is a single ephemeral,
+    // unpartitioned store. A tenant whose modulesettings still say `live` (e.g. a
+    // copied DB, or a downgrade from a persistent deploy) must NOT be advertised
+    // as `live` here, or sandbox entries would be served/acted on as live data.
+    // The route clamps the EFFECTIVE mode to `test` whenever persistence is
+    // in-memory (this unit harness is always in-memory: pgPool=null, flag unset).
+    const { app } = buildApp({ dataMode: 'live' });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.runtime.persistence, 'in_memory');
+    assert.equal(res.body.data.runtime.mode, 'test');
+    assert.equal(res.body.data.runtime.data_mode, 'test');
+  });
+
+  test('GET /runtime/status surfaces the dormant test_data_count from the injected counter', async () => {
+    let calledTenant = null;
+    let calledIsTest = null;
+    const { app } = buildApp({
+      dataMode: 'live',
+      getTestDataCount: async ({ tenantId, isTestData }) => {
+        calledTenant = tenantId;
+        calledIsTest = isTestData;
+        return 7;
+      },
+    });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.test_data_count, 7);
+    assert.equal(calledTenant, TENANT_ID);
+    assert.equal(calledIsTest, true);
+  });
+
+  test('GET /runtime/status fails safe to test_data_count=0 when the counter throws', async () => {
+    const { app } = buildApp({
+      getTestDataCount: async () => {
+        throw new Error('count blew up');
+      },
+    });
+    const res = await request(app).get('/api/v2/finance/runtime/status');
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.test_data_count, 0);
+  });
+
+  // The superadmin SUCCESS path requires passing validateTenantAccess's
+  // superadmin-write tenant resolution (a Supabase canonical-tenant lookup), so
+  // it's covered by an integration test rather than here; the persist logic
+  // (valid/invalid mode, not-enabled) is unit-tested in financeDataMode.test.js.
+  // This route test pins the superadmin GATE: a non-superadmin is forbidden and
+  // the setter is never reached.
+  test('PUT /settings/data-mode forbids non-superadmins (and never calls the setter)', async () => {
+    let called = false;
+    const { app } = buildApp({
+      user: { id: 'a', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
+      setFinanceDataMode: async () => {
+        called = true;
+        return 'live';
+      },
+    });
+    const res = await request(app).put('/api/v2/finance/settings/data-mode').send({ mode: 'live' });
+    assert.equal(res.status, 403);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_FORBIDDEN');
+    assert.equal(called, false);
   });
 
   test('module gate blocks access when Finance Ops is disabled', async () => {
@@ -70,7 +148,7 @@ describe('finance.v2 routes', () => {
   });
 
   // Phase 4-1 §9 row 10: the route lift must NOT expand the mutating surface.
-  test('route surface exposes exactly the 6 known mutating endpoints (no expansion)', () => {
+  test('route surface exposes exactly the 6 finance-data mutations + the settings endpoint (no expansion)', () => {
     const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
     const mutating = [];
     for (const layer of router.stack) {
@@ -78,7 +156,19 @@ describe('finance.v2 routes', () => {
       const methods = Object.keys(layer.route.methods).filter((m) => m !== 'get' && m !== '_all');
       if (methods.length) mutating.push(`${methods.join(',').toUpperCase()} ${layer.route.path}`);
     }
-    assert.equal(mutating.length, 6, `expected 6 mutating endpoints, got: ${mutating.join(' | ')}`);
+    // The superadmin Test/Live data-mode setter is a config mutation, not a
+    // finance-DATA write — allowed, and excluded from the §9 row-10 count of
+    // exactly-6 data mutations.
+    const dataMutations = mutating.filter((m) => m !== 'PUT /settings/data-mode');
+    assert.equal(
+      dataMutations.length,
+      6,
+      `expected 6 finance-data mutations, got: ${dataMutations.join(' | ')}`,
+    );
+    assert.ok(
+      mutating.includes('PUT /settings/data-mode'),
+      'the superadmin data-mode settings endpoint must be present',
+    );
   });
 
   test('POST /journal-drafts rejects unbalanced journals', async () => {
@@ -263,23 +353,19 @@ describe('finance.v2 routes', () => {
       }
     });
 
-    // Phase 4-1 / Codex PR #632 — BOOT GUARD: persistent mode is not yet
-    // activatable. Even WITH a pool, ENABLE_FINANCE_PERSISTENT_EVENTS=true refuses
-    // to mount, because the service-backed read/mutation endpoints
-    // (/journal-drafts, /approvals, /adapter-jobs, /draft-invoices, and the
-    // approve/reverse/update mutations) still read the in-memory buckets, which
-    // start empty per process — a PG-persisted record would be visible via the
-    // projection-backed reads but 404/empty via these. The projection-backed read
-    // adapter + pg event store still SHIP and are unit-tested (see
-    // finance.v2.adapterSelection.test.js); they are simply not activated here.
-    test('refuses to mount when ENABLE_FINANCE_PERSISTENT_EVENTS=true (even with a pool)', () => {
+    // Phase 4-1 Task 8 — ACTIVATION: persistent mode is now wired end-to-end.
+    // The boot guard is removed; with a Postgres pool present (so the
+    // projection-backed reads + persistent write runner have a way to reach
+    // Postgres), ENABLE_FINANCE_PERSISTENT_EVENTS=true MOUNTS without throwing.
+    // The durable read/write behaviour is exercised in
+    // finance.v2.persistentWrites.test.js with injected in-memory doubles.
+    test('mounts when ENABLE_FINANCE_PERSISTENT_EVENTS=true and a pool is present', () => {
       const pool = buildSpyPool();
       const previous = process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
       process.env.ENABLE_FINANCE_PERSISTENT_EVENTS = 'true';
       try {
-        assert.throws(
-          () => createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
-          /not yet supported|ENABLE_FINANCE_PERSISTENT_EVENTS/i,
+        assert.doesNotThrow(() =>
+          createFinanceV2Routes(pool, { isFinanceModuleEnabled: async () => true }),
         );
       } finally {
         if (previous === undefined) delete process.env.ENABLE_FINANCE_PERSISTENT_EVENTS;
@@ -331,5 +417,222 @@ describe('finance.v2 routes', () => {
     assert.equal(approveRes.body.data.approval.id, approvalId);
     assert.equal(approveRes.body.data.approval.status, 'approved');
     assert.equal(approveRes.body.data.approval.approved_by, 'human-user-2');
+  });
+
+  // ── slice 6b-2: applyFinanceDataModeChange orchestration (no Express/DB) ─────
+  describe('applyFinanceDataModeChange', () => {
+    test('persists THEN rebuilds (persistent mode), threading isTestData=true for test', async () => {
+      const order = [];
+      const setFinanceDataMode = async ({ mode }) => {
+        order.push('persist');
+        return mode;
+      };
+      let rebuildArgs = null;
+      const rebuildFinanceProjections = async (args) => {
+        order.push('rebuild');
+        rebuildArgs = args;
+      };
+
+      const eventStore = { name: 'es' };
+      const storeProvider = { name: 'sp' };
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: true,
+        setFinanceDataMode,
+        rebuildFinanceProjections,
+        eventStore,
+        storeProvider,
+        logger: NOOP_LOGGER,
+      });
+
+      assert.equal(result, 'test');
+      assert.deepEqual(order, ['persist', 'rebuild']);
+      assert.equal(rebuildArgs.tenantId, TENANT_ID);
+      assert.equal(rebuildArgs.isTestData, true);
+      assert.equal(rebuildArgs.eventStore, eventStore);
+      assert.equal(rebuildArgs.storeProvider, storeProvider);
+    });
+
+    test('live mode threads isTestData=false', async () => {
+      let rebuildArgs = null;
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'live',
+        persistent: true,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async (args) => {
+          rebuildArgs = args;
+        },
+        eventStore: {},
+        storeProvider: {},
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(result, 'live');
+      assert.equal(rebuildArgs.isTestData, false);
+    });
+
+    test('in-memory mode (persistent=false) persists TEST but SKIPS the rebuild', async () => {
+      let rebuilt = false;
+      const result = await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: false,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async () => {
+          rebuilt = true;
+        },
+        eventStore: {},
+        storeProvider: {},
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(result, 'test');
+      assert.equal(rebuilt, false);
+    });
+
+    test('in-memory mode REFUSES live (no isolation) — throws FINANCE_LIVE_REQUIRES_PERSISTENT [Codex PR #634 P2]', async () => {
+      let persisted = false;
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: false,
+          setFinanceDataMode: async () => {
+            persisted = true;
+            return 'live';
+          },
+          rebuildFinanceProjections: async () => {},
+          eventStore: {},
+          storeProvider: {},
+          logger: NOOP_LOGGER,
+        }),
+        (err) => err.code === 'FINANCE_LIVE_REQUIRES_PERSISTENT' && err.statusCode === 409,
+      );
+      // Refused BEFORE persisting — the in-memory tenant stays test-only.
+      assert.equal(persisted, false, 'live must not be persisted in in-memory mode');
+    });
+
+    test('skips rebuild when stores are absent even if persistent', async () => {
+      let rebuilt = false;
+      await applyFinanceDataModeChange({
+        tenantId: TENANT_ID,
+        mode: 'test',
+        persistent: true,
+        setFinanceDataMode: async ({ mode }) => mode,
+        rebuildFinanceProjections: async () => {
+          rebuilt = true;
+        },
+        eventStore: null,
+        storeProvider: null,
+        logger: NOOP_LOGGER,
+      });
+      assert.equal(rebuilt, false);
+    });
+
+    test('rebuild error FAILS LOUD — reverts the mode and throws (no silent success) [Codex P2]', async () => {
+      const errors = [];
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // pre-switch mode, used for the rollback
+          getFinanceDataMode: async () => 'test',
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          rebuildFinanceProjections: async () => {
+            throw new Error('rebuild kaboom');
+          },
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: (...a) => errors.push(a) },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED' && err.statusCode === 503,
+      );
+      // Persisted 'live' first, then reverted to the pre-switch 'test'.
+      assert.deepEqual(setCalls, ['live', 'test']);
+      assert.ok(errors.length >= 1, 'rebuild failure is logged at error level');
+    });
+
+    test('rebuild error without a resolvable previous mode still throws (no revert, but loud)', async () => {
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // no getFinanceDataMode injected → cannot roll back, but must NOT swallow
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          rebuildFinanceProjections: async () => {
+            throw new Error('rebuild kaboom');
+          },
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED',
+      );
+      assert.deepEqual(setCalls, ['live'], 'no revert when previous mode is unknown');
+    });
+
+    test('a DEGRADED rebuild (resolves, not throws) also fails the switch — reverts + 503 [Codex PR #634 P1]', async () => {
+      const setCalls = [];
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          getFinanceDataMode: async () => 'test',
+          setFinanceDataMode: async ({ mode }) => {
+            setCalls.push(mode);
+            return mode;
+          },
+          // Rebuild RESOLVES (no throw) but a projection degraded — the live store
+          // was left on the old partition, same leak hazard as a throw.
+          rebuildFinanceProjections: async () => ({
+            rebuilt: [],
+            degraded: ['finance.projection.ledger'],
+          }),
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_REBUILD_FAILED' && err.statusCode === 503,
+      );
+      // Persisted live, then reverted to the pre-switch test on the degraded result.
+      assert.deepEqual(setCalls, ['live', 'test']);
+    });
+
+    test('aborts BEFORE persisting when the current mode cannot be read (no rollback path) [Codex PR #634 P1]', async () => {
+      let persisted = false;
+      await assert.rejects(
+        applyFinanceDataModeChange({
+          tenantId: TENANT_ID,
+          mode: 'live',
+          persistent: true,
+          // The pre-switch mode lookup throws — we'd have no value to roll back to.
+          getFinanceDataMode: async () => {
+            throw new Error('supabase down');
+          },
+          setFinanceDataMode: async () => {
+            persisted = true;
+            return 'live';
+          },
+          rebuildFinanceProjections: async () => ({ rebuilt: [], degraded: [] }),
+          eventStore: {},
+          storeProvider: {},
+          logger: { ...NOOP_LOGGER, error: () => {} },
+        }),
+        (err) => err.code === 'FINANCE_MODE_SWITCH_PRECHECK_FAILED' && err.statusCode === 503,
+      );
+      // Failed the precheck → nothing persisted (no half-applied switch).
+      assert.equal(persisted, false, 'mode is not persisted when the pre-switch read fails');
+    });
   });
 });

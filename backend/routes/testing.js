@@ -6,6 +6,8 @@
 import express from 'express';
 import logger from '../lib/logger.js';
 import { validateUrl } from '../lib/urlValidator.js';
+import { authenticateRequest } from '../middleware/authenticate.js';
+import { requireSuperAdminRole } from '../middleware/validateTenant.js';
 
 export default function createTestingRoutes(_pgPool) {
   const router = express.Router();
@@ -269,7 +271,16 @@ export default function createTestingRoutes(_pgPool) {
   //     window_days?: number                       // Only delete items created within this window (default 3)
   //   }
   // }
-  router.post('/cleanup-test-data', async (req, res) => {
+  //
+  // SECURITY: this is a DESTRUCTIVE endpoint (mass-deletes is_test_data rows across
+  // core tables, and finance events when a tenant_id is given). The /api/testing
+  // mount carries no auth, so this handler gates itself: authenticateRequest
+  // populates req.user, then requireSuperAdminRole rejects anyone who is not a
+  // superadmin (401 if unauthenticated, 403 if a non-superadmin). This matches the
+  // superadmin-only control posture of the finance Test/Live data mode — a regular
+  // user can neither flip the mode nor clear the data. (Local dev without auth still
+  // works: requireSuperAdminRole mocks a superadmin when NODE_ENV === 'development'.)
+  router.post('/cleanup-test-data', authenticateRequest, requireSuperAdminRole, async (req, res) => {
     try {
       const { tenant_id, confirm, unflagged_cleanup } = req.body || {};
 
@@ -347,6 +358,43 @@ export default function createTestingRoutes(_pgPool) {
             error: error.message,
           };
         }
+      }
+
+      // Pass 3: Finance event stream (per-tenant, best-effort). Finance is
+      // event-sourced; test events live on finance.audit_events (is_test_data).
+      // The clear is PER-TENANT — without a tenant_id we cannot scope it, so we
+      // skip rather than risk clearing across tenants. Never fail the whole
+      // cleanup: a finance error is recorded and we continue.
+      if (tenant_id) {
+        try {
+          const { clearFinanceTestData } = await import('../lib/finance/clearFinanceTestData.js');
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+
+          const financeResult = await clearFinanceTestData({
+            pool: _pgPool,
+            getSupabaseClient,
+            tenantId: tenant_id,
+            logger,
+          });
+
+          results['finance.audit_events'] = {
+            deleted: financeResult.deleted,
+            rebuilt: financeResult.rebuilt,
+            success: true,
+          };
+          totalDeleted += financeResult.deleted;
+        } catch (financeErr) {
+          logger.error('Error clearing finance test data:', financeErr);
+          results['finance.audit_events'] = {
+            deleted: 0,
+            success: false,
+            error: financeErr.message,
+          };
+        }
+      } else {
+        results['finance.audit_events'] = {
+          skipped: 'tenant_id required for finance clear',
+        };
       }
 
       // Optional follow-up: remove recent unflagged test data (example.com emails) for safety

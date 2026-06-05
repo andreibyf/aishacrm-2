@@ -13,13 +13,19 @@ export function createPgAuditEventsReader({ pool }) {
     throw new Error('createPgAuditEventsReader requires a Postgres pool');
   }
   return {
-    async count(tenantId) {
+    async count(tenantId, isTestData = null) {
       // Schema-qualified: the persistent event store writes/reads
       // `finance.audit_events` (financeEventStore.pg.js AUDIT_EVENTS_TABLE). A
       // bare `audit_events` would not resolve under the default search_path.
+      // Codex PR #634 P2: partition by the active Test/Live mode when given, so
+      // /runtime/status `counts.audit_events` matches the (partitioned) /audit-events
+      // read instead of counting the opposite partition's events too. `null` = all.
+      const filterMode = isTestData !== null && isTestData !== undefined;
       const result = await pool.query(
-        'SELECT count(*)::int AS n FROM finance.audit_events WHERE tenant_id = $1',
-        [tenantId],
+        filterMode
+          ? 'SELECT count(*)::int AS n FROM finance.audit_events WHERE tenant_id = $1 AND is_test_data = $2'
+          : 'SELECT count(*)::int AS n FROM finance.audit_events WHERE tenant_id = $1',
+        filterMode ? [tenantId, isTestData] : [tenantId],
       );
       return Number(result?.rows?.[0]?.n ?? 0);
     },

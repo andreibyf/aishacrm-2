@@ -26,7 +26,7 @@ export class FinanceReadDegradedError extends Error {
 
 // Count a projection read model: arrays by length, bucket-objects by summing
 // their array values (approval_queue: pending+resolved; adapter_queue:
-// queued+running+failed+completed).
+// draft+queued+running+failed+completed).
 function countReadModel(readModel) {
   if (Array.isArray(readModel)) return readModel.length;
   if (readModel && typeof readModel === 'object') {
@@ -48,10 +48,10 @@ export function createProjectionBackedFinanceReadAdapter({
       'createProjectionBackedFinanceReadAdapter requires createStoreProvider(fn), auditEventsReader, workers',
     );
   }
-  const { ledger, journalEntries, approvalQueue, adapterQueue } = workers;
-  if (!ledger || !journalEntries || !approvalQueue || !adapterQueue) {
+  const { ledger, journalEntries, approvalQueue, adapterQueue, invoices } = workers;
+  if (!ledger || !journalEntries || !approvalQueue || !adapterQueue || !invoices) {
     throw new Error(
-      'createProjectionBackedFinanceReadAdapter requires ledger, journalEntries, approvalQueue, adapterQueue workers',
+      'createProjectionBackedFinanceReadAdapter requires ledger, journalEntries, approvalQueue, adapterQueue, invoices workers',
     );
   }
 
@@ -86,6 +86,104 @@ export function createProjectionBackedFinanceReadAdapter({
       return readProjection(createStoreProvider(), journalEntries, tenantId);
     },
 
+    // The invoices projection stores FULL invoice snapshots and getProjection
+    // returns them as an insertion-ordered array — the same shape
+    // `service.listInvoices()` returns — so it is served as-is. The route's
+    // /draft-invoices handler reads id/status/customer_id/currency/total_cents/
+    // created_at/updated_at off each record, all present on the snapshot.
+    async listInvoices(tenantId) {
+      return readProjection(createStoreProvider(), invoices, tenantId);
+    },
+
+    // Reconstruct a flat approval list matching `service.listApprovals()` on the
+    // route-consumed fields (finance.v2.js /approvals: id/status/target_type/
+    // target_id/requested_by/requested_at + the decision actor/timestamp the
+    // route coalesces into decided_by/decided_at). The approval_queue projection
+    // splits records into pending/resolved buckets, so flatten both: pending
+    // entries map straight through; resolved entries map resolved_by/resolved_at
+    // into the status-specific decision fields (approved_/rejected_/cancelled_)
+    // the route coalesces over.
+    async listApprovals(tenantId) {
+      const queue = await readProjection(createStoreProvider(), approvalQueue, tenantId);
+      const pending = (queue?.pending || []).map((entry) => ({
+        id: entry.approval_id,
+        tenant_id: entry.tenant_id ?? null,
+        target_type: entry.target_type,
+        target_id: entry.target_id,
+        status: 'pending',
+        requested_by: entry.requested_by ?? null,
+        requested_at: entry.created_at,
+      }));
+      const resolved = (queue?.resolved || []).map((entry) => {
+        const record = {
+          id: entry.approval_id,
+          tenant_id: entry.tenant_id ?? null,
+          target_type: entry.target_type,
+          target_id: entry.target_id,
+          status: entry.status,
+          requested_by: entry.requested_by ?? null,
+          requested_at: entry.requested_at ?? null,
+        };
+        // Stamp the decision actor + timestamp onto the status-specific fields
+        // (approved_by/at | rejected_by/at | cancelled_by/at) the route's
+        // decided_by/decided_at coalescing reads from.
+        if (entry.status === 'approved') {
+          record.approved_by = entry.resolved_by;
+          record.approved_at = entry.resolved_at;
+        } else if (entry.status === 'rejected') {
+          record.rejected_by = entry.resolved_by;
+          record.rejected_at = entry.resolved_at;
+        } else if (entry.status === 'cancelled') {
+          record.cancelled_by = entry.resolved_by;
+          record.cancelled_at = entry.resolved_at;
+        }
+        return record;
+      });
+      return [...pending, ...resolved];
+    },
+
+    // Reconstruct a flat adapter-job list matching `service.listAdapterJobs()` on
+    // the route-consumed fields (finance.v2.js /adapter-jobs: id/operation/status/
+    // attempts/created_at). The adapter_queue projection splits records into
+    // draft/queued/running/failed/completed buckets keyed by adapter_job_id;
+    // concat all buckets and map adapter_job_id -> id. The projection now
+    // materializes a draft job from the `finance.approval.requested` adapter_job
+    // snapshot (before any sync event), so an un-synced draft is present here —
+    // matching the in-memory domain service's listAdapterJobs().
+    async listAdapterJobs(tenantId) {
+      const buckets = await readProjection(createStoreProvider(), adapterQueue, tenantId);
+      const items = [
+        ...(buckets?.draft || []),
+        ...(buckets?.queued || []),
+        ...(buckets?.running || []),
+        ...(buckets?.failed || []),
+        ...(buckets?.completed || []),
+      ];
+      return items.map((item) => ({
+        id: item.adapter_job_id,
+        tenant_id: item.tenant_id,
+        provider: item.provider,
+        aggregate_type: item.aggregate_type,
+        aggregate_id: item.aggregate_id,
+        operation: item.operation,
+        mode: item.mode,
+        status: item.status,
+        attempts: item.attempts,
+        // Codex PR #633 P2: the projection now stores a retryable failure's backoff
+        // ETA on the queue item; the route serializes `j.next_attempt_at`. Carry it
+        // through or `/adapter-jobs?status=queued` reports `next_attempt_at: null`.
+        next_attempt_at: item.next_attempt_at ?? null,
+        // The route serializer (finance.v2.js GET /adapter-jobs) reads `last_error`
+        // — the in-memory contract's field name. The adapter_queue projection
+        // stores the error under `error_message`, so map it back to `last_error`
+        // here or the route emits `last_error: null` and drops the failure text
+        // for failed jobs in persistent mode (Codex PR #632-followup P2).
+        last_error: item.error_message ?? null,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      }));
+    },
+
     async getLedger(tenantId) {
       // Strip the projection read model's tenant_id wrapper so the shape matches
       // the in-memory `service.getLedger()` ({ accounts, totals }).
@@ -100,16 +198,19 @@ export function createProjectionBackedFinanceReadAdapter({
       return balanceSheetFromLedger(await ledgerReadModel(createStoreProvider(), tenantId));
     },
 
-    async getRuntimeStatus(tenantId) {
+    async getRuntimeStatus(tenantId, { isTestData = null } = {}) {
       const storeProvider = createStoreProvider();
       let auditCount;
       try {
-        auditCount = await auditEventsReader.count(tenantId);
+        // Codex PR #634 P2: partition the audit count by the active mode so it
+        // matches the (partitioned) /audit-events read. `null` = all (back-compat).
+        auditCount = await auditEventsReader.count(tenantId, isTestData);
       } catch (err) {
         throw new FinanceReadDegradedError('audit_events read failed', err);
       }
 
       const je = await readProjection(storeProvider, journalEntries, tenantId);
+      const inv = await readProjection(storeProvider, invoices, tenantId);
       const ap = await readProjection(storeProvider, approvalQueue, tenantId);
       const aj = await readProjection(storeProvider, adapterQueue, tenantId);
 
@@ -120,7 +221,7 @@ export function createProjectionBackedFinanceReadAdapter({
       // not be silently collapsed to null — that would mask projection_state read
       // failures and return 200 instead of 503.
       const lag = {};
-      for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue]) {
+      for (const worker of [ledger, journalEntries, approvalQueue, adapterQueue, invoices]) {
         let state;
         try {
           state = await storeProvider.getState(worker.projectionName, tenantId);
@@ -146,7 +247,7 @@ export function createProjectionBackedFinanceReadAdapter({
         },
         counts: {
           journal_entries: countReadModel(je),
-          invoices: 0, // no invoice projection; draft-invoices is a deferred gap endpoint
+          invoices: countReadModel(inv),
           approvals: countReadModel(ap),
           audit_events: auditCount,
           adapter_jobs: countReadModel(aj),
