@@ -18,9 +18,13 @@ SET config = jsonb_set(
 WHERE config->>'baseUrl' = 'http://localhost:3001';
 
 -- Log the changes
+-- NOTE: system_logs has no `log_type` column (see 001_init.sql / 003) — the
+-- correct column is `level` (NOT NULL). The original `log_type` reference made
+-- this migration fail on any from-scratch replay. 'configuration' is kept as the
+-- level value to preserve the original intent.
 INSERT INTO system_logs (
     tenant_id,
-    log_type,
+    level,
     message,
     metadata
 ) VALUES (

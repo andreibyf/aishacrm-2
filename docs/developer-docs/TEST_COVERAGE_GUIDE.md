@@ -261,9 +261,9 @@ test('user can complete workflow', async ({ page }) => {
    - Coverage reporting (c8)
    - Uploads coverage artifacts
 
-2. **api-schema-tests.yml** - Validates API schemas
-   - Form validation
-   - API schema validation
+2. **e2e.yml** (`schema-validation` suite) - Validates API schemas
+   - Runs `tests/platform/api-schema-validation.spec.js` against a live stack on the self-hosted runner (authenticated as superadmin)
+   - Replaces the retired `api-schema-tests.yml`, which tried to replay all migrations into an ephemeral Postgres the Supabase-backed backend never used
 
 ### Coverage Reporting
 

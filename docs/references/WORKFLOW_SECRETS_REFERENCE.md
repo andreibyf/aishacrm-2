@@ -36,8 +36,7 @@ This document provides a quick reference for all secrets used across GitHub Acti
 | Workflow               | Secrets Required                                                                | Purpose                    |
 | ---------------------- | ------------------------------------------------------------------------------- | -------------------------- |
 | `docker-release.yml`   | `PROD_VPS_HOST`<br>`PROD_VPS_USER`<br>`PROD_VPS_KEY`<br>`PROD_MCP_GITHUB_TOKEN` | Production deployment      |
-| `api-schema-tests.yml` | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`<br>`DATABASE_URL`                 | Database integration tests |
-| `e2e.yml`              | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`                                 | End-to-end tests           |
+| `e2e.yml`              | `VITE_SUPABASE_URL`<br>`VITE_SUPABASE_ANON_KEY`                                 | End-to-end tests (incl. the `schema-validation` suite, formerly `api-schema-tests.yml`) |
 | `mcp-audit-test.yml`   | `SUPABASE_URL`<br>`SUPABASE_SERVICE_ROLE_KEY`                                   | MCP server tests           |
 
 ## Secret Categories

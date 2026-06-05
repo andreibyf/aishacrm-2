@@ -109,7 +109,7 @@ jobs:
             "notifications" { $TARGET = "tests/e2e/notifications.spec.ts" }
             "tenant" { $TARGET = "tests/e2e/tenant-switching.spec.ts" }
             "crud" { $TARGET = "tests/e2e/crud-operations.spec.js" }
-            "schema-validation" { $TARGET = "tests/api-schema-validation.spec.js" }
+            "schema-validation" { $TARGET = "tests/platform/api-schema-validation.spec.js" }
             # Use directory-only target and rely on Playwright test discovery.
             # This avoids any regex/glob parsing differences across shells/versions.
             "all" { $TARGET = "tests/e2e/" }
