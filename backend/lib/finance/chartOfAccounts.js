@@ -136,8 +136,16 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
     if (hit) return { account: hit, created: false };
   }
   if (account_code !== undefined && account_code !== null && account_code !== '') {
-    const hit = list.find((a) => a.account_code === String(account_code));
-    if (hit) return { account: hit, created: false };
+    // Only treat a code as an identifier when it UNAMBIGUOUSLY maps to one account
+    // (Codex PR #647). Codes are unique within a process, but two concurrent
+    // persistent writes can transiently mint the same display code for DIFFERENT
+    // names (identity still differs via the name-derived id). A duplicated code
+    // can't reliably identify an account, so fall through to name resolution
+    // rather than binding to whichever copy `find` hits first. Durable code
+    // uniqueness needs the deferred finance.accounts materializer (unique
+    // tenant_id, account_code).
+    const matches = list.filter((a) => a.account_code === String(account_code));
+    if (matches.length === 1) return { account: matches[0], created: false };
   }
 
   const cls = safeClassification(classification);
