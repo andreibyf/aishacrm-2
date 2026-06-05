@@ -48,6 +48,29 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal(before, 1);
   });
 
+  test('posting a reversal marks the source entry reversed → it cannot be reversed again (Codex PR #650 P2)', async () => {
+    const service = createFinanceDomainService();
+    const sim = await service.simulatePostedDealWon({ tenantId: TENANT, actor, payload: { amount_cents: 250000 } });
+    const originalId = sim.posted_entry.id;
+
+    // request a reversal of the posted entry, then approve it (posts the reversal)
+    const rev = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor });
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: rev.approval.id, actor });
+
+    // the source entry is now 'reversed' (+ a finance.journal.reversed event)
+    const original = service.listJournalEntries(TENANT).find((e) => e.id === originalId);
+    assert.equal(original.status, 'reversed');
+    const reversedEvents = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.journal.reversed');
+    assert.equal(reversedEvents.length, 1);
+    assert.equal(reversedEvents[0].payload.journal_entry.id, originalId);
+
+    // a SECOND reversal of the same source is now rejected (not posted anymore)
+    await assert.rejects(
+      () => service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor }),
+      (err) => err.statusCode === 409,
+    );
+  });
+
   test('approving a NON-journal approval does not emit finance.journal.posted', async () => {
     const service = createFinanceDomainService();
     service.seedApproval({

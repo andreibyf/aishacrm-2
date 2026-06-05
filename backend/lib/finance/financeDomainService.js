@@ -927,6 +927,38 @@ export function createFinanceDomainService(opts = {}) {
             }),
           );
           Object.assign(entry, postedEntry);
+
+          // Codex PR #650 P2: if the just-posted entry is a REVERSAL
+          // (`reversal_of` set), mark its SOURCE entry `reversed` so it cannot be
+          // reversed again (reverseJournalEntry only allows `status === 'posted'`
+          // sources — otherwise one original could be reversed repeatedly,
+          // applying multiple reversing entries). The reversal entry's own posting
+          // already nets the original in the ledger (offsetting lines); this is a
+          // status guard, and the ledger projection does not consume
+          // finance.journal.reversed, so balances are unchanged. journalEntries
+          // projection + rebuildBucketFromEvents already handle the event.
+          if (postedEntry.reversal_of) {
+            const original = bucket.journalEntries.find((e) => e.id === postedEntry.reversal_of);
+            if (original && original.status !== 'reversed') {
+              const reversedOriginal = { ...clone(original), status: 'reversed', updated_at: now() };
+              await appendEvent(
+                bucket,
+                createFinanceEventEnvelope({
+                  tenantId,
+                  eventType: 'finance.journal.reversed',
+                  aggregateType: 'journal_entry',
+                  aggregateId: original.id,
+                  actorId: normalizedActor.id,
+                  actorType: normalizedActor.type,
+                  requestId,
+                  braidTraceId,
+                  payload: { journal_entry: clone(reversedOriginal) },
+                  policyDecision: decision,
+                }),
+              );
+              Object.assign(original, reversedOriginal);
+            }
+          }
         }
       }
 
