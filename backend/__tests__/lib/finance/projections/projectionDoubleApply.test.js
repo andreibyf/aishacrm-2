@@ -21,12 +21,11 @@
  *      provider — the runner's cursor guard makes the 2nd dispatch a no-op
  *      ('skipped'), so the read model is unchanged. This is the runtime proof.
  *
- * The ledger projection is deliberately EXCLUDED: it is additive
- * (`debit_cents = prev + line.debit_cents`) and NOT idempotent under
- * double-apply. It is safe today only because it consumes `finance.journal.posted`,
- * which has NO emit-site in the codebase (no live events ever reach it). See the
- * locking-prerequisite comment block in ledgerProjection.js and the design doc's
- * "Concurrency / deployment" section.
+ * The ledger projection is now INCLUDED (Codex PR #650 P1): Cash Flow Slice 2
+ * adds a `finance.journal.posted` emit-site, so the ledger had to become
+ * idempotent — it keys each contribution by the posted journal id, making a
+ * re-apply of the same event a no-op. See the idempotency comment in
+ * ledgerProjection.js.
  */
 
 import { describe, test } from 'node:test';
@@ -39,6 +38,7 @@ import createJournalEntriesProjectionWorker from '../../../../lib/finance/projec
 import createInvoiceProjectionWorker from '../../../../lib/finance/projections/invoiceProjection.js';
 import createApprovalQueueProjectionWorker from '../../../../lib/finance/projections/approvalQueueProjection.js';
 import createAdapterQueueProjectionWorker from '../../../../lib/finance/projections/adapterQueueProjection.js';
+import createLedgerProjectionWorker from '../../../../lib/finance/projections/ledgerProjection.js';
 
 const T = '00000000-0000-4000-8000-000000000abc';
 
@@ -211,11 +211,33 @@ const approvalRequestedWithDraftAdapterJob = {
   },
 };
 
+// Cash Flow Slice 2: the ledger now receives finance.journal.posted and must be
+// idempotent under double-apply (Codex PR #650 P1) — keyed by journal id.
+const journalPosted = {
+  id: 'evt_je_posted_1',
+  tenant_id: T,
+  event_type: 'finance.journal.posted',
+  created_at: '2026-05-21T01:00:00.000Z',
+  payload: {
+    journal_entry: {
+      id: 'je-posted-1',
+      tenant_id: T,
+      status: 'posted',
+      created_at: '2026-05-21T01:00:00.000Z',
+      lines: [
+        { account_id: 'a_cash', account_name: 'Cash', classification: 'Asset', debit_cents: 250000, credit_cents: 0 },
+        { account_id: 'a_rev', account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 250000 },
+      ],
+    },
+  },
+};
+
 const FLOWING = [
   ['journal_entries', createJournalEntriesProjectionWorker, journalDraftCreated],
   ['invoices', createInvoiceProjectionWorker, invoiceDraftCreated],
   ['approval_queue', createApprovalQueueProjectionWorker, approvalRequested],
   ['adapter_queue', createAdapterQueueProjectionWorker, adapterSyncQueued],
+  ['ledger', createLedgerProjectionWorker, journalPosted],
   // adapter_queue draft-materialization path (Task 8b).
   [
     'adapter_queue (draft)',
