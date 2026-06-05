@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import createFinanceDomainService from '../../../lib/finance/financeDomainService.js';
+import rebuildBucketFromEvents from '../../../lib/finance/financeDomainReplay.js';
 
 const TENANT = '00000000-0000-4000-8000-000000000abc';
 const actor = { id: 'u1', type: 'human' };
@@ -60,6 +61,23 @@ describe('financeDomainService — COA wiring', () => {
     // audit-only: must NOT have created a journal line on the ledger for the account itself
     const ledger = service.getLedger ? service.getLedger(TENANT) : null;
     if (ledger) assert.ok(!('account' in (ledger || {})) || true); // ledger derivation untouched
+  });
+
+  // Codex PR #647 P1 regression: in persistent mode the bucket is rebuilt from
+  // events (rebuildBucketFromEvents), which returns accounts:[] for a fresh tenant
+  // with no finance.account.created events. getTenantCoa MUST still seed the
+  // baseline into that empty replayed array — otherwise a hydrated write would
+  // auto-create AR/Revenue at 1500/4500 instead of resolving seeded 1100/4000.
+  test('a hydrated (replayed) bucket still seeds the baseline before write resolution', async () => {
+    const hydrated = rebuildBucketFromEvents([]);
+    assert.deepEqual(hydrated.accounts, []); // empty replayed array — the trap
+    const store = { tenants: new Map([[TENANT, hydrated]]) };
+    const service = createFinanceDomainService({ store });
+    const res = await service.simulateDealWon({ tenantId: TENANT, actor, payload: { amount_cents: 250000 } });
+    const lines = res.journal_entry.lines;
+    assert.equal(lines.find((l) => l.classification === 'Asset').account_code, '1100');
+    assert.equal(lines.find((l) => l.classification === 'Revenue').account_code, '4000');
+    assert.equal((await accountCreatedEvents(service)).length, 0); // seeded → no auto-create
   });
 
   test('reusing the same normalized name does not duplicate the account or re-emit the event', async () => {

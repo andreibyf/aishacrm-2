@@ -101,10 +101,14 @@ export function createProjectionBackedFinanceReadAdapter({
     // merged with the auto-created accounts folded from `finance.account.created`
     // events in append order. Fail-closed: a reader error propagates → 503
     // (no in-memory fallback), per the §6 no-silent-fallback contract.
-    async listAccounts(tenantId) {
+    async listAccounts(tenantId, { isTestData = null } = {}) {
       let created;
       try {
-        const payloads = await auditEventsReader.listByType(tenantId, 'finance.account.created');
+        const payloads = await auditEventsReader.listByType(
+          tenantId,
+          'finance.account.created',
+          isTestData,
+        );
         created = payloads.map((p) => ({
           id: p.account_id,
           tenant_id: tenantId,

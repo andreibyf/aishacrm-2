@@ -32,11 +32,17 @@ export function createPgAuditEventsReader({ pool }) {
 
     // COA Slice 1: fold a single event_type in append order (created_at, seq).
     // Used to reconstruct the tenant chart of accounts from finance.account.created
-    // events in persistent mode. Returns the parsed payloads in order.
-    async listByType(tenantId, eventType) {
+    // events in persistent mode. Returns the parsed payloads in order. Partitioned
+    // by the active Test/Live mode when `isTestData` is given (Codex PR #647 P2 —
+    // mirrors count(): without it, test-created accounts leak into the live chart
+    // and vice versa). `null`/undefined = no partition filter (back-compat).
+    async listByType(tenantId, eventType, isTestData = null) {
+      const filterMode = isTestData !== null && isTestData !== undefined;
       const result = await pool.query(
-        'SELECT payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = $2 ORDER BY created_at ASC, seq ASC',
-        [tenantId, eventType],
+        filterMode
+          ? 'SELECT payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = $2 AND is_test_data = $3 ORDER BY created_at ASC, seq ASC'
+          : 'SELECT payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = $2 ORDER BY created_at ASC, seq ASC',
+        filterMode ? [tenantId, eventType, isTestData] : [tenantId, eventType],
       );
       return (result?.rows ?? []).map((r) =>
         typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload || {},

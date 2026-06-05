@@ -561,7 +561,11 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // (fail-closed → 503 on a reader error). No create/edit/deactivate here.
   router.get('/accounts', async (req, res) => {
     try {
-      const accounts = await readAdapter.listAccounts(req.financeTenantId);
+      // Codex PR #647 P2: thread the active Test/Live partition so persistent-mode
+      // test-created accounts don't leak into the live chart (or vice versa) —
+      // same posture as /audit-events + /evidence-packs. In-memory ignores it.
+      const isTestData = await resolveReadIsTestData(req);
+      const accounts = await readAdapter.listAccounts(req.financeTenantId, { isTestData });
       res.json({ status: 'success', data: { accounts } });
     } catch (error) {
       logger.error('[finance.v2] list accounts failed:', error);
