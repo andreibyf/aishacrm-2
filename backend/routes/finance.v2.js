@@ -648,7 +648,12 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         id: j.id,
         aggregate_id: j.id,
         status: j.status,
-        account_code: null,
+        // COA Slice 1: a journal entry spans multiple accounts — surface its
+        // distinct resolved line codes (e.g. "1100, 4000"). Honest fallback to
+        // null (→ "—") for any legacy entry whose lines carry no resolved code.
+        account_code: Array.isArray(j.lines)
+          ? [...new Set(j.lines.map((l) => l.account_code).filter(Boolean))].join(', ') || null
+          : null,
         amount_cents: Array.isArray(j.lines)
           ? j.lines.reduce((sum, line) => sum + Number(line.debit_cents || 0), 0)
           : 0,

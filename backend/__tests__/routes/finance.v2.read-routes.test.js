@@ -266,7 +266,10 @@ describe('GET /api/v2/finance/journal-drafts', () => {
       'status',
     ]);
     assert.equal(row.aggregate_id, row.id); // aggregate_id <- id
-    assert.equal(row.account_code, null);
+    // COA Slice 1: account_code now surfaces the entry's resolved line codes
+    // (was a hardcoded null placeholder). The draft's lines resolve to seeded
+    // accounts, so at least one 4-digit code is present.
+    assert.match(row.account_code, /\d{4}/);
   });
 
   test('every journal-draft row is also visible via /journal-entries (subset invariant)', async () => {
