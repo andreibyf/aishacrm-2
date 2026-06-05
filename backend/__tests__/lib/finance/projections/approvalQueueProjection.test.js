@@ -139,6 +139,55 @@ test('a finance.approval.requested event adds a pending queue entry', async () =
   });
 });
 
+test('a finance.journal.reversal_requested creates a pending approval, then approves cleanly (Codex PR #634)', async () => {
+  const provider = createMemoryProjectionStoreProvider();
+  const runner = makeRunner({ storeProvider: provider });
+  const worker = createApprovalQueueProjectionWorker();
+  runner.register(worker);
+
+  // reverseJournalEntry emits the reversal's pending approval ONLY inside this event.
+  await runner.dispatch({
+    id: 'rev1',
+    tenant_id: TENANT_A,
+    event_type: 'finance.journal.reversal_requested',
+    created_at: '2026-05-21T00:00:00.000Z',
+    aggregate_type: 'journal_entry',
+    aggregate_id: 'reversal-je-1',
+    actor_id: 'user_requester',
+    payload: {
+      original_entry_id: 'je-original',
+      reversal_entry: { id: 'reversal-je-1' },
+      approval: {
+        id: 'approval_rev1',
+        tenant_id: TENANT_A,
+        target_type: 'journal_entry',
+        target_id: 'reversal-je-1',
+        status: 'pending',
+        requested_by: 'user_requester',
+        requested_at: '2026-05-21T00:00:00.000Z',
+        created_at: '2026-05-21T00:00:00.000Z',
+      },
+    },
+  });
+
+  let queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.pending.length, 1, 'the reversal approval is now in /approvals');
+  assert.equal(queue.pending[0].approval_id, 'approval_rev1');
+
+  // Approving the reversal resolves cleanly — no "unknown approval" degrade.
+  await runner.dispatch(
+    approvalResolved('finance.approval.approved', 'r', {
+      approvalId: 'approval_rev1',
+      createdAt: '2026-05-21T01:00:00.000Z',
+      resolvedBy: 'user_approver',
+    }),
+  );
+  queue = queueOf(worker, provider, TENANT_A);
+  assert.equal(queue.pending.length, 0);
+  assert.equal(queue.resolved.length, 1);
+  assert.equal(queue.resolved[0].status, 'approved');
+});
+
 // ── resolution removes pending, adds resolved ─────────────────────────────────
 
 test('finance.approval.approved removes the pending entry and adds a resolved entry', async () => {
@@ -173,6 +222,11 @@ test('finance.approval.approved removes the pending entry and adds a resolved en
     resolved_at: '2026-05-21T02:00:00.000Z',
     target_type: 'journal_entry',
     target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
   });
 });
 
@@ -200,9 +254,20 @@ test('finance.approval.rejected removes the pending entry and adds a resolved en
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.pending.length, 0);
   assert.equal(queue.resolved.length, 1);
-  assert.equal(queue.resolved[0].status, 'rejected');
-  assert.equal(queue.resolved[0].resolved_by, 'user_boss');
-  assert.equal(queue.resolved[0].resolved_at, '2026-05-21T02:00:00.000Z');
+
+  assert.deepEqual(queue.resolved[0], {
+    approval_id: 'approval_1',
+    status: 'rejected',
+    resolved_by: 'user_boss',
+    resolved_at: '2026-05-21T02:00:00.000Z',
+    target_type: 'journal_entry',
+    target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
+  });
 });
 
 test('finance.approval.cancelled removes the pending entry and adds a resolved entry', async () => {
@@ -229,7 +294,20 @@ test('finance.approval.cancelled removes the pending entry and adds a resolved e
   const queue = queueOf(worker, provider, TENANT_A);
   assert.equal(queue.pending.length, 0);
   assert.equal(queue.resolved.length, 1);
-  assert.equal(queue.resolved[0].status, 'cancelled');
+
+  assert.deepEqual(queue.resolved[0], {
+    approval_id: 'approval_1',
+    status: 'cancelled',
+    resolved_by: 'user_alice',
+    resolved_at: '2026-05-21T02:00:00.000Z',
+    target_type: 'journal_entry',
+    target_id: 'je-1',
+    // Phase 4-1 (Task 3): resolved entries additively carry the original
+    // requester + request timestamp so the persistent /approvals read matches
+    // the in-memory service shape for resolved approvals.
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T00:00:00.000Z',
+  });
 });
 
 // ── Replay rebuild (acceptance) ────────────────────────────────────────────────
@@ -348,6 +426,8 @@ test('a duplicate finance.approval.requested does not reopen an already-resolved
     resolved_at: '2026-05-21T02:00:00.000Z',
     target_type: 'journal_entry',
     target_id: 'je-e1',
+    requested_by: 'user_requester',
+    requested_at: '2026-05-21T01:00:00.000Z',
   });
 });
 

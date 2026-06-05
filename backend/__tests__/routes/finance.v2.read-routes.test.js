@@ -661,6 +661,145 @@ describe('finance.v2 read endpoints — no mutation', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Phase 4-1 Task 4 — the four service-backed list reads are served via the
+// read ADAPTER (not `service.list*` directly), so they stay durable when
+// persistent mode lands. A spy readAdapterFactory proves the source indirection
+// AND that the handler's filtering/mapping/envelope are unchanged downstream.
+// ---------------------------------------------------------------------------
+describe('finance.v2 list reads — served via the read adapter', () => {
+  function buildSpyApp() {
+    const calls = {
+      listInvoices: [],
+      listJournalEntries: [],
+      listApprovals: [],
+      listAdapterJobs: [],
+    };
+    const canned = {
+      invoices: [
+        {
+          id: 'inv_1',
+          status: 'draft',
+          customer_id: 'CUST-9',
+          currency: 'usd',
+          total_cents: 4242,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+        { id: 'inv_2', status: 'sent', total_cents: 1 }, // filtered out (not draft)
+      ],
+      journalEntries: [
+        {
+          id: 'je_1',
+          status: 'draft',
+          currency: 'usd',
+          lines: [{ debit_cents: 700, credit_cents: 0 }],
+          created_at: '2026-01-02T00:00:00.000Z',
+        },
+        { id: 'je_2', status: 'posted', lines: [{ debit_cents: 5, credit_cents: 0 }] }, // filtered out
+      ],
+      approvals: [
+        {
+          id: 'ap_1',
+          status: 'pending',
+          target_type: 'journal_entry',
+          target_id: 'je_1',
+          requested_by: 'user-1',
+          requested_at: '2026-01-03T00:00:00.000Z',
+        },
+      ],
+      adapterJobs: [
+        {
+          id: 'job_1',
+          status: 'running',
+          operation: 'push_draft',
+          created_at: '2026-01-04T00:00:00.000Z',
+        },
+      ],
+    };
+    const readAdapterFactory = () => ({
+      async listInvoices(tenantId) {
+        calls.listInvoices.push(tenantId);
+        return canned.invoices;
+      },
+      async listJournalEntries(tenantId) {
+        calls.listJournalEntries.push(tenantId);
+        return canned.journalEntries;
+      },
+      async listApprovals(tenantId) {
+        calls.listApprovals.push(tenantId);
+        return canned.approvals;
+      },
+      async listAdapterJobs(tenantId) {
+        calls.listAdapterJobs.push(tenantId);
+        return canned.adapterJobs;
+      },
+    });
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { id: 'user-1', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID };
+      next();
+    });
+    app.use(
+      '/api/v2/finance',
+      createFinanceV2Routes(null, {
+        readAdapterFactory,
+        isFinanceModuleEnabled: async () => true,
+      }),
+    );
+    return { app, calls };
+  }
+
+  test('GET /draft-invoices reads from readAdapter.listInvoices and preserves mapping', async () => {
+    const { app, calls } = buildSpyApp();
+    const res = await request(app).get('/api/v2/finance/draft-invoices');
+    assert.equal(res.status, 200);
+    assert.deepEqual(calls.listInvoices, [TENANT_ID]);
+    assert.equal(res.body.data.total, 1); // non-draft filtered out
+    const row = res.body.data.invoices[0];
+    assert.equal(row.id, 'inv_1');
+    assert.equal(row.amount_cents, 4242); // amount_cents <- total_cents
+    assert.equal(row.customer_name, null);
+    assert.equal(res.body.data.source.projection, 'invoices');
+  });
+
+  test('GET /journal-drafts reads from readAdapter.listJournalEntries and preserves mapping', async () => {
+    const { app, calls } = buildSpyApp();
+    const res = await request(app).get('/api/v2/finance/journal-drafts');
+    assert.equal(res.status, 200);
+    assert.deepEqual(calls.listJournalEntries, [TENANT_ID]);
+    assert.equal(res.body.data.total, 1); // posted filtered out
+    const row = res.body.data.journal_drafts[0];
+    assert.equal(row.aggregate_id, 'je_1'); // aggregate_id <- id
+    assert.equal(row.amount_cents, 700); // sum(debit_cents)
+    assert.equal(res.body.data.source.projection, 'journal_entries');
+  });
+
+  test('GET /approvals reads from readAdapter.listApprovals and preserves mapping', async () => {
+    const { app, calls } = buildSpyApp();
+    const res = await request(app).get('/api/v2/finance/approvals');
+    assert.equal(res.status, 200);
+    assert.deepEqual(calls.listApprovals, [TENANT_ID]);
+    assert.equal(res.body.data.total, 1);
+    const row = res.body.data.approvals[0];
+    assert.equal(row.subject_type, 'journal_entry'); // subject_type <- target_type
+    assert.equal(row.subject_id, 'je_1'); // subject_id <- target_id
+    assert.equal(res.body.data.source.projection, 'approval_queue');
+  });
+
+  test('GET /adapter-jobs reads from readAdapter.listAdapterJobs and preserves mapping', async () => {
+    const { app, calls } = buildSpyApp();
+    const res = await request(app).get('/api/v2/finance/adapter-jobs');
+    assert.equal(res.status, 200);
+    assert.deepEqual(calls.listAdapterJobs, [TENANT_ID]);
+    assert.equal(res.body.data.total, 1);
+    const row = res.body.data.adapter_jobs[0];
+    assert.equal(row.operation, 'push_draft');
+    assert.equal(row.attempts, 0);
+    assert.equal(res.body.data.source.projection, 'adapter_jobs');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Beta integrity slice — the financial-statement routes must return exactly
 // what the accounting engine computes (no recompute / shape drift between the
 // engine source of truth and the GET pass-through routes).

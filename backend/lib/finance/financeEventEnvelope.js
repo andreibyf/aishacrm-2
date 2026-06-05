@@ -9,6 +9,7 @@ export function createFinanceEventEnvelope({
   actorId = null,
   actorType = 'human',
   source = 'finance',
+  isTestData = false,
   requestId = null,
   braidTraceId = null,
   correlationId = null,
@@ -28,6 +29,8 @@ export function createFinanceEventEnvelope({
     actor_id: actorId,
     actor_type: normalizeActorType(actorType),
     source,
+    // Test/Live data-mode partition (slice 6a): live (false) by default.
+    is_test_data: isTestData,
     request_id: requestId,
     braid_trace_id: braidTraceId,
     correlation_id: correlationId || requestId || null,

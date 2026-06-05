@@ -160,8 +160,14 @@ export function createFinanceDomainService(opts = {}) {
       return clone(bucket.adapterJobs);
     },
 
-    async listAuditEvents(tenantId) {
-      return await eventStore.query({ tenant_id: tenantId });
+    // Slice 6 (Codex P1): segregate by Test/Live partition. `isTestData` is the
+    // active mode's flag (true=test, false=live); null means NO filter — the
+    // backward-compatible default the in-memory/unstamped path relies on (the
+    // store treats null/undefined as "all events"). The persistent route resolves
+    // the tenant mode and threads it in so the raw event stream can't leak the
+    // opposite partition.
+    async listAuditEvents(tenantId, isTestData = null) {
+      return await eventStore.query({ tenant_id: tenantId, is_test_data: isTestData });
     },
 
     getLedger(tenantId) {

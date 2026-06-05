@@ -13,6 +13,10 @@ permissions:
   contents: read
   issues: write
 
+# Tunable parameters via GitHub repo Variables:
+# PR_AGENT_MAX_TOKENS  (default 18000)
+# PR_AGENT_SUGGESTIONS (default 3)
+
 jobs:
   pr_review:
     if: |
@@ -31,10 +35,13 @@ jobs:
           CONFIG.MODEL: "openai/qwen-14b"
           CONFIG.MODEL_WEAK: "openai/qwen-14b"
           CONFIG.FALLBACK_MODELS: "[]"
-          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "20000"
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: ${{ vars.PR_AGENT_MAX_TOKENS || '18000' }}
+          CONFIG.PATCH_EXTRA_LINES_BEFORE: "2"
+          CONFIG.PATCH_EXTRA_LINES_AFTER: "1"
+          CONFIG.LARGE_PATCH_POLICY: "drop"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_REVIEWER.REQUIRE_SCORE_REVIEW: "false"
-          PR_REVIEWER.NUM_CODE_SUGGESTIONS: "3"
+          PR_REVIEWER.NUM_CODE_SUGGESTIONS: ${{ vars.PR_AGENT_SUGGESTIONS || '3' }}
           PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
           PR_REVIEWER.EXTRA_INSTRUCTIONS: |
             This is AiSHA CRM, a multi-tenant Node.js/React CRM. Apply these rules:
@@ -44,4 +51,4 @@ jobs:
             4. DATABASE: All tables have RLS. Never use service role key except in explicit admin routes.
             5. AI ENGINE: Tool-calling stays on OpenAI/Anthropic. Local provider is for summaries/light tasks only.
             6. SECURITY: No raw SQL, always use Supabase client with tenant isolation. Validate all UUIDs before DB queries.
-            Skip reviewing: dist/, node_modules/, *.min.js, backend/migrations/ (already applied).
+            Skip reviewing: dist/, node_modules/, *.min.js, backend/migrations/, backend/__tests__/, src/**/__tests__/, **/*.test.js, **/*.test.jsx, **/*.spec.js.

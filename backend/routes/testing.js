@@ -280,153 +280,185 @@ export default function createTestingRoutes(_pgPool) {
   // superadmin-only control posture of the finance Test/Live data mode — a regular
   // user can neither flip the mode nor clear the data. (Local dev without auth still
   // works: requireSuperAdminRole mocks a superadmin when NODE_ENV === 'development'.)
-  router.post(
-    '/cleanup-test-data',
-    authenticateRequest,
-    requireSuperAdminRole,
-    async (req, res) => {
-      try {
-        const { tenant_id, confirm, unflagged_cleanup } = req.body || {};
+  router.post('/cleanup-test-data', authenticateRequest, requireSuperAdminRole, async (req, res) => {
+    try {
+      const { tenant_id, confirm, unflagged_cleanup } = req.body || {};
 
-        if (!confirm) {
-          return res.status(400).json({
-            status: 'error',
-            message: 'Cleanup requires explicit confirmation',
-            hint: 'Send { "confirm": true } in request body',
-          });
-        }
+      if (!confirm) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Cleanup requires explicit confirmation',
+          hint: 'Send { "confirm": true } in request body',
+        });
+      }
 
-        // Tables with a direct is_test_data boolean column (migration 053)
-        const directFlagTables = ['activities', 'contacts', 'leads', 'accounts', 'opportunities'];
+      // Tables with a direct is_test_data boolean column (migration 053)
+      const directFlagTables = ['activities', 'contacts', 'leads', 'accounts', 'opportunities'];
 
-        // Tables that store is_test_data inside JSONB metadata
-        const metadataFlagTables = ['system_logs'];
+      // Tables that store is_test_data inside JSONB metadata
+      const metadataFlagTables = ['system_logs'];
 
-        const results = {};
-        let totalDeleted = 0;
+      const results = {};
+      let totalDeleted = 0;
 
-        // Pass 1: Tables with direct is_test_data column
-        for (const table of directFlagTables) {
-          try {
-            let query = `DELETE FROM ${table} WHERE is_test_data = true`;
-            const params = [];
+      // Pass 1: Tables with direct is_test_data column
+      for (const table of directFlagTables) {
+        try {
+          let query = `DELETE FROM ${table} WHERE is_test_data = true`;
+          const params = [];
 
-            if (tenant_id) {
-              query += ` AND tenant_id = $1`;
-              params.push(tenant_id);
-            }
-
-            query += ` RETURNING id`;
-
-            const result = await _pgPool.query(query, params);
-            const count = result.rowCount || 0;
-
-            results[table] = { deleted: count, success: true };
-            totalDeleted += count;
-          } catch (error) {
-            logger.error(`Error cleaning ${table}:`, error);
-            results[table] = { deleted: 0, success: false, error: error.message };
+          if (tenant_id) {
+            query += ` AND tenant_id = $1`;
+            params.push(tenant_id);
           }
-        }
 
-        // Pass 2: Tables with metadata-based is_test_data
-        for (const table of metadataFlagTables) {
-          try {
-            let query = `
+          query += ` RETURNING id`;
+
+          const result = await _pgPool.query(query, params);
+          const count = result.rowCount || 0;
+
+          results[table] = { deleted: count, success: true };
+          totalDeleted += count;
+        } catch (error) {
+          logger.error(`Error cleaning ${table}:`, error);
+          results[table] = { deleted: 0, success: false, error: error.message };
+        }
+      }
+
+      // Pass 2: Tables with metadata-based is_test_data
+      for (const table of metadataFlagTables) {
+        try {
+          let query = `
             DELETE FROM ${table}
             WHERE (metadata->>'is_test_data')::boolean = true
           `;
-            const params = [];
+          const params = [];
 
-            if (tenant_id) {
-              query += ` AND tenant_id = $1`;
-              params.push(tenant_id);
-            }
-
-            query += ` RETURNING id`;
-
-            const result = await _pgPool.query(query, params);
-            const count = result.rowCount || 0;
-
-            results[table] = {
-              deleted: count,
-              success: true,
-            };
-
-            totalDeleted += count;
-          } catch (error) {
-            logger.error(`Error cleaning ${table}:`, error);
-            results[table] = {
-              deleted: 0,
-              success: false,
-              error: error.message,
-            };
+          if (tenant_id) {
+            query += ` AND tenant_id = $1`;
+            params.push(tenant_id);
           }
+
+          query += ` RETURNING id`;
+
+          const result = await _pgPool.query(query, params);
+          const count = result.rowCount || 0;
+
+          results[table] = {
+            deleted: count,
+            success: true,
+          };
+
+          totalDeleted += count;
+        } catch (error) {
+          logger.error(`Error cleaning ${table}:`, error);
+          results[table] = {
+            deleted: 0,
+            success: false,
+            error: error.message,
+          };
         }
-
-        // Optional follow-up: remove recent unflagged test data (example.com emails) for safety
-        if (unflagged_cleanup?.enabled) {
-          try {
-            const windowDays = Math.max(
-              1,
-              Math.min(parseInt(unflagged_cleanup.window_days || '3', 10) || 3, 90),
-            );
-            const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
-
-            const { getSupabaseClient } = await import('../lib/supabase-db.js');
-            const supabase = getSupabaseClient();
-
-            // Contacts and leads typically have email columns; clean those by domain pattern
-            const emailTables = ['contacts', 'leads'];
-            for (const table of emailTables) {
-              try {
-                let q = supabase
-                  .from(table)
-                  .delete()
-                  .ilike('email', '%@example.com')
-                  .gte('created_at', cutoff)
-                  .select();
-                if (tenant_id) q = q.eq('tenant_id', tenant_id);
-
-                const { data, error } = await q;
-                if (error) throw error;
-                const count = Array.isArray(data) ? data.length : 0;
-                results[`${table}_unflagged`] = {
-                  deleted: count,
-                  success: true,
-                  window_days: windowDays,
-                };
-                totalDeleted += count;
-              } catch (unflaggedErr) {
-                logger.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
-                results[`${table}_unflagged`] = {
-                  deleted: 0,
-                  success: false,
-                  error: unflaggedErr.message,
-                };
-              }
-            }
-          } catch (unflaggedBlockErr) {
-            logger.error('Unflagged cleanup block error:', unflaggedBlockErr);
-            results['unflagged_cleanup'] = { success: false, error: unflaggedBlockErr.message };
-          }
-        }
-
-        res.json({
-          status: 'success',
-          data: {
-            total_deleted: totalDeleted,
-            tenant_id: tenant_id || 'all',
-            results,
-            timestamp: new Date().toISOString(),
-          },
-        });
-      } catch (error) {
-        logger.error('Cleanup test data error:', error);
-        res.status(500).json({ status: 'error', message: error.message });
       }
-    },
-  );
+
+      // Pass 3: Finance event stream (per-tenant, best-effort). Finance is
+      // event-sourced; test events live on finance.audit_events (is_test_data).
+      // The clear is PER-TENANT — without a tenant_id we cannot scope it, so we
+      // skip rather than risk clearing across tenants. Never fail the whole
+      // cleanup: a finance error is recorded and we continue.
+      if (tenant_id) {
+        try {
+          const { clearFinanceTestData } = await import('../lib/finance/clearFinanceTestData.js');
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+
+          const financeResult = await clearFinanceTestData({
+            pool: _pgPool,
+            getSupabaseClient,
+            tenantId: tenant_id,
+            logger,
+          });
+
+          results['finance.audit_events'] = {
+            deleted: financeResult.deleted,
+            rebuilt: financeResult.rebuilt,
+            success: true,
+          };
+          totalDeleted += financeResult.deleted;
+        } catch (financeErr) {
+          logger.error('Error clearing finance test data:', financeErr);
+          results['finance.audit_events'] = {
+            deleted: 0,
+            success: false,
+            error: financeErr.message,
+          };
+        }
+      } else {
+        results['finance.audit_events'] = {
+          skipped: 'tenant_id required for finance clear',
+        };
+      }
+
+      // Optional follow-up: remove recent unflagged test data (example.com emails) for safety
+      if (unflagged_cleanup?.enabled) {
+        try {
+          const windowDays = Math.max(
+            1,
+            Math.min(parseInt(unflagged_cleanup.window_days || '3', 10) || 3, 90),
+          );
+          const cutoff = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
+
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+
+          // Contacts and leads typically have email columns; clean those by domain pattern
+          const emailTables = ['contacts', 'leads'];
+          for (const table of emailTables) {
+            try {
+              let q = supabase
+                .from(table)
+                .delete()
+                .ilike('email', '%@example.com')
+                .gte('created_at', cutoff)
+                .select();
+              if (tenant_id) q = q.eq('tenant_id', tenant_id);
+
+              const { data, error } = await q;
+              if (error) throw error;
+              const count = Array.isArray(data) ? data.length : 0;
+              results[`${table}_unflagged`] = {
+                deleted: count,
+                success: true,
+                window_days: windowDays,
+              };
+              totalDeleted += count;
+            } catch (unflaggedErr) {
+              logger.error(`Unflagged cleanup error for ${table}:`, unflaggedErr);
+              results[`${table}_unflagged`] = {
+                deleted: 0,
+                success: false,
+                error: unflaggedErr.message,
+              };
+            }
+          }
+        } catch (unflaggedBlockErr) {
+          logger.error('Unflagged cleanup block error:', unflaggedBlockErr);
+          results['unflagged_cleanup'] = { success: false, error: unflaggedBlockErr.message };
+        }
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          total_deleted: totalDeleted,
+          tenant_id: tenant_id || 'all',
+          results,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      logger.error('Cleanup test data error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
 
   // GET /api/testing/full-scan - Run comprehensive endpoint availability scan
   // Query params:

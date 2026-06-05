@@ -44,6 +44,7 @@ import { createApprovalQueueProjectionWorker } from '../lib/finance/projections/
 import { createAdapterQueueProjectionWorker } from '../lib/finance/projections/adapterQueueProjection.js';
 import { createAuditTimelineProjectionWorker } from '../lib/finance/projections/auditTimelineProjection.js';
 import { createJournalEntriesProjectionWorker } from '../lib/finance/projections/journalEntriesProjection.js';
+import { createInvoiceProjectionWorker } from '../lib/finance/projections/invoiceProjection.js';
 // Slice 2C: shared worker process-lifecycle helpers extracted to a common module
 // so finance-adapter-worker (and any future finance-*-worker) follows the same
 // disabled-by-default + heartbeat-file + clean-shutdown contract without
@@ -54,6 +55,22 @@ import {
   writeWorkerHeartbeat as commonWriteWorkerHeartbeat,
   installSignalHandlers as commonInstallSignalHandlers,
 } from '../lib/finance/financeWorkerCommon.js';
+// Slice 6: the worker must replay only the tenant's ACTIVE Test/Live partition,
+// or it undoes a partitioned mode-switch rebuild.
+import { fetchFinanceDataMode, FINANCE_DATA_MODES } from '../lib/finance/financeDataMode.js';
+import { getSupabaseClient } from '../lib/supabase-db.js';
+
+/**
+ * Production per-tenant partition resolver: returns `true` when the tenant's
+ * finance data mode is `test`, `false` for `live`. Used so the poll cycle
+ * replays only the active partition's events. Injectable into
+ * `runProjectionPollCycle` / `startFinanceProjectionWorker` so tests drive it
+ * without Supabase.
+ */
+export async function defaultResolveIsTestData(tenantId) {
+  const mode = await fetchFinanceDataMode({ tenantId, getSupabaseClient });
+  return mode === FINANCE_DATA_MODES.TEST;
+}
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -115,13 +132,47 @@ export const parseControlledTenantIds = commonParseControlledTenantIds;
  * `event_count` reflects events successfully dispatched before any failure
  * for that tenant — useful operator signal when a partial cycle ran.
  */
-export async function runProjectionPollCycle({ runner, eventStore, tenantIds }) {
+export async function runProjectionPollCycle({
+  runner,
+  eventStore,
+  tenantIds,
+  resolveIsTestData = null,
+}) {
   const summary = [];
 
   for (const tenantId of tenantIds) {
+    // Slice 6 (Codex PR #634 P1): replay only the tenant's ACTIVE Test/Live
+    // partition. Without this the worker re-projects BOTH partitions into the
+    // shared projection_state, undoing a partitioned mode-switch rebuild — e.g.
+    // switching to TEST with no test events would let the next poll replay LIVE
+    // events into the test projections (or vice-versa). With no resolver injected
+    // the filter is `null` (replay all) — the back-compatible Slice-1 behavior.
+    let isTestData = null;
+    if (resolveIsTestData) {
+      try {
+        isTestData = await resolveIsTestData(tenantId);
+      } catch (error) {
+        // Codex PR #634 P2: FAIL-CLOSED. Forcing a partition could replay the WRONG
+        // partition's events into the shared projection rows (e.g. dormant test
+        // events newer than the live cursor dispatched into live projections). SKIP
+        // this tenant's poll until the mode lookup succeeds — the next cycle retries.
+        logger.warn(
+          { tenant_id: tenantId, error: error?.message || String(error) },
+          '[finance-projection-worker] data-mode resolve failed; SKIPPING tenant this cycle',
+        );
+        summary.push({
+          tenant_id: tenantId,
+          ok: false,
+          event_count: 0,
+          error: `data-mode resolve failed: ${error?.message || String(error)}`,
+        });
+        continue;
+      }
+    }
+
     let events;
     try {
-      events = await eventStore.replay(tenantId);
+      events = await eventStore.replay(tenantId, isTestData);
     } catch (error) {
       logger.error(
         {
@@ -180,8 +231,9 @@ export async function runProjectionPollCycle({ runner, eventStore, tenantIds }) 
 
 /**
  * Build the production runner: a `createProjectionRunner` wired to the
- * Postgres event store + the Postgres projection-state provider, with all
- * four Slice 1 projections registered.
+ * Postgres event store + the Postgres projection-state provider, with every
+ * business + infrastructure projection registered (ledger, approval_queue,
+ * adapter_queue, audit_timeline, journal_entries, invoices).
  *
  * The audit-timeline worker opts into the reserved internal infrastructure
  * event `finance.audit.event_appended` (the runtime gates infra-event
@@ -199,6 +251,7 @@ export function buildProjectionRunner({ pool }) {
   runner.register(createAdapterQueueProjectionWorker());
   runner.register(createAuditTimelineProjectionWorker({ includeInfrastructureEvents: true }));
   runner.register(createJournalEntriesProjectionWorker());
+  runner.register(createInvoiceProjectionWorker());
 
   return runner;
 }
@@ -252,6 +305,7 @@ export function startFinanceProjectionWorker({
   runner,
   eventStore,
   tenantIds = parseControlledTenantIds(),
+  resolveIsTestData = defaultResolveIsTestData,
 } = {}) {
   if (!isFinanceProjectionWorkerEnabled()) {
     logger.info('[finance-projection-worker] disabled — idling');
@@ -301,7 +355,12 @@ export function startFinanceProjectionWorker({
     }
 
     try {
-      const summary = await runProjectionPollCycle({ runner, eventStore, tenantIds });
+      const summary = await runProjectionPollCycle({
+        runner,
+        eventStore,
+        tenantIds,
+        resolveIsTestData,
+      });
       const successCount = summary.filter((row) => row.ok).length;
       const failureCount = summary.length - successCount;
       const eventCount = summary.reduce((acc, row) => acc + row.event_count, 0);

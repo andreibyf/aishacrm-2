@@ -69,6 +69,9 @@ export function createFinanceEventStore() {
       causation_id: eventPartial.causation_id || null,
       payload: eventPartial.payload || {},
       policy_decision: eventPartial.policy_decision || {},
+      // Test/Live data-mode partition (slice 6a): preserve the stamped mode;
+      // live (false) by default so existing callers are unaffected.
+      is_test_data: eventPartial.is_test_data ?? false,
       created_at: new Date().toISOString(),
     });
 
@@ -81,6 +84,7 @@ export function createFinanceEventStore() {
     event_type,
     aggregate_type,
     aggregate_id,
+    is_test_data,
     limit,
     fromIndex = 0,
   } = {}) {
@@ -91,11 +95,15 @@ export function createFinanceEventStore() {
       );
     }
 
+    const filterMode = is_test_data !== undefined && is_test_data !== null;
+
     let results = log.slice(fromIndex).filter((evt) => {
       if (evt.tenant_id !== tenant_id) return false;
       if (event_type !== undefined && evt.event_type !== event_type) return false;
       if (aggregate_type !== undefined && evt.aggregate_type !== aggregate_type) return false;
       if (aggregate_id !== undefined && evt.aggregate_id !== aggregate_id) return false;
+      // Test/Live partition (slice 6a): filter only when explicitly provided.
+      if (filterMode && evt.is_test_data !== is_test_data) return false;
       return true;
     });
 
@@ -106,18 +114,25 @@ export function createFinanceEventStore() {
     return results;
   }
 
-  function replay(tenant_id) {
+  function replay(tenant_id, isTestData = null) {
     if (!tenant_id) {
       throw new FinanceEventStoreError(
         'tenant_id is required for event store replay',
         'FINANCE_EVENT_STORE_INVALID',
       );
     }
+    // Test/Live partition (slice 6a): filter to the requested mode only when
+    // supplied. null/undefined → all events (today's behaviour, unchanged).
+    const filterMode = isTestData !== null && isTestData !== undefined;
     // CF-5: Sort by created_at ASC, with _seq as a deterministic tie-breaker for
     // events that share the same millisecond timestamp. This guarantees stable
     // replay ordering without sub-millisecond clock resolution.
     return log
-      .filter((evt) => evt.tenant_id === tenant_id)
+      .filter((evt) => {
+        if (evt.tenant_id !== tenant_id) return false;
+        if (filterMode && evt.is_test_data !== isTestData) return false;
+        return true;
+      })
       .sort((a, b) => {
         if (a.created_at < b.created_at) return -1;
         if (a.created_at > b.created_at) return 1;
@@ -125,14 +140,19 @@ export function createFinanceEventStore() {
       });
   }
 
-  function getCount(tenant_id) {
+  function getCount(tenant_id, isTestData = null) {
     if (!tenant_id) {
       throw new FinanceEventStoreError(
         'tenant_id is required for event store getCount',
         'FINANCE_EVENT_STORE_INVALID',
       );
     }
-    return log.filter((evt) => evt.tenant_id === tenant_id).length;
+    const filterMode = isTestData !== null && isTestData !== undefined;
+    return log.filter((evt) => {
+      if (evt.tenant_id !== tenant_id) return false;
+      if (filterMode && evt.is_test_data !== isTestData) return false;
+      return true;
+    }).length;
   }
 
   return { append, query, replay, getCount };
