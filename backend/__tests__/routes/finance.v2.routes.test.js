@@ -64,12 +64,19 @@ describe('finance.v2 routes', () => {
     assert.equal(res.body.data.test_data_count, 0);
   });
 
-  test('GET /runtime/status reports live when the tenant data mode is live', async () => {
+  test('GET /runtime/status clamps a persisted live mode to test in in-memory deployments (Codex PR #634)', async () => {
+    // In-memory has NO test/live partition — the bucket is a single ephemeral,
+    // unpartitioned store. A tenant whose modulesettings still say `live` (e.g. a
+    // copied DB, or a downgrade from a persistent deploy) must NOT be advertised
+    // as `live` here, or sandbox entries would be served/acted on as live data.
+    // The route clamps the EFFECTIVE mode to `test` whenever persistence is
+    // in-memory (this unit harness is always in-memory: pgPool=null, flag unset).
     const { app } = buildApp({ dataMode: 'live' });
     const res = await request(app).get('/api/v2/finance/runtime/status');
     assert.equal(res.status, 200);
-    assert.equal(res.body.data.runtime.mode, 'live');
-    assert.equal(res.body.data.runtime.data_mode, 'live');
+    assert.equal(res.body.data.runtime.persistence, 'in_memory');
+    assert.equal(res.body.data.runtime.mode, 'test');
+    assert.equal(res.body.data.runtime.data_mode, 'test');
   });
 
   test('GET /runtime/status surfaces the dormant test_data_count from the injected counter', async () => {

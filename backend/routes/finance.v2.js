@@ -468,6 +468,14 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       } catch (err) {
         logger.warn('[finance.v2] data-mode resolve failed; defaulting to test:', err?.message);
       }
+      // Codex PR #634 P2: in-memory deployments have NO test/live isolation, so the
+      // EFFECTIVE mode is always `test` — even for a tenant whose persisted setting
+      // is `live` (e.g. a copied DB or a downgrade from a persistent deploy). The
+      // PUT setter already refuses live in-memory; clamp the reported mode here too
+      // so the API never advertises `live` while serving the unpartitioned bucket.
+      if (!persistentEvents) {
+        dataMode = FINANCE_DATA_MODES.TEST;
+      }
       // Codex PR #634 P2: count audit events for the ACTIVE partition only, so
       // `counts.audit_events` / `persistence_lag.audit_events_total` match the
       // (partitioned) /audit-events read instead of counting the opposite partition.
