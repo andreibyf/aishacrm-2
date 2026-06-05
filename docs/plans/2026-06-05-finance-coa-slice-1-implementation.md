@@ -37,6 +37,26 @@
 
 **Code generation (auto-create):** reserved range per classification to avoid colliding with system codes — Asset `15xx`, Liability `25xx`, Equity `35xx`, Revenue `45xx`, Expense `55xx`. Allocate the next free code in the range (deterministic: lowest unused). **Normalization for matching:** trim + collapse internal whitespace + case-fold; **display name preserves** the first-seen original casing.
 
+**Match key is classification-scoped (strict)** — `Asset:Cash` and `Revenue:Cash` are **distinct** accounts; never match by name alone.
+
+**`account_type` defaults for auto-created accounts (by classification):** `Asset → Asset`, `Liability → Liability`, `Equity → Equity`, `Revenue → Revenue`, `Expense → Expense`. The special seeded types (`Cash`, `Receivable`, `Payable`, `Suspense`) belong to the `is_system=true` baseline only and are **never** assigned by auto-create — an auto-created Asset is a generic `Asset`, not `Cash` (so Bridge B's `account_type ∈ {Cash, Bank}` cash set stays curated, not polluted by free-text names).
+
+---
+
+## Review clarifications (folded in — PR #646 review, Codex)
+
+The plan was approved "with required clarifications"; all are incorporated into the tasks below. Summary so nothing is lost:
+
+1. **`finance.account.created` is audit/provenance-only** — it must NOT create journal lines, affect ledger totals, or alter statements (Task 4).
+2. **Deterministic in-memory account ids** — derived from `tenantId + account_code`, not random (Task 2).
+3. **Persistent auto-create collision → retry, never silent** — on `account_code` conflict, reload + retry next free code, or return the existing row only if its normalized `classification:name` key matches; never proceed without an `account_id` (Task 3).
+4. **Classification-scoped matching** — see the strict rule above (Task 1).
+5. **Explicit `account_type` defaults** — see the table above (Task 1).
+6. **Persistent fail-closed** — if persistent mode is active and `finance.accounts` is unavailable, fail closed with 503 (no in-memory fallback), consistent with persistent reads (Tasks 3 + 5).
+7. **Update the frozen tab-inventory doc** too — not just smoke tests + status doc (Task 6).
+
+**Suggested implementation branch:** `feat/finance-ops-coa-slice1`.
+
 ---
 
 ## Task 1 — `chartOfAccounts` module (pure logic, mode-agnostic)
@@ -59,7 +79,9 @@
 - Modify: `backend/lib/finance/financeDomainService.js` (the in-memory `getTenantBucket` shape)
 - Test: `backend/__tests__/lib/finance/financeDomainService.coa.test.js` (new)
 
-**Behavior:** each tenant bucket gains `accounts` (array), **lazily seeded** with `DEFAULT_COA` (deep clone, stable synthetic ids) on first access. A helper `getTenantCoa(bucket)` ensures the seed. Auto-creates from Task 4 append to this array (ephemeral, per-process). No DB.
+**Behavior:** each tenant bucket gains `accounts` (array), **lazily seeded** with `DEFAULT_COA` on first access. A helper `getTenantCoa(bucket)` ensures the seed. Auto-creates from Task 4 append to this array (ephemeral, per-process). No DB.
+
+**Deterministic ids (review clarification 2):** seeded + auto-created in-memory account ids are **derived from `tenantId + account_code`** (e.g. `acct_${shortHash(tenantId)}_${account_code}`), NOT random — so read-your-write and tests are stable across calls within a process. Test: the same tenant seeded twice yields identical account ids.
 
 ## Task 3 — Persistent COA store (`finance.accounts`)
 
@@ -67,7 +89,11 @@
 - Create: `backend/lib/finance/coaStore.pg.js`
 - Test: `backend/__tests__/lib/finance/coaStore.pg.test.js` (pg mocked, no real DB)
 
-**Behavior:** `createFinancePgCoaStore({ pool })` exposes `ensureSeed(tenantId)` (idempotent upsert of `DEFAULT_COA` keyed on `unique(tenant_id, account_code)`), `list(tenantId)`, and `upsertAutoCreated(tenantId, account)` (insert non-system account; `ON CONFLICT (tenant_id, account_code)` no-op). Tenant-scoped; mirrors the event-store DI pattern (injected pool, no silent fallback). **Not wired** to a live DB by this slice — used only when persistent mode is active.
+**Behavior:** `createFinancePgCoaStore({ pool })` exposes `ensureSeed(tenantId)` (idempotent upsert of `DEFAULT_COA` keyed on `unique(tenant_id, account_code)`), `list(tenantId)`, and `upsertAutoCreated(tenantId, account)`. Tenant-scoped; mirrors the event-store DI pattern (injected pool). **Not wired** to a live DB by this slice — used only when persistent mode is active.
+
+**Collision behavior (review clarification 3) — never silent:** `upsertAutoCreated` inserts the non-system account; if the generated `account_code` conflicts (`23505` on `unique(tenant_id, account_code)`), it must NOT `DO NOTHING` and proceed without an id. Instead: (a) if an existing row matches the **same normalized `classification:name` key**, return that row (the concurrent create won — reuse it); (b) otherwise **reload the tenant accounts, recompute the next free code, and retry** (bounded retries). The function always returns a resolved account with an `account_id` or throws — callers never get a null id.
+
+**Fail-closed (review clarification 6):** if persistent mode is active and `finance.accounts` is unavailable/unreadable (missing table, query error), the store surfaces the error so the route fails closed with **503** — **no in-memory fallback in persistent mode**, consistent with the persistent-read posture. (In-memory mode never touches this store.)
 
 ## Task 4 — Resolve lines in the write choke point
 
@@ -75,7 +101,9 @@
 - Modify: `backend/lib/finance/financeDomainService.js:createJournalDraft` (the single choke point — `simulateDealWon` flows through it at `:447`)
 - Test: extend `financeDomainService.coa.test.js`
 
-**Behavior:** after `assertBalancedJournal(payload.lines)` and before building `journalEntry`, resolve each validated line through `resolveAccount` against the tenant COA (in-memory bucket array, or — when a persistent COA store is injected — its `list`+`upsertAutoCreated`). Attach `account_id` and denormalized `account_code` to each line; keep `account_name`/`classification` as-is. Emit a `finance.account.created` event (via the existing event path) for each auto-created account, with actor + trace metadata. **Read-your-write:** the projections already key on `account_id` when present (`ledgerProjection.accountKey`), so no projection change needed — codes now flow through.
+**Behavior:** after `assertBalancedJournal(payload.lines)` and before building `journalEntry`, resolve each validated line through `resolveAccount` against the tenant COA (in-memory bucket array, or — when a persistent COA store is injected — its `list`+`upsertAutoCreated`). Attach `account_id` and denormalized `account_code` to each line; keep `account_name`/`classification` as-is. **Read-your-write:** the projections already key on `account_id` when present (`ledgerProjection.accountKey`), so no projection change needed — codes now flow through.
+
+**`finance.account.created` is audit/provenance-ONLY (review clarification 1):** emitted once per auto-created account. It must **NOT** create journal lines, contribute to ledger totals, or alter any accounting statement — no business projection consumes it (only `auditTimelineProjection`, via the existing infrastructure-event opt-in pattern). Payload records: `tenant_id`, actor, the **normalized match key**, the generated `account_code`, `classification`, `account_type`, and the originating journal-draft / correlation id when available. This keeps COA-management metadata out of the accounting event stream's business semantics.
 
 **Steps (TDD):** failing test "a deal-won draft resolves both lines to seeded accounts (codes 1100 + 4000), account_id populated"; "an unseeded line name auto-creates a non-system account in the reserved range and emits finance.account.created"; "re-running with the same name reuses the account (no duplicate, no second created event)". Implement, green, commit.
 
@@ -94,7 +122,8 @@
 - Modify: `src/api/finance.js` (add `getAccounts(tenantId, { signal })` — GET-only, no mutation helper)
 - Create: `src/components/finance/ChartOfAccountsPanel.jsx` (uses `FinanceTablePanel`; columns: Code, Name, Classification, Type, Parent, System, Active)
 - Modify: `src/pages/FinanceOps.jsx` (`FINANCE_OPS_TABS` — add `{ id: 'accounts', label: 'Chart of accounts' }` immediately after `ledger`; this is the §6.2 freeze extension recorded in the design)
-- Tests: `src/components/finance/__tests__/ChartOfAccountsPanel.test.jsx` (new) + update `FinanceOps.smoke.test.jsx` (tab count/labels)
+- Modify: `docs/architecture/finance/finance-ui-slice-1-read-only-console-design.md` (review clarification 7) — amend the §6.2 **frozen tab inventory** to include "Chart of accounts" with a dated amendment note (the freeze is extended, not silently violated)
+- Tests: `src/components/finance/__tests__/ChartOfAccountsPanel.test.jsx` (new) + update `FinanceOps.smoke.test.jsx` (tab count/labels) + any other test asserting tab count/labels
 
 **Behavior:** read-only table, Refresh + CSV export (reuse `FinanceTablePanel` chrome). No create/edit/deactivate affordance.
 
@@ -107,9 +136,19 @@
 ## Final review
 
 - Run full finance backend suite + finance frontend suite; lint clean.
-- Confirm guardrails intact (no mutation UI, no provider/persistent flips, no migration applied).
 - Update `CHANGELOG.md` and `finance-ops-IMPLEMENTATION-STATUS.md` (move COA from "design-only §7" to "implemented", note Slice 2 / Bridge B still pending).
 - Then `superpowers:finishing-a-development-branch`.
+
+**Post-implementation acceptance checks (from the PR #646 review):**
+- [ ] Seeded accounts appear in `GET /api/v2/finance/accounts`.
+- [ ] Journal-draft lines now include `account_id` and `account_code`.
+- [ ] `simulateDealWon` resolves *Accounts Receivable* + *Revenue* to `1100` and `4000`.
+- [ ] A custom account name auto-creates a **non-system** account in the reserved range.
+- [ ] Reusing the same normalized name does **not** create a duplicate (and emits no second `finance.account.created`).
+- [ ] Ledger / Journals show account codes instead of "—" for resolved lines (honest "—" fallback retained for legacy free-text lines).
+- [ ] Persistent mode **fails closed** if the COA store/table is unavailable (503, no in-memory fallback).
+- [ ] `finance.account.created` does not affect ledger totals / statements.
+- [ ] No provider writes, no production actions, no env flips, no migration applied, **no editable COA UI**.
 
 ## Notes on sequencing & risk
 
