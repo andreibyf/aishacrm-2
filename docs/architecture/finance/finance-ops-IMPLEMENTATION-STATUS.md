@@ -10,7 +10,7 @@
 
 ## 1. TL;DR — current posture
 
-- **Read-only Finance Ops console is live** (`/FinanceOps`) — 12 tabs, all read-only, behind the per-tenant `financeOps` module gate + RBAC.
+- **Read-only Finance Ops console is live** (`/FinanceOps`) — 13 tabs, all read-only, behind the per-tenant `financeOps` module gate + RBAC.
 - **The event-sourced accounting core is implemented** (double-entry journals, projections, audit trail, approvals, adapter jobs) and runs in **in-memory mode by default**.
 - **Persistent durability is built but OFF by default.** `ENABLE_FINANCE_PERSISTENT_EVENTS=false` everywhere → ephemeral in-memory event store. Setting it `true` requires a Postgres pool **and** migrations 172–179 applied (the route fail-closes otherwise).
 - **No provider writes.** `FINANCE_PROVIDER_WRITES_ENABLED=false` (dominant kill switch); the ERPNext adapter is sandbox/draft-only.
@@ -90,12 +90,13 @@
 
 ## 6. Frontend console (read-only)
 
-`src/pages/FinanceOps.jsx` + `src/components/finance/`. Tab strip (frozen by design-freeze §6.2, amended 2026-06-05): **Runtime overview, Ledger summary, Chart of accounts, Draft invoices, Journal drafts, Journal entries, Approval queue, Adapter queue, Audit timeline, Projection / degraded, Sandbox adapter, Evidence.** Plus: guardrail banners, the test-mode "Create test entries" panel, per-panel CSV export, and amount formatting (cents → `2,500.00`, #642). Every tab is read-only — no approve/reject/reverse/replay/retry/provider-sync controls.
+`src/pages/FinanceOps.jsx` + `src/components/finance/`. Tab strip (frozen by design-freeze §6.2, amended 2026-06-05): **Runtime overview, Ledger summary, Chart of accounts, Cash flow, Draft invoices, Journal drafts, Journal entries, Approval queue, Adapter queue, Audit timeline, Projection / degraded, Sandbox adapter, Evidence.** Plus: guardrail banners, the test-mode "Create test entries" panel, per-panel CSV export, and amount formatting (cents → `2,500.00`, #642). Every tab is read-only — no approve/reject/reverse/replay/retry/provider-sync controls.
 
 ## 7. Design-only / NOT yet implemented
 
 - **Chart of accounts — WIRED (COA Slice 1, done).** `finance.accounts` is now resolved into the write path: `createJournalDraft` (and `simulateDealWon` through it) attaches `account_id` + `account_code` to every line, auto-creating a non-system account on a miss (audit-only `finance.account.created` event). A baseline seed + classification-scoped normalization end the "Cash"/"cash" fragmentation; resolved lines show real codes (no more "—"). Read-only `GET /api/v2/finance/accounts` + a "Chart of accounts" console tab (after Ledger summary). Event-sourced durability; both runtime modes (persistent reads fail-closed). Code: `backend/lib/finance/chartOfAccounts.js`, `financeDomainService.js`, `readAdapters/*`, `src/components/finance/ChartOfAccountsPanel.jsx`. **Editable COA manager** remains deferred (read-only first). The 2026-06-05 beta-scope decision still holds (COA = production-readiness prerequisite + fast-follow; disclosed as beta limitation #9).
-- **Cash Flow ↔ Finance bridge (Slice 2) — NOT implemented.** Designed (#643, "Bridge B": read-only cash-flow view derived from posted journals; cash/bank accounts identified via COA `account_type`). The Cash Flow module (`cash_flow` table, `backend/routes/cashflow.js`) is currently **fully separate** from finance. **This is the next slice.**
+- **Cash Flow ↔ Finance bridge (Slice 2) — DONE.** Bridge B implemented: `GET /api/v2/finance/cash-flow` + a read-only "Cash flow" tab rendering a statement derived from posted cash/bank journal lines (cash accounts via COA `account_type`), period inflow/outflow/net + contra-classification breakdown. Reconciles to the balance sheet's Cash line (same `posted`/`reversed` filter). Nothing written into the manual `cash_flow` module (which stays fully separate) or the ledger. **Bundled with journal posting** (below).
+- **Journal posting — DONE (Slice 2).** `approveFinanceAction` posts the journal on approval (`pending_approval → posted`, emits `finance.journal.posted`) — the unlock that makes the Ledger / P&L / Balance-sheet / Cash-flow reflect entries (they filter `posted`/`reversed`). Human-gated (approve is AI-blocked → AI can't post). A test-mode "Simulate posted deal" sandbox affordance (`POST /simulate/posted-deal-won`) populates the statements; the live console adds no approve/post controls.
 - **ERPNext live / other providers** — sandbox/draft-only today; live provider writes, QuickBooks/Xero, and provider COA mapping are not implemented.
 - **Production activation** — Phase 4 production-pilot is *designed* (`phase-4-*` docs) but nothing is activated; persistent events/provider writes remain operator-gated and off.
 - **Many `phase-3-*` / `staging-*` docs are runbooks/plans**, not executed actions (each says "no live action performed").
