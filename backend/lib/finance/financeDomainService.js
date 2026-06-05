@@ -47,11 +47,19 @@ function getTenantBucket(store, tenantId) {
   return store.tenants.get(tenantId);
 }
 
-// In-memory chart of accounts per tenant: lazily seeded with the baseline on
-// first access (COA Slice 1). Auto-created accounts are appended here and also
-// emitted as audit-only `finance.account.created` events.
+// In-memory chart of accounts per tenant (COA Slice 1). Ensures the baseline
+// system accounts are present (idempotent by account_code) on every access —
+// robust whether the bucket is fresh OR was rebuilt from events in persistent
+// mode (where `finance.account.created` events replay the auto-created accounts
+// and this fills in the non-event baseline). Auto-created accounts are appended
+// here and emitted as audit-only `finance.account.created` events.
 function getTenantCoa(bucket, tenantId) {
-  if (!bucket.accounts) bucket.accounts = seedAccountsForTenant(tenantId);
+  if (!Array.isArray(bucket.accounts)) bucket.accounts = [];
+  for (const base of seedAccountsForTenant(tenantId)) {
+    if (!bucket.accounts.some((a) => a.account_code === base.account_code)) {
+      bucket.accounts.push(base);
+    }
+  }
   return bucket.accounts;
 }
 
@@ -418,14 +426,19 @@ export function createFinanceDomainService(opts = {}) {
       // up front so the account-created events can carry it as provenance.
       const journalEntryId = `journal_${generateId()}`;
       const coa = getTenantCoa(bucket, tenantId);
+      // assertBalancedJournal's normalizeLine keeps account_id but DROPS
+      // account_code (Codex PR #647 P2), so read the caller-supplied code from the
+      // raw payload line at the same index (validateJournalLines maps in order).
+      const inputLines = Array.isArray(payload.lines) ? payload.lines : [];
       const resolvedLines = [];
-      for (const line of validation.lines) {
+      for (let i = 0; i < validation.lines.length; i += 1) {
+        const line = validation.lines[i];
         const { account, created } = resolveAccount({
           tenantId,
           accounts: coa,
           classification: line.classification,
           account_name: line.account_name,
-          account_code: line.account_code,
+          account_code: inputLines[i]?.account_code,
           account_id: line.account_id,
         });
         if (created) {

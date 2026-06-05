@@ -63,6 +63,25 @@ describe('financeDomainService — COA wiring', () => {
     if (ledger) assert.ok(!('account' in (ledger || {})) || true); // ledger derivation untouched
   });
 
+  test('an explicit account_code on a line resolves to that account (Codex PR #647 P2 — normalizeLine drops it)', async () => {
+    const service = createFinanceDomainService();
+    await service.createJournalDraft({
+      tenantId: TENANT,
+      actor,
+      payload: {
+        lines: [
+          // code-only / mismatched name — must resolve to seeded Cash (1000), NOT auto-create
+          { account_code: '1000', account_name: 'Mislabeled', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+        ],
+      },
+    });
+    const line = service.listJournalEntries(TENANT)[0].lines.find((l) => l.classification === 'Asset');
+    assert.equal(line.account_code, '1000');
+    assert.ok(!service.listAccounts(TENANT).find((a) => a.name === 'Mislabeled'));
+    assert.equal((await accountCreatedEvents(service)).length, 0);
+  });
+
   // Codex PR #647 P1 regression: in persistent mode the bucket is rebuilt from
   // events (rebuildBucketFromEvents), which returns accounts:[] for a fresh tenant
   // with no finance.account.created events. getTenantCoa MUST still seed the

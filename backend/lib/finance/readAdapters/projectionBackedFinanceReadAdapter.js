@@ -123,12 +123,16 @@ export function createProjectionBackedFinanceReadAdapter({
       } catch (err) {
         throw new FinanceReadDegradedError('Failed to read chart of accounts', err);
       }
+      // Dedupe by account_id, NOT account_code (Codex PR #647 P1): auto-created
+      // ids are name-derived + unique, but two different names can transiently
+      // share a display code under a concurrent-create race — deduping by code
+      // would hide one real account; deduping by id keeps both (identity correct).
       const accounts = seedAccountsForTenant(tenantId);
-      const seenCodes = new Set(accounts.map((a) => a.account_code));
+      const seenIds = new Set(accounts.map((a) => a.id));
       for (const acc of created) {
-        if (acc.account_code && !seenCodes.has(acc.account_code)) {
+        if (acc.id && !seenIds.has(acc.id)) {
           accounts.push(acc);
-          seenCodes.add(acc.account_code);
+          seenIds.add(acc.id);
         }
       }
       return accounts;

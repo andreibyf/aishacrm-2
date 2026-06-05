@@ -4,6 +4,7 @@ import {
   DEFAULT_COA,
   normalizeAccountKey,
   deterministicAccountId,
+  autoAccountId,
   nextCodeForClassification,
   seedAccountsForTenant,
   resolveAccount,
@@ -99,7 +100,18 @@ describe('chartOfAccounts — resolveAccount', () => {
     // special seeded types are NEVER auto-assigned — generic per classification
     assert.equal(account.account_type, 'Revenue');
     assert.equal(account.name, 'Consulting Fees');
-    assert.equal(account.id, deterministicAccountId(TENANT, '4500'));
+    // name-derived id (concurrency-safe), NOT code-derived (Codex PR #647 P1)
+    assert.equal(account.id, autoAccountId(TENANT, 'Revenue', 'Consulting Fees'));
+  });
+
+  test('auto-created ids are NAME-derived so two different names never share an id even on the same code', () => {
+    // Simulate the concurrent race: both requests see the same pre-write COA and
+    // independently allocate the lowest free Revenue code (4500) for DIFFERENT names.
+    const a = resolveAccount({ tenantId: TENANT, accounts: seed, classification: 'Revenue', account_name: 'Consulting Fees' });
+    const b = resolveAccount({ tenantId: TENANT, accounts: seed, classification: 'Revenue', account_name: 'Marketing' });
+    assert.equal(a.account.account_code, '4500');
+    assert.equal(b.account.account_code, '4500'); // same display code (cosmetic)
+    assert.notEqual(a.account.id, b.account.id); // but DISTINCT identities — no attribution collision
   });
 
   test('an auto-created Asset is generic Asset type, not Cash (cash set stays curated)', () => {

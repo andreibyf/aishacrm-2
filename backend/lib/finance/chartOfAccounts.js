@@ -63,13 +63,30 @@ export function normalizeAccountKey(classification, name) {
   return `${safeClassification(classification)}:${normalizeName(name).toLowerCase()}`;
 }
 
-function shortTenantHash(tenantId) {
-  return createHash('sha1').update(String(tenantId)).digest('hex').slice(0, 8);
+// Non-secret deterministic digest used only to derive stable account-id prefixes
+// (not for any security purpose). SHA-256 (not SHA-1/MD5) to satisfy static
+// analysis; truncated because we only need a short stable token.
+function shortHash(value) {
+  return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
 }
 
-/** Deterministic id per (tenant, code) — stable across calls for read-your-write + tests. */
+/** Deterministic id per (tenant, code) — used for the fixed-code SEEDED accounts. */
 export function deterministicAccountId(tenantId, accountCode) {
-  return `acct_${shortTenantHash(tenantId)}_${accountCode}`;
+  return `acct_${shortHash(tenantId)}_${accountCode}`;
+}
+
+/**
+ * Auto-created accounts get a NAME-derived id (unique per tenant + classification
+ * + normalized name), NOT a code-derived one (Codex PR #647 P1). Two concurrent
+ * persistent writes that auto-create DIFFERENT account names can therefore never
+ * collide on the same `account_id` even if the non-atomic lowest-free code
+ * allocation hands them the same display `account_code`. Identity + all
+ * ledger/line attribution stay correct; under that rare race the display code may
+ * cosmetically duplicate until a durable `finance.accounts` materializer
+ * (unique `tenant_id, account_code`) reconciles it.
+ */
+export function autoAccountId(tenantId, classification, name) {
+  return `acct_${shortHash(tenantId)}_a_${shortHash(normalizeAccountKey(classification, name))}`;
 }
 
 /** Lowest free code in the classification's reserved auto-create range. */
@@ -83,9 +100,9 @@ export function nextCodeForClassification(classification, existingCodes = []) {
   throw new Error(`COA auto-create code range exhausted for ${cls} (${lo}-${hi})`);
 }
 
-function buildAccount(tenantId, { account_code, name, classification, account_type, is_system }) {
+function buildAccount(tenantId, { account_code, name, classification, account_type, is_system, id }) {
   return {
-    id: deterministicAccountId(tenantId, account_code),
+    id: id || deterministicAccountId(tenantId, account_code),
     tenant_id: tenantId,
     account_code,
     name,
@@ -135,6 +152,8 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
     classification: cls,
     account_type: AUTO_ACCOUNT_TYPE[cls],
     is_system: false,
+    // name-derived id (not code-derived) — concurrency-safe identity, see autoAccountId.
+    id: autoAccountId(tenantId, cls, account_name),
   });
   return { account, created: true };
 }
@@ -143,6 +162,7 @@ export default {
   DEFAULT_COA,
   normalizeAccountKey,
   deterministicAccountId,
+  autoAccountId,
   nextCodeForClassification,
   seedAccountsForTenant,
   resolveAccount,
