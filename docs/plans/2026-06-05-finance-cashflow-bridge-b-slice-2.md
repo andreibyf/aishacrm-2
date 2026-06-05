@@ -86,8 +86,12 @@ Output shape: `{ cash_account_codes: [...], periods: [{ period, inflow_cents, ou
 - Guardrails intact (no writes into `cash_flow`, no ledger writes, no provider/production/env/migration).
 - Then `superpowers:finishing-a-development-branch`.
 
+## Decisions locked (2026-06-05)
+
+- **Direction = Bridge B only (A).** Auto-derived cash-flow *statement* from Finance's own posted journals. **No "sync" button** (nothing external to sync — it's a derivation of the tenant's own ledger, always available as a read once Finance is active, with a normal Refresh). **No import from the manual Cash Flow module** (Direction A stays out — un-audited single-sided entries must never be synthesized into the audited double-entry ledger).
+- **Surface = Finance Ops "Cash flow" tab** (auto-on when `financeOps` is active), alongside the other statements. The manual Cash Flow Management module remains independent and is untouched.
+
 ## Open questions for the reviewer
 
-1. **Surface** — Finance Ops "Cash flow" tab (recommended, Task 4) vs the design's Cash Flow page section?
-2. **Sequencing** — ship Bridge B now (empty-ready) as planned, or do a journal-posting slice first so all four statements show data?
-3. **Contra categorization** (Task 1b) — include the cash-from-Revenue / cash-to-Expense breakdown in Slice 2, or defer?
+1. **Sequencing** — ship Bridge B now (correct but empty until journals post) as planned, or do a **journal-posting slice first** so all four statements show data? *(Recommended: posting first or bundled — otherwise Bridge B is a permanently-empty statement until then.)*
+2. **Contra categorization** (Task 1b) — include the cash-from-Revenue / cash-to-Expense breakdown in Slice 2, or defer?
