@@ -903,42 +903,46 @@ export function createFinanceDomainService(opts = {}) {
       let postedEntry = null;
       if (approval.target_type === 'journal_entry') {
         const entry = bucket.journalEntries.find((e) => e.id === approval.target_id);
-        if (entry && entry.status !== 'posted' && entry.status !== 'reversed') {
-          postedEntry = {
-            ...clone(entry),
-            status: 'posted',
-            posted_at: now(),
-            posted_by: normalizedActor.id,
-            updated_at: now(),
-          };
-          await appendEvent(
-            bucket,
-            createFinanceEventEnvelope({
-              tenantId,
-              eventType: 'finance.journal.posted',
-              aggregateType: 'journal_entry',
-              aggregateId: entry.id,
-              actorId: normalizedActor.id,
-              actorType: normalizedActor.type,
-              requestId,
-              braidTraceId,
-              payload: { journal_entry: clone(postedEntry) },
-              policyDecision: decision,
-            }),
-          );
-          Object.assign(entry, postedEntry);
+        if (entry) {
+          // 1. Post the target entry if not already posted/reversed.
+          if (entry.status !== 'posted' && entry.status !== 'reversed') {
+            postedEntry = {
+              ...clone(entry),
+              status: 'posted',
+              posted_at: now(),
+              posted_by: normalizedActor.id,
+              updated_at: now(),
+            };
+            await appendEvent(
+              bucket,
+              createFinanceEventEnvelope({
+                tenantId,
+                eventType: 'finance.journal.posted',
+                aggregateType: 'journal_entry',
+                aggregateId: entry.id,
+                actorId: normalizedActor.id,
+                actorType: normalizedActor.type,
+                requestId,
+                braidTraceId,
+                payload: { journal_entry: clone(postedEntry) },
+                policyDecision: decision,
+              }),
+            );
+            Object.assign(entry, postedEntry);
+          }
 
-          // Codex PR #650 P2: if the just-posted entry is a REVERSAL
-          // (`reversal_of` set), mark its SOURCE entry `reversed` so it cannot be
-          // reversed again (reverseJournalEntry only allows `status === 'posted'`
-          // sources — otherwise one original could be reversed repeatedly,
-          // applying multiple reversing entries). The reversal entry's own posting
-          // already nets the original in the ledger (offsetting lines); this is a
-          // status guard, and the ledger projection does not consume
-          // finance.journal.reversed, so balances are unchanged. journalEntries
-          // projection + rebuildBucketFromEvents already handle the event.
-          if (postedEntry.reversal_of) {
-            const original = bucket.journalEntries.find((e) => e.id === postedEntry.reversal_of);
+          // 2. If the target is a REVERSAL (`reversal_of` set), mark its SOURCE
+          // entry `reversed` so it cannot be reversed again (reverseJournalEntry
+          // only allows `status === 'posted'` sources — otherwise one original
+          // could be reversed repeatedly). This runs INDEPENDENTLY of step 1 and
+          // is idempotent (Codex PR #650 P2 follow-up): on a retry after a partial
+          // append (posted landed durably, reversed failed), the reversal entry is
+          // already `posted` and skips step 1, but the source still needs healing —
+          // re-approving the same reversal now marks it. The reversal entry's own
+          // posting nets the original in the ledger; the ledger projection does not
+          // consume finance.journal.reversed, so balances are unchanged.
+          if (entry.reversal_of) {
+            const original = bucket.journalEntries.find((e) => e.id === entry.reversal_of);
             if (original && original.status !== 'reversed') {
               const reversedOriginal = { ...clone(original), status: 'reversed', updated_at: now() };
               await appendEvent(

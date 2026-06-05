@@ -71,6 +71,38 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     );
   });
 
+  test('re-approving a reversal HEALS the source after a partial append left it posted (Codex PR #650 P2 follow-up)', async () => {
+    const service = createFinanceDomainService();
+    // Simulate the partial-failure state: the reversal entry is already durably
+    // 'posted' (finance.journal.posted landed) but the source is still 'posted'
+    // (the finance.journal.reversed append had failed). The reversal approval is
+    // still pending → a retry re-approves it.
+    service.seedJournalEntry({
+      id: 'je_orig',
+      tenant_id: TENANT,
+      status: 'posted',
+      currency: 'usd',
+      lines: [{ account_id: 'a_cash', account_name: 'Cash', classification: 'Asset', debit_cents: 100000, credit_cents: 0 }],
+    });
+    service.seedJournalEntry({
+      id: 'je_rev',
+      tenant_id: TENANT,
+      status: 'posted',
+      reversal_of: 'je_orig',
+      currency: 'usd',
+      lines: [{ account_id: 'a_cash', account_name: 'Cash', classification: 'Asset', debit_cents: 0, credit_cents: 100000 }],
+    });
+    service.seedApproval({ id: 'appr_rev', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'je_rev', status: 'pending' });
+
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_rev', actor });
+
+    // healed: the source is now reversed even though the reversal was already posted (step 1 skipped)
+    const orig = service.listJournalEntries(TENANT).find((e) => e.id === 'je_orig');
+    assert.equal(orig.status, 'reversed');
+    const reversedEvents = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.journal.reversed');
+    assert.equal(reversedEvents.length, 1);
+  });
+
   test('approving a NON-journal approval does not emit finance.journal.posted', async () => {
     const service = createFinanceDomainService();
     service.seedApproval({
