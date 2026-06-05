@@ -73,5 +73,5 @@ Module-gated; `resolveReadIsTestData(req)` → adapter; returns `{ data: { cash_
 - Update `CHANGELOG.md` + `finance-ops-IMPLEMENTATION-STATUS.md` (posting wired → statements populate; Bridge B implemented; note posting is approval-driven/human-gated).
 - `superpowers:finishing-a-development-branch`.
 
-## Open question for the reviewer
-- **Task 3 posting affordance** — a test-mode "posted sandbox journal" control is the planned way to make the console show data. OK, or should posting stay backend-only (statements only populate via real backend approvals)?
+## Decisions — all resolved (2026-06-05)
+- **Task 3 posting affordance — APPROVED.** The test-mode "posted sandbox journal" control IS the intended way to populate the console (sandbox / `is_test_data` only; the live console adds no approve/post controls). Plan fully approved; proceed to implementation.
