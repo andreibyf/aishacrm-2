@@ -396,4 +396,109 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       'sandbox write bound to the verified TEST partition (not re-resolved to live)',
     );
   });
+
+  // -------------------------------------------------------------------------
+  // Editable COA manager — Task 15 (design §7 partition behavior). A COA
+  // POST /accounts is a partition-stamped write exactly like the other
+  // mutations: in TEST mode it stamps is_test_data=true and folds only into the
+  // test partition's chart; LIVE keeps its own independent chart; and an
+  // unresolved data mode fails closed (503) so a COA edit never lands in the
+  // wrong partition.
+  // -------------------------------------------------------------------------
+
+  // Build an app over CALLER-SUPPLIED shared stores so a single durable event
+  // store can be read under both the TEST and the LIVE partition (proving
+  // cross-partition isolation). Mirrors buildPersistentApp's wiring.
+  function buildPersistentAppOverStores({ eventStore, storeProvider, dataMode }) {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { id: 'human-user-1', role: 'admin', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID };
+      next();
+    });
+    app.use(
+      '/api/v2/finance',
+      createFinanceV2Routes(DUMMY_POOL, {
+        isFinanceModuleEnabled: async () => true,
+        eventStore,
+        createStoreProvider: () => storeProvider,
+        getFinanceDataMode: async () => dataMode,
+      }),
+    );
+    return app;
+  }
+
+  const COA_PAYLOAD = { name: 'Operating Bank', classification: 'Asset', account_type: 'Bank' };
+
+  test('a COA POST /accounts in TEST mode stamps is_test_data=true and folds only into the test partition', async () => {
+    const { app, eventStore } = buildPersistentApp({ dataMode: 'test' });
+
+    const createRes = await request(app).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    const createdId = createRes.body.data.id;
+    assert.ok(createdId, 'created account has an id');
+
+    // The emitted finance.account.created envelope is partition-stamped TEST.
+    const events = await eventStore.query({ tenant_id: TENANT_ID });
+    const created = events.filter((e) => e.event_type === 'finance.account.created');
+    assert.ok(created.length > 0, 'a finance.account.created event was appended');
+    assert.ok(
+      created.every((e) => e.is_test_data === true),
+      'the COA create is stamped into the TEST partition',
+    );
+
+    // Read-your-write within the SAME (test) partition: the new account is in the
+    // test chart. (The /accounts read contract returns { accounts } with no
+    // `source` provenance block — read-route parity with read-routes.test.js —
+    // so the read-your-write visibility below is the partition signal.)
+    const testList = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(testList.status, 200);
+    assert.ok(
+      testList.body.data.accounts.some((a) => a.id === createdId),
+      'test-created account is visible in the test chart',
+    );
+  });
+
+  test('GET /accounts for the LIVE partition does NOT show a TEST-created account', async () => {
+    // Share ONE durable store + projection provider across a TEST-mode write app
+    // and a LIVE-mode read app so the only difference is the active partition.
+    const eventStore = createFinanceEventStore();
+    const storeProvider = createMemoryProjectionStoreProvider();
+
+    const testApp = buildPersistentAppOverStores({ eventStore, storeProvider, dataMode: 'test' });
+    const liveApp = buildPersistentAppOverStores({ eventStore, storeProvider, dataMode: 'live' });
+
+    const createRes = await request(testApp).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    const createdId = createRes.body.data.id;
+
+    // The test partition sees it...
+    const testList = await request(testApp).get('/api/v2/finance/accounts');
+    assert.ok(
+      testList.body.data.accounts.some((a) => a.id === createdId),
+      'test chart shows the test-created account',
+    );
+
+    // ...but the LIVE partition's chart must NOT — only the re-seeded baseline
+    // system accounts (no test-created account leaks across the partition).
+    const liveList = await request(liveApp).get('/api/v2/finance/accounts');
+    assert.equal(liveList.status, 200);
+    assert.ok(
+      !liveList.body.data.accounts.some((a) => a.id === createdId),
+      `test-created account ${createdId} must NOT appear in the live chart; got ${JSON.stringify(
+        liveList.body.data.accounts.map((a) => a.id),
+      )}`,
+    );
+  });
+
+  test('a COA POST /accounts is refused (503) when the data mode cannot be resolved', async () => {
+    const { app } = buildPersistentApp({
+      getFinanceDataMode: async () => {
+        throw new Error('supabase lookup failed');
+      },
+    });
+    const res = await request(app).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
+  });
 });
