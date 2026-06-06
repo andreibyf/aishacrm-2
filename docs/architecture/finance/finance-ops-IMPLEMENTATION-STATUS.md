@@ -4,7 +4,7 @@
 >
 > **Maintenance:** update this file in the same PR as any finance change. It complements — does not replace — `CHANGELOG.md` (detailed per-change log) and the Slack "Finance Ops Canvas" (ChatGPT-maintained coordination view).
 >
-> **Last updated:** 2026-06-05 (through PR #642 merged; PR #643 open as design-only).
+> **Last updated:** 2026-06-06 (COA Slice 1 + Cash Flow Bridge B merged; editable COA manager implemented — retires beta limitation #10).
 
 ---
 
@@ -94,7 +94,8 @@
 
 ## 7. Design-only / NOT yet implemented
 
-- **Chart of accounts — WIRED (COA Slice 1, done).** `finance.accounts` is now resolved into the write path: `createJournalDraft` (and `simulateDealWon` through it) attaches `account_id` + `account_code` to every line, auto-creating a non-system account on a miss (audit-only `finance.account.created` event). A baseline seed + classification-scoped normalization end the "Cash"/"cash" fragmentation; resolved lines show real codes (no more "—"). Read-only `GET /api/v2/finance/accounts` + a "Chart of accounts" console tab (after Ledger summary). Event-sourced durability; both runtime modes (persistent reads fail-closed). Code: `backend/lib/finance/chartOfAccounts.js`, `financeDomainService.js`, `readAdapters/*`, `src/components/finance/ChartOfAccountsPanel.jsx`. **Editable COA manager** remains deferred (read-only first). The 2026-06-05 beta-scope decision still holds (COA = production-readiness prerequisite + fast-follow; disclosed as beta limitation #9).
+- **Chart of accounts — WIRED (COA Slice 1, done).** `finance.accounts` is now resolved into the write path: `createJournalDraft` (and `simulateDealWon` through it) attaches `account_id` + `account_code` to every line, auto-creating a non-system account on a miss (audit-only `finance.account.created` event). A baseline seed + classification-scoped normalization end the "Cash"/"cash" fragmentation; resolved lines show real codes (no more "—"). Read-only `GET /api/v2/finance/accounts` + a "Chart of accounts" console tab (after Ledger summary). Event-sourced durability; both runtime modes (persistent reads fail-closed). Code: `backend/lib/finance/chartOfAccounts.js`, `financeDomainService.js`, `readAdapters/*`, `src/components/finance/ChartOfAccountsPanel.jsx`. The 2026-06-05 beta-scope decision still holds (COA = production-readiness prerequisite + fast-follow; disclosed as beta limitation #9).
+- **Editable COA manager — IMPLEMENTED (2026-06-06).** The Chart-of-accounts tab is now an **editable manager**: server-authoritative `createAccount` / `updateAccount` / `deactivateAccount` / `reactivateAccount` (`financeDomainService.js`) behind RBAC-gated V2 routes (`routes/finance.v2.js`), with `ChartOfAccountsPanel.jsx` as the UI. Server-enforced lock rules: system accounts fully locked; posted-history accounts allow only name + `account_type` with a reason; no-history accounts fully editable. Curated `account_type` enum per classification; soft-deactivate balance guard; reactivate uniqueness re-check. All failures carry stable `FINANCE_COA_*` codes; the whole surface is **human-only** (AI actors → `403 FINANCE_COA_AI_FORBIDDEN`). `GET /accounts` exposes `has_posted_history`. **RBAC deviation:** no granular `finance.accounts.manage` capability exists, so the routes fall back to an **admin/superadmin** gate (structured so only the helper body changes when a capability lands). Event-sourced, **in-memory-first** (persistent mode stays flag-off). This **RETIRES beta limitation #10** — a custom-named account marked `Bank`/`Cash` now has its posted cash movements recognized by the already-live Cash Flow Bridge B (PR #650); proven by the #10-retirement integration test (`financeDomainService.coa-manager.test.js`). Residuals: system/seeded accounts still locked from rename; persistent activation deferred; granular capability deferred.
 - **Cash Flow ↔ Finance bridge (Slice 2) — DONE.** Bridge B implemented: `GET /api/v2/finance/cash-flow` + a read-only "Cash flow" tab rendering a statement derived from posted cash/bank journal lines (cash accounts via COA `account_type`), period inflow/outflow/net + contra-classification breakdown. Reconciles to the balance sheet's Cash line (same `posted`/`reversed` filter). Nothing written into the manual `cash_flow` module (which stays fully separate) or the ledger. **Bundled with journal posting** (below).
 - **Journal posting — DONE (Slice 2).** `approveFinanceAction` posts the journal on approval (`pending_approval → posted`, emits `finance.journal.posted`) — the unlock that makes the Ledger / P&L / Balance-sheet / Cash-flow reflect entries (they filter `posted`/`reversed`). Human-gated (approve is AI-blocked → AI can't post). A test-mode "Simulate posted deal" sandbox affordance (`POST /simulate/posted-deal-won`) populates the statements; the live console adds no approve/post controls.
 - **ERPNext live / other providers** — sandbox/draft-only today; live provider writes, QuickBooks/Xero, and provider COA mapping are not implemented.
@@ -103,7 +104,7 @@
 
 ## 8. Known gaps / limitations
 
-- ~~Emergent COA (account codes blank)~~ — RESOLVED in COA Slice 1 (§7). Editable COA management still deferred.
+- ~~Emergent COA (account codes blank)~~ — RESOLVED in COA Slice 1 (§7). ~~Editable COA management still deferred.~~ — Editable COA manager IMPLEMENTED (2026-06-06, §7); retires beta limitation #10.
 - Migrations 172–179 not auto-applied; persistent mode is inert until they are.
 - In-memory mode is ephemeral (restart loses finance state) and has no Test/Live partition (segregation is a persistent-mode property; in-memory is always `test`).
 - See `finance-ops-beta-limitations.md` for the curated beta-limitations list.
@@ -112,7 +113,7 @@
 
 1. **PR #643** review → if approved, implement **Slice 1** (COA seed + write-path resolution + read-only Chart-of-Accounts tab + `GET /accounts`).
 2. **Slice 2** — Bridge B cash-flow reporting view (depends on COA `account_type`).
-3. Future: editable COA manager; provider COA mapping; production-pilot activation gates.
+3. ~~editable COA manager~~ — DONE (2026-06-06, §7). Future: provider COA mapping; production-pilot activation gates; granular `finance.accounts.manage` capability (manager is admin/superadmin-gated for now).
 
 ## 10. Code map (where to look)
 

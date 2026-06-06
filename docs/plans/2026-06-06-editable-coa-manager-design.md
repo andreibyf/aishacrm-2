@@ -91,6 +91,8 @@ Edits target the active Test/Live partition (§7).
 
 Gate the four routes behind a **narrow capability — `finance.accounts.manage`** — per the RBAC & Access Matrix (Track E, #626), not a broad finance-manage permission. If the existing RBAC model cannot express a capability this granular, fall back to the closest finance-management permission and record the deviation. (Confirmed during planning.) AI-actor blocking (§2) is independent of and in addition to RBAC.
 
+**RBAC deviation as implemented (2026-06-06):** the repo's RBAC model has only coarse roles (`superadmin`/`admin`/`manager`/`user`/`employee`) and `perm_*` booleans — there is **no** `finance.accounts.manage` capability, and the RBAC & Access Matrix (Track E, #626) explicitly records that a finance-admin/finance-viewer split does **not** exist yet (Deferred). So the narrow capability is **not expressible** today. Per the documented fallback, the four routes are gated by the closest existing permission — **tenant `admin` OR `superadmin`** (`isSuperAdmin(req) || role === 'admin'`), throwing `403 FINANCE_COA_FORBIDDEN` on failure (`backend/routes/finance.v2.js`, `requireCoaManage` helper). COA management is a structural finance-config change, so admin is the natural floor. The gate is isolated in a single helper body so that **when a true `finance.accounts.manage` capability lands, only that body changes** — the four route call-sites and the `FINANCE_COA_FORBIDDEN` contract stay put. AI-actor blocking remains independent of and in addition to this gate.
+
 ## 6. Structured error codes
 
 Stable codes on every validation/authorization failure (HTTP in parentheses):
