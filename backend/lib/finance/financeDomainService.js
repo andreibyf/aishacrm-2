@@ -864,6 +864,29 @@ export function createFinanceDomainService(opts = {}) {
       const approval = bucket.approvals.find((row) => row.id === approvalId);
       ensureTenantMatch(approval, tenantId);
 
+      // Double-reversal guard (Codex PR #650 P2): if this approval would post a
+      // REVERSAL whose source has ALREADY been reversed by a DIFFERENT reversal
+      // entry, reject BEFORE approving/posting. Two reversals can race from the
+      // same posted source — `reverseJournalEntry` only guards on the source being
+      // `posted`, and the source flips to `reversed` at step 2 below, so two
+      // requests created before either approval both pass. Without this, approving
+      // the second would post a second `finance.journal.posted` reversal and
+      // double-reverse the original in the ledger/cash-flow before step 2 noticed.
+      // An idempotent re-approval of the SAME reversal (source.reversed_by ===
+      // target.id) falls through — step 1 no-ops on the already-posted entry and
+      // step 2 heals a source left `posted` by a partial append.
+      if (approval.target_type === 'journal_entry') {
+        const target = bucket.journalEntries.find((e) => e.id === approval.target_id);
+        if (target?.reversal_of) {
+          const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);
+          if (source && source.status === 'reversed' && source.reversed_by && source.reversed_by !== target.id) {
+            const error = new Error('This entry has already been reversed by another reversal; a second reversal cannot be posted.');
+            error.statusCode = 409;
+            throw error;
+          }
+        }
+      }
+
       // Append-before-mutate (PR #632 P2): persist the approved transition before
       // mutating the in-memory approval, so a failed append leaves it pending.
       // The append must also land before promoteLinkedAdapterJobs runs, since the
@@ -944,7 +967,12 @@ export function createFinanceDomainService(opts = {}) {
           if (entry.reversal_of) {
             const original = bucket.journalEntries.find((e) => e.id === entry.reversal_of);
             if (original && original.status !== 'reversed') {
-              const reversedOriginal = { ...clone(original), status: 'reversed', updated_at: now() };
+              // Stamp `reversed_by` with THIS reversal's id so the double-reversal
+              // guard above can tell a redundant second reversal (different id →
+              // reject) from an idempotent re-approval of the same one (same id →
+              // heal). Carried by the finance.journal.reversed payload, so it
+              // survives projection rebuild + persistent rehydration.
+              const reversedOriginal = { ...clone(original), status: 'reversed', reversed_by: entry.id, updated_at: now() };
               await appendEvent(
                 bucket,
                 createFinanceEventEnvelope({

@@ -71,6 +71,40 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     );
   });
 
+  test('two reversals raced from the same posted source — approving the SECOND is rejected, no double-reverse (Codex PR #650 P2)', async () => {
+    const service = createFinanceDomainService();
+    const sim = await service.simulatePostedDealWon({ tenantId: TENANT, actor, payload: { amount_cents: 250000 } });
+    const originalId = sim.posted_entry.id;
+
+    // TWO reversal requests created BEFORE either is approved. Both pass the
+    // request-time guard because the source is still 'posted' (it only flips to
+    // 'reversed' at approval) — so two distinct reversal entries + approvals exist.
+    const rev1 = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor });
+    const rev2 = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor });
+    assert.notEqual(rev1.reversal_entry.id, rev2.reversal_entry.id);
+
+    // approve the first → posts rev1, marks the source reversed (reversed_by=rev1)
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: rev1.approval.id, actor });
+    const postedAfter1 = (await postedEvents(service)).length;
+
+    // approving the SECOND is rejected — the source is already reversed by rev1
+    await assert.rejects(
+      () => service.approveFinanceAction({ tenantId: TENANT, approvalId: rev2.approval.id, actor }),
+      (err) => err.statusCode === 409,
+    );
+
+    // no second posted reversal, source reversed exactly once, ledger nets to zero
+    assert.equal((await postedEvents(service)).length, postedAfter1);
+    const reversedEvents = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.journal.reversed');
+    assert.equal(reversedEvents.length, 1);
+    assert.equal(reversedEvents[0].payload.journal_entry.id, originalId);
+    // ledger = the sale (250000) + exactly ONE reversal (250000) = 500000, NOT
+    // 750000 (a second posted reversal would balance too, so assert the total).
+    const ledger = service.getLedger(TENANT);
+    assert.equal(ledger.totals.debit_cents, 500000);
+    assert.equal(ledger.totals.credit_cents, 500000);
+  });
+
   test('re-approving a reversal HEALS the source after a partial append left it posted (Codex PR #650 P2 follow-up)', async () => {
     const service = createFinanceDomainService();
     // Simulate the partial-failure state: the reversal entry is already durably
