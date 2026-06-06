@@ -689,3 +689,13 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
     assert.equal((await updatedEvents(service)).length, 0);
   });
 });
+
+describe('financeDomainService — COA manager wiring (Task 10)', () => {
+  test('all four COA manager methods are exposed on the service object', () => {
+    const service = createFinanceDomainService();
+    assert.equal(typeof service.createAccount, 'function');
+    assert.equal(typeof service.updateAccount, 'function');
+    assert.equal(typeof service.deactivateAccount, 'function');
+    assert.equal(typeof service.reactivateAccount, 'function');
+  });
+});
