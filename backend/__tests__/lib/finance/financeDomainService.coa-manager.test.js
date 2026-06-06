@@ -840,6 +840,60 @@ describe('financeDomainService — #10-retirement integration (custom account �
     assert.equal(revenueCategory.inflow_cents, 30000);
   });
 
+  test('after a no-history rename, reusing the OLD name in a manual create is rejected (id-reuse guard, Codex PR #651 P1)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await service.createAccount({
+      tenantId: TENANT,
+      actor,
+      payload: { name: 'Stripe', classification: 'Asset', account_type: 'Asset' },
+    });
+    const originalId = acct.id;
+    // rename (no posted history → full edit allowed); id is immutable, derived from the OLD name
+    await service.updateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { name: 'Stripe Payouts' } });
+    const renamed = service.listAccounts(TENANT).find((a) => a.id === originalId);
+    assert.equal(renamed.name, 'Stripe Payouts');
+
+    // creating a NEW account with the OLD name would regenerate originalId → reject
+    await assert.rejects(
+      () =>
+        service.createAccount({
+          tenantId: TENANT,
+          actor,
+          payload: { name: 'Stripe', classification: 'Asset', account_type: 'Bank' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_NAME_RESERVED',
+    );
+    // no second account with the original id was created (chart still has exactly one)
+    assert.equal(service.listAccounts(TENANT).filter((a) => a.id === originalId).length, 1);
+  });
+
+  test('after a no-history rename, a journal auto-create on the OLD name is rejected (Codex PR #651 P1)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await service.createAccount({
+      tenantId: TENANT,
+      actor,
+      payload: { name: 'Stripe', classification: 'Asset', account_type: 'Asset' },
+    });
+    await service.updateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { name: 'Stripe Payouts' } });
+
+    // a journal line on the freed OLD name would auto-create an account with the renamed
+    // account's id (name-derived) → refuse rather than corrupt the id-keyed chart
+    await assert.rejects(
+      () =>
+        service.createJournalDraft({
+          tenantId: TENANT,
+          actor,
+          payload: {
+            lines: [
+              { account_name: 'Stripe', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+              { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+            ],
+          },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_NAME_RESERVED',
+    );
+  });
+
   test('a journal draft posting to a DEACTIVATED account is rejected — deactivation is enforceable (Codex PR #651 P2)', async () => {
     const service = createFinanceDomainService();
     const acct = await service.createAccount({

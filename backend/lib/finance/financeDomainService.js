@@ -527,6 +527,19 @@ export function createFinanceDomainService(opts = {}) {
           e.code = 'FINANCE_COA_ACCOUNT_INACTIVE';
           throw e;
         }
+        // Codex PR #651 P1: an AUTO-create whose name-derived id collides with an
+        // existing (renamed-away) account would mint a second account with that id.
+        // A name-match would have returned created:false, so created:true + an id
+        // already in the chart means the old name's id-slot is held by a renamed
+        // account — refuse rather than corrupt the id-keyed chart.
+        if (created && coa.some((a) => a.id === account.id)) {
+          const e = new Error(
+            `The account name "${line.account_name}" is reserved by a renamed account and cannot be auto-created; rename or reactivate it, or use a different name.`,
+          );
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_NAME_RESERVED';
+          throw e;
+        }
       }
 
       const resolvedLines = [];
@@ -1232,6 +1245,22 @@ export function createFinanceDomainService(opts = {}) {
       // Stamp provenance so the in-memory chart matches the replayed shape (the
       // fold carries `source` onto folded accounts), exactly like the auto-create path.
       account.source = 'manual';
+
+      // Codex PR #651 P1: ids are NAME-DERIVED (autoAccountId), so a RENAMED account
+      // keeps its original id (= hash of its OLD classification:name) while its old key
+      // becomes free. Creating a NEW account on that old name would regenerate the SAME
+      // id → two accounts, one id, corrupting the id-keyed replay Map. Refuse any create
+      // whose minted id already belongs to an account (the renamed account's lingering id
+      // reserves the old name). This is distinct from the DUPLICATE_NAME guard above,
+      // which only catches a CURRENT name match.
+      if (coa.some((a) => a.id === account.id)) {
+        const e = new Error(
+          `The name '${name}' in ${classification} is reserved by a renamed account and cannot be reused; choose a different name.`,
+        );
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_NAME_RESERVED';
+        throw e;
+      }
 
       // Append-before-mutate (PR #632 P2): persist the FLAT created event first;
       // only push onto the chart after the append resolves.
