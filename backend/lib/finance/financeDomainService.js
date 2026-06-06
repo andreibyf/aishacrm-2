@@ -1232,6 +1232,153 @@ export function createFinanceDomainService(opts = {}) {
       return clone(account);
     },
 
+    // Phase 3b (editable COA manager, design §2 + plan Task 7). Edit a non-system
+    // account. Event-sourced (Approach A): append the FULL post-edit snapshot under
+    // `finance.account.updated.payload.account` BEFORE mutating the chart, so the
+    // replay fold upserts it identically. Server is the authority for every lock
+    // rule (§2): UI hiding is presentation only. Human-only (ai_agent fail-closed
+    // by the governance default for ManageChartOfAccountsCommand).
+    async updateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: COA management is human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find the account by id (re-seeds the baseline first via getTenantCoa).
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts are fully locked — no field is editable (design §2).
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be edited.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // A field is "changed" only when present in the payload AND different from the
+      // current stored value. `account_code` is compared as a string (the stored
+      // shape) so a same-value re-submit isn't treated as a change.
+      const has = (field) => Object.prototype.hasOwnProperty.call(payload, field);
+      const nameChanged = has('name') && String(payload.name ?? '') !== String(current.name ?? '');
+      const classificationChanged = has('classification') && payload.classification !== current.classification;
+      const codeChanged = has('account_code') && String(payload.account_code ?? '') !== String(current.account_code ?? '');
+      const typeChanged = has('account_type') && payload.account_type !== current.account_type;
+      const anyChange = nameChanged || classificationChanged || codeChanged || typeChanged;
+
+      // 4. Posted-history lock rules (design §2).
+      const posted = hasPostedHistory(bucket, accountId);
+      if (posted && (classificationChanged || codeChanged)) {
+        const e = new Error('Classification and account_code are locked on an account with posted history.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY';
+        throw e;
+      }
+      if (posted && anyChange && String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to edit an account with posted history.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 5. Validate the EFFECTIVE (merged) result.
+      const effectiveClassification = classificationChanged ? payload.classification : current.classification;
+      const effectiveName = nameChanged ? payload.name : current.name;
+      const effectiveType = typeChanged ? payload.account_type : current.account_type;
+      const effectiveCode = codeChanged ? String(payload.account_code) : current.account_code;
+
+      if (classificationChanged && !FINANCE_CLASSIFICATIONS.includes(effectiveClassification)) {
+        const e = new Error(`Invalid account classification: ${effectiveClassification}`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CLASSIFICATION';
+        throw e;
+      }
+      if (nameChanged && String(effectiveName ?? '').trim() === '') {
+        const e = new Error('Account name is required');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_NAME';
+        throw e;
+      }
+      // The effective (classification, account_type) pair must always be valid — a
+      // classification change can invalidate the existing type, and vice-versa.
+      if (!isValidAccountType(effectiveClassification, effectiveType)) {
+        const e = new Error(`Invalid account_type '${effectiveType}' for classification '${effectiveClassification}'`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
+        throw e;
+      }
+      // Uniqueness: only when the match key (name/classification) actually changes,
+      // and only against OTHER accounts.
+      if (nameChanged || classificationChanged) {
+        const newKey = normalizeAccountKey(effectiveClassification, effectiveName);
+        if (coa.some((a) => a.id !== accountId && normalizeAccountKey(a.classification, a.name) === newKey)) {
+          const e = new Error(`An account named '${effectiveName}' already exists in ${effectiveClassification}`);
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_DUPLICATE_NAME';
+          throw e;
+        }
+      }
+      if (codeChanged && coa.some((a) => a.id !== accountId && a.account_code === effectiveCode)) {
+        const e = new Error(`Account code '${effectiveCode}' is already in use`);
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DUPLICATE_CODE';
+        throw e;
+      }
+
+      // 6. Build the full merged snapshot (id / is_system / is_active / source unchanged).
+      const updated = {
+        ...current,
+        account_code: effectiveCode,
+        name: effectiveName,
+        classification: effectiveClassification,
+        account_type: effectiveType,
+      };
+
+      // Append-before-mutate (PR #632 P2): persist the FULL snapshot first.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.updated',
+          aggregateType: 'account',
+          aggregateId: updated.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: { account: clone(updated), reason: payload.reason ?? null },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation: 'Edited chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      Object.assign(current, updated);
+
+      return clone(current);
+    },
+
     seedJournalEntry(entry) {
       const bucket = getTenantBucket(store, entry?.tenant_id);
       bucket.journalEntries.push(clone(entry));

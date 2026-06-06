@@ -9,6 +9,9 @@ const aiActor = { id: 'bot', type: 'ai_agent' };
 const createdEvents = async (service) =>
   (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.created');
 
+const updatedEvents = async (service) =>
+  (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.updated');
+
 // Seed a journal entry directly into the bucket with a given status + lines so the
 // helpers (__hasPostedHistory / __accountBalanceCents) have posted/reversed history
 // to fold over. Mirrors the posting test's seedJournalEntry usage.
@@ -264,3 +267,220 @@ describe('financeDomainService — createAccount (Task 6)', () => {
     );
   });
 });
+
+// Helper: create a manual account and return it (minted id + auto code).
+const makeAccount = (service, payload) =>
+  service.createAccount({ tenantId: TENANT, actor, payload });
+
+// Helper: seed one posted journal line against an account id so it has posted
+// history (and a balance). Posts +amount debit by default.
+const postLine = (service, accountId, { id = `je_${accountId}`, debit = 1000, credit = 0, status = 'posted' } = {}) =>
+  seedEntry(service, {
+    id,
+    status,
+    lines: [{ account_id: accountId, account_name: 'X', classification: 'Asset', debit_cents: debit, credit_cents: credit }],
+  });
+
+describe('financeDomainService — updateAccount (Task 7)', () => {
+  test('no-history full edit: name + classification + account_code + account_type all change', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Misc Asset', classification: 'Asset', account_type: 'Asset' });
+
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: 'Service Revenue', classification: 'Revenue', account_code: '4567', account_type: 'Revenue' },
+    });
+
+    assert.equal(updated.id, acct.id, 'identity is immutable');
+    assert.equal(updated.name, 'Service Revenue');
+    assert.equal(updated.classification, 'Revenue');
+    assert.equal(updated.account_code, '4567');
+    assert.equal(updated.account_type, 'Revenue');
+    assert.equal(updated.is_system, false);
+    assert.equal(updated.is_active, true);
+
+    // listed reflects the edit
+    const listed = service.listAccounts(TENANT).find((a) => a.id === acct.id);
+    assert.equal(listed.name, 'Service Revenue');
+    assert.equal(listed.classification, 'Revenue');
+
+    // one finance.account.updated event with the FULL snapshot under payload.account
+    const events = await updatedEvents(service);
+    assert.equal(events.length, 1);
+    const ev = events[0];
+    assert.equal(ev.aggregate_type, 'account');
+    assert.equal(ev.aggregate_id, acct.id);
+    assert.equal(ev.payload.account.id, acct.id);
+    assert.equal(ev.payload.account.name, 'Service Revenue');
+    assert.equal(ev.payload.account.classification, 'Revenue');
+    assert.equal(ev.payload.account.account_code, '4567');
+    assert.equal(ev.payload.account.account_type, 'Revenue');
+    assert.equal(ev.payload.account.is_system, false);
+    assert.equal(ev.payload.account.is_active, true);
+  });
+
+  test('posted-history account allows name + account_type change WITH a reason', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Operating', classification: 'Asset', account_type: 'Asset' });
+    postLine(service, acct.id);
+
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: 'Operating Bank', account_type: 'Bank', reason: 'mark as bank for cash flow' },
+    });
+
+    assert.equal(updated.name, 'Operating Bank');
+    assert.equal(updated.account_type, 'Bank');
+    assert.equal(updated.classification, 'Asset', 'classification unchanged');
+
+    const events = await updatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].payload.reason, 'mark as bank for cash flow');
+  });
+
+  test('posted-history account rejects a classification change with 409 FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Has History', classification: 'Asset', account_type: 'Asset' });
+    postLine(service, acct.id);
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { classification: 'Expense', account_type: 'Expense', reason: 'whatever' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('posted-history account rejects an account_code change with 409 FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Has History 2', classification: 'Asset', account_type: 'Asset' });
+    postLine(service, acct.id);
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { account_code: '1599', reason: 'renumber' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('posted-history change WITHOUT a reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Needs Reason', classification: 'Asset', account_type: 'Asset' });
+    postLine(service, acct.id);
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { name: 'Renamed No Reason' },
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_REASON_REQUIRED',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('a system account is fully locked: 409 FINANCE_COA_SYSTEM_ACCOUNT_LOCKED on any field', async () => {
+    const service = createFinanceDomainService();
+    // 'Cash' (1000) is a seeded system account.
+    const cash = service.listAccounts(TENANT).find((a) => a.account_code === '1000');
+    assert.ok(cash && cash.is_system, 'Cash is a seeded system account');
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: cash.id,
+          payload: { name: 'My Cash' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('an unknown account id is 404 FINANCE_COA_ACCOUNT_NOT_FOUND', async () => {
+    const service = createFinanceDomainService();
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: 'acct_does_not_exist',
+          payload: { name: 'Ghost' },
+        }),
+      (err) => err.statusCode === 404 && err.code === 'FINANCE_COA_ACCOUNT_NOT_FOUND',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('renaming onto another account name collides with 409 FINANCE_COA_DUPLICATE_NAME', async () => {
+    const service = createFinanceDomainService();
+    await makeAccount(service, { name: 'Alpha Revenue', classification: 'Revenue', account_type: 'Revenue' });
+    const beta = await makeAccount(service, { name: 'Beta Revenue', classification: 'Revenue', account_type: 'Revenue' });
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: beta.id,
+          payload: { name: 'alpha revenue' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_DUPLICATE_NAME',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('an invalid effective account_type for the classification is 400 FINANCE_COA_INVALID_ACCOUNT_TYPE (Bank on Revenue)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Sales', classification: 'Revenue', account_type: 'Revenue' });
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { account_type: 'Bank' },
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_INVALID_ACCOUNT_TYPE',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('an ai_agent actor is blocked with 403 FINANCE_COA_AI_FORBIDDEN and NO event', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Guarded', classification: 'Asset', account_type: 'Asset' });
+
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor: aiActor,
+          accountId: acct.id,
+          payload: { name: 'AI Renamed' },
+        }),
+      (err) => err.statusCode === 403 && err.code === 'FINANCE_COA_AI_FORBIDDEN',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+    assert.equal(service.listAccounts(TENANT).find((a) => a.id === acct.id).name, 'Guarded');
+  });
+});
+
