@@ -744,3 +744,99 @@ describe('financeDomainService — COA manager wiring (Task 10)', () => {
     assert.equal(typeof service.reactivateAccount, 'function');
   });
 });
+
+// =====================================================================================
+// #10-RETIREMENT INTEGRATION TEST (Task 20)
+//
+// This is an explicitly-labelled INTEGRATION test, not part of the COA-CRUD acceptance
+// (which makes no /cash-flow claim — see design §8). It is VALID because Cash Flow
+// Bridge B is already MERGED and live (PR #650): getCashFlow / buildCashFlowStatement
+// recognize an account as cash when its `account_type ∈ {Cash, Bank}` (or its normalized
+// (classification, name) matches a curated cash/bank account). This test does NOT
+// re-implement cash flow — it only proves that the editable COA manager's account_type
+// edit feeds that already-live recognition, which is exactly what retires beta
+// limitation #10 (custom-named bank/cash accounts being invisible to /cash-flow).
+//
+// ORDERING (the "post first, then mark Bank" sequence):
+//   1. createAccount a CUSTOM-named generic Asset ('Stripe Payouts', Asset/Asset) —
+//      NOT recognized as cash by Bridge B (no curated Cash/Bank namesake).
+//   2. Post a balanced journal line that moves real cash through that account
+//      (Debit Stripe Payouts / Credit Revenue), then assert getCashFlow does NOT yet
+//      recognize it: its account_code is absent from cash_account_codes and there is
+//      no inflow attributed to it.
+//   3. updateAccount to set account_type = 'Bank'. The account NOW has posted history,
+//      so this is a posted-history edit — account_type is editable on posted-history
+//      accounts WITH a reason (per the §2 lock rules), so this is valid. (This is the
+//      same edge the "posted-history account allows name + account_type change WITH a
+//      reason" unit test above exercises.)
+//   4. Assert getCashFlow now recognizes it: its account_code ∈ cash_account_codes AND
+//      the posted receipt surfaces as a cash inflow attributed to the contra (Revenue).
+// =====================================================================================
+describe('financeDomainService — #10-retirement integration (custom account → Bank → cash flow)', () => {
+  test('a custom-named Asset, once marked Bank, has its posted receipt recognized by /cash-flow', async () => {
+    const service = createFinanceDomainService();
+
+    // (1) Custom-named generic Asset — NOT one of the curated Cash/Bank seeds.
+    const payouts = await makeAccount(service, {
+      name: 'Stripe Payouts',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
+    assert.equal(payouts.account_type, 'Asset');
+
+    // The seeded Revenue account is the contra leg (a non-cash credit source).
+    const revenue = service.listAccounts(TENANT).find((a) => a.account_code === '4000');
+    assert.ok(revenue, 'seeded Revenue account exists for the contra leg');
+
+    // (2) Post a balanced journal line: Debit Stripe Payouts / Credit Revenue.
+    // Real cash flows through the custom account, but it is typed Asset, so Bridge B
+    // must NOT recognize it yet.
+    seedEntry(service, {
+      id: 'je_stripe_receipt',
+      status: 'posted',
+      lines: [
+        { account_id: payouts.id, account_name: payouts.name, classification: 'Asset', debit_cents: 30000, credit_cents: 0 },
+        { account_id: revenue.id, account_name: revenue.name, classification: 'Revenue', debit_cents: 0, credit_cents: 30000 },
+      ],
+    });
+    // Give the bucket entry a posted_at so the cash flow period buckets deterministically.
+    service.__getBucket(TENANT).journalEntries.find((e) => e.id === 'je_stripe_receipt').posted_at =
+      '2026-06-15T00:00:00Z';
+
+    const before = service.getCashFlow(TENANT);
+    assert.equal(
+      before.cash_account_codes.includes(payouts.account_code),
+      false,
+      'BEFORE: a generic Asset is not recognized as cash',
+    );
+    assert.equal(before.totals.inflow_cents, 0, 'BEFORE: no cash inflow is reported for the Asset-typed account');
+    assert.deepEqual(before.periods, [], 'BEFORE: no cash-flow period exists at all');
+
+    // (3) Mark it Bank. The account now has posted history, so account_type is editable
+    // only WITH a reason (posted-history lock rule).
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: payouts.id,
+      payload: { account_type: 'Bank', reason: 'reclassify Stripe payout account as a bank account' },
+    });
+    assert.equal(updated.account_type, 'Bank');
+    assert.equal(updated.classification, 'Asset', 'classification unchanged');
+
+    // (4) AFTER: Bridge B now recognizes the same posted receipt as a cash inflow.
+    const after = service.getCashFlow(TENANT);
+    assert.equal(
+      after.cash_account_codes.includes(payouts.account_code),
+      true,
+      'AFTER: the now-Bank account_code is in cash_account_codes',
+    );
+    assert.equal(after.totals.inflow_cents, 30000, 'AFTER: the posted receipt is reported as a cash inflow');
+    assert.equal(after.totals.outflow_cents, 0);
+    assert.equal(after.totals.net_cents, 30000);
+    assert.equal(after.periods.length, 1, 'AFTER: exactly one cash-flow period');
+    assert.equal(after.periods[0].period, '2026-06');
+    const revenueCategory = after.periods[0].by_category.find((c) => c.classification === 'Revenue');
+    assert.ok(revenueCategory, 'AFTER: the inflow is attributed to the Revenue contra leg');
+    assert.equal(revenueCategory.inflow_cents, 30000);
+  });
+});
