@@ -1114,6 +1114,109 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
+    // Phase 3a (editable COA manager, design §2 + plan Task 6). Create a MANUAL,
+    // non-system chart-of-accounts account. Event-sourced (Approach A): append a
+    // FLAT `finance.account.created` (source:'manual') BEFORE mutating the chart,
+    // mirroring the auto-create emission shape so the replay fold upserts it
+    // identically. Human-only: an ai_agent is fail-closed by the governance default
+    // (ManageChartOfAccountsCommand is an unknown command type → blocked for AI)
+    // before any event lands. No update/deactivate/reactivate here (Phase 3b).
+    async createAccount({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+      const { name, classification, account_type } = payload;
+
+      // 1. Governance: COA management is human-only. The governance default
+      // fail-closes ai_agent for unknown command types (ManageChartOfAccountsCommand
+      // is intentionally NOT in any allow-list).
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. classification must be one of the 5 canonical values.
+      if (!FINANCE_CLASSIFICATIONS.includes(classification)) {
+        const e = new Error(`Invalid account classification: ${classification}`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CLASSIFICATION';
+        throw e;
+      }
+
+      // 3. account_type must be curated AND valid for the classification.
+      if (!isValidAccountType(classification, account_type)) {
+        const e = new Error(`Invalid account_type '${account_type}' for classification '${classification}'`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
+        throw e;
+      }
+
+      // 4. Reject a duplicate normalized (classification, name) — prevents the
+      // fragmentation the manager exists to retire (design §2).
+      const coa = getTenantCoa(bucket, tenantId);
+      const matchKey = normalizeAccountKey(classification, name);
+      if (coa.some((a) => normalizeAccountKey(a.classification, a.name) === matchKey)) {
+        const e = new Error(`An account named '${name}' already exists in ${classification}`);
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DUPLICATE_NAME';
+        throw e;
+      }
+
+      const account = buildManualAccount({
+        tenantId,
+        classification,
+        name,
+        account_type,
+        existingCodes: coa.map((a) => a.account_code),
+      });
+      // Stamp provenance so the in-memory chart matches the replayed shape (the
+      // fold carries `source` onto folded accounts), exactly like the auto-create path.
+      account.source = 'manual';
+
+      // Append-before-mutate (PR #632 P2): persist the FLAT created event first;
+      // only push onto the chart after the append resolves.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.created',
+          aggregateType: 'account',
+          aggregateId: account.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            account_id: account.id,
+            account_code: account.account_code,
+            name: account.name,
+            classification: account.classification,
+            account_type: account.account_type,
+            is_system: false,
+            source: 'manual',
+            match_key: normalizeAccountKey(account.classification, account.name),
+          },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation: 'Manually created chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      coa.push(account);
+
+      return clone(account);
+    },
+
     seedJournalEntry(entry) {
       const bucket = getTenantBucket(store, entry?.tenant_id);
       bucket.journalEntries.push(clone(entry));
