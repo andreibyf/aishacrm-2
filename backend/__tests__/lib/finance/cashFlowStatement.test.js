@@ -133,6 +133,48 @@ describe('buildCashFlowStatement', () => {
     assert.deepEqual(stmt.periods, []);
   });
 
+  test('a mixed cash + non-cash entry scales contra categories to the cash portion (Codex PR #650 P2)', () => {
+    // Debit Cash 50 + Debit A/R 50 / Credit Revenue 100 → only 50 cash in; the A/R 50
+    // is a non-cash deferral. by_category must show Revenue inflow 50 (NOT the full
+    // 100 credit), and the A/R must not appear as an outflow — so Σ(by_category)
+    // reconciles with the period total.
+    const p = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 50000, credit_cents: 0 },
+        { account_id: 'a_ar', classification: 'Asset', debit_cents: 50000, credit_cents: 0 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 100000 },
+      ])],
+      accounts,
+    ).periods[0];
+    assert.equal(p.inflow_cents, 50000);
+    assert.equal(p.outflow_cents, 0);
+    assert.equal(p.by_category.find((c) => c.classification === 'Revenue').inflow_cents, 50000);
+    // Σ(by_category) reconciles EXACTLY with the period totals
+    assert.equal(p.by_category.reduce((s, c) => s + c.inflow_cents, 0), p.inflow_cents);
+    assert.equal(p.by_category.reduce((s, c) => s + c.outflow_cents, 0), p.outflow_cents);
+  });
+
+  test('contra scaling distributes cents exactly even on a non-divisible split (Codex PR #650 P2)', () => {
+    // Net cash 100 attributed across three equal positive contras (Revenue/Liability/
+    // Equity, each weight 100) → 100/3 each. Largest-remainder must keep Σ === 100
+    // (one category 34, the others 33), never 99 or 102. (A/R debit 200 is the
+    // opposite-direction non-cash offset and must be excluded.)
+    const p = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 100, credit_cents: 0 },
+        { account_id: 'a_ar', classification: 'Asset', debit_cents: 200, credit_cents: 0 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 100 },
+        { account_id: 'a_loan', classification: 'Liability', debit_cents: 0, credit_cents: 100 },
+        { account_id: 'a_eq', classification: 'Equity', debit_cents: 0, credit_cents: 100 },
+      ])],
+      accounts,
+    ).periods[0];
+    assert.equal(p.inflow_cents, 100);
+    assert.equal(p.by_category.reduce((s, c) => s + c.inflow_cents, 0), 100); // exact, despite 100/3
+    assert.ok(!p.by_category.some((c) => c.classification === 'Asset')); // A/R offset excluded
+    for (const c of p.by_category) assert.ok(c.inflow_cents === 33 || c.inflow_cents === 34);
+  });
+
   test('buckets by period (posted_at month) in order', () => {
     const periods = buildCashFlowStatement(
       [posted(cashRevenue(10000), { posted_at: '2026-05-10T00:00:00Z' }), posted(cashRevenue(20000), { posted_at: '2026-06-10T00:00:00Z' })],

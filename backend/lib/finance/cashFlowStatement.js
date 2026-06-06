@@ -11,12 +11,14 @@
  * reconciles to the balance sheet's Cash line. NEVER broaden this filter to
  * approved/pending (that would desync it from the balance sheet).
  *
- * Period totals come from the CASH lines (authoritative). The `by_category`
- * breakdown comes from the contra (non-cash) lines of cash-touching entries: a
- * contra CREDIT ↔ cash inflow, a contra DEBIT ↔ cash outflow, grouped by the
- * contra line's classification (cash from Revenue, cash to Expense, …). For the
- * balanced two-leg entries this system produces, the category sums equal the
- * cash totals.
+ * Period totals come from the CASH lines (authoritative) — the NET cash change per
+ * entry, so internal cash↔cash transfers don't inflate gross. The `by_category`
+ * breakdown ATTRIBUTES that net cash to the contra (non-cash) classifications,
+ * grouped (cash from Revenue, cash to Expense, …). It is SCALED to the net so it
+ * reconciles exactly with the period total: a simple two-leg entry's single contra
+ * equals the cash, but an entry mixing cash and non-cash legs on the same side
+ * (e.g. Debit Cash 50 + Debit A/R 50 / Credit Revenue 100 → only 50 cash in) must
+ * not attribute the full 100 — Σ(by_category) always equals the period inflow/outflow.
  */
 
 import { normalizeAccountKey } from './chartOfAccounts.js';
@@ -81,23 +83,55 @@ export function buildCashFlowStatement(journalEntries = [], accounts = []) {
     }
     const nonCashLines = lines.filter((l) => !isCash(l));
 
-    // A pure internal cash↔cash transfer (zero net cash effect, no non-cash contra)
-    // is not a cash flow — skip it entirely so it adds no (empty) period.
-    if (entryNetCents === 0 && nonCashLines.length === 0) continue;
+    // An entry with no NET cash change is not a cash flow — skip it (a pure internal
+    // cash↔cash transfer, OR a wash entry whose non-cash legs net out). This is what
+    // keeps internal transfers (e.g. Debit Bank / Credit Cash) out of the statement
+    // and stops a net-zero entry creating an empty period.
+    if (entryNetCents === 0) continue;
 
     const period = String(entry.posted_at || entry.created_at || '').slice(0, 7) || 'unknown';
     const p = ensurePeriod(period);
 
-    if (entryNetCents > 0) p.inflow_cents += entryNetCents;
-    else if (entryNetCents < 0) p.outflow_cents += -entryNetCents;
+    const magnitude = Math.abs(entryNetCents);
+    const inflow = entryNetCents > 0;
+    if (inflow) p.inflow_cents += magnitude;
+    else p.outflow_cents += magnitude;
 
-    // Contra breakdown — from the non-cash lines.
+    // Contra breakdown — attribute the entry's NET cash change across the non-cash
+    // (contra) classifications, SCALED so Σ(by_category) reconciles EXACTLY with the
+    // period total. For a simple two-leg entry the single contra equals the cash, but
+    // an entry mixing cash and non-cash legs on the SAME side (e.g. Debit Cash 50 +
+    // Debit A/R 50 / Credit Revenue 100 → only 50 cash in) must NOT attribute the full
+    // 100 revenue to cash. Net each contra classification (credit − debit) — those nets
+    // sum to entryNetCents — keep the ones contributing in the net cash DIRECTION (the
+    // opposite ones are non-cash offsets, e.g. the A/R deferral) and scale them to the
+    // cash magnitude with largest-remainder rounding for exact cents (Codex PR #650 P2).
+    const catNet = new Map(); // classification -> net cents (credit − debit)
     for (const l of nonCashLines) {
       const cls = l.classification || 'Uncategorized';
-      if (!p.categories.has(cls)) p.categories.set(cls, { inflow_cents: 0, outflow_cents: 0 });
-      const cat = p.categories.get(cls);
-      cat.inflow_cents += cents(l.credit_cents); // contra credit ↔ cash inflow
-      cat.outflow_cents += cents(l.debit_cents); // contra debit ↔ cash outflow
+      catNet.set(cls, (catNet.get(cls) || 0) + cents(l.credit_cents) - cents(l.debit_cents));
+    }
+    const dirCats = [...catNet.entries()]
+      .map(([cls, net]) => ({ cls, weight: inflow ? net : -net })) // contribution toward the cash magnitude
+      .filter((c) => c.weight > 0);
+    const weightSum = dirCats.reduce((s, c) => s + c.weight, 0);
+    if (weightSum > 0) {
+      const alloc = dirCats.map((c) => {
+        const exact = (c.weight * magnitude) / weightSum;
+        const whole = Math.floor(exact);
+        return { cls: c.cls, cents: whole, frac: exact - whole };
+      });
+      // Largest-remainder: hand the leftover cents to the largest fractional parts so
+      // Σ(alloc) === magnitude exactly (no penny lost or invented).
+      let remainder = magnitude - alloc.reduce((s, a) => s + a.cents, 0);
+      alloc.sort((a, b) => b.frac - a.frac);
+      for (let i = 0; i < alloc.length && remainder > 0; i += 1, remainder -= 1) alloc[i].cents += 1;
+      for (const a of alloc) {
+        if (!p.categories.has(a.cls)) p.categories.set(a.cls, { inflow_cents: 0, outflow_cents: 0 });
+        const cat = p.categories.get(a.cls);
+        if (inflow) cat.inflow_cents += a.cents;
+        else cat.outflow_cents += a.cents;
+      }
     }
   }
 
