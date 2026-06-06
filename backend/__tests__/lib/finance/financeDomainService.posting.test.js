@@ -105,6 +105,97 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal(ledger.totals.credit_cents, 500000);
   });
 
+  test('CONCURRENT in-memory approvals of two reversals for one source — exactly one posts (synchronous claim, Codex PR #650 P2)', async () => {
+    const service = createFinanceDomainService();
+    const sim = await service.simulatePostedDealWon({ tenantId: TENANT, actor, payload: { amount_cents: 250000 } });
+    const originalId = sim.posted_entry.id;
+    const rev1 = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor });
+    const rev2 = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: originalId, actor });
+
+    // Approve BOTH concurrently on the SAME in-memory bucket. The synchronous claim
+    // (set before the first await) means whichever approval runs its guard first
+    // stakes the source; the other sees the claim and is rejected (409) — neither
+    // can post a second reversal.
+    const results = await Promise.allSettled([
+      service.approveFinanceAction({ tenantId: TENANT, approvalId: rev1.approval.id, actor }),
+      service.approveFinanceAction({ tenantId: TENANT, approvalId: rev2.approval.id, actor }),
+    ]);
+    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+    const rejected = results.filter((r) => r.status === 'rejected');
+    assert.equal(rejected.length, 1);
+    assert.equal(rejected[0].reason.statusCode, 409);
+
+    // exactly ONE posted reversal (+ the sale), source reversed once, ledger not doubled
+    assert.equal((await postedEvents(service)).length, 2);
+    const reversed = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.journal.reversed');
+    assert.equal(reversed.length, 1);
+    assert.equal(service.getLedger(TENANT).totals.debit_cents, 500000);
+  });
+
+  test('CROSS-PROCESS reversals of one source — the second posted-append collides on the durable PK → 409 (deterministic-id CAS, Codex PR #650 P2)', async () => {
+    // Simulate the PERSISTENT race: two requests hydrate SEPARATE buckets (so neither
+    // sees the other's in-flight reversal) but append to ONE durable store. The store
+    // enforces id-uniqueness like Postgres, so the second reversal's DETERMINISTIC
+    // finance.journal.posted id (keyed on the source) collides and is rejected — the
+    // in-memory claim alone could not catch this (the buckets are independent).
+    const seenIds = new Set();
+    const events = [];
+    const sharedStore = {
+      append: async (env) => {
+        if (seenIds.has(env.id)) {
+          const e = new Error(`duplicate event id ${env.id}`);
+          e.code = 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID';
+          throw e;
+        }
+        seenIds.add(env.id);
+        events.push(env);
+        return Object.freeze({ ...env });
+      },
+      query: async () => events.slice(),
+      replay: async () => events.slice(),
+    };
+
+    const mkSource = () => ({
+      id: 'je_src', tenant_id: TENANT, status: 'posted', currency: 'usd',
+      lines: [
+        { account_id: 'a_cash', account_name: 'Cash', classification: 'Asset', debit_cents: 250000, credit_cents: 0 },
+        { account_id: 'a_rev', account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 250000 },
+      ],
+    });
+    const mkReversal = (id) => ({
+      id, tenant_id: TENANT, status: 'pending_approval', reversal_of: 'je_src', currency: 'usd',
+      lines: [
+        { account_id: 'a_cash', account_name: 'Cash', classification: 'Asset', debit_cents: 0, credit_cents: 250000 },
+        { account_id: 'a_rev', account_name: 'Revenue', classification: 'Revenue', debit_cents: 250000, credit_cents: 0 },
+      ],
+    });
+
+    // Two independent services (separate buckets) sharing ONE durable store.
+    const svcA = createFinanceDomainService({ eventStore: sharedStore });
+    const svcB = createFinanceDomainService({ eventStore: sharedStore });
+    svcA.seedJournalEntry(mkSource());
+    svcA.seedJournalEntry(mkReversal('rev_a'));
+    svcA.seedApproval({ id: 'appr_a', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'rev_a', status: 'pending' });
+    svcB.seedJournalEntry(mkSource());
+    svcB.seedJournalEntry(mkReversal('rev_b'));
+    svcB.seedApproval({ id: 'appr_b', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'rev_b', status: 'pending' });
+
+    // A approves first → posts rev_a (deterministic id = f('je_src')), reverses source.
+    await svcA.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_a', actor });
+    // B's bucket still shows je_src posted (independent) → its claim passes, but the
+    // posted-append collides on the shared store's PK → 409.
+    await assert.rejects(
+      () => svcB.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_b', actor }),
+      (err) => err.statusCode === 409,
+    );
+
+    // exactly ONE finance.journal.posted reversal of je_src is durable
+    const postedReversals = events.filter(
+      (e) => e.event_type === 'finance.journal.posted' && e.payload?.journal_entry?.reversal_of === 'je_src',
+    );
+    assert.equal(postedReversals.length, 1);
+  });
+
   test('re-approving a reversal HEALS the source after a partial append left it posted (Codex PR #650 P2 follow-up)', async () => {
     const service = createFinanceDomainService();
     // Simulate the partial-failure state: the reversal entry is already durably
