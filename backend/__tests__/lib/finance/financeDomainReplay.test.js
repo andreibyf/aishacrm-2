@@ -326,19 +326,7 @@ describe('rebuildBucketFromEvents — COA account.updated / account.deactivated 
     assert.equal(account.is_active, false);
   });
 
-  test('created → deactivated → updated(is_active:true) reactivates the account', () => {
-    const reactivatedSnapshot = {
-      id: ACCOUNT_ID,
-      tenant_id: T,
-      account_code: '1050',
-      name: 'Petty Cash',
-      classification: 'Asset',
-      account_type: 'Asset',
-      is_system: false,
-      is_active: true,
-      parent_account_id: null,
-      source: 'manual',
-    };
+  test('created → deactivated → reactivated flips is_active back to true', () => {
     const events = [
       createdEvent(),
       {
@@ -347,14 +335,50 @@ describe('rebuildBucketFromEvents — COA account.updated / account.deactivated 
         payload: { account_id: ACCOUNT_ID, reason: 'no longer used' },
       },
       {
-        event_type: 'finance.account.updated',
+        event_type: 'finance.account.reactivated',
         tenant_id: T,
-        payload: { account: reactivatedSnapshot, reason: 'back in use' },
+        payload: { account_id: ACCOUNT_ID, reason: 'back in use' },
       },
     ];
     const account = findAccount(rebuildBucketFromEvents(events));
     assert.ok(account, 'account present after reactivation');
     assert.equal(account.is_active, true);
+  });
+
+  // Codex PR #651 P2: an ordinary finance.account.updated (FIELD edit) carries a full
+  // snapshot whose is_active can be STALE (hydrated while active, raced ahead of a
+  // concurrent deactivate). The fold must PRESERVE the existing activation, so the edit
+  // does NOT silently reactivate — only created/deactivated/reactivated change is_active.
+  test('created → deactivated → updated(stale is_active:true field edit) stays INACTIVE', () => {
+    const staleEditSnapshot = {
+      id: ACCOUNT_ID,
+      tenant_id: T,
+      account_code: '1050',
+      name: 'Petty Cash (renamed)',
+      classification: 'Asset',
+      account_type: 'Bank',
+      is_system: false,
+      is_active: true, // STALE — hydrated before the deactivate
+      parent_account_id: null,
+      source: 'manual',
+    };
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.deactivated',
+        tenant_id: T,
+        payload: { account_id: ACCOUNT_ID, reason: 'closed' },
+      },
+      {
+        event_type: 'finance.account.updated',
+        tenant_id: T,
+        payload: { account: staleEditSnapshot, reason: 'rename' },
+      },
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.ok(account, 'account present');
+    assert.equal(account.name, 'Petty Cash (renamed)', 'the field edit IS applied');
+    assert.equal(account.is_active, false, 'but activation is preserved — no silent reactivation');
   });
 
   test('account.deactivated for an unknown id is a no-op', () => {

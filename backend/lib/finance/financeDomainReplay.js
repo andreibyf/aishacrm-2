@@ -94,13 +94,14 @@ export function rebuildBucketFromEvents(events = []) {
         }
         break;
 
-      // Phase 2: COA edit / reactivation. The COA manager emits the FULL
-      // post-edit account snapshot under payload.account (incl. is_active,
-      // is_system). Upsert/replace by account.id — preserving first-insertion
-      // order (Map.set on an existing key updates in place). Reactivation rides
-      // this same event (snapshot carries is_active:true). `source` is carried
-      // from the snapshot, falling back to an existing folded value, then
-      // 'manual'.
+      // Phase 2: COA FIELD edit. The COA manager emits the FULL post-edit account
+      // snapshot under payload.account. Upsert/replace by account.id — preserving
+      // first-insertion order (Map.set on an existing key updates in place).
+      // Activation state is PRESERVED from the existing folded value, NOT taken from
+      // the snapshot (Codex PR #651 P2): an ordinary edit's hydrated snapshot can
+      // carry a STALE is_active that raced ahead of a concurrent deactivate, which
+      // would silently reactivate. Activation changes ONLY via created / deactivated /
+      // reactivated. `source` is carried from the snapshot, then existing, then 'manual'.
       case 'finance.account.updated':
         if (payload.account && payload.account.id) {
           const incoming = payload.account;
@@ -114,7 +115,7 @@ export function rebuildBucketFromEvents(events = []) {
             account_type: incoming.account_type,
             parent_account_id: incoming.parent_account_id ?? null,
             is_system: incoming.is_system ?? existing?.is_system ?? false,
-            is_active: incoming.is_active ?? existing?.is_active ?? true,
+            is_active: existing?.is_active ?? incoming.is_active ?? true,
             source: incoming.source ?? existing?.source ?? 'manual',
           });
         }
@@ -127,6 +128,16 @@ export function rebuildBucketFromEvents(events = []) {
         if (payload.account_id && accounts.has(payload.account_id)) {
           const target = accounts.get(payload.account_id);
           accounts.set(payload.account_id, { ...target, is_active: false });
+        }
+        break;
+
+      // COA reactivation — a DEDICATED event (symmetric with deactivated), so an
+      // ordinary field edit can never carry activation. Flip is_active:true in place
+      // (no-op if the id is absent). (Codex PR #651 P2)
+      case 'finance.account.reactivated':
+        if (payload.account_id && accounts.has(payload.account_id)) {
+          const target = accounts.get(payload.account_id);
+          accounts.set(payload.account_id, { ...target, is_active: true });
         }
         break;
       // Invoices — both create and update carry the full post-transition invoice

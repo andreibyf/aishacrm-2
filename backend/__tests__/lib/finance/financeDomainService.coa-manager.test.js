@@ -629,7 +629,7 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
 });
 
 describe('financeDomainService — reactivateAccount (Task 9)', () => {
-  test('success: reactivates an inactive account, same id preserved, is_active true, finance.account.updated emitted', async () => {
+  test('success: reactivates an inactive account, same id preserved, is_active true, dedicated finance.account.reactivated emitted', async () => {
     const service = createFinanceDomainService();
     const acct = await makeAccount(service, { name: 'Comeback', classification: 'Asset', account_type: 'Asset' });
     await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close' } });
@@ -647,12 +647,14 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
     const listed = service.listAccounts(TENANT).find((a) => a.id === acct.id);
     assert.equal(listed.is_active, true);
 
-    // reactivation rides finance.account.updated with is_active:true snapshot
-    const events = await updatedEvents(service);
-    assert.equal(events.length, 1);
-    assert.equal(events[0].payload.account.id, acct.id);
-    assert.equal(events[0].payload.account.is_active, true);
-    assert.equal(events[0].payload.reason, 'reopen');
+    // reactivation now rides a DEDICATED finance.account.reactivated event (Codex PR #651 P2),
+    // NOT finance.account.updated — so an ordinary field edit can never carry activation
+    const updated = await updatedEvents(service);
+    assert.equal(updated.length, 0, 'no finance.account.updated emitted for a reactivation');
+    const reactivated = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.reactivated');
+    assert.equal(reactivated.length, 1);
+    assert.equal(reactivated[0].payload.account_id, acct.id);
+    assert.equal(reactivated[0].payload.reason, 'reopen');
   });
 
   test('reactivating an already-active account is rejected with 409 FINANCE_COA_NOT_INACTIVE', async () => {

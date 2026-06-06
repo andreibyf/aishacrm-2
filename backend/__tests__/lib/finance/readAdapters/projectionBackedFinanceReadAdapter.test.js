@@ -165,6 +165,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       'finance.account.created',
       'finance.account.updated',
       'finance.account.deactivated',
+      'finance.account.reactivated',
     ]);
     assert.equal(calls[0].tenantId, T);
     assert.equal(calls[0].isTestData, true);
@@ -193,23 +194,8 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
             },
           },
           { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_bank', reason: 'closing' } },
-          // reactivated (rides finance.account.updated; full snapshot, is_active:true)
-          {
-            event_type: 'finance.account.updated',
-            payload: {
-              account: {
-                id: 'acct_bank',
-                tenant_id: T,
-                account_code: '1500',
-                name: 'Operating Bank',
-                classification: 'Asset',
-                account_type: 'Bank',
-                is_system: false,
-                is_active: true,
-                source: 'manual',
-              },
-            },
-          },
+          // reactivated (dedicated finance.account.reactivated event)
+          { event_type: 'finance.account.reactivated', payload: { account_id: 'acct_bank', reason: 'back' } },
         ],
       },
       workers: w,
@@ -249,6 +235,36 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const acc = accounts.find((a) => a.id === 'acct_dup');
     assert.ok(acc, 'the concurrently-created account is present');
     assert.equal(acc.is_active, true, 'a duplicate create must NOT be misread as a deactivation');
+  });
+
+  // Codex PR #651 P2: a field-edit finance.account.updated carries a full snapshot
+  // whose is_active can be STALE (raced ahead of a concurrent deactivate). The fold
+  // must preserve activation so the edit does NOT silently reactivate.
+  test('a field-edit finance.account.updated after a deactivate stays INACTIVE (no silent reactivation)', async () => {
+    const w = workers();
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [
+          {
+            event_type: 'finance.account.created',
+            payload: { account_id: 'acct_x', account_code: '1500', name: 'X', classification: 'Asset', account_type: 'Asset', source: 'manual' },
+          },
+          { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_x', reason: 'closed' } },
+          {
+            event_type: 'finance.account.updated',
+            payload: {
+              account: { id: 'acct_x', tenant_id: T, account_code: '1500', name: 'X renamed', classification: 'Asset', account_type: 'Bank', is_system: false, is_active: true, source: 'manual' },
+            },
+          },
+        ],
+      },
+      workers: w,
+    });
+    const acc = (await adapter.listAccounts(T, { isTestData: true })).find((a) => a.id === 'acct_x');
+    assert.equal(acc.name, 'X renamed', 'the field edit is applied');
+    assert.equal(acc.is_active, false, 'but activation is preserved — no silent reactivation');
   });
 
   test('listAccounts fails closed (FinanceReadDegradedError) when the reader throws', async () => {

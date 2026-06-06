@@ -19,12 +19,13 @@ Three append-only events (validated by the existing `finance.*` pattern in `asse
 | Event | When | Payload (additions) |
 | --- | --- | --- |
 | `finance.account.created` | create (manual) **and** existing auto-create | `source: 'manual' \| 'auto_resolution'` (explicit enum) |
-| `finance.account.updated` | edit / reactivate | full post-edit account snapshot + `reason` (when required) |
+| `finance.account.updated` | FIELD edit only (name/type/classification/code) | full post-edit account snapshot + `reason` (when required) |
 | `finance.account.deactivated` | deactivate | account id + `reason` |
+| `finance.account.reactivated` | reactivate | account id + `reason` |
 
 - **Identity is immutable.** A manual account mints a **name-derived id** (`autoAccountId(tenantId, classification, name)`, concurrency-safe per Codex #647); `account_code` is display/control metadata, never identity. Renaming never changes the id, so id-matched posted history (Slice 1 wired `journal_lines.account_id`) is stable across renames.
 - The existing auto-create path is updated to stamp `source: 'auto_resolution'`; the manager stamps `source: 'manual'`.
-- The fold upserts the account by id (created/updated) and flips `is_active` (deactivated / updated-with-`is_active`). Baseline system accounts remain re-seeded on access (not events), exactly as today.
+- The fold upserts the account by id (created/updated) and changes activation state ONLY via `created` (active) / `deactivated` (inactive) / `reactivated` (active). A FIELD edit (`updated`) **preserves** the existing activation — its snapshot's `is_active` is ignored — so an edit that raced ahead of a concurrent `deactivate` can never silently reactivate (Codex PR #651 P2). Baseline system accounts remain re-seeded on access (not events), exactly as today.
 
 ## 2. Operations & validation (server-enforced)
 

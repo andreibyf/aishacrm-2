@@ -1614,20 +1614,26 @@ export function createFinanceDomainService(opts = {}) {
         throw e;
       }
 
-      // Build the reactivated snapshot (same id, is_active:true). Append-before-mutate.
-      const reactivated = { ...current, is_active: true };
+      // Append-before-mutate. Emit a DEDICATED finance.account.reactivated event
+      // (symmetric with finance.account.deactivated), NOT finance.account.updated with
+      // an is_active:true snapshot (Codex PR #651 P2). Overloading `updated` made the
+      // fold treat its snapshot's is_active as authoritative, so an ordinary field-edit
+      // PATCH that raced with a /deactivate (its hydrated snapshot still carrying
+      // is_active:true) would silently REACTIVATE the account, bypassing this route's
+      // reason + conflict checks. Activation state now changes ONLY via
+      // created/deactivated/reactivated; `updated` carries field edits and preserves it.
       await appendEvent(
         bucket,
         createFinanceEventEnvelope({
           tenantId,
-          eventType: 'finance.account.updated',
+          eventType: 'finance.account.reactivated',
           aggregateType: 'account',
-          aggregateId: reactivated.id,
+          aggregateId: current.id,
           actorId: normalizedActor.id,
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account: clone(reactivated), reason: payload.reason != null ? String(payload.reason).trim() : null },
+          payload: { account_id: current.id, reason: payload.reason != null ? String(payload.reason).trim() : null },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,

@@ -135,6 +135,7 @@ export function createProjectionBackedFinanceReadAdapter({
           'finance.account.created',
           'finance.account.updated',
           'finance.account.deactivated',
+          'finance.account.reactivated',
         ],
         { isTestData },
       );
@@ -146,8 +147,11 @@ export function createProjectionBackedFinanceReadAdapter({
       // unambiguous (Codex PR #651 P2).
       for (const { event_type: eventType, payload: p } of ordered) {
         if (eventType === 'finance.account.updated') {
-          // payload.account is the FULL post-edit snapshot → full-replace by id
-          // (upsert; preserves insertion order). Reactivation rides this event.
+          // payload.account is the FULL post-edit snapshot → full-replace fields by id
+          // (upsert; preserves insertion order). Activation is PRESERVED from the
+          // existing folded value, NOT the snapshot — an ordinary edit's hydrated
+          // snapshot can carry a stale is_active that raced a concurrent deactivate
+          // (Codex PR #651 P2). Activation changes only via created/deactivated/reactivated.
           const incoming = p.account;
           if (!incoming || !incoming.id) continue;
           const existing = folded.get(incoming.id);
@@ -160,13 +164,18 @@ export function createProjectionBackedFinanceReadAdapter({
             account_type: incoming.account_type,
             parent_account_id: incoming.parent_account_id ?? null,
             is_system: incoming.is_system ?? existing?.is_system ?? false,
-            is_active: incoming.is_active ?? existing?.is_active ?? true,
+            is_active: existing?.is_active ?? incoming.is_active ?? true,
             source: incoming.source ?? existing?.source ?? 'manual',
           });
         } else if (eventType === 'finance.account.deactivated') {
           // flip is_active:false in place (no-op if the id is not yet folded).
           if (p.account_id && folded.has(p.account_id)) {
             folded.set(p.account_id, { ...folded.get(p.account_id), is_active: false });
+          }
+        } else if (eventType === 'finance.account.reactivated') {
+          // dedicated reactivation event → flip is_active:true (no-op if not folded).
+          if (p.account_id && folded.has(p.account_id)) {
+            folded.set(p.account_id, { ...folded.get(p.account_id), is_active: true });
           }
         } else if (eventType === 'finance.account.created') {
           // flat payload → upsert the account (is_active:true; a duplicate concurrent
