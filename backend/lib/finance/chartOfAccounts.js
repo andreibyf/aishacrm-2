@@ -200,10 +200,40 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
   return { account, created: true };
 }
 
+/**
+ * Pure factory for a MANUALLY-created account (editable COA manager, design §2).
+ * Mints a name-derived id (immutable, concurrency-safe per Codex #647) — never a
+ * code-derived one — and an `account_code` from the classification's reserved
+ * auto-create range. The display name falls back to 'Unnamed' for a blank name,
+ * matching resolveAccount so the same name keys/ids/stores consistently.
+ *
+ * Does NOT mutate inputs and does NOT validate `account_type` — type/per-
+ * classification validation (`isValidAccountType`) is the caller's job.
+ *
+ * @returns {object} a new non-system, active account object
+ */
+export function buildManualAccount({ tenantId, classification, name, account_type, existingCodes }) {
+  const cls = safeClassification(classification);
+  const displayName = normalizeName(name) || 'Unnamed';
+  const code = nextCodeForClassification(cls, Array.isArray(existingCodes) ? existingCodes : []);
+  return {
+    id: autoAccountId(tenantId, cls, displayName),
+    tenant_id: tenantId,
+    account_code: code,
+    name: displayName,
+    classification: cls,
+    account_type,
+    parent_account_id: null,
+    is_system: false,
+    is_active: true,
+  };
+}
+
 export default {
   DEFAULT_COA,
   ACCOUNT_TYPES_BY_CLASSIFICATION,
   isValidAccountType,
+  buildManualAccount,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,
