@@ -62,6 +62,11 @@ export function createInMemoryFinanceReadAdapter({ service }) {
       return service.listAccounts(tenantId);
     },
 
+    // Cash Flow Slice 2: derived cash-flow statement. In-memory is unpartitioned.
+    async getCashFlow(tenantId, _opts = {}) {
+      return service.getCashFlow(tenantId);
+    },
+
     async listApprovals(tenantId) {
       return service.listApprovals(tenantId);
     },

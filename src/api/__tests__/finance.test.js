@@ -433,6 +433,8 @@ describe('finance API client -- read-only safety (no mutating exports)', () => {
       'getEvidencePack',
       // COA Slice 1 — read-only chart of accounts.
       'getAccounts',
+      // Cash Flow Slice 2 — read-only cash-flow statement (Bridge B).
+      'getCashFlow',
       'FINANCE_API_GAPS',
       'getFinanceApiGap',
       // Test/Live data-mode feature — the ONE intentional mutation in this

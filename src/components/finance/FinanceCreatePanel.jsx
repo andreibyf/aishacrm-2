@@ -16,7 +16,12 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, PlusCircle } from 'lucide-react';
-import { simulateDealWon, createJournalDraft, createDraftInvoice } from '@/api/financeWrites';
+import {
+  simulateDealWon,
+  simulatePostedDealWon,
+  createJournalDraft,
+  createDraftInvoice,
+} from '@/api/financeWrites';
 
 function dollarsToCents(value) {
   const n = Number.parseFloat(value);
@@ -71,6 +76,14 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
     const cents = positiveCents(dealAmount, 'deal');
     if (cents == null) return;
     run('deal', () => simulateDealWon(tenantId, { amount_cents: cents, currency: 'usd' }));
+  };
+
+  // Sandbox: create AND post the deal so the ledger / P&L / balance-sheet /
+  // cash-flow show data (a draft stays out of those statements until posted).
+  const onSimulatePosted = () => {
+    const cents = positiveCents(dealAmount, 'deal');
+    if (cents == null) return;
+    run('deal-posted', () => simulatePostedDealWon(tenantId, { amount_cents: cents, currency: 'usd' }));
   };
 
   const onJournal = () => {
@@ -135,7 +148,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
           <label className="text-xs text-slate-400">
             Deal amount (USD)
             <input
@@ -154,6 +167,20 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
             className="bg-amber-600 text-white hover:bg-amber-700"
           >
             {busy === 'deal' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Simulate deal-won'}
+          </Button>
+          <Button
+            type="button"
+            onClick={onSimulatePosted}
+            disabled={busy === 'deal-posted'}
+            data-testid="finance-create-deal-posted-btn"
+            title="Create and post — shows in the ledger / P&L / balance sheet / cash flow"
+            className="bg-emerald-700 text-white hover:bg-emerald-800"
+          >
+            {busy === 'deal-posted' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Simulate posted deal'
+            )}
           </Button>
         </div>
 

@@ -192,10 +192,12 @@ test('read-your-write: the AFFECTED projections (and only those) are rebuilt dur
     logger,
   });
 
-  // The command appended finance.approval.approved (+ a finance.adapter.sync_queued
-  // from promoting the seeded draft adapter_job for journal_X). The affected
-  // projection set is every worker consuming those event types:
+  // The command appended finance.approval.approved + finance.journal.posted
+  // (Cash Flow Slice 2 — approving a journal-entry approval now posts it) + a
+  // finance.adapter.sync_queued from promoting the seeded draft adapter_job for
+  // journal_X. The affected projection set is every worker consuming those types:
   //   approval.approved   → approval_queue, journal_entries
+  //   journal.posted      → journal_entries, ledger
   //   adapter.sync_queued → adapter_queue
   assert.ok(eventStore.appended.length >= 1, 'command appended at least one event');
   const replayedNames = createRunner.replayed.map((r) => r.projectionName);
@@ -213,11 +215,13 @@ test('read-your-write: the AFFECTED projections (and only those) are rebuilt dur
     replayedNames.includes('finance.projection.adapter_queue'),
     'adapter_queue is affected by adapter.sync_queued',
   );
-  // Non-affected projections must NOT be rebuilt (no posted/invoice events here).
+  // Cash Flow Slice 2: posting on approval emits finance.journal.posted, which the
+  // ledger projection consumes — so ledger IS now affected by an approve.
   assert.ok(
-    !replayedNames.includes('finance.projection.ledger'),
-    'ledger consumes only finance.journal.posted — not affected',
+    replayedNames.includes('finance.projection.ledger'),
+    'ledger is affected by finance.journal.posted (posting on approval)',
   );
+  // Non-affected projections must NOT be rebuilt (no invoice events here).
   assert.ok(
     !replayedNames.includes('finance.projection.invoices'),
     'invoices consumes only invoice draft events — not affected',

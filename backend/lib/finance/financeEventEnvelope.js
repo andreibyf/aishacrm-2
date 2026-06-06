@@ -16,12 +16,17 @@ export function createFinanceEventEnvelope({
   causationId = null,
   payload = {},
   policyDecision = {},
+  // Optional caller-supplied event id. Default: a fresh random UUID. A DETERMINISTIC
+  // id lets the durable event store's PK act as a compare-and-set — two appends that
+  // derive the same id collide (23505 → FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID), which
+  // the reversal-posting path uses to reject a concurrent second reversal of one source.
+  id = null,
 } = {}) {
   // M-1: Bare UUID — no prefix. finance.audit_events.id is a uuid column in Postgres.
   // Causation chains: caller may pre-assign this id via createFinanceEventEnvelope and pass it
   // to financeEventStore.append() so downstream events can reference it as causation_id.
   return {
-    id: randomUUID(),
+    id: id || randomUUID(),
     tenant_id: tenantId,
     event_type: eventType,
     aggregate_type: aggregateType,

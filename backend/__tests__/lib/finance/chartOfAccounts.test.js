@@ -30,10 +30,10 @@ describe('chartOfAccounts — normalization & keys', () => {
 });
 
 describe('chartOfAccounts — seed', () => {
-  test('seedAccountsForTenant returns the 7 system accounts with deterministic ids', () => {
+  test('seedAccountsForTenant returns the 8 system accounts with deterministic ids', () => {
     const seed = seedAccountsForTenant(TENANT);
     assert.equal(seed.length, DEFAULT_COA.length);
-    assert.equal(seed.length, 7);
+    assert.equal(seed.length, 8);
     const cash = seed.find((a) => a.account_code === '1000');
     assert.equal(cash.name, 'Cash');
     assert.equal(cash.account_type, 'Cash');

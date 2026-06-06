@@ -22,6 +22,14 @@ import { FINANCE_CLASSIFICATIONS } from './accountingEngine.js';
  */
 export const DEFAULT_COA = Object.freeze([
   { account_code: '1000', name: 'Cash', classification: 'Asset', account_type: 'Cash' },
+  // Seeded Bank account (Codex PR #650 P2): without it, a tenant posting to a
+  // 'Bank' line would auto-create it as a generic `Asset` (auto-create never
+  // assigns the curated Cash/Bank types) and the cash-flow statement — which keys
+  // on `account_type ∈ {Cash, Bank}` — would silently omit those bank
+  // receipts/payments. Seeding Bank makes a 'Bank' line resolve to a real Bank
+  // account. (Custom-named bank accounts, e.g. "Operating Account", still resolve
+  // to `Asset` and need the deferred editable COA manager to be marked `Bank`.)
+  { account_code: '1050', name: 'Bank', classification: 'Asset', account_type: 'Bank' },
   { account_code: '1100', name: 'Accounts Receivable', classification: 'Asset', account_type: 'Receivable' },
   { account_code: '2000', name: 'Accounts Payable', classification: 'Liability', account_type: 'Payable' },
   { account_code: '3000', name: 'Retained Earnings', classification: 'Equity', account_type: 'Equity' },

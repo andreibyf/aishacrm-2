@@ -51,6 +51,7 @@ import RuntimeOverview from '@/components/finance/RuntimeOverview';
 import FinanceCreatePanel from '@/components/finance/FinanceCreatePanel';
 import LedgerSummary from '@/components/finance/LedgerSummary';
 import ChartOfAccountsPanel from '@/components/finance/ChartOfAccountsPanel';
+import CashFlowStatementPanel from '@/components/finance/CashFlowStatementPanel';
 import JournalEntriesList from '@/components/finance/JournalEntriesList';
 import DraftInvoicesPanel from '@/components/finance/DraftInvoicesPanel';
 import JournalDraftsPanel from '@/components/finance/JournalDraftsPanel';
@@ -70,6 +71,7 @@ export const FINANCE_OPS_TABS = Object.freeze([
   { id: 'runtime-overview', label: 'Runtime overview' },
   { id: 'ledger', label: 'Ledger summary' },
   { id: 'accounts', label: 'Chart of accounts' },
+  { id: 'cash-flow', label: 'Cash flow' },
   { id: 'invoices', label: 'Draft invoices' },
   { id: 'journal-drafts', label: 'Journal drafts' },
   { id: 'journal-entries', label: 'Journal entries' },
@@ -400,6 +402,9 @@ export default function FinanceOpsPage() {
         </TabsContent>
         <TabsContent value="accounts" className="m-0">
           <ChartOfAccountsPanel tenantId={selectedTenantId} />
+        </TabsContent>
+        <TabsContent value="cash-flow" className="m-0">
+          <CashFlowStatementPanel tenantId={selectedTenantId} />
         </TabsContent>
         <TabsContent value="invoices" className="m-0">
           <DraftInvoicesPanel tenantId={selectedTenantId} />

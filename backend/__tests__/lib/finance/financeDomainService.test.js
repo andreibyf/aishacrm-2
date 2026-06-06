@@ -425,7 +425,7 @@ test('financeDomainService approveFinanceAction promotes linked adapter_jobs dra
   assert.equal(queuedEvents[0].payload.adapter_job.status, 'queued');
 });
 
-test('financeDomainService approveFinanceAction does NOT post the journal (Phase 3-8 §5.7 contract preserved)', async () => {
+test('financeDomainService approveFinanceAction POSTS the journal (Cash Flow Slice 2 — supersedes the old pending-only contract)', async () => {
   const eventStore = createFinanceEventStore();
   const service = createFinanceDomainService({ eventStore });
 
@@ -435,21 +435,19 @@ test('financeDomainService approveFinanceAction does NOT post the journal (Phase
     payload: { amount_cents: 10000 },
   });
 
-  await service.approveFinanceAction({
+  const res = await service.approveFinanceAction({
     tenantId: TENANT_ID,
     approvalId: sim.approval.id,
     actor: { id: 'approver-1', type: 'human' },
   });
 
-  // Journal entry still pending_approval — approval does not auto-post
-  const entries = service.listJournalEntries(TENANT_ID);
-  const matching = entries.find((e) => e.id === sim.journal_entry.id);
+  // Slice 2: approving a journal-entry approval posts it (pending_approval → posted).
+  const matching = service.listJournalEntries(TENANT_ID).find((e) => e.id === sim.journal_entry.id);
   assert.ok(matching, 'journal entry still exists');
-  assert.equal(
-    matching.status,
-    'pending_approval',
-    'journal stays pending_approval — Slice 2 does not implement journal posting',
-  );
+  assert.equal(matching.status, 'posted', 'journal posts on approval (Slice 2)');
+  assert.ok(matching.posted_at);
+  assert.ok(res.posted_entry);
+  assert.equal(res.posted_entry.status, 'posted');
 });
 
 test('financeDomainService approveFinanceAction is idempotent on the promoter side (re-approving emits no extra sync_queued)', async () => {

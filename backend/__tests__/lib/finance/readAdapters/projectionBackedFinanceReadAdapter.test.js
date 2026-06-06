@@ -123,8 +123,8 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       workers: w,
     });
     const accounts = await adapter.listAccounts(T, { isTestData: true });
-    // baseline (7) + the one folded auto-created account
-    assert.equal(accounts.length, 8);
+    // baseline (8) + the one folded auto-created account
+    assert.equal(accounts.length, 9);
     assert.ok(accounts.find((a) => a.account_code === '1000' && a.is_system === true));
     const created = accounts.find((a) => a.account_code === '4500');
     assert.equal(created.is_system, false);

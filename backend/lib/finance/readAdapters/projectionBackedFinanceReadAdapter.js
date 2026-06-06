@@ -14,6 +14,7 @@
 
 import { profitAndLossFromLedger, balanceSheetFromLedger } from '../accountingEngine.js';
 import { seedAccountsForTenant } from '../chartOfAccounts.js';
+import { buildCashFlowStatement } from '../cashFlowStatement.js';
 
 export class FinanceReadDegradedError extends Error {
   constructor(message, cause) {
@@ -82,6 +83,39 @@ export function createProjectionBackedFinanceReadAdapter({
     };
   }
 
+  // COA Slice 1: the event-sourced chart of accounts — baseline seed merged with
+  // auto-created accounts folded from `finance.account.created` (partition-aware).
+  // Fail-closed: a reader error propagates → 503. Deduped by account_id (Codex
+  // PR #647 P1). Shared by listAccounts + getCashFlow.
+  async function foldChartOfAccounts(tenantId, isTestData) {
+    let created;
+    try {
+      const payloads = await auditEventsReader.listByType(tenantId, 'finance.account.created', isTestData);
+      created = payloads.map((p) => ({
+        id: p.account_id,
+        tenant_id: tenantId,
+        account_code: p.account_code,
+        name: p.name,
+        classification: p.classification,
+        account_type: p.account_type,
+        parent_account_id: null,
+        is_system: false,
+        is_active: true,
+      }));
+    } catch (err) {
+      throw new FinanceReadDegradedError('Failed to read chart of accounts', err);
+    }
+    const accounts = seedAccountsForTenant(tenantId);
+    const seenIds = new Set(accounts.map((a) => a.id));
+    for (const acc of created) {
+      if (acc.id && !seenIds.has(acc.id)) {
+        accounts.push(acc);
+        seenIds.add(acc.id);
+      }
+    }
+    return accounts;
+  }
+
   return {
     async listJournalEntries(tenantId) {
       return readProjection(createStoreProvider(), journalEntries, tenantId);
@@ -102,40 +136,19 @@ export function createProjectionBackedFinanceReadAdapter({
     // events in append order. Fail-closed: a reader error propagates → 503
     // (no in-memory fallback), per the §6 no-silent-fallback contract.
     async listAccounts(tenantId, { isTestData = null } = {}) {
-      let created;
-      try {
-        const payloads = await auditEventsReader.listByType(
-          tenantId,
-          'finance.account.created',
-          isTestData,
-        );
-        created = payloads.map((p) => ({
-          id: p.account_id,
-          tenant_id: tenantId,
-          account_code: p.account_code,
-          name: p.name,
-          classification: p.classification,
-          account_type: p.account_type,
-          parent_account_id: null,
-          is_system: false,
-          is_active: true,
-        }));
-      } catch (err) {
-        throw new FinanceReadDegradedError('Failed to read chart of accounts', err);
-      }
-      // Dedupe by account_id, NOT account_code (Codex PR #647 P1): auto-created
-      // ids are name-derived + unique, but two different names can transiently
-      // share a display code under a concurrent-create race — deduping by code
-      // would hide one real account; deduping by id keeps both (identity correct).
-      const accounts = seedAccountsForTenant(tenantId);
-      const seenIds = new Set(accounts.map((a) => a.id));
-      for (const acc of created) {
-        if (acc.id && !seenIds.has(acc.id)) {
-          accounts.push(acc);
-          seenIds.add(acc.id);
-        }
-      }
-      return accounts;
+      return foldChartOfAccounts(tenantId, isTestData);
+    },
+
+    // COA Slice 1 + Cash Flow Slice 2: the cash-flow statement, derived from the
+    // posted/reversed journal lines (journal_entries projection) on cash/bank
+    // accounts (COA account_type). Partition-aware; fail-closed via the same
+    // event-sourced COA fold.
+    async getCashFlow(tenantId, { isTestData = null } = {}) {
+      const [entries, accounts] = await Promise.all([
+        readProjection(createStoreProvider(), journalEntries, tenantId),
+        foldChartOfAccounts(tenantId, isTestData),
+      ]);
+      return buildCashFlowStatement(entries, accounts);
     },
 
     // Reconstruct a flat approval list matching `service.listApprovals()` on the

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import {
   assertBalancedJournal,
   buildBalanceSheet,
@@ -20,11 +20,28 @@ import {
   resolveAccount,
   normalizeAccountKey,
 } from './chartOfAccounts.js';
+import { buildCashFlowStatement } from './cashFlowStatement.js';
 
 function createStore() {
   return {
     tenants: new Map(),
   };
+}
+
+// Deterministic, valid-shaped (v5) UUID for a REVERSAL's finance.approval.approved
+// event, keyed on the SOURCE entry id. Two approvals for two reversals of the SAME
+// source therefore mint the SAME approval-approved event id, so the durable event
+// store's primary key rejects the second append (23505 →
+// FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID). This is the cross-process concurrency guard
+// (the persistent runner hydrates a fresh per-request bucket, so an in-memory check
+// alone can't see a sibling request's in-flight reversal; the durable PK can). The CAS
+// gates the APPROVAL transition itself — the loser is rejected BEFORE it is durably
+// recorded as approved, so persistentWriteRunner never advances a losing approval into
+// the approval_queue while its reversal stays unpostable. Non-secret — a stable id.
+function reversalApprovalEventId(sourceEntryId) {
+  const h = createHash('sha256').update(`finance.reversal.approval-claim:${sourceEntryId}`).digest('hex');
+  const variant = ((parseInt(h.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(18, 20)}-${h.slice(20, 32)}`;
 }
 
 function getTenantBucket(store, tenantId) {
@@ -181,6 +198,14 @@ export function createFinanceDomainService(opts = {}) {
     listAccounts(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
       return clone(getTenantCoa(bucket, tenantId));
+    },
+
+    // Cash Flow Slice 2 (Bridge B): read-only cash-flow statement derived from
+    // this tenant's posted journal lines on cash/bank accounts. Reconciles to the
+    // ledger (same posted/reversed filter).
+    getCashFlow(tenantId) {
+      const bucket = getTenantBucket(store, tenantId);
+      return buildCashFlowStatement(bucket.journalEntries, getTenantCoa(bucket, tenantId));
     },
 
     listAdapterJobs(tenantId) {
@@ -704,6 +729,43 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
+    // Cash Flow Slice 2 — test-mode sandbox convenience: simulate a won deal AND
+    // immediately approve it so the journal POSTS, populating the ledger / P&L /
+    // balance-sheet / cash-flow with sample data. Composes the two real operations
+    // (simulateDealWon → approveFinanceAction) on the same bucket; it does NOT add
+    // a general approve control. Surfaced ONLY by the test-mode create panel; live
+    // posting still goes through the real human approval flow. Human-gated:
+    // approveFinanceAction blocks AI actors.
+    async simulatePostedDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+      // A posted CASH sale (Debit Cash / Credit Revenue) — touches a cash account
+      // so it shows in the cash-flow statement, unlike simulateDealWon's default
+      // Debit-AR credit sale (revenue accrued, cash not yet received). Callers may
+      // still override payload.lines.
+      const amountCents = Number(payload.amount_cents || 0);
+      const simPayload = {
+        ...payload,
+        memo: payload.memo || 'Simulated posted cash sale',
+        lines: payload.lines || [
+          { account_name: 'Cash', classification: 'Asset', debit_cents: amountCents, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: amountCents },
+        ],
+      };
+      const sim = await this.simulateDealWon({ tenantId, actor, payload: simPayload, requestId, braidTraceId });
+      const approved = await this.approveFinanceAction({
+        tenantId,
+        approvalId: sim.approval.id,
+        actor,
+        requestId,
+        braidTraceId,
+      });
+      return {
+        journal_entry: approved.posted_entry || sim.journal_entry,
+        approval: approved.approval,
+        posted_entry: approved.posted_entry,
+        governance_decision: sim.governance_decision,
+      };
+    },
+
     async reverseJournalEntry({
       tenantId,
       journalEntryId,
@@ -818,44 +880,181 @@ export function createFinanceDomainService(opts = {}) {
       const approval = bucket.approvals.find((row) => row.id === approvalId);
       ensureTenantMatch(approval, tenantId);
 
+      // Double-reversal guard + SYNCHRONOUS CLAIM (Codex PR #650 P2). Two reversals
+      // can race from the same posted source — `reverseJournalEntry` only guards on
+      // the source being `posted`, and the source flips to `reversed` at step 2 below,
+      // so two requests created before either approval both pass. Without protection,
+      // approving the second posts a second `finance.journal.posted` reversal and
+      // double-reverses the original in the ledger/cash-flow.
+      //   • Same-process (in-memory shared bucket): this block runs BEFORE any await,
+      //     so the `source.reversed_by` claim is set atomically — a second approval
+      //     interleaving at the awaits below sees the claim and is rejected (409).
+      //   • Cross-process (persistent hydrates a fresh per-request bucket, so the
+      //     claim is process-local): the durable guarantee comes from the DETERMINISTIC
+      //     finance.approval.approved id below — the event store PK rejects the second,
+      //     gating the APPROVAL transition itself so a losing approval is never durably
+      //     recorded as approved while its reversal stays unpostable (Codex PR #650 P1).
+      // An idempotent re-approval of the SAME reversal (reversed_by === target.id)
+      // falls through — step 1 no-ops on the already-posted entry and step 2 heals a
+      // source left `posted` by a partial append.
+      let reversalSourceId = null;
+      if (approval.target_type === 'journal_entry') {
+        const target = bucket.journalEntries.find((e) => e.id === approval.target_id);
+        if (target?.reversal_of) {
+          reversalSourceId = target.reversal_of;
+          const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);
+          if (source) {
+            if (source.reversed_by && source.reversed_by !== target.id) {
+              const error = new Error('This entry has already been reversed by another reversal; a second reversal cannot be posted.');
+              error.statusCode = 409;
+              throw error;
+            }
+            // Synchronous claim — no await between the read above and this write.
+            if (source.status !== 'reversed') {
+              source.reversed_by = target.id;
+            }
+          }
+        }
+      }
+
       // Append-before-mutate (PR #632 P2): persist the approved transition before
       // mutating the in-memory approval, so a failed append leaves it pending.
       // The append must also land before promoteLinkedAdapterJobs runs, since the
       // promotion is a consequence of a durably-recorded approval.
-      const approvedApproval = {
-        ...approval,
-        status: 'approved',
-        approved_by: normalizedActor.id,
-        approved_at: now(),
-      };
+      //
+      // Skip re-appending when the approval is ALREADY approved (idempotent re-approval
+      // / heal retry): the durable approval transition already landed, and with the
+      // deterministic reversal-claim id below a re-append would self-collide. The
+      // posting/heal steps still run.
+      if (approval.status !== 'approved') {
+        const approvedApproval = {
+          ...approval,
+          status: 'approved',
+          approved_by: normalizedActor.id,
+          approved_at: now(),
+        };
 
-      await appendEvent(
-        bucket,
-        createFinanceEventEnvelope({
-          tenantId,
-          eventType: 'finance.approval.approved',
-          aggregateType: 'approval',
-          aggregateId: approval.id,
-          actorId: normalizedActor.id,
-          actorType: normalizedActor.type,
-          requestId,
-          braidTraceId,
-          payload: { approval: clone(approvedApproval) },
-          policyDecision: decision,
-        }),
-      );
-      Object.assign(approval, approvedApproval);
+        // For a REVERSAL approval, the approval-approved event id is DETERMINISTIC on
+        // the SOURCE id (reversalSourceId), so two approvals for two reversals of the
+        // same source collide on the event store PK — the LOSER's approval transition
+        // is rejected (409) and never durably recorded, so it cannot be advanced into
+        // the approval_queue while its reversal stays unpostable (Codex PR #650 P1).
+        const approvedEventId = reversalSourceId ? reversalApprovalEventId(reversalSourceId) : null;
+        try {
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.approval.approved',
+              aggregateType: 'approval',
+              aggregateId: approval.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: { approval: clone(approvedApproval) },
+              policyDecision: decision,
+              id: approvedEventId,
+            }),
+          );
+        } catch (err) {
+          // The durable PK rejected a concurrent reversal approval of the same source.
+          if (err?.code === 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID' && reversalSourceId) {
+            const e = new Error('This entry is already being reversed by a concurrent request; a second reversal cannot be approved.');
+            e.statusCode = 409;
+            throw e;
+          }
+          throw err;
+        }
+        Object.assign(approval, approvedApproval);
+      }
+
+      // Cash Flow Slice 2 — JOURNAL POSTING. When the approved approval targets a
+      // journal entry, post it (pending_approval → posted) and emit
+      // `finance.journal.posted` with the full posted entry (the shape
+      // journalEntriesProjection + rebuildBucketFromEvents already expect). This
+      // is what makes the ledger / P&L / balance-sheet / cash-flow reflect the
+      // entry. Human-gated: approveFinanceAction is AI-blocked above
+      // (finance.ai.no_money_movement), so an AI actor can never post. Idempotent:
+      // an already-posted/reversed entry is left untouched.
+      let postedEntry = null;
+      if (approval.target_type === 'journal_entry') {
+        const entry = bucket.journalEntries.find((e) => e.id === approval.target_id);
+        if (entry) {
+          // 1. Post the target entry if not already posted/reversed.
+          if (entry.status !== 'posted' && entry.status !== 'reversed') {
+            postedEntry = {
+              ...clone(entry),
+              status: 'posted',
+              posted_at: now(),
+              posted_by: normalizedActor.id,
+              updated_at: now(),
+            };
+            // The concurrency guard is on the approval transition above (the durable
+            // reversal-claim CAS), so a losing reversal never reaches this post.
+            await appendEvent(
+              bucket,
+              createFinanceEventEnvelope({
+                tenantId,
+                eventType: 'finance.journal.posted',
+                aggregateType: 'journal_entry',
+                aggregateId: entry.id,
+                actorId: normalizedActor.id,
+                actorType: normalizedActor.type,
+                requestId,
+                braidTraceId,
+                payload: { journal_entry: clone(postedEntry) },
+                policyDecision: decision,
+              }),
+            );
+            Object.assign(entry, postedEntry);
+          }
+
+          // 2. If the target is a REVERSAL (`reversal_of` set), mark its SOURCE
+          // entry `reversed` so it cannot be reversed again (reverseJournalEntry
+          // only allows `status === 'posted'` sources — otherwise one original
+          // could be reversed repeatedly). This runs INDEPENDENTLY of step 1 and
+          // is idempotent (Codex PR #650 P2 follow-up): on a retry after a partial
+          // append (posted landed durably, reversed failed), the reversal entry is
+          // already `posted` and skips step 1, but the source still needs healing —
+          // re-approving the same reversal now marks it. The reversal entry's own
+          // posting nets the original in the ledger; the ledger projection does not
+          // consume finance.journal.reversed, so balances are unchanged.
+          if (entry.reversal_of) {
+            const original = bucket.journalEntries.find((e) => e.id === entry.reversal_of);
+            if (original && original.status !== 'reversed') {
+              // Stamp `reversed_by` with THIS reversal's id so the double-reversal
+              // guard above can tell a redundant second reversal (different id →
+              // reject) from an idempotent re-approval of the same one (same id →
+              // heal). Carried by the finance.journal.reversed payload, so it
+              // survives projection rebuild + persistent rehydration.
+              const reversedOriginal = { ...clone(original), status: 'reversed', reversed_by: entry.id, updated_at: now() };
+              await appendEvent(
+                bucket,
+                createFinanceEventEnvelope({
+                  tenantId,
+                  eventType: 'finance.journal.reversed',
+                  aggregateType: 'journal_entry',
+                  aggregateId: original.id,
+                  actorId: normalizedActor.id,
+                  actorType: normalizedActor.type,
+                  requestId,
+                  braidTraceId,
+                  payload: { journal_entry: clone(reversedOriginal) },
+                  policyDecision: decision,
+                }),
+              );
+              Object.assign(original, reversedOriginal);
+            }
+          }
+        }
+      }
 
       // Slice 2B: promote any linked adapter_jobs from `draft → queued` and
       // emit one `finance.adapter.sync_queued` event per promoted job. The
       // linkage is structural via shared `aggregate_id` — see §4.1 of the
       // slice-2 adapter runtime design freeze. The promoter is a no-op for
       // approvals whose target has no linked adapter_jobs.
-      //
-      // IMPORTANT — Phase 3-8 §5.7 contract preserved: this does NOT modify
-      // the journal entry's status. The journal stays at `pending_approval`.
-      // Only the adapter_job transitions. Journal posting is NOT a Slice 2
-      // deliverable.
       const promotion = await promoteLinkedAdapterJobs({
         bucket,
         tenantId,
@@ -871,6 +1070,7 @@ export function createFinanceDomainService(opts = {}) {
         approval: clone(approval),
         governance_decision: decision,
         promoted_adapter_jobs: promotion.promoted_jobs,
+        posted_entry: postedEntry ? clone(postedEntry) : null,
       };
     },
 

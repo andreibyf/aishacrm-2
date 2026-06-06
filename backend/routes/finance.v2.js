@@ -295,6 +295,46 @@ function decodeAuditCursor(cursor, tenantId) {
   return parsed;
 }
 
+/**
+ * Server-enforced test-only guard for the posted-deal SANDBOX endpoint (Codex
+ * PR #650 P1). `POST /simulate/posted-deal-won` auto-creates AND posts a journal;
+ * the UI only hides the create panel outside test mode, which is not a backend
+ * boundary. In persistent mode a write is stamped by the tenant's resolved
+ * data mode, so a live tenant would persist this as LIVE finance data (and could
+ * materialize claimable adapter jobs). This guard refuses that:
+ *   - in-memory mode → always allowed (the effective mode is test-only; runtime
+ *     status is clamped to test, writes are unpartitioned/ephemeral);
+ *   - persistent + test → allowed;
+ *   - persistent + live → 409 FINANCE_TEST_MODE_REQUIRED;
+ *   - persistent + unresolvable mode → 503 (fail-closed; never assume test).
+ * Exported for unit testing (like applyFinanceDataModeChange).
+ */
+export async function assertPostedSandboxAllowed({
+  persistentEvents,
+  getFinanceDataMode,
+  tenantId,
+  req,
+}) {
+  if (!persistentEvents) return;
+  let dataMode;
+  try {
+    dataMode = await getFinanceDataMode({ tenantId, req });
+  } catch {
+    const e = new Error('Could not resolve the finance data mode for the test-only sandbox.');
+    e.statusCode = 503;
+    e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+    throw e;
+  }
+  if (dataMode !== FINANCE_DATA_MODES.TEST) {
+    const e = new Error(
+      'The posted-deal sandbox is test-mode only; this tenant is in live finance data mode.',
+    );
+    e.statusCode = 409;
+    e.code = 'FINANCE_TEST_MODE_REQUIRED';
+    throw e;
+  }
+}
+
 export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
   // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
@@ -329,7 +369,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // persistent mode the command runs through the durable write runner (hydrate →
   // run → advance); in default mode it runs directly against the in-memory
   // domain service. Behaviour is identical to the per-handler branch it replaces.
-  async function runWrite(req, command) {
+  async function runWrite(req, command, { isTestData: isTestDataOverride } = {}) {
     if (persistentEvents) {
       // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
       // into the durable write runner so HYDRATE + the projection REBUILD both
@@ -340,19 +380,28 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       // mode can't be resolved, REFUSE the write rather than acknowledge it in the
       // wrong partition.
       let isTestData;
-      try {
-        isTestData =
-          (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
-          FINANCE_DATA_MODES.TEST;
-      } catch (err) {
-        const e = new Error(
-          'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
-            'avoid persisting it in the wrong (test/live) partition.',
-        );
-        e.statusCode = 503;
-        e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
-        e.cause = err;
-        throw e;
+      if (isTestDataOverride !== undefined) {
+        // Caller pre-resolved AND bound the partition (the test-only sandbox,
+        // Codex PR #650 P2). Use it directly and do NOT re-resolve the mode here —
+        // re-resolving opens a TOCTOU window where a superadmin test→live flip
+        // between the caller's check and this lookup would persist the write into
+        // the live partition. Binding to the verified partition closes it.
+        isTestData = isTestDataOverride;
+      } else {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch (err) {
+          const e = new Error(
+            'Cannot resolve the finance data mode for this tenant; refusing the write to ' +
+              'avoid persisting it in the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          e.cause = err;
+          throw e;
+        }
       }
       return runPersistentWriteFn({
         tenantId: req.financeTenantId,
@@ -599,6 +648,42 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.json({ status: 'success', data: balanceSheet });
     } catch (error) {
       logger.error('[finance.v2] balance-sheet failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // Cash Flow Slice 2 (Bridge B) — read-only cash-flow statement derived from
+  // posted journal lines on cash/bank accounts. Partition-aware (persistent only).
+  router.get('/cash-flow', async (req, res) => {
+    try {
+      // Cash-flow derives from the journal_entries PROJECTION, which (unlike
+      // /accounts + /audit-events) is NOT partition-filtered at read — it serves
+      // whatever partition the projection_state currently holds; only the COA fold
+      // honors `isTestData`. So resolveReadIsTestData's fail-SAFE-to-test default is
+      // UNSAFE here: on an unresolved data mode it would pair a test-folded COA with
+      // possibly-LIVE journal entries and leak live cash movements under a test
+      // label. Fail CLOSED instead (503) — the same posture the write path takes
+      // (runWrite) — so the statement is only ever derived under a resolved,
+      // consistent partition (Codex PR #650 P2).
+      let isTestData = null;
+      if (persistentEvents) {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch {
+          const e = new Error(
+            'Cannot resolve the finance data mode; refusing the cash-flow read to avoid serving the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          throw e;
+        }
+      }
+      const cashFlow = await readAdapter.getCashFlow(req.financeTenantId, { isTestData });
+      res.json({ status: 'success', data: { cash_flow: cashFlow } });
+    } catch (error) {
+      logger.error('[finance.v2] cash-flow failed:', error);
       sendError(res, error);
     }
   });
@@ -939,6 +1024,36 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] simulate deal won failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // Cash Flow Slice 2 — test-mode sandbox: simulate a won deal AND post it (auto
+  // approve), so the statements show sample data. Composes simulate + approve; the
+  // test-mode create panel is the only caller. Human-gated (approve blocks AI).
+  router.post('/simulate/posted-deal-won', async (req, res) => {
+    try {
+      // Codex PR #650 P1: server-enforced test-only — refuse in live persistent mode.
+      await assertPostedSandboxAllowed({
+        persistentEvents,
+        getFinanceDataMode,
+        tenantId: req.financeTenantId,
+        req,
+      });
+      const command = (svc) =>
+        svc.simulatePostedDealWon({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      // Codex PR #650 P2: bind the sandbox write to the verified TEST partition so
+      // a concurrent test→live flip can never persist it into the live partition.
+      const result = await runWrite(req, command, { isTestData: true });
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] simulate posted deal won failed:', error);
       sendError(res, error);
     }
   });
