@@ -19,8 +19,44 @@ import {
   seedAccountsForTenant,
   resolveAccount,
   normalizeAccountKey,
+  buildManualAccount,
+  isValidAccountType,
 } from './chartOfAccounts.js';
+import { FINANCE_CLASSIFICATIONS } from './accountingEngine.js';
 import { buildCashFlowStatement } from './cashFlowStatement.js';
+
+// Phase 3a (editable COA manager, design §2). "Has posted history" = the
+// account_id appears in any posted/reversed journal line. Renaming/locking
+// decisions key on this; pure, no I/O. Mirrors the ledger projection's
+// posted+reversed filter so the two agree on what counts as money truth.
+const POSTED_STATUSES = new Set(['posted', 'reversed']);
+
+function hasPostedHistory(bucket, accountId) {
+  const entries = Array.isArray(bucket?.journalEntries) ? bucket.journalEntries : [];
+  return entries.some(
+    (entry) =>
+      POSTED_STATUSES.has(entry.status) &&
+      Array.isArray(entry.lines) &&
+      entry.lines.some((line) => line.account_id === accountId),
+  );
+}
+
+// Net posted balance (Σ debit_cents − Σ credit_cents) for an account across
+// posted/reversed entries. Same filter as hasPostedHistory so a nonzero balance
+// implies posted history. Used by the deactivate guard (design §2 — nonzero
+// posted balance blocks deactivation).
+function accountBalanceCents(bucket, accountId) {
+  const entries = Array.isArray(bucket?.journalEntries) ? bucket.journalEntries : [];
+  let net = 0;
+  for (const entry of entries) {
+    if (!POSTED_STATUSES.has(entry.status) || !Array.isArray(entry.lines)) continue;
+    for (const line of entry.lines) {
+      if (line.account_id !== accountId) continue;
+      net += Number(line.debit_cents || 0) - Number(line.credit_cents || 0);
+    }
+  }
+  return net;
+}
 
 function createStore() {
   return {
@@ -1119,6 +1155,21 @@ export function createFinanceDomainService(opts = {}) {
 
     getEventStore() {
       return eventStore;
+    },
+
+    // Phase 3a test seams (plan Task 5). Expose the pure COA history/balance
+    // helpers and the live bucket so unit tests can assert posted-history +
+    // net-balance directly over seeded journal entries.
+    __getBucket(tenantId) {
+      return getTenantBucket(store, tenantId);
+    },
+
+    __hasPostedHistory(bucket, accountId) {
+      return hasPostedHistory(bucket, accountId);
+    },
+
+    __accountBalanceCents(bucket, accountId) {
+      return accountBalanceCents(bucket, accountId);
     },
   };
 }
