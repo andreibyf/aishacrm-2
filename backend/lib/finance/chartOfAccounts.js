@@ -58,6 +58,27 @@ const AUTO_ACCOUNT_TYPE = Object.freeze({
   Expense: 'Expense',
 });
 
+/**
+ * Curated, closed `account_type` enum per classification (design §2). Grounded in
+ * the types the baseline DEFAULT_COA seeds plus the generic AUTO_ACCOUNT_TYPE per
+ * classification — the editable COA manager may only set a type from this list, and
+ * only one valid for the chosen classification (e.g. `Bank` cannot be Revenue). The
+ * generic per-classification type is listed first so it reads as the default.
+ */
+export const ACCOUNT_TYPES_BY_CLASSIFICATION = Object.freeze({
+  Asset: Object.freeze(['Asset', 'Cash', 'Bank', 'Receivable', 'Suspense']),
+  Liability: Object.freeze(['Liability', 'Payable']),
+  Equity: Object.freeze(['Equity']),
+  Revenue: Object.freeze(['Revenue']),
+  Expense: Object.freeze(['Expense']),
+});
+
+/** True iff `accountType` is curated AND valid for `classification`. */
+export function isValidAccountType(classification, accountType) {
+  const allowed = ACCOUNT_TYPES_BY_CLASSIFICATION[classification];
+  return Array.isArray(allowed) && allowed.includes(accountType);
+}
+
 function safeClassification(classification) {
   return FINANCE_CLASSIFICATIONS.includes(classification) ? classification : 'Expense';
 }
@@ -181,6 +202,8 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
 
 export default {
   DEFAULT_COA,
+  ACCOUNT_TYPES_BY_CLASSIFICATION,
+  isValidAccountType,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,

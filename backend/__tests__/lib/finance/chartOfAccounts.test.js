@@ -2,6 +2,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_COA,
+  ACCOUNT_TYPES_BY_CLASSIFICATION,
+  isValidAccountType,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,
@@ -54,6 +56,27 @@ describe('chartOfAccounts — nextCodeForClassification', () => {
   test('throws when the reserved range is exhausted', () => {
     const full = Array.from({ length: 100 }, (_, i) => String(5500 + i)); // Expense 5500-5599
     assert.throws(() => nextCodeForClassification('Expense', full), /exhausted/i);
+  });
+});
+
+describe('chartOfAccounts — account_type curation (Task 1)', () => {
+  test('ACCOUNT_TYPES_BY_CLASSIFICATION maps each classification to its curated list', () => {
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Asset, ['Asset', 'Cash', 'Bank', 'Receivable', 'Suspense']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Liability, ['Liability', 'Payable']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Equity, ['Equity']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Revenue, ['Revenue']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Expense, ['Expense']);
+  });
+
+  test('isValidAccountType accepts curated type/classification pairs', () => {
+    assert.equal(isValidAccountType('Asset', 'Bank'), true);
+    assert.equal(isValidAccountType('Asset', 'Cash'), true);
+    assert.equal(isValidAccountType('Liability', 'Payable'), true);
+  });
+
+  test('isValidAccountType rejects wrong classification or uncurated type', () => {
+    assert.equal(isValidAccountType('Revenue', 'Bank'), false); // wrong classification
+    assert.equal(isValidAccountType('Asset', 'Checking'), false); // not curated
   });
 });
 
