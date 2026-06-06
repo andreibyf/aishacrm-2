@@ -103,6 +103,28 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal(reversedEvents.length, 1);
   });
 
+  test('a posted journal against a Bank account IS recognized in cash flow (Codex PR #650 P2)', async () => {
+    const service = createFinanceDomainService();
+    // Debit Bank / Credit Revenue — resolves to the seeded Bank account (type Bank),
+    // then approve → posts.
+    const sim = await service.simulateDealWon({
+      tenantId: TENANT,
+      actor,
+      payload: {
+        amount_cents: 90000,
+        lines: [
+          { account_name: 'Bank', classification: 'Asset', debit_cents: 90000, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 90000 },
+        ],
+      },
+    });
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: sim.approval.id, actor });
+
+    const cf = service.getCashFlow(TENANT);
+    assert.equal(cf.totals.inflow_cents, 90000); // bank receipt recognized as cash inflow
+    assert.ok(cf.cash_account_codes.includes('1050')); // the seeded Bank account
+  });
+
   test('approving a NON-journal approval does not emit finance.journal.posted', async () => {
     const service = createFinanceDomainService();
     service.seedApproval({

@@ -22,10 +22,10 @@ const accountCreatedEvents = async (service) =>
   (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.created');
 
 describe('financeDomainService — COA wiring', () => {
-  test('listAccounts returns the seeded baseline (7 system accounts)', () => {
+  test('listAccounts returns the seeded baseline (8 system accounts)', () => {
     const service = createFinanceDomainService();
     const accounts = service.listAccounts(TENANT);
-    assert.equal(accounts.length, 7);
+    assert.equal(accounts.length, 8);
     assert.ok(accounts.every((a) => a.is_system === true));
     assert.ok(accounts.find((a) => a.account_code === '1000' && a.account_type === 'Cash'));
   });

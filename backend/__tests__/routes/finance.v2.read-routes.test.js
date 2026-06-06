@@ -46,12 +46,12 @@ function assertSourceBlock(source) {
 }
 
 describe('GET /api/v2/finance/accounts (COA Slice 1)', () => {
-  test('returns the seeded baseline chart (7 system accounts)', async () => {
+  test('returns the seeded baseline chart (8 system accounts)', async () => {
     const { app } = buildApp();
     const res = await request(app).get('/api/v2/finance/accounts');
     assert.equal(res.status, 200);
     const accounts = res.body.data.accounts;
-    assert.equal(accounts.length, 7);
+    assert.equal(accounts.length, 8);
     assert.ok(accounts.find((a) => a.account_code === '1000' && a.account_type === 'Cash'));
     assert.ok(accounts.every((a) => a.is_system === true));
   });
