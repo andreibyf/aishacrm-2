@@ -124,14 +124,15 @@ Append `finance.account.updated` with the full post-edit snapshot (+ `reason`), 
 ### Task 8: `deactivateAccount`
 
 Signature: `deactivateAccount({ tenantId, actor, accountId, payload: { reason }, … })`.
-- not found → 404; `is_system` → `FINANCE_COA_SYSTEM_ACCOUNT_LOCKED`; missing `reason` → `FINANCE_COA_REASON_REQUIRED`; `accountBalanceCents !== 0` → `FINANCE_COA_DEACTIVATE_NONZERO_BALANCE` (409); already inactive → no-op or `FINANCE_COA_NOT_INACTIVE` inverse (define: deactivating an inactive account is idempotent no-op).
+- not found → 404; `is_system` → `FINANCE_COA_SYSTEM_ACCOUNT_LOCKED`; missing `reason` → `FINANCE_COA_REASON_REQUIRED`; `accountBalanceCents !== 0` → `FINANCE_COA_DEACTIVATE_NONZERO_BALANCE` (409).
+- **Already inactive (non-system) → idempotent no-op: return the account, append NO new event.** (Confirmed.)
 - Else append `finance.account.deactivated` (+ reason), fold (`is_active:false`).
-**Tests:** success; system blocked; nonzero-balance blocked; missing-reason 400. Commit.
+**Tests:** success; system blocked; nonzero-balance blocked; missing-reason 400; **deactivating an already-inactive account emits no second event (idempotent)**. Commit.
 
 ### Task 9: `reactivateAccount`
 
 Signature: `reactivateAccount({ tenantId, actor, accountId, payload: { reason }, … })`.
-- not found → 404; `is_system` → locked; currently active → `FINANCE_COA_NOT_INACTIVE` (409); missing reason → 400.
+- not found → 404; `is_system` → locked; **currently active → `FINANCE_COA_NOT_INACTIVE` (409)** (confirmed); missing reason → 400.
 - **Re-run uniqueness** vs currently-active accounts: code or normalized `(classification,name)` conflict → `FINANCE_COA_REACTIVATE_CONFLICT` (409).
 - Else append `finance.account.updated` with `is_active:true` (same id) + reason, fold.
 **Tests:** success (id preserved); conflict blocked; system blocked; already-active 409. Commit.
