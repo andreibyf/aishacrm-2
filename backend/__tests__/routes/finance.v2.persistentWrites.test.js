@@ -501,4 +501,64 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
     assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
   });
+
+  // -------------------------------------------------------------------------
+  // Editable COA manager — Phase 4 (design §8 + §9). The PERSISTENT read path's
+  // chart fold must reflect account EDITS and DEACTIVATIONS, not just creates.
+  // A renamed/retyped account folded from `finance.account.created` alone would
+  // read back with its ORIGINAL fields; a deactivated account would never hide.
+  // These prove GET /accounts (via the projection-backed read adapter) folds
+  // `finance.account.updated` (full-snapshot replace) and `finance.account.deactivated`
+  // (is_active flip) end-to-end — the same semantics financeDomainReplay.js folds.
+  // -------------------------------------------------------------------------
+
+  test('GET /accounts reflects a PATCH edit (new name + account_type) in persistent mode', async () => {
+    const { app } = buildPersistentApp({ dataMode: 'test' });
+
+    const createRes = await request(app).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    const id = createRes.body.data.id;
+    assert.ok(id, 'created account has an id');
+
+    // Edit: rename AND retype (Asset/Bank → keep Asset classification but change
+    // name + account_type). updateAccount emits finance.account.updated with the
+    // FULL post-edit snapshot under payload.account.
+    const patchRes = await request(app)
+      .patch(`/api/v2/finance/accounts/${id}`)
+      .send({ name: 'Renamed Settlement Bank', account_type: 'Cash', reason: 'reclassified' });
+    assert.equal(patchRes.status, 200, JSON.stringify(patchRes.body));
+
+    const listRes = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(listRes.status, 200);
+    const acc = listRes.body.data.accounts.find((a) => a.id === id);
+    assert.ok(acc, `edited account ${id} should be visible; got ${JSON.stringify(
+      listRes.body.data.accounts.map((a) => a.id),
+    )}`);
+    assert.equal(acc.name, 'Renamed Settlement Bank', 'GET /accounts reflects the NEW name');
+    assert.equal(acc.account_type, 'Cash', 'GET /accounts reflects the NEW account_type');
+    assert.equal(acc.is_active, true, 'an edited (not deactivated) account stays active');
+  });
+
+  test('GET /accounts hides a deactivated account (is_active:false) in persistent mode', async () => {
+    const { app } = buildPersistentApp({ dataMode: 'test' });
+
+    const createRes = await request(app).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    const id = createRes.body.data.id;
+
+    const deacRes = await request(app)
+      .post(`/api/v2/finance/accounts/${id}/deactivate`)
+      .send({ reason: 'closing the account' });
+    assert.equal(deacRes.status, 200, JSON.stringify(deacRes.body));
+
+    const listRes = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(listRes.status, 200);
+    const acc = listRes.body.data.accounts.find((a) => a.id === id);
+    assert.ok(acc, `deactivated account ${id} should still be present in the chart`);
+    assert.equal(
+      acc.is_active,
+      false,
+      `deactivated account must read back is_active:false; got ${JSON.stringify(acc)}`,
+    );
+  });
 });
