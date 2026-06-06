@@ -669,10 +669,29 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // (fail-closed → 503 on a reader error). No create/edit/deactivate here.
   router.get('/accounts', async (req, res) => {
     try {
-      // Codex PR #647 P2: thread the active Test/Live partition so persistent-mode
-      // test-created accounts don't leak into the live chart (or vice versa) —
-      // same posture as /audit-events + /evidence-packs. In-memory ignores it.
-      const isTestData = await resolveReadIsTestData(req);
+      // The COA fold is partition-filtered (folds finance.account.* for the active
+      // partition), BUT `has_posted_history` is derived from the journal_entries
+      // PROJECTION, which (like /cash-flow) is NOT partition-filtered at read. So
+      // resolveReadIsTestData's fail-SAFE-to-test default is UNSAFE here: on an
+      // unresolved data mode it would fold the test COA while stamping
+      // has_posted_history from whatever partition the projection holds — leaking a
+      // live activity bit and wrongly locking test-mode edits. Fail CLOSED instead
+      // (503), mirroring /cash-flow + the write path (Codex PR #651 P2).
+      let isTestData = null;
+      if (persistentEvents) {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch {
+          const e = new Error(
+            'Cannot resolve the finance data mode; refusing the accounts read to avoid serving the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          throw e;
+        }
+      }
       const accounts = await readAdapter.listAccounts(req.financeTenantId, { isTestData });
       res.json({ status: 'success', data: { accounts } });
     } catch (error) {

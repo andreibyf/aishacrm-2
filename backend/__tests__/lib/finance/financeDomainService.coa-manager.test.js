@@ -839,4 +839,46 @@ describe('financeDomainService — #10-retirement integration (custom account �
     assert.ok(revenueCategory, 'AFTER: the inflow is attributed to the Revenue contra leg');
     assert.equal(revenueCategory.inflow_cents, 30000);
   });
+
+  test('a journal draft posting to a DEACTIVATED account is rejected — deactivation is enforceable (Codex PR #651 P2)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await service.createAccount({
+      tenantId: TENANT,
+      actor,
+      payload: { name: 'Old Bank', classification: 'Asset', account_type: 'Bank' },
+    });
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'closing it' } });
+
+    // a draft posting to the inactive account (by id) is refused BEFORE any posting
+    await assert.rejects(
+      () =>
+        service.createJournalDraft({
+          tenantId: TENANT,
+          actor,
+          payload: {
+            lines: [
+              { account_id: acct.id, account_name: 'Old Bank', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+              { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+            ],
+          },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_ACCOUNT_INACTIVE',
+    );
+    // pre-pass rejects before any create → NO orphan auto-created 'Revenue' account
+    const created = await createdEvents(service);
+    assert.ok(!created.some((e) => e.payload.name === 'Revenue'));
+
+    // control: a draft to ACTIVE (seeded) accounts still posts fine
+    const ok = await service.createJournalDraft({
+      tenantId: TENANT,
+      actor,
+      payload: {
+        lines: [
+          { account_name: 'Cash', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+        ],
+      },
+    });
+    assert.ok(ok?.journal_entry?.id || ok?.id);
+  });
 });

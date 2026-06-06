@@ -501,6 +501,34 @@ export function createFinanceDomainService(opts = {}) {
       // account_code (Codex PR #647 P2), so read the caller-supplied code from the
       // raw payload line at the same index (validateJournalLines maps in order).
       const inputLines = Array.isArray(payload.lines) ? payload.lines : [];
+
+      // Codex PR #651 P2: make deactivation ENFORCEABLE. A draft line that resolves
+      // to an EXISTING but INACTIVE account must be refused — otherwise a deactivated
+      // account could still receive new posted lines (resolveAccount matches by
+      // id/code/name and does NOT check is_active; we keep matching inactive accounts
+      // so global name/code uniqueness holds and we never auto-create a duplicate).
+      // PRE-PASS (resolveAccount is pure — no coa mutation) so we reject BEFORE any
+      // account-created event/push, leaving no orphan auto-created account on refusal.
+      for (let i = 0; i < validation.lines.length; i += 1) {
+        const line = validation.lines[i];
+        const { account, created } = resolveAccount({
+          tenantId,
+          accounts: coa,
+          classification: line.classification,
+          account_name: line.account_name,
+          account_code: inputLines[i]?.account_code,
+          account_id: line.account_id,
+        });
+        if (!created && account.is_active === false) {
+          const e = new Error(
+            `Account "${account.name}" (${account.account_code}) is inactive; reactivate it or use a different account before posting to it.`,
+          );
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_ACCOUNT_INACTIVE';
+          throw e;
+        }
+      }
+
       const resolvedLines = [];
       for (let i = 0; i < validation.lines.length; i += 1) {
         const line = validation.lines[i];

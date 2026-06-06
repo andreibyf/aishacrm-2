@@ -108,6 +108,7 @@ Stable codes on every validation/authorization failure (HTTP in parentheses):
 | `FINANCE_COA_SYSTEM_ACCOUNT_LOCKED` | edit/deactivate of a system account | 409 |
 | `FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY` | classification/code edit on a posted-history account | 409 |
 | `FINANCE_COA_DEACTIVATE_NONZERO_BALANCE` | deactivate with a nonzero posted balance | 409 |
+| `FINANCE_COA_ACCOUNT_INACTIVE` | a journal draft line posts to a deactivated account (deactivation enforced in the journal-resolution path) | 409 |
 | `FINANCE_COA_REASON_REQUIRED` | missing `reason` for deactivate/reactivate/posted-history edit | 400 |
 | `FINANCE_COA_NOT_INACTIVE` | reactivate an already-active account | 409 |
 | `FINANCE_COA_REACTIVATE_CONFLICT` | reactivate would collide on code or name | 409 |

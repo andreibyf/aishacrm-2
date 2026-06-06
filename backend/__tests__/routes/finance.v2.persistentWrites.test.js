@@ -366,6 +366,22 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
     assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
   });
 
+  // Codex PR #651 P2 — /accounts also fails closed: has_posted_history is derived from
+  // the unpartitioned journal_entries projection, so a fail-safe-to-test guess could
+  // leak a live activity bit / wrongly lock test edits.
+  test('GET /accounts is refused (503) when the data mode cannot be resolved', async () => {
+    const { app } = buildPersistentApp({
+      getFinanceDataMode: async () => {
+        throw new Error('supabase lookup failed');
+      },
+    });
+
+    const res = await request(app).get('/api/v2/finance/accounts');
+
+    assert.equal(res.status, 503, `expected 503, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.code, 'FINANCE_DATA_MODE_UNRESOLVED');
+  });
+
   // Codex PR #650 P1 — the posted-deal SANDBOX is server-enforced test-only.
   test('POST /simulate/posted-deal-won is refused (409) for a LIVE persistent tenant', async () => {
     const { app, eventStore } = buildPersistentApp({ dataMode: 'live' });
