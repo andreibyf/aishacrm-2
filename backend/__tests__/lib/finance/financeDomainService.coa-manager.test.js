@@ -582,3 +582,110 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
     assert.equal((await deactivatedEvents(service)).length, 1, 'no second deactivated event');
   });
 });
+
+describe('financeDomainService — reactivateAccount (Task 9)', () => {
+  test('success: reactivates an inactive account, same id preserved, is_active true, finance.account.updated emitted', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Comeback', classification: 'Asset', account_type: 'Asset' });
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close' } });
+
+    const result = await service.reactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'reopen' },
+    });
+
+    assert.equal(result.id, acct.id, 'id preserved');
+    assert.equal(result.is_active, true);
+
+    const listed = service.listAccounts(TENANT).find((a) => a.id === acct.id);
+    assert.equal(listed.is_active, true);
+
+    // reactivation rides finance.account.updated with is_active:true snapshot
+    const events = await updatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].payload.account.id, acct.id);
+    assert.equal(events[0].payload.account.is_active, true);
+    assert.equal(events[0].payload.reason, 'reopen');
+  });
+
+  test('reactivating an already-active account is rejected with 409 FINANCE_COA_NOT_INACTIVE', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Still Active', classification: 'Asset', account_type: 'Asset' });
+
+    await assert.rejects(
+      () =>
+        service.reactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { reason: 'reopen' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_NOT_INACTIVE',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('a system account cannot be reactivated: 409 FINANCE_COA_SYSTEM_ACCOUNT_LOCKED', async () => {
+    const service = createFinanceDomainService();
+    const cash = service.listAccounts(TENANT).find((a) => a.account_code === '1000');
+
+    await assert.rejects(
+      () =>
+        service.reactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: cash.id,
+          payload: { reason: 'reopen' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED',
+    );
+  });
+
+  test('reactivation that would collide on a name with another active account is 409 FINANCE_COA_REACTIVATE_CONFLICT', async () => {
+    const service = createFinanceDomainService();
+    const original = await makeAccount(service, { name: 'Consulting', classification: 'Revenue', account_type: 'Revenue' });
+    // A second active account, created with a distinct name (so create's dup-name
+    // guard passes), then renamed in the bucket onto the SAME normalized
+    // (classification, name) as `original` — i.e. a conflict that only exists at
+    // reactivate time, after `original` was deactivated. (createAccount/updateAccount
+    // reject names that collide with ANY account incl. inactive, so the only way to
+    // stage a reactivate-time-only conflict is to seed the colliding active account.)
+    const rival = await makeAccount(service, { name: 'Advisory', classification: 'Revenue', account_type: 'Revenue' });
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: original.id, payload: { reason: 'close' } });
+    // Rename the rival (active) onto the deactivated original's key directly in the bucket.
+    const rivalRow = service.__getBucket(TENANT).accounts.find((a) => a.id === rival.id);
+    rivalRow.name = 'consulting';
+
+    await assert.rejects(
+      () =>
+        service.reactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: original.id,
+          payload: { reason: 'reopen' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_REACTIVATE_CONFLICT',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('a missing reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Reopen No Reason', classification: 'Asset', account_type: 'Asset' });
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close' } });
+
+    await assert.rejects(
+      () =>
+        service.reactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: {},
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_REASON_REQUIRED',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+});

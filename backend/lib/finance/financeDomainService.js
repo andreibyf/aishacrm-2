@@ -1468,6 +1468,107 @@ export function createFinanceDomainService(opts = {}) {
       return clone(current);
     },
 
+    // Phase 3b (editable COA manager, design §2 + plan Task 9). Reactivate a
+    // non-system, currently-inactive account — preserving its id — after re-checking
+    // uniqueness against currently-ACTIVE accounts. Rides `finance.account.updated`
+    // with an is_active:true snapshot (same event the replay fold flips on). Human-only.
+    async reactivateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find by id.
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts cannot be reactivated.
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be reactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // 4. Must currently be inactive.
+      if (current.is_active === true) {
+        const e = new Error('Account is already active.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_NOT_INACTIVE';
+        throw e;
+      }
+
+      // 5. A reason is required.
+      if (String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to reactivate an account.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 6. Re-check uniqueness against currently-ACTIVE OTHER accounts: a code OR a
+      // normalized (classification, name) collision blocks reactivation (design §2).
+      const key = normalizeAccountKey(current.classification, current.name);
+      const conflict = coa.some(
+        (a) =>
+          a.id !== accountId &&
+          a.is_active === true &&
+          (a.account_code === current.account_code ||
+            normalizeAccountKey(a.classification, a.name) === key),
+      );
+      if (conflict) {
+        const e = new Error('Reactivation conflicts with an active account on code or name.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_REACTIVATE_CONFLICT';
+        throw e;
+      }
+
+      // Build the reactivated snapshot (same id, is_active:true). Append-before-mutate.
+      const reactivated = { ...current, is_active: true };
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.updated',
+          aggregateType: 'account',
+          aggregateId: reactivated.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: { account: clone(reactivated), reason: payload.reason },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation: 'Reactivated chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      current.is_active = true;
+
+      return clone(current);
+    },
+
     seedJournalEntry(entry) {
       const bucket = getTenantBucket(store, entry?.tenant_id);
       bucket.journalEntries.push(clone(entry));
