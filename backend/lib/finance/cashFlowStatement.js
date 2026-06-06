@@ -19,6 +19,8 @@
  * cash totals.
  */
 
+import { normalizeAccountKey } from './chartOfAccounts.js';
+
 const CASH_ACCOUNT_TYPES = new Set(['Cash', 'Bank']);
 const POSTED_STATUSES = new Set(['posted', 'reversed']);
 
@@ -33,11 +35,25 @@ function cents(v) {
  * @returns {{ cash_account_codes: string[], periods: Array, totals: object }}
  */
 export function buildCashFlowStatement(journalEntries = [], accounts = []) {
-  const cashAccounts = (Array.isArray(accounts) ? accounts : []).filter((a) =>
-    CASH_ACCOUNT_TYPES.has(a?.account_type),
+  const list = Array.isArray(accounts) ? accounts : [];
+
+  // A cash account is one the curated COA TYPES as Cash/Bank, OR one whose
+  // normalized (classification, name) matches such a curated account. The
+  // name-match is anchored to the seeded Cash/Bank accounts — NOT an arbitrary
+  // heuristic — so a 'Bank' account that was AUTO-created as a generic `Asset`
+  // BEFORE the Bank seed existed (its historical journal lines reference that
+  // Asset-typed id) is still recognized as cash and not silently omitted (Codex
+  // PR #650 P2). A custom-named bank account ("Operating Account") has no curated
+  // namesake and remains out until the deferred editable COA manager (limitation #10).
+  const cashKeys = new Set(
+    list.filter((a) => CASH_ACCOUNT_TYPES.has(a?.account_type))
+      .map((a) => normalizeAccountKey(a.classification, a.name)),
   );
+  const isCashAccount = (a) =>
+    CASH_ACCOUNT_TYPES.has(a?.account_type) || cashKeys.has(normalizeAccountKey(a?.classification, a?.name));
+  const cashAccounts = list.filter(isCashAccount);
   const cashIds = new Set(cashAccounts.map((a) => a.id));
-  const cash_account_codes = cashAccounts.map((a) => a.account_code).sort();
+  const cash_account_codes = [...new Set(cashAccounts.map((a) => a.account_code))].sort();
 
   const periodMap = new Map(); // period -> { inflow_cents, outflow_cents, categories: Map }
   const ensurePeriod = (period) => {

@@ -656,7 +656,30 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // posted journal lines on cash/bank accounts. Partition-aware (persistent only).
   router.get('/cash-flow', async (req, res) => {
     try {
-      const isTestData = await resolveReadIsTestData(req);
+      // Cash-flow derives from the journal_entries PROJECTION, which (unlike
+      // /accounts + /audit-events) is NOT partition-filtered at read — it serves
+      // whatever partition the projection_state currently holds; only the COA fold
+      // honors `isTestData`. So resolveReadIsTestData's fail-SAFE-to-test default is
+      // UNSAFE here: on an unresolved data mode it would pair a test-folded COA with
+      // possibly-LIVE journal entries and leak live cash movements under a test
+      // label. Fail CLOSED instead (503) — the same posture the write path takes
+      // (runWrite) — so the statement is only ever derived under a resolved,
+      // consistent partition (Codex PR #650 P2).
+      let isTestData = null;
+      if (persistentEvents) {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch {
+          const e = new Error(
+            'Cannot resolve the finance data mode; refusing the cash-flow read to avoid serving the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          throw e;
+        }
+      }
       const cashFlow = await readAdapter.getCashFlow(req.financeTenantId, { isTestData });
       res.json({ status: 'success', data: { cash_flow: cashFlow } });
     } catch (error) {

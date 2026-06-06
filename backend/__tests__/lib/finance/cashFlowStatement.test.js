@@ -99,6 +99,40 @@ describe('buildCashFlowStatement', () => {
     assert.equal(p.by_category.find((c) => c.classification === 'Revenue').inflow_cents, 40000);
   });
 
+  test('a Bank account auto-created as Asset BEFORE the seed is still recognized as cash by name (Codex PR #650 P2)', () => {
+    // Pre-seed, a 'Bank' line auto-created with account_type 'Asset' (auto-create
+    // never assigns Cash/Bank). Its posted lines reference that Asset-typed id. With
+    // the seeded Bank present (same normalized key 'Asset:bank'), the historical
+    // account is matched BY NAME and its bank receipts are not silently omitted.
+    const histBank = { id: 'a_hist_bank', account_code: '1500', account_type: 'Asset', classification: 'Asset', name: 'Bank' };
+    const stmt = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_hist_bank', classification: 'Asset', debit_cents: 80000, credit_cents: 0 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 80000 },
+      ])],
+      [...accounts, histBank],
+    );
+    assert.equal(stmt.totals.inflow_cents, 80000);
+    assert.ok(stmt.cash_account_codes.includes('1500')); // historical Bank counted
+    assert.ok(stmt.cash_account_codes.includes('1050')); // seeded Bank still counted
+  });
+
+  test('an Asset account with NO curated cash/bank namesake is NOT treated as cash (bounded — limitation #10)', () => {
+    // A custom-named asset ("Operating Account") has no seeded namesake, so the
+    // name-match must not fire — it stays out (documented residual; needs the
+    // deferred editable COA manager). Proves the recognition is anchored to the
+    // curated seed, not an arbitrary Asset→cash heuristic.
+    const op = { id: 'a_op', account_code: '1501', account_type: 'Asset', classification: 'Asset', name: 'Operating Account' };
+    const stmt = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_op', classification: 'Asset', debit_cents: 80000, credit_cents: 0 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 80000 },
+      ])],
+      [...accounts, op],
+    );
+    assert.deepEqual(stmt.periods, []);
+  });
+
   test('buckets by period (posted_at month) in order', () => {
     const periods = buildCashFlowStatement(
       [posted(cashRevenue(10000), { posted_at: '2026-05-10T00:00:00Z' }), posted(cashRevenue(20000), { posted_at: '2026-06-10T00:00:00Z' })],
