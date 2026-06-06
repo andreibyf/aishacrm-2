@@ -128,4 +128,21 @@ describe('financeDomainService — COA wiring', () => {
     assert.equal(matches.length, 1);
     assert.equal((await accountCreatedEvents(service)).length, 1);
   });
+
+  // Phase 2 Task 3 — an auto-created account stamps source provenance. The
+  // auto-create path emits finance.account.created with source:'auto_resolution',
+  // and the fold carries that onto the listed account (Phase 3 will emit
+  // source:'manual' from the COA manager).
+  test('an auto-created account is stamped source: auto_resolution (event + folded account)', async () => {
+    const service = createFinanceDomainService();
+    await customDraft(service, 'Consulting Fees');
+
+    const events = await accountCreatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].payload.source, 'auto_resolution');
+
+    const created = service.listAccounts(TENANT).find((a) => a.name === 'Consulting Fees');
+    assert.ok(created, 'auto-created account present');
+    assert.equal(created.source, 'auto_resolution');
+  });
 });

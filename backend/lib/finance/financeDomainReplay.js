@@ -87,6 +87,9 @@ export function rebuildBucketFromEvents(events = []) {
             parent_account_id: null,
             is_system: false,
             is_active: true,
+            // Phase 2: provenance of the account. Pre-source events (auto-create
+            // only existed before the manager) default to 'auto_resolution'.
+            source: payload.source || 'auto_resolution',
           });
         }
         break;

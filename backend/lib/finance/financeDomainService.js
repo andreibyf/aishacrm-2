@@ -467,6 +467,9 @@ export function createFinanceDomainService(opts = {}) {
           account_id: line.account_id,
         });
         if (created) {
+          // Phase 2: stamp provenance so the in-memory chart matches the
+          // replayed shape (the fold carries source onto folded accounts).
+          account.source = 'auto_resolution';
           coa.push(account);
           await appendEvent(
             bucket,
@@ -486,6 +489,7 @@ export function createFinanceDomainService(opts = {}) {
                 classification: account.classification,
                 account_type: account.account_type,
                 is_system: false,
+                source: 'auto_resolution',
                 match_key: normalizeAccountKey(account.classification, account.name),
                 source_journal_draft_id: journalEntryId,
                 correlation_id: requestId || null,
