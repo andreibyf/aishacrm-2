@@ -5,8 +5,10 @@
  *
  * These call the existing Finance v2 mutating endpoints (no new backend
  * surface). The backend governs each command (financeGovernanceDecision +
- * actor checks); the UI only exposes them when the tenant is in TEST mode, so
- * the entries created here are sandbox/test data.
+ * actor checks). The SIMULATE helpers are only exposed in TEST mode (their
+ * entries are sandbox/test data); the CHART-OF-ACCOUNTS mutations
+ * (create/update/deactivate/reactivate) are admin-gated and live-capable —
+ * the backend (`requireCoaManage` + the domain lock rules) is the authority.
  *
  * Tenant is forwarded as `x-tenant-id` (also satisfies validateTenantAccess for
  * superadmins). Errors are thrown with the structured { status, code, details }
