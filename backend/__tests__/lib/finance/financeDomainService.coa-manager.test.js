@@ -208,6 +208,43 @@ describe('financeDomainService — createAccount (Task 6)', () => {
     assert.equal((await createdEvents(service)).length, 1);
   });
 
+  test('rejects an empty name with 400 FINANCE_COA_INVALID_NAME and NO event is emitted', async () => {
+    const service = createFinanceDomainService();
+    await assert.rejects(
+      () =>
+        service.createAccount({
+          tenantId: TENANT,
+          actor,
+          payload: { name: '', classification: 'Asset', account_type: 'Asset' },
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_INVALID_NAME',
+    );
+    assert.equal((await createdEvents(service)).length, 0);
+    // nothing landed in the chart under the fragmenting 'Unnamed' fallback either
+    assert.equal(
+      service.listAccounts(TENANT).some((a) => a.name === 'Unnamed'),
+      false,
+    );
+  });
+
+  test('rejects a whitespace-only name with 400 FINANCE_COA_INVALID_NAME and NO event is emitted', async () => {
+    const service = createFinanceDomainService();
+    await assert.rejects(
+      () =>
+        service.createAccount({
+          tenantId: TENANT,
+          actor,
+          payload: { name: '   ', classification: 'Asset', account_type: 'Asset' },
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_INVALID_NAME',
+    );
+    assert.equal((await createdEvents(service)).length, 0);
+    assert.equal(
+      service.listAccounts(TENANT).some((a) => a.name === 'Unnamed'),
+      false,
+    );
+  });
+
   test('an ai_agent actor is blocked with 403 FINANCE_COA_AI_FORBIDDEN and NO event is emitted', async () => {
     const service = createFinanceDomainService();
     await assert.rejects(

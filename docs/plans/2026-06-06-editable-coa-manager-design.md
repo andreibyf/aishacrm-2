@@ -100,6 +100,7 @@ Stable codes on every validation/authorization failure (HTTP in parentheses):
 | `FINANCE_COA_ACCOUNT_NOT_FOUND` | unknown `:id` (or wrong tenant) | 404 |
 | `FINANCE_COA_INVALID_CLASSIFICATION` | classification not in the 5-value enum | 400 |
 | `FINANCE_COA_INVALID_ACCOUNT_TYPE` | type not curated, or invalid for the classification | 400 |
+| `FINANCE_COA_INVALID_NAME` | missing/blank account name | 400 |
 | `FINANCE_COA_DUPLICATE_NAME` | normalized `(classification, name)` already exists | 409 |
 | `FINANCE_COA_DUPLICATE_CODE` | `account_code` collides within the tenant | 409 |
 | `FINANCE_COA_SYSTEM_ACCOUNT_LOCKED` | edit/deactivate of a system account | 409 |

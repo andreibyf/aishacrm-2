@@ -1117,8 +1117,9 @@ export function createFinanceDomainService(opts = {}) {
     // Phase 3a (editable COA manager, design §2 + plan Task 6). Create a MANUAL,
     // non-system chart-of-accounts account. Event-sourced (Approach A): append a
     // FLAT `finance.account.created` (source:'manual') BEFORE mutating the chart,
-    // mirroring the auto-create emission shape so the replay fold upserts it
-    // identically. Human-only: an ai_agent is fail-closed by the governance default
+    // mirroring the auto-create event's PAYLOAD SHAPE so the replay fold upserts it
+    // identically — but deliberately append-before-mutate (unlike the older auto-create
+    // path, which pushes onto the chart before appending). Human-only: an ai_agent is fail-closed by the governance default
     // (ManageChartOfAccountsCommand is an unknown command type → blocked for AI)
     // before any event lands. No update/deactivate/reactivate here (Phase 3b).
     async createAccount({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
@@ -1158,7 +1159,21 @@ export function createFinanceDomainService(opts = {}) {
         throw e;
       }
 
-      // 4. Reject a duplicate normalized (classification, name) — prevents the
+      // 4. name must be present and non-blank. buildManualAccount substitutes
+      // 'Unnamed' for a blank name, but the duplicate guard below keys on the RAW
+      // input — so two blank-name creates key the dup-check on "asset:" while both
+      // STORE as "asset:unnamed" with the SAME autoAccountId(...,'Unnamed'), bypassing
+      // the dup guard and minting two rows with one id (COA fragmentation this manager
+      // exists to prevent). chartOfAccounts.normalizeName isn't exported, so replicate
+      // its blank check minimally here. Placed BEFORE the duplicate-name check.
+      if (String(name ?? '').trim() === '') {
+        const e = new Error('Account name is required');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_NAME';
+        throw e;
+      }
+
+      // 5. Reject a duplicate normalized (classification, name) — prevents the
       // fragmentation the manager exists to retire (design §2).
       const coa = getTenantCoa(bucket, tenantId);
       const matchKey = normalizeAccountKey(classification, name);
