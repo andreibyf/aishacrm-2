@@ -451,6 +451,51 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
     assert.equal((await updatedEvents(service)).length, 0);
   });
 
+  test('renaming a no-history account stores the CANONICAL (whitespace-collapsed) name, not the raw input', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Misc', classification: 'Asset', account_type: 'Asset' });
+
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: '  Spaced    Name  ' },
+    });
+
+    // The stored / returned name is the canonical form (trim + collapse runs of
+    // whitespace), matching what createAccount would have stored.
+    assert.equal(updated.name, 'Spaced Name');
+
+    // listAccounts reflects the canonical name too.
+    const listed = service.listAccounts(TENANT).find((a) => a.id === acct.id);
+    assert.equal(listed.name, 'Spaced Name');
+
+    // The emitted finance.account.updated snapshot carries the canonical name.
+    const events = await updatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].payload.account.name, 'Spaced Name');
+  });
+
+  test('changing account_code onto a code already held by ANOTHER account is 409 FINANCE_COA_DUPLICATE_CODE', async () => {
+    const service = createFinanceDomainService();
+    const a = await makeAccount(service, { name: 'Code A', classification: 'Revenue', account_type: 'Revenue' });
+    const b = await makeAccount(service, { name: 'Code B', classification: 'Revenue', account_type: 'Revenue' });
+
+    // No posted history on `a`, so account_code is editable — but the target code
+    // is already held by `b`, so it must collide.
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: a.id,
+          payload: { account_code: b.account_code },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_DUPLICATE_CODE',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
   test('an invalid effective account_type for the classification is 400 FINANCE_COA_INVALID_ACCOUNT_TYPE (Bank on Revenue)', async () => {
     const service = createFinanceDomainService();
     const acct = await makeAccount(service, { name: 'Sales', classification: 'Revenue', account_type: 'Revenue' });

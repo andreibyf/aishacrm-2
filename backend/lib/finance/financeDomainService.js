@@ -19,6 +19,7 @@ import {
   seedAccountsForTenant,
   resolveAccount,
   normalizeAccountKey,
+  normalizeName,
   buildManualAccount,
   isValidAccountType,
 } from './chartOfAccounts.js';
@@ -1301,7 +1302,13 @@ export function createFinanceDomainService(opts = {}) {
 
       // 5. Validate the EFFECTIVE (merged) result.
       const effectiveClassification = classificationChanged ? payload.classification : current.classification;
-      const effectiveName = nameChanged ? payload.name : current.name;
+      // Canonicalize a changed name to the same whitespace-collapsed form
+      // createAccount stores (via buildManualAccount → normalizeName), so a rename
+      // can never persist a non-canonical "  Spaced    Name  " into the snapshot the
+      // replay fold saves. This single derivation feeds the non-blank validation,
+      // the duplicate-name guard (normalizeAccountKey), AND the stored value, so
+      // they can't diverge.
+      const effectiveName = nameChanged ? normalizeName(payload.name) : current.name;
       const effectiveType = typeChanged ? payload.account_type : current.account_type;
       const effectiveCode = codeChanged ? String(payload.account_code) : current.account_code;
 
@@ -1364,7 +1371,7 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account: clone(updated), reason: payload.reason ?? null },
+          payload: { account: clone(updated), reason: payload.reason != null ? String(payload.reason).trim() : null },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,
@@ -1453,7 +1460,7 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account_id: current.id, reason: payload.reason },
+          payload: { account_id: current.id, reason: payload.reason != null ? String(payload.reason).trim() : null },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,
@@ -1554,7 +1561,7 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account: clone(reactivated), reason: payload.reason },
+          payload: { account: clone(reactivated), reason: payload.reason != null ? String(payload.reason).trim() : null },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,

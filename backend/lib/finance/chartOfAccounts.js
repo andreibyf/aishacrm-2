@@ -83,7 +83,7 @@ function safeClassification(classification) {
   return FINANCE_CLASSIFICATIONS.includes(classification) ? classification : 'Expense';
 }
 
-function normalizeName(name) {
+export function normalizeName(name) {
   return String(name ?? '').trim().replace(/\s+/g, ' ');
 }
 
@@ -234,6 +234,7 @@ export default {
   ACCOUNT_TYPES_BY_CLASSIFICATION,
   isValidAccountType,
   buildManualAccount,
+  normalizeName,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,
