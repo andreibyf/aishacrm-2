@@ -11,14 +11,17 @@
  * reconciles to the balance sheet's Cash line. NEVER broaden this filter to
  * approved/pending (that would desync it from the balance sheet).
  *
- * Period totals come from the CASH lines (authoritative) — the NET cash change per
- * entry, so internal cash↔cash transfers don't inflate gross. The `by_category`
- * breakdown ATTRIBUTES that net cash to the contra (non-cash) classifications,
- * grouped (cash from Revenue, cash to Expense, …). It is SCALED to the net so it
- * reconciles exactly with the period total: a simple two-leg entry's single contra
- * equals the cash, but an entry mixing cash and non-cash legs on the same side
- * (e.g. Debit Cash 50 + Debit A/R 50 / Credit Revenue 100 → only 50 cash in) must
- * not attribute the full 100 — Σ(by_category) always equals the period inflow/outflow.
+ * Per entry, the reportable cash flow is the movement BACKED BY non-cash legs, capped
+ * by the cash that actually moved in each direction:
+ *   inflow  = min(Σ non-cash credits, Σ cash-line debits)   — sources, capped by cash in
+ *   outflow = min(Σ non-cash debits,  Σ cash-line credits)  — uses,    capped by cash out
+ * This (a) excludes a pure internal cash↔cash transfer (no non-cash backing), (b)
+ * preserves GROSS flows in a compound entry whose cash legs net to zero but are each
+ * backed by a real non-cash leg, and (c) caps an accrual portion (a non-cash leg with no
+ * matching cash movement adds nothing). The `by_category` breakdown attributes the
+ * reportable inflow across non-cash CREDIT classifications (sources) and the outflow
+ * across non-cash DEBIT classifications (uses), scaled so Σ(by_category) reconciles
+ * EXACTLY with the period inflow/outflow.
  */
 
 import { normalizeAccountKey } from './chartOfAccounts.js';
@@ -29,6 +32,35 @@ const POSTED_STATUSES = new Set(['posted', 'reversed']);
 function cents(v) {
   const n = Number(v || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Distribute `amount` cents across `lines` grouped by classification, weighted by each
+ * line's `weightField` (credit_cents for sources/inflow, debit_cents for uses/outflow),
+ * scaled by amount/weightTotal, with largest-remainder rounding so the per-category sum
+ * equals `amount` EXACTLY. Writes onto `p.categories[cls][targetField]`.
+ */
+function distributeByCategory(p, lines, weightField, amount, weightTotal, targetField) {
+  if (amount <= 0 || weightTotal <= 0) return;
+  const weights = new Map(); // classification -> Σ weight
+  for (const l of lines) {
+    const w = cents(l[weightField]);
+    if (w <= 0) continue;
+    const cls = l.classification || 'Uncategorized';
+    weights.set(cls, (weights.get(cls) || 0) + w);
+  }
+  const alloc = [...weights.entries()].map(([cls, w]) => {
+    const exact = (w * amount) / weightTotal;
+    const whole = Math.floor(exact);
+    return { cls, cents: whole, frac: exact - whole };
+  });
+  let remainder = amount - alloc.reduce((s, a) => s + a.cents, 0);
+  alloc.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; i < alloc.length && remainder > 0; i += 1, remainder -= 1) alloc[i].cents += 1;
+  for (const a of alloc) {
+    if (!p.categories.has(a.cls)) p.categories.set(a.cls, { inflow_cents: 0, outflow_cents: 0 });
+    p.categories.get(a.cls)[targetField] += a.cents;
+  }
 }
 
 /**
@@ -72,67 +104,50 @@ export function buildCashFlowStatement(journalEntries = [], accounts = []) {
     const cashLines = lines.filter(isCash);
     if (cashLines.length === 0) continue;
 
-    // Authoritative period totals — the NET cash change for this entry across ALL
-    // cash lines. Computing the net (rather than summing each cash line's debit as
-    // an inflow and credit as an outflow separately) means an internal cash↔cash
-    // transfer (e.g. Debit Bank / Credit Cash, both account_type ∈ {Cash, Bank})
-    // nets to zero and does NOT inflate gross inflow/outflow (Codex PR #650 P2).
-    let entryNetCents = 0;
-    for (const l of cashLines) {
-      entryNetCents += cents(l.debit_cents) - cents(l.credit_cents);
-    }
     const nonCashLines = lines.filter((l) => !isCash(l));
 
-    // An entry with no NET cash change is not a cash flow — skip it (a pure internal
-    // cash↔cash transfer, OR a wash entry whose non-cash legs net out). This is what
-    // keeps internal transfers (e.g. Debit Bank / Credit Cash) out of the statement
-    // and stops a net-zero entry creating an empty period.
-    if (entryNetCents === 0) continue;
+    // GROSS cash movement on this entry: a cash-line DEBIT is cash received (in), a
+    // cash-line CREDIT is cash paid (out).
+    let cashIn = 0; // Σ cash-line debits
+    let cashOut = 0; // Σ cash-line credits
+    for (const l of cashLines) {
+      cashIn += cents(l.debit_cents);
+      cashOut += cents(l.credit_cents);
+    }
+    // Non-cash legs: a CREDIT is a source of funds (backs a cash inflow), a DEBIT is a
+    // use (backs a cash outflow).
+    let sourceTotal = 0; // Σ non-cash credits
+    let useTotal = 0; // Σ non-cash debits
+    for (const l of nonCashLines) {
+      sourceTotal += cents(l.credit_cents);
+      useTotal += cents(l.debit_cents);
+    }
+
+    // Report the cash flow BACKED BY non-cash legs, capped by the cash that actually
+    // moved in that direction. min() does three things at once (Codex PR #650 P2):
+    //   (a) excludes a pure internal cash↔cash transfer (e.g. Debit Bank / Credit Cash)
+    //       — its cash legs have no non-cash backing, so source/useTotal are 0;
+    //   (b) PRESERVES gross flows in a compound entry whose cash legs net to zero but
+    //       are each backed by a real non-cash leg (e.g. Debit Cash + Debit Expense /
+    //       Credit Revenue + Credit Cash → 100 in from Revenue AND 100 out to Expense);
+    //   (c) caps an accrual portion — a non-cash leg with no matching cash movement
+    //       (e.g. the A/R in Debit Cash 50 + Debit A/R 50 / Credit Revenue 100) adds
+    //       nothing, so only the 50 of real cash is reported.
+    const inflowCents = Math.min(sourceTotal, cashIn);
+    const outflowCents = Math.min(useTotal, cashOut);
+    if (inflowCents === 0 && outflowCents === 0) continue;
 
     const period = String(entry.posted_at || entry.created_at || '').slice(0, 7) || 'unknown';
     const p = ensurePeriod(period);
+    p.inflow_cents += inflowCents;
+    p.outflow_cents += outflowCents;
 
-    const magnitude = Math.abs(entryNetCents);
-    const inflow = entryNetCents > 0;
-    if (inflow) p.inflow_cents += magnitude;
-    else p.outflow_cents += magnitude;
-
-    // Contra breakdown — attribute the entry's NET cash change across the non-cash
-    // (contra) classifications, SCALED so Σ(by_category) reconciles EXACTLY with the
-    // period total. For a simple two-leg entry the single contra equals the cash, but
-    // an entry mixing cash and non-cash legs on the SAME side (e.g. Debit Cash 50 +
-    // Debit A/R 50 / Credit Revenue 100 → only 50 cash in) must NOT attribute the full
-    // 100 revenue to cash. Net each contra classification (credit − debit) — those nets
-    // sum to entryNetCents — keep the ones contributing in the net cash DIRECTION (the
-    // opposite ones are non-cash offsets, e.g. the A/R deferral) and scale them to the
-    // cash magnitude with largest-remainder rounding for exact cents (Codex PR #650 P2).
-    const catNet = new Map(); // classification -> net cents (credit − debit)
-    for (const l of nonCashLines) {
-      const cls = l.classification || 'Uncategorized';
-      catNet.set(cls, (catNet.get(cls) || 0) + cents(l.credit_cents) - cents(l.debit_cents));
-    }
-    const dirCats = [...catNet.entries()]
-      .map(([cls, net]) => ({ cls, weight: inflow ? net : -net })) // contribution toward the cash magnitude
-      .filter((c) => c.weight > 0);
-    const weightSum = dirCats.reduce((s, c) => s + c.weight, 0);
-    if (weightSum > 0) {
-      const alloc = dirCats.map((c) => {
-        const exact = (c.weight * magnitude) / weightSum;
-        const whole = Math.floor(exact);
-        return { cls: c.cls, cents: whole, frac: exact - whole };
-      });
-      // Largest-remainder: hand the leftover cents to the largest fractional parts so
-      // Σ(alloc) === magnitude exactly (no penny lost or invented).
-      let remainder = magnitude - alloc.reduce((s, a) => s + a.cents, 0);
-      alloc.sort((a, b) => b.frac - a.frac);
-      for (let i = 0; i < alloc.length && remainder > 0; i += 1, remainder -= 1) alloc[i].cents += 1;
-      for (const a of alloc) {
-        if (!p.categories.has(a.cls)) p.categories.set(a.cls, { inflow_cents: 0, outflow_cents: 0 });
-        const cat = p.categories.get(a.cls);
-        if (inflow) cat.inflow_cents += a.cents;
-        else cat.outflow_cents += a.cents;
-      }
-    }
+    // by_category — distribute the reportable inflow across the non-cash CREDIT
+    // classifications (sources) and the reportable outflow across the non-cash DEBIT
+    // classifications (uses), each scaled to the reportable amount with largest-remainder
+    // rounding so Σ(by_category) reconciles EXACTLY with the period totals.
+    distributeByCategory(p, nonCashLines, 'credit_cents', inflowCents, sourceTotal, 'inflow_cents');
+    distributeByCategory(p, nonCashLines, 'debit_cents', outflowCents, useTotal, 'outflow_cents');
   }
 
   const periods = [...periodMap.entries()]

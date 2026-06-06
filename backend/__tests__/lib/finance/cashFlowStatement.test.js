@@ -175,6 +175,45 @@ describe('buildCashFlowStatement', () => {
     for (const c of p.by_category) assert.ok(c.inflow_cents === 33 || c.inflow_cents === 34);
   });
 
+  test('a compound entry with offsetting cash legs backed by non-cash preserves GROSS flows (Codex PR #650 P2)', () => {
+    // Debit Cash 100 + Debit Expense 100 / Credit Revenue 100 + Credit Cash 100. The
+    // cash legs net to zero, but they are NOT an internal transfer — each is backed by a
+    // real non-cash leg: 100 cash IN from Revenue and 100 cash OUT to Expense. The
+    // statement must report both gross flows, not drop the entry as a net-zero wash.
+    const p = buildCashFlowStatement(
+      [posted([
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 100000, credit_cents: 0 },
+        { account_id: 'a_exp', classification: 'Expense', debit_cents: 100000, credit_cents: 0 },
+        { account_id: 'a_rev', classification: 'Revenue', debit_cents: 0, credit_cents: 100000 },
+        { account_id: 'a_cash', classification: 'Asset', debit_cents: 0, credit_cents: 100000 },
+      ])],
+      accounts,
+    ).periods[0];
+    assert.equal(p.inflow_cents, 100000); // received from Revenue
+    assert.equal(p.outflow_cents, 100000); // paid to Expense
+    assert.equal(p.net_cents, 0);
+    assert.equal(p.by_category.find((c) => c.classification === 'Revenue').inflow_cents, 100000);
+    assert.equal(p.by_category.find((c) => c.classification === 'Expense').outflow_cents, 100000);
+    // Σ(by_category) reconciles with the period totals
+    assert.equal(p.by_category.reduce((s, c) => s + c.inflow_cents, 0), p.inflow_cents);
+    assert.equal(p.by_category.reduce((s, c) => s + c.outflow_cents, 0), p.outflow_cents);
+  });
+
+  test('a pure internal cash↔cash transfer with no non-cash backing is still excluded', () => {
+    // Debit Bank 75000 / Credit Cash 75000 — both cash legs, no non-cash backing → no
+    // reportable flow (distinct from the compound case above, which HAS backing).
+    assert.deepEqual(
+      buildCashFlowStatement(
+        [posted([
+          { account_id: 'a_bank', classification: 'Asset', debit_cents: 75000, credit_cents: 0 },
+          { account_id: 'a_cash', classification: 'Asset', debit_cents: 0, credit_cents: 75000 },
+        ])],
+        accounts,
+      ).periods,
+      [],
+    );
+  });
+
   test('buckets by period (posted_at month) in order', () => {
     const periods = buildCashFlowStatement(
       [posted(cashRevenue(10000), { posted_at: '2026-05-10T00:00:00Z' }), posted(cashRevenue(20000), { posted_at: '2026-06-10T00:00:00Z' })],
