@@ -28,15 +28,18 @@ function createStore() {
   };
 }
 
-// Deterministic, valid-shaped (v5) UUID for a REVERSAL's finance.journal.posted
-// event, keyed on the SOURCE entry id. Two reversals of the same source therefore
-// mint the SAME posted-event id, so the durable event store's primary key rejects
-// the second append (23505 → FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID). This is the
-// cross-process concurrency guard (the persistent runner hydrates a fresh per-request
-// bucket, so an in-memory check alone can't see a sibling request's in-flight reversal;
-// the durable PK can). Non-secret — purely a stable id derivation.
-function reversalPostEventId(sourceEntryId) {
-  const h = createHash('sha256').update(`finance.journal.reversed-post:${sourceEntryId}`).digest('hex');
+// Deterministic, valid-shaped (v5) UUID for a REVERSAL's finance.approval.approved
+// event, keyed on the SOURCE entry id. Two approvals for two reversals of the SAME
+// source therefore mint the SAME approval-approved event id, so the durable event
+// store's primary key rejects the second append (23505 →
+// FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID). This is the cross-process concurrency guard
+// (the persistent runner hydrates a fresh per-request bucket, so an in-memory check
+// alone can't see a sibling request's in-flight reversal; the durable PK can). The CAS
+// gates the APPROVAL transition itself — the loser is rejected BEFORE it is durably
+// recorded as approved, so persistentWriteRunner never advances a losing approval into
+// the approval_queue while its reversal stays unpostable. Non-secret — a stable id.
+function reversalApprovalEventId(sourceEntryId) {
+  const h = createHash('sha256').update(`finance.reversal.approval-claim:${sourceEntryId}`).digest('hex');
   const variant = ((parseInt(h.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(18, 20)}-${h.slice(20, 32)}`;
 }
@@ -888,13 +891,17 @@ export function createFinanceDomainService(opts = {}) {
       //     interleaving at the awaits below sees the claim and is rejected (409).
       //   • Cross-process (persistent hydrates a fresh per-request bucket, so the
       //     claim is process-local): the durable guarantee comes from the DETERMINISTIC
-      //     finance.journal.posted id in step 1 — the event store PK rejects the second.
+      //     finance.approval.approved id below — the event store PK rejects the second,
+      //     gating the APPROVAL transition itself so a losing approval is never durably
+      //     recorded as approved while its reversal stays unpostable (Codex PR #650 P1).
       // An idempotent re-approval of the SAME reversal (reversed_by === target.id)
       // falls through — step 1 no-ops on the already-posted entry and step 2 heals a
       // source left `posted` by a partial append.
+      let reversalSourceId = null;
       if (approval.target_type === 'journal_entry') {
         const target = bucket.journalEntries.find((e) => e.id === approval.target_id);
         if (target?.reversal_of) {
+          reversalSourceId = target.reversal_of;
           const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);
           if (source) {
             if (source.reversed_by && source.reversed_by !== target.id) {
@@ -914,29 +921,53 @@ export function createFinanceDomainService(opts = {}) {
       // mutating the in-memory approval, so a failed append leaves it pending.
       // The append must also land before promoteLinkedAdapterJobs runs, since the
       // promotion is a consequence of a durably-recorded approval.
-      const approvedApproval = {
-        ...approval,
-        status: 'approved',
-        approved_by: normalizedActor.id,
-        approved_at: now(),
-      };
+      //
+      // Skip re-appending when the approval is ALREADY approved (idempotent re-approval
+      // / heal retry): the durable approval transition already landed, and with the
+      // deterministic reversal-claim id below a re-append would self-collide. The
+      // posting/heal steps still run.
+      if (approval.status !== 'approved') {
+        const approvedApproval = {
+          ...approval,
+          status: 'approved',
+          approved_by: normalizedActor.id,
+          approved_at: now(),
+        };
 
-      await appendEvent(
-        bucket,
-        createFinanceEventEnvelope({
-          tenantId,
-          eventType: 'finance.approval.approved',
-          aggregateType: 'approval',
-          aggregateId: approval.id,
-          actorId: normalizedActor.id,
-          actorType: normalizedActor.type,
-          requestId,
-          braidTraceId,
-          payload: { approval: clone(approvedApproval) },
-          policyDecision: decision,
-        }),
-      );
-      Object.assign(approval, approvedApproval);
+        // For a REVERSAL approval, the approval-approved event id is DETERMINISTIC on
+        // the SOURCE id (reversalSourceId), so two approvals for two reversals of the
+        // same source collide on the event store PK — the LOSER's approval transition
+        // is rejected (409) and never durably recorded, so it cannot be advanced into
+        // the approval_queue while its reversal stays unpostable (Codex PR #650 P1).
+        const approvedEventId = reversalSourceId ? reversalApprovalEventId(reversalSourceId) : null;
+        try {
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.approval.approved',
+              aggregateType: 'approval',
+              aggregateId: approval.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: { approval: clone(approvedApproval) },
+              policyDecision: decision,
+              id: approvedEventId,
+            }),
+          );
+        } catch (err) {
+          // The durable PK rejected a concurrent reversal approval of the same source.
+          if (err?.code === 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID' && reversalSourceId) {
+            const e = new Error('This entry is already being reversed by a concurrent request; a second reversal cannot be approved.');
+            e.statusCode = 409;
+            throw e;
+          }
+          throw err;
+        }
+        Object.assign(approval, approvedApproval);
+      }
 
       // Cash Flow Slice 2 — JOURNAL POSTING. When the approved approval targets a
       // journal entry, post it (pending_approval → posted) and emit
@@ -959,38 +990,23 @@ export function createFinanceDomainService(opts = {}) {
               posted_by: normalizedActor.id,
               updated_at: now(),
             };
-            // For a REVERSAL, the posted event id is DETERMINISTIC on the SOURCE id, so
-            // two reversals of the same source collide on the event store PK and the
-            // second is rejected (cross-process concurrency guard, Codex PR #650 P2).
-            // Non-reversal posts keep a random id.
-            const postedEventId = entry.reversal_of ? reversalPostEventId(entry.reversal_of) : null;
-            try {
-              await appendEvent(
-                bucket,
-                createFinanceEventEnvelope({
-                  tenantId,
-                  eventType: 'finance.journal.posted',
-                  aggregateType: 'journal_entry',
-                  aggregateId: entry.id,
-                  actorId: normalizedActor.id,
-                  actorType: normalizedActor.type,
-                  requestId,
-                  braidTraceId,
-                  payload: { journal_entry: clone(postedEntry) },
-                  policyDecision: decision,
-                  id: postedEventId,
-                }),
-              );
-            } catch (err) {
-              // The durable PK rejected a concurrent reversal of the same source —
-              // another request already posted it. Surface as a 409, not a 500.
-              if (err?.code === 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID' && entry.reversal_of) {
-                const e = new Error('This entry is already being reversed by a concurrent request; a second reversal cannot be posted.');
-                e.statusCode = 409;
-                throw e;
-              }
-              throw err;
-            }
+            // The concurrency guard is on the approval transition above (the durable
+            // reversal-claim CAS), so a losing reversal never reaches this post.
+            await appendEvent(
+              bucket,
+              createFinanceEventEnvelope({
+                tenantId,
+                eventType: 'finance.journal.posted',
+                aggregateType: 'journal_entry',
+                aggregateId: entry.id,
+                actorId: normalizedActor.id,
+                actorType: normalizedActor.type,
+                requestId,
+                braidTraceId,
+                payload: { journal_entry: clone(postedEntry) },
+                policyDecision: decision,
+              }),
+            );
             Object.assign(entry, postedEntry);
           }
 

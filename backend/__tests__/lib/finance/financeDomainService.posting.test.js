@@ -132,12 +132,14 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal(service.getLedger(TENANT).totals.debit_cents, 500000);
   });
 
-  test('CROSS-PROCESS reversals of one source — the second posted-append collides on the durable PK → 409 (deterministic-id CAS, Codex PR #650 P2)', async () => {
+  test('CROSS-PROCESS reversals of one source — the second APPROVAL collides on the durable PK → 409, no orphaned approved approval (deterministic-id CAS, Codex PR #650 P1)', async () => {
     // Simulate the PERSISTENT race: two requests hydrate SEPARATE buckets (so neither
     // sees the other's in-flight reversal) but append to ONE durable store. The store
     // enforces id-uniqueness like Postgres, so the second reversal's DETERMINISTIC
-    // finance.journal.posted id (keyed on the source) collides and is rejected — the
-    // in-memory claim alone could not catch this (the buckets are independent).
+    // finance.approval.approved id (keyed on the source) collides and is rejected
+    // BEFORE the approval is durably recorded — so the loser is never advanced into the
+    // approval_queue as "approved" while its reversal stays unpostable. The in-memory
+    // claim alone could not catch this (the buckets are independent).
     const seenIds = new Set();
     const events = [];
     const sharedStore = {
@@ -180,10 +182,12 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     svcB.seedJournalEntry(mkReversal('rev_b'));
     svcB.seedApproval({ id: 'appr_b', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'rev_b', status: 'pending' });
 
-    // A approves first → posts rev_a (deterministic id = f('je_src')), reverses source.
+    // A approves first → approves appr_a (deterministic id = f('je_src')), posts rev_a,
+    // reverses source.
     await svcA.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_a', actor });
-    // B's bucket still shows je_src posted (independent) → its claim passes, but the
-    // posted-append collides on the shared store's PK → 409.
+    // B's bucket still shows je_src posted (independent) → its in-memory claim passes,
+    // but the approval-approved append collides on the shared store's PK → 409, BEFORE
+    // any approval/posting is durably recorded for appr_b.
     await assert.rejects(
       () => svcB.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_b', actor }),
       (err) => err.statusCode === 409,
@@ -194,6 +198,29 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
       (e) => e.event_type === 'finance.journal.posted' && e.payload?.journal_entry?.reversal_of === 'je_src',
     );
     assert.equal(postedReversals.length, 1);
+    // and NO orphaned approved approval for the losing reversal: exactly one
+    // finance.approval.approved was recorded across both reversal approvals
+    const approvedReversalApprovals = events.filter(
+      (e) => e.event_type === 'finance.approval.approved' && ['rev_a', 'rev_b'].includes(e.payload?.approval?.target_id),
+    );
+    assert.equal(approvedReversalApprovals.length, 1);
+    assert.equal(approvedReversalApprovals[0].payload.approval.target_id, 'rev_a');
+  });
+
+  test('re-approving a fully-posted reversal is idempotent — no second approval event, no error (Codex PR #650 P1)', async () => {
+    const service = createFinanceDomainService();
+    const sim = await service.simulatePostedDealWon({ tenantId: TENANT, actor, payload: { amount_cents: 250000 } });
+    const rev = await service.reverseJournalEntry({ tenantId: TENANT, journalEntryId: sim.posted_entry.id, actor });
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: rev.approval.id, actor });
+
+    const approvedBefore = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.approval.approved').length;
+    // re-approve the SAME (already-approved) reversal approval — skip-if-approved means
+    // no second finance.approval.approved (which would self-collide on the durable id)
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: rev.approval.id, actor });
+    const approvedAfter = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.approval.approved').length;
+    assert.equal(approvedAfter, approvedBefore);
+    const reversed = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.journal.reversed');
+    assert.equal(reversed.length, 1); // still exactly one reversal
   });
 
   test('re-approving a reversal HEALS the source after a partial append left it posted (Codex PR #650 P2 follow-up)', async () => {
