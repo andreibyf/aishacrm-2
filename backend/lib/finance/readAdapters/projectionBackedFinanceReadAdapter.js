@@ -129,7 +129,7 @@ export function createProjectionBackedFinanceReadAdapter({
     // — exactly reproducing financeDomainReplay.js's fold.
     const folded = new Map();
     try {
-      const orderedPayloads = await auditEventsReader.listByTypesOrdered(
+      const ordered = await auditEventsReader.listByTypesOrdered(
         tenantId,
         [
           'finance.account.created',
@@ -139,12 +139,17 @@ export function createProjectionBackedFinanceReadAdapter({
         { isTestData },
       );
 
-      for (const p of orderedPayloads) {
-        // updated — payload.account is the FULL post-edit snapshot → full-replace
-        // by account.id (upsert; preserves insertion order). Reactivation rides
-        // this same event (snapshot carries is_active:true).
-        if (p.account && p.account.id) {
+      // Switch on event_type (NOT payload shape) — exactly mirroring
+      // financeDomainReplay.js. A shape-only fold misreads a SECOND concurrent
+      // finance.account.created (which shares the first's name-derived account_id, so
+      // the id is already folded) as a deactivation; event_type makes the three cases
+      // unambiguous (Codex PR #651 P2).
+      for (const { event_type: eventType, payload: p } of ordered) {
+        if (eventType === 'finance.account.updated') {
+          // payload.account is the FULL post-edit snapshot → full-replace by id
+          // (upsert; preserves insertion order). Reactivation rides this event.
           const incoming = p.account;
+          if (!incoming || !incoming.id) continue;
           const existing = folded.get(incoming.id);
           folded.set(incoming.id, {
             id: incoming.id,
@@ -158,22 +163,15 @@ export function createProjectionBackedFinanceReadAdapter({
             is_active: incoming.is_active ?? existing?.is_active ?? true,
             source: incoming.source ?? existing?.source ?? 'manual',
           });
-          continue;
-        }
-
-        // deactivated — payload.account_id (no payload.account) → flip
-        // is_active:false in place (no-op if the id is not yet folded).
-        if (p.account_id && folded.has(p.account_id)) {
-          folded.set(p.account_id, { ...folded.get(p.account_id), is_active: false });
-          continue;
-        }
-
-        // created — flat payload (account_id + create-shaped fields, no
-        // payload.account) → new account (carry `source`; default is_active:true,
-        // is_system:false). Guard on a create-shaped field so a malformed
-        // deactivated-before-create payload (account_id + reason only) cannot
-        // materialize a phantom account here, mirroring replay's no-op.
-        if (p.account_id && (p.account_code != null || p.name != null)) {
+        } else if (eventType === 'finance.account.deactivated') {
+          // flip is_active:false in place (no-op if the id is not yet folded).
+          if (p.account_id && folded.has(p.account_id)) {
+            folded.set(p.account_id, { ...folded.get(p.account_id), is_active: false });
+          }
+        } else if (eventType === 'finance.account.created') {
+          // flat payload → upsert the account (is_active:true; a duplicate concurrent
+          // create just re-asserts it active, matching replay).
+          if (!p.account_id) continue;
           folded.set(p.account_id, {
             id: p.account_id,
             tenant_id: tenantId,

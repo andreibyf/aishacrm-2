@@ -70,6 +70,7 @@ describe('pgAuditEventsReader', () => {
 
     // No partition → 2 params, event_type = ANY($2), no is_test_data clause.
     await reader.listByTypesOrdered('tenant-1', types);
+    assert.match(calls[0].text, /select event_type, payload/i); // carries event_type for the fold
     assert.match(calls[0].text, /event_type = any\(\$2\)/i);
     assert.match(calls[0].text, /order by created_at asc, seq asc/i);
     assert.equal(calls[0].text.includes('is_test_data'), false);
@@ -81,11 +82,13 @@ describe('pgAuditEventsReader', () => {
     assert.deepEqual(calls[1].values, ['tenant-1', types, true]);
   });
 
-  test('listByTypesOrdered() parses string payloads', async () => {
-    const pool = { query: async () => ({ rows: [{ payload: '{"account_id":"a1"}' }] }) };
+  test('listByTypesOrdered() parses string payloads and carries event_type', async () => {
+    const pool = {
+      query: async () => ({ rows: [{ event_type: 'finance.account.created', payload: '{"account_id":"a1"}' }] }),
+    };
     const reader = createPgAuditEventsReader({ pool });
     const out = await reader.listByTypesOrdered('t', ['finance.account.created']);
-    assert.deepEqual(out, [{ account_id: 'a1' }]);
+    assert.deepEqual(out, [{ event_type: 'finance.account.created', payload: { account_id: 'a1' } }]);
   });
 
   test('requires a pool', () => {

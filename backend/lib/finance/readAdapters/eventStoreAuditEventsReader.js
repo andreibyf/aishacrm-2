@@ -52,11 +52,15 @@ export function createEventStoreAuditEventsReader({ eventStore }) {
     },
 
     // Ordered multi-type read (mirror pgAuditEventsReader.listByTypesOrdered):
-    // return the payloads of the matching event types in TRUE GLOBAL append order
-    // (created_at ASC, then the store's monotonic _seq tie-breaker), partitioned
-    // by the active Test/Live mode when given. The single-type listByType cannot
-    // express a cross-type global order, which loses the ordering of an
+    // return `{ event_type, payload }` for the matching event types in TRUE GLOBAL
+    // append order (created_at ASC, then the store's monotonic _seq tie-breaker),
+    // partitioned by the active Test/Live mode when given. The single-type listByType
+    // cannot express a cross-type global order, which loses the ordering of an
     // interleaved create→deactivate→reactivate stream; this method preserves it.
+    // event_type is carried so the fold switches on it instead of GUESSING from the
+    // payload shape (Codex PR #651 P2 — two concurrent finance.account.created events
+    // share a name-derived id, and a shape-only fold misreads the second as a
+    // deactivation).
     //
     // Implementation: query the tenant's partition WITHOUT an event_type filter
     // (the store has no multi-type predicate), filter to the requested set, then
@@ -75,7 +79,7 @@ export function createEventStoreAuditEventsReader({ eventStore }) {
           if (a.created_at > b.created_at) return 1;
           return (a._seq ?? 0) - (b._seq ?? 0);
         })
-        .map((e) => e.payload || {});
+        .map((e) => ({ event_type: e.event_type, payload: e.payload || {} }));
     },
   };
 }

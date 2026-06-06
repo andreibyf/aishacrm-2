@@ -136,11 +136,14 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
         calls.push({ tenantId, eventTypes, isTestData });
         return [
           {
-            account_id: 'acct_x_4500',
-            account_code: '4500',
-            name: 'Consulting Fees',
-            classification: 'Revenue',
-            account_type: 'Revenue',
+            event_type: 'finance.account.created',
+            payload: {
+              account_id: 'acct_x_4500',
+              account_code: '4500',
+              name: 'Consulting Fees',
+              classification: 'Revenue',
+              account_type: 'Revenue',
+            },
           },
         ];
       },
@@ -176,31 +179,35 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       createStoreProvider: emptyStoreProvider,
       auditEventsReader: {
         count: async () => 0,
-        // Payloads already returned in global append order by the reader.
+        // Events already returned in global append order by the reader.
         listByTypesOrdered: async () => [
-          // created
           {
-            account_id: 'acct_bank',
-            account_code: '1500',
-            name: 'Operating Bank',
-            classification: 'Asset',
-            account_type: 'Bank',
-            source: 'manual',
-          },
-          // deactivated
-          { account_id: 'acct_bank', reason: 'closing' },
-          // reactivated (rides finance.account.updated; full snapshot, is_active:true)
-          {
-            account: {
-              id: 'acct_bank',
-              tenant_id: T,
+            event_type: 'finance.account.created',
+            payload: {
+              account_id: 'acct_bank',
               account_code: '1500',
               name: 'Operating Bank',
               classification: 'Asset',
               account_type: 'Bank',
-              is_system: false,
-              is_active: true,
               source: 'manual',
+            },
+          },
+          { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_bank', reason: 'closing' } },
+          // reactivated (rides finance.account.updated; full snapshot, is_active:true)
+          {
+            event_type: 'finance.account.updated',
+            payload: {
+              account: {
+                id: 'acct_bank',
+                tenant_id: T,
+                account_code: '1500',
+                name: 'Operating Bank',
+                classification: 'Asset',
+                account_type: 'Bank',
+                is_system: false,
+                is_active: true,
+                source: 'manual',
+              },
             },
           },
         ],
@@ -211,6 +218,37 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const acc = accounts.find((a) => a.id === 'acct_bank');
     assert.ok(acc, 'folded account is present');
     assert.equal(acc.is_active, true, 'reactivation (last in order) wins');
+  });
+
+  // A second concurrent finance.account.created shares the first's name-derived
+  // account_id (append-always store, each write hydrates before the other appends).
+  // The fold MUST switch on event_type — a shape-only fold sees account_id already
+  // folded and misreads the second create as a deactivation, flipping it inactive.
+  test('a SECOND concurrent finance.account.created (same id) stays ACTIVE — not a deactivation (Codex PR #651 P2)', async () => {
+    const w = workers();
+    const created = {
+      account_id: 'acct_dup',
+      account_code: '1500',
+      name: 'Operating Bank',
+      classification: 'Asset',
+      account_type: 'Bank',
+      source: 'manual',
+    };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [
+          { event_type: 'finance.account.created', payload: created },
+          { event_type: 'finance.account.created', payload: created },
+        ],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const acc = accounts.find((a) => a.id === 'acct_dup');
+    assert.ok(acc, 'the concurrently-created account is present');
+    assert.equal(acc.is_active, true, 'a duplicate create must NOT be misread as a deactivation');
   });
 
   test('listAccounts fails closed (FinanceReadDegradedError) when the reader throws', async () => {
@@ -548,7 +586,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       ]),
       auditEventsReader: {
         count: async () => 0,
-        listByTypesOrdered: async () => [folded],
+        listByTypesOrdered: async () => [{ event_type: 'finance.account.created', payload: folded }],
       },
       workers: w,
     });
