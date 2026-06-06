@@ -1376,7 +1376,8 @@ export function createFinanceDomainService(opts = {}) {
       // they can't diverge.
       const effectiveName = nameChanged ? normalizeName(payload.name) : current.name;
       const effectiveType = typeChanged ? payload.account_type : current.account_type;
-      const effectiveCode = codeChanged ? String(payload.account_code) : current.account_code;
+      // Trim a changed code so the stored value is canonical (mirrors name handling).
+      const effectiveCode = codeChanged ? String(payload.account_code ?? '').trim() : current.account_code;
 
       if (classificationChanged && !FINANCE_CLASSIFICATIONS.includes(effectiveClassification)) {
         const e = new Error(`Invalid account classification: ${effectiveClassification}`);
@@ -1388,6 +1389,16 @@ export function createFinanceDomainService(opts = {}) {
         const e = new Error('Account name is required');
         e.statusCode = 400;
         e.code = 'FINANCE_COA_INVALID_NAME';
+        throw e;
+      }
+      // account_code is the editable control/display field — a blank/whitespace code is
+      // unusable (and code-based journal resolution ignores blank codes), so reject it
+      // before storing rather than persisting an account with no usable code (Codex PR
+      // #651 P2). effectiveCode is already trimmed above.
+      if (codeChanged && effectiveCode === '') {
+        const e = new Error('Account code cannot be blank.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CODE';
         throw e;
       }
       // The effective (classification, account_type) pair must always be valid — a

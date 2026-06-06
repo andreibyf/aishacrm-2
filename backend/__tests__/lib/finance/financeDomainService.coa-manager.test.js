@@ -496,6 +496,20 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
     assert.equal((await updatedEvents(service)).length, 0);
   });
 
+  test('editing account_code to blank/whitespace is rejected with 400 FINANCE_COA_INVALID_CODE (Codex PR #651 P2)', async () => {
+    const service = createFinanceDomainService();
+    const a = await makeAccount(service, { name: 'Blank Code', classification: 'Revenue', account_type: 'Revenue' });
+    for (const code of ['', '   ']) {
+      await assert.rejects(
+        () => service.updateAccount({ tenantId: TENANT, actor, accountId: a.id, payload: { account_code: code } }),
+        (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_INVALID_CODE',
+      );
+    }
+    // no update event emitted, and the account keeps its original code
+    assert.equal((await updatedEvents(service)).length, 0);
+    assert.equal(service.listAccounts(TENANT).find((x) => x.id === a.id).account_code, a.account_code);
+  });
+
   test('an invalid effective account_type for the classification is 400 FINANCE_COA_INVALID_ACCOUNT_TYPE (Bank on Revenue)', async () => {
     const service = createFinanceDomainService();
     const acct = await makeAccount(service, { name: 'Sales', classification: 'Revenue', account_type: 'Revenue' });

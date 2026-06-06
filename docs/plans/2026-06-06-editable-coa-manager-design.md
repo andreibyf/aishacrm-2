@@ -104,6 +104,7 @@ Stable codes on every validation/authorization failure (HTTP in parentheses):
 | `FINANCE_COA_INVALID_CLASSIFICATION` | classification not in the 5-value enum | 400 |
 | `FINANCE_COA_INVALID_ACCOUNT_TYPE` | type not curated, or invalid for the classification | 400 |
 | `FINANCE_COA_INVALID_NAME` | missing/blank account name | 400 |
+| `FINANCE_COA_INVALID_CODE` | blank/whitespace `account_code` on edit | 400 |
 | `FINANCE_COA_DUPLICATE_NAME` | normalized `(classification, name)` already exists | 409 |
 | `FINANCE_COA_NAME_RESERVED` | the (name-derived) id is held by a renamed-away account — old name can't be reused (create or journal auto-create) | 409 |
 | `FINANCE_COA_DUPLICATE_CODE` | `account_code` collides within the tenant | 409 |
