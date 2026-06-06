@@ -561,4 +561,45 @@ describe('finance.v2 persistent writes (Phase 4-1 Task 8 activation)', () => {
       `deactivated account must read back is_active:false; got ${JSON.stringify(acc)}`,
     );
   });
+
+  // Editable COA manager — Phase 4 ORDERING bug. A create → deactivate →
+  // reactivate sequence appends events in this GLOBAL order:
+  //   1. finance.account.created     (is_active:true)
+  //   2. finance.account.deactivated (flip is_active:false)
+  //   3. finance.account.updated     (reactivation snapshot, is_active:true)
+  // The correct final state is is_active:true. A per-event-TYPE fold (created →
+  // updated → deactivated passes) loses this global append order: the
+  // reactivation (updated) is folded BEFORE the deactivation, so the later
+  // deactivated pass re-flips it off and GET /accounts wrongly reads
+  // is_active:false. This asserts the single ORDERED pass yields is_active:true.
+  test('GET /accounts reflects a create→deactivate→reactivate sequence as is_active:true (ordered fold)', async () => {
+    const { app } = buildPersistentApp({ dataMode: 'test' });
+
+    const createRes = await request(app).post('/api/v2/finance/accounts').send(COA_PAYLOAD);
+    assert.equal(createRes.status, 201, JSON.stringify(createRes.body));
+    const id = createRes.body.data.id;
+    assert.ok(id, 'created account has an id');
+
+    const deacRes = await request(app)
+      .post(`/api/v2/finance/accounts/${id}/deactivate`)
+      .send({ reason: 'temporarily closing' });
+    assert.equal(deacRes.status, 200, JSON.stringify(deacRes.body));
+
+    const reacRes = await request(app)
+      .post(`/api/v2/finance/accounts/${id}/reactivate`)
+      .send({ reason: 'reopening' });
+    assert.equal(reacRes.status, 200, JSON.stringify(reacRes.body));
+
+    const listRes = await request(app).get('/api/v2/finance/accounts');
+    assert.equal(listRes.status, 200);
+    const acc = listRes.body.data.accounts.find((a) => a.id === id);
+    assert.ok(acc, `reactivated account ${id} should be present in the chart`);
+    assert.equal(
+      acc.is_active,
+      true,
+      `a reactivated account must read back is_active:true (ordered fold); got ${JSON.stringify(
+        acc,
+      )}`,
+    );
+  });
 });

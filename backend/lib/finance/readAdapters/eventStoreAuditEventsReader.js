@@ -50,6 +50,33 @@ export function createEventStoreAuditEventsReader({ eventStore }) {
       });
       return events.map((e) => e.payload || {});
     },
+
+    // Ordered multi-type read (mirror pgAuditEventsReader.listByTypesOrdered):
+    // return the payloads of the matching event types in TRUE GLOBAL append order
+    // (created_at ASC, then the store's monotonic _seq tie-breaker), partitioned
+    // by the active Test/Live mode when given. The single-type listByType cannot
+    // express a cross-type global order, which loses the ordering of an
+    // interleaved create→deactivate→reactivate stream; this method preserves it.
+    //
+    // Implementation: query the tenant's partition WITHOUT an event_type filter
+    // (the store has no multi-type predicate), filter to the requested set, then
+    // sort by created_at then _seq — the SAME ordering the store's own replay()
+    // applies (financeEventStore.js), so the fold sees events exactly as appended.
+    async listByTypesOrdered(tenantId, eventTypes, { isTestData = null } = {}) {
+      const types = new Set(eventTypes || []);
+      const events = eventStore.query({
+        tenant_id: tenantId,
+        is_test_data: isTestData,
+      });
+      return events
+        .filter((e) => types.has(e.event_type))
+        .sort((a, b) => {
+          if (a.created_at < b.created_at) return -1;
+          if (a.created_at > b.created_at) return 1;
+          return (a._seq ?? 0) - (b._seq ?? 0);
+        })
+        .map((e) => e.payload || {});
+    },
   };
 }
 

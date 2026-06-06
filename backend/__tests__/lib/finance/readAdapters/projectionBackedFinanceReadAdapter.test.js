@@ -99,13 +99,13 @@ async function seededProvider(w) {
 }
 
 describe('ProjectionBackedFinanceReadAdapter', () => {
-  test('listAccounts folds finance.account.created over the baseline + threads the Test/Live partition (Codex PR #647 P2)', async () => {
+  test('listAccounts folds the ordered account stream over the baseline + threads the Test/Live partition (Codex PR #647 P2)', async () => {
     const w = workers();
     const calls = [];
     const auditEventsReader = {
       count: async () => 0,
-      listByType: async (tenantId, eventType, isTestData) => {
-        calls.push({ tenantId, eventType, isTestData });
+      listByTypesOrdered: async (tenantId, eventTypes, { isTestData } = {}) => {
+        calls.push({ tenantId, eventTypes, isTestData });
         return [
           {
             account_id: 'acct_x_4500',
@@ -129,9 +129,60 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const created = accounts.find((a) => a.account_code === '4500');
     assert.equal(created.is_system, false);
     assert.equal(created.name, 'Consulting Fees');
-    // partition threaded through to the reader
-    assert.equal(calls[0].eventType, 'finance.account.created');
+    // ordered multi-type read: all three account event types, partition threaded
+    assert.deepEqual(calls[0].eventTypes, [
+      'finance.account.created',
+      'finance.account.updated',
+      'finance.account.deactivated',
+    ]);
+    assert.equal(calls[0].tenantId, T);
     assert.equal(calls[0].isTestData, true);
+  });
+
+  // ORDERING regression (Phase 4): a create→deactivate→reactivate stream folds in
+  // global append order, so the reactivation (finance.account.updated, is_active:true)
+  // — which arrives AFTER the deactivation — wins. A per-type fold would re-flip it off.
+  test('listAccounts folds create→deactivate→reactivate in order → is_active:true', async () => {
+    const w = workers();
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: () => ({}),
+      auditEventsReader: {
+        count: async () => 0,
+        // Payloads already returned in global append order by the reader.
+        listByTypesOrdered: async () => [
+          // created
+          {
+            account_id: 'acct_bank',
+            account_code: '1500',
+            name: 'Operating Bank',
+            classification: 'Asset',
+            account_type: 'Bank',
+            source: 'manual',
+          },
+          // deactivated
+          { account_id: 'acct_bank', reason: 'closing' },
+          // reactivated (rides finance.account.updated; full snapshot, is_active:true)
+          {
+            account: {
+              id: 'acct_bank',
+              tenant_id: T,
+              account_code: '1500',
+              name: 'Operating Bank',
+              classification: 'Asset',
+              account_type: 'Bank',
+              is_system: false,
+              is_active: true,
+              source: 'manual',
+            },
+          },
+        ],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const acc = accounts.find((a) => a.id === 'acct_bank');
+    assert.ok(acc, 'folded account is present');
+    assert.equal(acc.is_active, true, 'reactivation (last in order) wins');
   });
 
   test('listAccounts fails closed (FinanceReadDegradedError) when the reader throws', async () => {
@@ -140,7 +191,7 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
       createStoreProvider: () => ({}),
       auditEventsReader: {
         count: async () => 0,
-        listByType: async () => {
+        listByTypesOrdered: async () => {
           throw new Error('db down');
         },
       },

@@ -85,10 +85,11 @@ export function createProjectionBackedFinanceReadAdapter({
 
   // COA Slice 1 + Phase 4: the event-sourced chart of accounts — baseline seed
   // merged with the accounts folded from the `finance.account.*` event stream
-  // (partition-aware). Folds ALL THREE account events, EXACTLY mirroring
+  // (partition-aware). Folds ALL THREE account events in ONE TRUE GLOBAL-ORDER
+  // pass (created_at ASC, then seq/_seq ASC), EXACTLY mirroring
   // financeDomainReplay.js's create/update/deactivate cases so the persistent
-  // read path sees edits AND deactivations (design §8/§9), not just the
-  // original-field create snapshot:
+  // read path sees edits, deactivations AND reactivations (design §8/§9), not
+  // just the original-field create snapshot:
   //   - created:     flat payload → new account (source carried; is_active:true)
   //   - updated:     payload.account is the FULL post-edit snapshot → full-replace
   //                  by id (reactivation rides this with is_active:true)
@@ -96,80 +97,76 @@ export function createProjectionBackedFinanceReadAdapter({
   // Fail-closed: a reader error propagates → 503. Iteration order is stable (Map
   // insertion order). Deduped/upserted by account_id (Codex PR #647 P1).
   //
-  // ORDERING NUANCE: `auditEventsReader.listByType` exposes ONE event_type at a
-  // time (no cross-type global-order read on the reader interface), so the fold
-  // applies the three types in separate passes (created → updated → deactivated).
-  // This is correct for the activation contract (edits + deactivations visible).
-  // A deactivate-then-reactivate sequence (reactivate rides finance.account.updated)
-  // would be folded out-of-order under per-type passes — that requires a true
-  // global-order reader and is out of scope for this read-adapter fix. Shared by
-  // listAccounts + getCashFlow.
+  // ORDERING: a SINGLE ordered multi-type read (auditEventsReader.listByTypesOrdered)
+  // preserves the global append order across all three types. This is required for
+  // an interleaved create→deactivate→reactivate stream: the reactivation rides
+  // finance.account.updated (is_active:true) and must fold AFTER the deactivation.
+  // Per-type passes (the previous approach) folded the reactivation before the
+  // deactivation, so the deactivated pass wrongly re-flipped is_active off. Shared
+  // by listAccounts + getCashFlow.
   async function foldChartOfAccounts(tenantId, isTestData) {
     // A Map keyed by account_id gives "upsert-in-place, preserve insertion order"
     // for free — `Map.set` on an existing key updates the value without moving it
     // — exactly reproducing financeDomainReplay.js's fold.
     const folded = new Map();
     try {
-      // 1. created — flat payload → account (carry `source`; default is_active:true,
-      //    is_system:false), mirroring replay's finance.account.created case.
-      const createdPayloads = await auditEventsReader.listByType(
+      const orderedPayloads = await auditEventsReader.listByTypesOrdered(
         tenantId,
-        'finance.account.created',
-        isTestData,
+        [
+          'finance.account.created',
+          'finance.account.updated',
+          'finance.account.deactivated',
+        ],
+        { isTestData },
       );
-      for (const p of createdPayloads) {
-        if (!p.account_id) continue;
-        folded.set(p.account_id, {
-          id: p.account_id,
-          tenant_id: tenantId,
-          account_code: p.account_code,
-          name: p.name,
-          classification: p.classification,
-          account_type: p.account_type,
-          parent_account_id: null,
-          is_system: false,
-          is_active: true,
-          source: p.source || 'auto_resolution',
-        });
-      }
 
-      // 2. updated — payload.account is the FULL post-edit snapshot → full-replace
-      //    by account.id (upsert; preserves insertion order), mirroring replay's
-      //    finance.account.updated case (all 10 fields). Reactivation rides this.
-      const updatedPayloads = await auditEventsReader.listByType(
-        tenantId,
-        'finance.account.updated',
-        isTestData,
-      );
-      for (const p of updatedPayloads) {
-        const incoming = p.account;
-        if (!incoming || !incoming.id) continue;
-        const existing = folded.get(incoming.id);
-        folded.set(incoming.id, {
-          id: incoming.id,
-          tenant_id: incoming.tenant_id ?? tenantId,
-          account_code: incoming.account_code,
-          name: incoming.name,
-          classification: incoming.classification,
-          account_type: incoming.account_type,
-          parent_account_id: incoming.parent_account_id ?? null,
-          is_system: incoming.is_system ?? existing?.is_system ?? false,
-          is_active: incoming.is_active ?? existing?.is_active ?? true,
-          source: incoming.source ?? existing?.source ?? 'manual',
-        });
-      }
+      for (const p of orderedPayloads) {
+        // updated — payload.account is the FULL post-edit snapshot → full-replace
+        // by account.id (upsert; preserves insertion order). Reactivation rides
+        // this same event (snapshot carries is_active:true).
+        if (p.account && p.account.id) {
+          const incoming = p.account;
+          const existing = folded.get(incoming.id);
+          folded.set(incoming.id, {
+            id: incoming.id,
+            tenant_id: incoming.tenant_id ?? tenantId,
+            account_code: incoming.account_code,
+            name: incoming.name,
+            classification: incoming.classification,
+            account_type: incoming.account_type,
+            parent_account_id: incoming.parent_account_id ?? null,
+            is_system: incoming.is_system ?? existing?.is_system ?? false,
+            is_active: incoming.is_active ?? existing?.is_active ?? true,
+            source: incoming.source ?? existing?.source ?? 'manual',
+          });
+          continue;
+        }
 
-      // 3. deactivated — payload.account_id → flip is_active:false in place
-      //    (no-op if the id is absent), mirroring replay's
-      //    finance.account.deactivated case.
-      const deactivatedPayloads = await auditEventsReader.listByType(
-        tenantId,
-        'finance.account.deactivated',
-        isTestData,
-      );
-      for (const p of deactivatedPayloads) {
+        // deactivated — payload.account_id (no payload.account) → flip
+        // is_active:false in place (no-op if the id is not yet folded).
         if (p.account_id && folded.has(p.account_id)) {
           folded.set(p.account_id, { ...folded.get(p.account_id), is_active: false });
+          continue;
+        }
+
+        // created — flat payload (account_id + create-shaped fields, no
+        // payload.account) → new account (carry `source`; default is_active:true,
+        // is_system:false). Guard on a create-shaped field so a malformed
+        // deactivated-before-create payload (account_id + reason only) cannot
+        // materialize a phantom account here, mirroring replay's no-op.
+        if (p.account_id && (p.account_code != null || p.name != null)) {
+          folded.set(p.account_id, {
+            id: p.account_id,
+            tenant_id: tenantId,
+            account_code: p.account_code,
+            name: p.name,
+            classification: p.classification,
+            account_type: p.account_type,
+            parent_account_id: null,
+            is_system: false,
+            is_active: true,
+            source: p.source || 'auto_resolution',
+          });
         }
       }
     } catch (err) {
