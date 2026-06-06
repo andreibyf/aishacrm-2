@@ -216,8 +216,15 @@ export function getJournalEntries(tenantId, { signal } = {}) {
  * GET /api/v2/finance/accounts
  *
  * Returns the tenant chart of accounts (baseline system accounts + any
- * auto-created accounts). Read-only (COA Slice 1) — there is no create/edit/
- * deactivate helper here, consistent with the read-only console posture.
+ * auto-created / manually-created accounts). This GET stays read-only here; the
+ * editable COA manager's create/edit/deactivate/reactivate helpers live in
+ * `src/api/financeWrites.js` (Phase 5) so this module's GET-only contract holds.
+ *
+ * Each account carries the flags the COA manager UI renders the lock rules from
+ * (passthrough — no shape coercion): `is_system`, `is_active`, `source`, and
+ * `has_posted_history` (true when the account appears in a posted/reversed
+ * journal line — drives the classification/code lock + required reason). The
+ * server remains the authority for every lock rule.
  *
  * Drives: the Chart of accounts tab.
  *
