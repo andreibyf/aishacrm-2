@@ -12,6 +12,9 @@ const createdEvents = async (service) =>
 const updatedEvents = async (service) =>
   (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.updated');
 
+const deactivatedEvents = async (service) =>
+  (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.deactivated');
+
 // Seed a journal entry directly into the bucket with a given status + lines so the
 // helpers (__hasPostedHistory / __accountBalanceCents) have posted/reversed history
 // to fold over. Mirrors the posting test's seedJournalEntry usage.
@@ -484,3 +487,98 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
   });
 });
 
+describe('financeDomainService — deactivateAccount (Task 8)', () => {
+  test('success: deactivates an account (is_active false, one deactivated event)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'To Close', classification: 'Asset', account_type: 'Asset' });
+
+    const result = await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'no longer used' },
+    });
+
+    assert.equal(result.id, acct.id);
+    assert.equal(result.is_active, false);
+
+    const listed = service.listAccounts(TENANT).find((a) => a.id === acct.id);
+    assert.equal(listed.is_active, false);
+
+    const events = await deactivatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].aggregate_id, acct.id);
+    assert.equal(events[0].payload.account_id, acct.id);
+    assert.equal(events[0].payload.reason, 'no longer used');
+  });
+
+  test('a system account cannot be deactivated: 409 FINANCE_COA_SYSTEM_ACCOUNT_LOCKED', async () => {
+    const service = createFinanceDomainService();
+    const cash = service.listAccounts(TENANT).find((a) => a.account_code === '1000');
+
+    await assert.rejects(
+      () =>
+        service.deactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: cash.id,
+          payload: { reason: 'x' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED',
+    );
+    assert.equal((await deactivatedEvents(service)).length, 0);
+  });
+
+  test('a nonzero posted balance blocks deactivation: 409 FINANCE_COA_DEACTIVATE_NONZERO_BALANCE', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Has Balance', classification: 'Asset', account_type: 'Asset' });
+    postLine(service, acct.id, { debit: 5000, credit: 0 });
+
+    await assert.rejects(
+      () =>
+        service.deactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { reason: 'try close' },
+        }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_DEACTIVATE_NONZERO_BALANCE',
+    );
+    assert.equal((await deactivatedEvents(service)).length, 0);
+  });
+
+  test('a missing reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'No Reason Close', classification: 'Asset', account_type: 'Asset' });
+
+    await assert.rejects(
+      () =>
+        service.deactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: acct.id,
+          payload: { reason: '   ' },
+        }),
+      (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_REASON_REQUIRED',
+    );
+    assert.equal((await deactivatedEvents(service)).length, 0);
+  });
+
+  test('deactivating an already-inactive account is an idempotent no-op (returns ok, NO second event)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await makeAccount(service, { name: 'Double Close', classification: 'Asset', account_type: 'Asset' });
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close once' } });
+    assert.equal((await deactivatedEvents(service)).length, 1);
+
+    // Second deactivation: no-op. reason is NOT required for the no-op path.
+    const again = await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: {},
+    });
+    assert.equal(again.id, acct.id);
+    assert.equal(again.is_active, false);
+    assert.equal((await deactivatedEvents(service)).length, 1, 'no second deactivated event');
+  });
+});

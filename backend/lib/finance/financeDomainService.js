@@ -1379,6 +1379,95 @@ export function createFinanceDomainService(opts = {}) {
       return clone(current);
     },
 
+    // Phase 3b (editable COA manager, design §2 + plan Task 8). Deactivate a
+    // non-system account with a zero posted balance. Append `finance.account.deactivated`
+    // {account_id, reason} before flipping is_active. Human-only.
+    async deactivateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find by id.
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts cannot be deactivated.
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be deactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // 4. Idempotent no-op: an already-inactive account returns OK with NO event
+      // (and no reason requirement). Placed BEFORE the reason/balance guards so a
+      // redundant deactivate is always safe.
+      if (current.is_active === false) {
+        return clone(current);
+      }
+
+      // 5. A reason is required.
+      if (String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to deactivate an account.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 6. A nonzero posted balance blocks deactivation (design §2).
+      if (accountBalanceCents(bucket, accountId) !== 0) {
+        const e = new Error('An account with a nonzero posted balance cannot be deactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DEACTIVATE_NONZERO_BALANCE';
+        throw e;
+      }
+
+      // Append-before-mutate: persist the deactivation first.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.deactivated',
+          aggregateType: 'account',
+          aggregateId: current.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: { account_id: current.id, reason: payload.reason },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation: 'Deactivated chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      current.is_active = false;
+
+      return clone(current);
+    },
+
     seedJournalEntry(entry) {
       const bucket = getTenantBucket(store, entry?.tenant_id);
       bucket.journalEntries.push(clone(entry));
