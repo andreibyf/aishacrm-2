@@ -93,6 +93,42 @@ export function rebuildBucketFromEvents(events = []) {
           });
         }
         break;
+
+      // Phase 2: COA edit / reactivation. The COA manager emits the FULL
+      // post-edit account snapshot under payload.account (incl. is_active,
+      // is_system). Upsert/replace by account.id — preserving first-insertion
+      // order (Map.set on an existing key updates in place). Reactivation rides
+      // this same event (snapshot carries is_active:true). `source` is carried
+      // from the snapshot, falling back to an existing folded value, then
+      // 'manual'.
+      case 'finance.account.updated':
+        if (payload.account && payload.account.id) {
+          const incoming = payload.account;
+          const existing = accounts.get(incoming.id);
+          accounts.set(incoming.id, {
+            id: incoming.id,
+            tenant_id: incoming.tenant_id ?? event.tenant_id,
+            account_code: incoming.account_code,
+            name: incoming.name,
+            classification: incoming.classification,
+            account_type: incoming.account_type,
+            parent_account_id: incoming.parent_account_id ?? null,
+            is_system: incoming.is_system ?? existing?.is_system ?? false,
+            is_active: incoming.is_active ?? existing?.is_active ?? true,
+            source: incoming.source ?? existing?.source ?? 'manual',
+          });
+        }
+        break;
+
+      // Phase 2: COA deactivation. Flip the existing account's is_active to
+      // false in place (no-op if the id is absent — e.g. a deactivation that
+      // races ahead of its create in a malformed stream).
+      case 'finance.account.deactivated':
+        if (payload.account_id && accounts.has(payload.account_id)) {
+          const target = accounts.get(payload.account_id);
+          accounts.set(payload.account_id, { ...target, is_active: false });
+        }
+        break;
       // Invoices — both create and update carry the full post-transition invoice
       // under payload.invoice. Mirrors invoiceProjection.js.
       case 'finance.invoice.draft_created':
