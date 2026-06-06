@@ -16,6 +16,25 @@ import { profitAndLossFromLedger, balanceSheetFromLedger } from '../accountingEn
 import { seedAccountsForTenant } from '../chartOfAccounts.js';
 import { buildCashFlowStatement } from '../cashFlowStatement.js';
 
+// Phase 5 (editable COA manager): "has posted history" = the account_id appears
+// in any posted/reversed journal line. Mirrors financeDomainService.hasPostedHistory
+// and the ledger/cash-flow posted+reversed filter so all read paths agree.
+const POSTED_STATUSES = new Set(['posted', 'reversed']);
+
+// Build the set of account_ids that appear in any posted/reversed journal line,
+// from the journal_entries projection read model (an array of entry snapshots).
+function postedAccountIds(entries) {
+  const ids = new Set();
+  const list = Array.isArray(entries) ? entries : [];
+  for (const entry of list) {
+    if (!POSTED_STATUSES.has(entry?.status) || !Array.isArray(entry.lines)) continue;
+    for (const line of entry.lines) {
+      if (line?.account_id != null) ids.add(line.account_id);
+    }
+  }
+  return ids;
+}
+
 export class FinanceReadDegradedError extends Error {
   constructor(message, cause) {
     super(message);
@@ -205,8 +224,22 @@ export function createProjectionBackedFinanceReadAdapter({
     // merged with the auto-created accounts folded from `finance.account.created`
     // events in append order. Fail-closed: a reader error propagates → 503
     // (no in-memory fallback), per the §6 no-silent-fallback contract.
+    //
+    // Phase 5 (editable COA manager): stamp each account with `has_posted_history`
+    // computed from the journal_entries projection (an account_id appearing in any
+    // posted/reversed journal line). Mirrors the in-memory listAccounts so the
+    // manager UI renders the same lock state in both read paths. Fail-closed on
+    // the projection read via readProjection (→ 503).
     async listAccounts(tenantId, { isTestData = null } = {}) {
-      return foldChartOfAccounts(tenantId, isTestData);
+      const [accounts, entries] = await Promise.all([
+        foldChartOfAccounts(tenantId, isTestData),
+        readProjection(createStoreProvider(), journalEntries, tenantId),
+      ]);
+      const postedIds = postedAccountIds(entries);
+      return accounts.map((account) => ({
+        ...account,
+        has_posted_history: postedIds.has(account.id),
+      }));
     },
 
     // COA Slice 1 + Cash Flow Slice 2: the cash-flow statement, derived from the

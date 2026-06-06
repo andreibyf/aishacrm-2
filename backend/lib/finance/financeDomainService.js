@@ -232,9 +232,18 @@ export function createFinanceDomainService(opts = {}) {
 
     // COA Slice 1: the tenant chart of accounts (baseline seed + any accounts
     // auto-created by journal-draft resolution this process). Read-only.
+    //
+    // Phase 5 (editable COA manager): each account additionally carries a
+    // per-account `has_posted_history` boolean so the manager UI can render the
+    // posted-history lock rules (classification/code disabled, reason required).
+    // The server remains the authority — this is purely a presentation signal.
     listAccounts(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
-      return clone(getTenantCoa(bucket, tenantId));
+      const accounts = clone(getTenantCoa(bucket, tenantId));
+      return accounts.map((account) => ({
+        ...account,
+        has_posted_history: hasPostedHistory(bucket, account.id),
+      }));
     },
 
     // Cash Flow Slice 2 (Bridge B): read-only cash-flow statement derived from

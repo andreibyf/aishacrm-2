@@ -145,4 +145,44 @@ describe('financeDomainService — COA wiring', () => {
     assert.ok(created, 'auto-created account present');
     assert.equal(created.source, 'auto_resolution');
   });
+
+  // Phase 5 (editable COA manager): listAccounts stamps a per-account
+  // has_posted_history boolean (account_id in any posted/reversed journal line)
+  // so the manager UI can render the posted-history lock rules. Server is still
+  // the authority — this is presentation signal only.
+  test('listAccounts stamps has_posted_history true for an account with a posted line, false otherwise', () => {
+    const service = createFinanceDomainService();
+    const cash = service.listAccounts(TENANT).find((a) => a.account_code === '1000');
+    const revenue = service.listAccounts(TENANT).find((a) => a.account_code === '4000');
+    // Seed a posted entry touching Cash (1000) only.
+    service.seedJournalEntry({
+      id: 'je_posted',
+      tenant_id: TENANT,
+      status: 'posted',
+      currency: 'usd',
+      lines: [
+        { account_id: cash.id, account_code: '1000', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+        { account_id: revenue.id, account_code: '4000', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+      ],
+    });
+    const accounts = service.listAccounts(TENANT);
+    assert.equal(accounts.find((a) => a.account_code === '1000').has_posted_history, true);
+    assert.equal(accounts.find((a) => a.account_code === '4000').has_posted_history, true);
+    // An account with no posted line is false.
+    assert.equal(accounts.find((a) => a.account_code === '2000').has_posted_history, false);
+  });
+
+  test('listAccounts has_posted_history ignores draft / pending_approval lines', () => {
+    const service = createFinanceDomainService();
+    const payable = service.listAccounts(TENANT).find((a) => a.account_code === '2000');
+    service.seedJournalEntry({
+      id: 'je_draft',
+      tenant_id: TENANT,
+      status: 'draft',
+      currency: 'usd',
+      lines: [{ account_id: payable.id, account_code: '2000', classification: 'Liability', debit_cents: 0, credit_cents: 1000 }],
+    });
+    const accounts = service.listAccounts(TENANT);
+    assert.equal(accounts.find((a) => a.account_code === '2000').has_posted_history, false);
+  });
 });
