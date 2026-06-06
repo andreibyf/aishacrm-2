@@ -14,6 +14,7 @@ import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
 import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
 import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAdapters/projectionBackedFinanceReadAdapter.js';
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
+import { createEventStoreAuditEventsReader } from '../lib/finance/readAdapters/eventStoreAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
 import {
@@ -37,6 +38,7 @@ export function defaultFinanceReadAdapterFactory({
   pgPool,
   service,
   createStoreProvider,
+  eventStore,
 }) {
   if (!persistentEvents) {
     return createInMemoryFinanceReadAdapter({ service });
@@ -47,7 +49,21 @@ export function defaultFinanceReadAdapterFactory({
         'projection-backed reads; refusing to mount the finance v2 routes.',
     );
   }
-  const auditEventsReader = createPgAuditEventsReader({ pool: pgPool });
+  // The COA fold (listAccounts/getCashFlow) reads finance.account.* events via
+  // `auditEventsReader`. In production that is the Postgres reader bound to the
+  // real pool. But when the caller injects an in-memory `eventStore` (the
+  // persistent-write tests, and any non-PG deployment shape) while passing a
+  // pool that is not a real PG pool (no `.query`), the PG reader would throw on
+  // first COA read — failing it closed (503) even though the durable events are
+  // in the injected store. Bind the reader to that store instead so the COA
+  // read-your-write + Test/Live partition contract (editable-COA design §7)
+  // holds under the injected-store path exactly as it does against Postgres. The
+  // production PG path (real pool with `.query`) is unchanged.
+  const poolIsRealPg = pgPool && typeof pgPool.query === 'function';
+  const auditEventsReader =
+    !poolIsRealPg && eventStore && typeof eventStore.query === 'function'
+      ? createEventStoreAuditEventsReader({ eventStore })
+      : createPgAuditEventsReader({ pool: pgPool });
   const workers = {
     ledger: createLedgerProjectionWorker(),
     journalEntries: createJournalEntriesProjectionWorker(),
@@ -221,6 +237,46 @@ function buildActor(req) {
 // and sets an is_superadmin flag. Honor either; never trust body-supplied roles.
 function isSuperAdmin(req) {
   return req.user?.role === 'superadmin' || req.user?.is_superadmin === true;
+}
+
+// COA-manager RBAC gate (editable-coa-manager design §5).
+//
+// RBAC INVESTIGATION OUTCOME / DEVIATION (recorded here per the design doc):
+// The design wants a NARROW capability `finance.accounts.manage`. The repo has
+// NO granular capability system — `req.user` carries only a normalized `role`
+// (superadmin/admin/manager/user/employee), coarse `perm_*` booleans, and a
+// `nav_permissions` map; there is no per-tenant role-assignment table and no
+// capability store (`backend/routes/permissions.js` is a stub). The Track E RBAC
+// & Access Matrix (#626, docs/architecture/finance/finance-ops-rbac-access-matrix.md
+// §4.3–4.4, §8.1) documents that a finance-admin/finance-viewer split does NOT
+// exist today and is Deferred. So `finance.accounts.manage` is NOT expressible.
+//
+// FALLBACK (design §5 sanctioned): gate on the closest finance-MANAGEMENT
+// permission that DOES exist — tenant admin OR superadmin — mirroring
+// `requireAdminRole` (validateTenant.js), which already guards the finance-module
+// enable toggle (`POST /api/modulesettings`, RBAC matrix §5.1/§8.1). COA
+// management is a structural finance-config change, so admin is the natural
+// analog. This satisfies the §8.2 binding rule (backend-first, route-layer
+// check). The domain-layer AI block (FINANCE_COA_AI_FORBIDDEN) is independent of
+// and additional to this gate — defense in depth.
+//
+// On failure throws 403 FINANCE_COA_FORBIDDEN (design §6). When a true
+// `finance.accounts.manage` capability lands, swap this body for the capability
+// check; the route wiring does not change.
+function requireCoaManage(req) {
+  // AI actors are governed by the domain-layer block (FINANCE_COA_AI_FORBIDDEN),
+  // which is the authoritative, more-specific signal (design §5: AI blocking is
+  // independent of and additional to RBAC). Let an AI actor through this RBAC
+  // gate so the domain layer emits that specific code rather than masking it with
+  // a generic FINANCE_COA_FORBIDDEN — the write is still refused, just with the
+  // accurate reason. (A human caller never reaches the domain AI block.)
+  if (buildActor(req).type === 'ai_agent') return;
+  const role = req.user?.role;
+  if (isSuperAdmin(req) || role === 'admin') return;
+  const err = new Error('You do not have permission to manage the chart of accounts');
+  err.statusCode = 403;
+  err.code = 'FINANCE_COA_FORBIDDEN';
+  throw err;
 }
 
 function sendError(res, error) {
@@ -456,6 +512,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     pgPool,
     service,
     createStoreProvider,
+    // Thread the (possibly injected) persistent event store so the factory can
+    // back the COA audit-events reader with it when there is no real PG pool.
+    eventStore: persistentEventStore,
   });
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
@@ -1091,6 +1150,92 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] approve finance action failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Editable Chart of Accounts manager (design 2026-06-06 §3). Four
+  // human-only, RBAC-gated mutations that mirror the draft-invoices template
+  // (runWrite → domain method → sendError). The domain service enforces every
+  // lock rule (§2) and the AI-actor block; requireCoaManage adds the RBAC gate
+  // (§5) BEFORE any write so a forbidden caller never reaches the domain layer.
+  // -------------------------------------------------------------------------
+  router.post('/accounts', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.createAccount({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] create account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.patch('/accounts/:id', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.updateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] update account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.post('/accounts/:id/deactivate', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.deactivateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] deactivate account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.post('/accounts/:id/reactivate', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.reactivateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] reactivate account failed:', error);
       sendError(res, error);
     }
   });

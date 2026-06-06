@@ -151,10 +151,16 @@ describe('finance.v2 routes', () => {
   });
 
   // Phase 4-1 §9 row 10: the mutating surface is intentionally bounded. Cash Flow
-  // Slice 2 adds ONE: POST /simulate/posted-deal-won (a test-mode sandbox helper
+  // Slice 2 added ONE: POST /simulate/posted-deal-won (a test-mode sandbox helper
   // that composes the already-present simulate + approve so the statements show
-  // sample data — not a new general mutation primitive).
-  test('route surface exposes exactly the 7 finance-data mutations + the settings endpoint (no unplanned expansion)', () => {
+  // sample data — not a new general mutation primitive). The editable Chart of
+  // Accounts manager (design 2026-06-06 §3) adds FOUR sanctioned COA-management
+  // mutations: POST /accounts, PATCH /accounts/:id, POST /accounts/:id/deactivate,
+  // POST /accounts/:id/reactivate — each human-only + RBAC-gated (requireCoaManage)
+  // and enforced server-side by the domain service. The guard's purpose is to
+  // catch UNPLANNED expansion, so the expected count is bumped 7 → 11 deliberately
+  // and the four new routes are asserted by name below.
+  test('route surface exposes exactly the 11 finance-data mutations + the settings endpoint (no unplanned expansion)', () => {
     const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
     const mutating = [];
     for (const layer of router.stack) {
@@ -167,9 +173,20 @@ describe('finance.v2 routes', () => {
     const dataMutations = mutating.filter((m) => m !== 'PUT /settings/data-mode');
     assert.equal(
       dataMutations.length,
-      7,
-      `expected 7 finance-data mutations, got: ${dataMutations.join(' | ')}`,
+      11,
+      `expected 11 finance-data mutations, got: ${dataMutations.join(' | ')}`,
     );
+    for (const coaRoute of [
+      'POST /accounts',
+      'PATCH /accounts/:id',
+      'POST /accounts/:id/deactivate',
+      'POST /accounts/:id/reactivate',
+    ]) {
+      assert.ok(
+        mutating.includes(coaRoute),
+        `the sanctioned COA-management route ${coaRoute} must be present`,
+      );
+    }
     assert.ok(
       mutating.includes('PUT /settings/data-mode'),
       'the superadmin data-mode settings endpoint must be present',
