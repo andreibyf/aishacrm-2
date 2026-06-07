@@ -16,7 +16,7 @@
     "test:auth": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/auth/*.test.js",
     "test:bundles": "NODE_ENV=test node --test --test-force-exit --test-timeout=45000 --test-reporter tap __tests__/bundles.test.js",
     "test:system": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/system/*.test.js",
-    "test:integration": "NODE_ENV=test node --test --test-force-exit --test-timeout=60000 --test-reporter tap __tests__/integration/*.test.js",
+    "test:integration": "node --import ./__tests__/setup.js --test --test-force-exit --test-timeout=60000 --test-reporter tap __tests__/integration/*.test.js",
     "test:validation": "NODE_ENV=test node --test --test-force-exit --test-timeout=30000 --test-reporter tap __tests__/validation/*.test.js",
     "test:schema-alignment": "sh scripts/test-schema-alignment.sh",
     "test:coverage": "NODE_ENV=test c8 --reporter=text-summary --reporter=lcov node --test --test-force-exit --test-timeout=120000 --test-reporter tap __tests__/**/*.test.js __tests__/lib/finance/*.test.js __tests__/lib/finance/projections/*.test.js __tests__/workers/*.test.js lib/care/*.test.js lib/care/__tests__/*.test.js",

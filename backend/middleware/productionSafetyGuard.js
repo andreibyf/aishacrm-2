@@ -47,12 +47,16 @@ async function logSecurityEvent(pgPool, details) {
     });
   } catch (error) {
     // Don't fail the request if logging fails
-    logger.error('Failed to log security event:', {
-      error: error.message,
-      stack: error.stack,
-      hasPgPool: !!pgPool,
-      errorCode: error.code,
-    });
+    logger.error(
+      {
+        err: error,
+        error: error.message,
+        stack: error.stack,
+        hasPgPool: !!pgPool,
+        errorCode: error.code,
+      },
+      'Failed to log security event',
+    );
   }
 }
 
