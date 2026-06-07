@@ -6,12 +6,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { getSupabaseClient } from '../../lib/supabase-db.js';
-import { 
-  getActiveAlerts, 
-  getHealthStats, 
+import {
+  getActiveAlerts,
+  getHealthStats,
   resolveAlert,
-  triggerHealthCheck 
+  triggerHealthCheck,
 } from '../../lib/healthMonitor.js';
+import { initSupabaseForTests, hasSupabaseCredentials } from '../setup.js';
 import { withTimeoutSkip, getTestTimeoutMs } from '../helpers/timeout.js';
 
 const timeoutTest = (name, fn) =>
@@ -19,29 +20,33 @@ const timeoutTest = (name, fn) =>
     await withTimeoutSkip(t, fn);
   });
 
-describe('Health Monitoring System', () => {
+const SKIP_HEALTH_MONITORING_INTEGRATION = !hasSupabaseCredentials();
+
+describe('Health Monitoring System', { skip: SKIP_HEALTH_MONITORING_INTEGRATION }, () => {
   let testAlertId = null;
-  const supa = getSupabaseClient();
+  let supa;
+
+  test('initialize Supabase test client', { timeout: getTestTimeoutMs() }, async () => {
+    const initialized = await initSupabaseForTests();
+    assert.equal(initialized, true, 'Supabase test client should initialize');
+    supa = getSupabaseClient();
+  });
 
   timeoutTest('should create health alerts table and views', async () => {
     // Check if table exists
-    const { error: tableError } = await supa
-      .from('devai_health_alerts')
-      .select('id')
-      .limit(1);
-    
+    const { error: tableError } = await supa.from('devai_health_alerts').select('id').limit(1);
+
     assert.equal(tableError, null, 'devai_health_alerts table should exist');
   });
 
   timeoutTest('should create deduplication function', async () => {
     // Test deduplication function
-    const { data, error } = await supa
-      .rpc('devai_check_duplicate_alert', {
-        p_category: 'test_category',
-        p_title: 'Test Alert',
-        p_time_window_minutes: 60,
-      });
-    
+    const { data, error } = await supa.rpc('devai_check_duplicate_alert', {
+      p_category: 'test_category',
+      p_title: 'Test Alert',
+      p_time_window_minutes: 60,
+    });
+
     assert.equal(error, null, 'Deduplication function should work');
     assert.equal(data, false, 'No duplicates should exist for new alert');
   });
@@ -67,12 +72,12 @@ describe('Health Monitoring System', () => {
       .insert(testAlert)
       .select()
       .single();
-    
+
     assert.equal(error, null, 'Alert creation should succeed');
     assert.ok(data.id, 'Alert should have an ID');
     assert.equal(data.severity, 'medium', 'Severity should match');
     assert.equal(data.category, 'error_spike', 'Category should match');
-    
+
     testAlertId = data.id;
   });
 
@@ -91,17 +96,16 @@ describe('Health Monitoring System', () => {
       .insert(alert1)
       .select()
       .single();
-    
+
     assert.equal(createError, null, 'First alert should be created');
 
     // Check for duplicate
-    const { data: isDuplicate } = await supa
-      .rpc('devai_check_duplicate_alert', {
-        p_category: 'api',
-        p_title: 'Duplicate Test Alert',
-        p_time_window_minutes: 60,
-      });
-    
+    const { data: isDuplicate } = await supa.rpc('devai_check_duplicate_alert', {
+      p_category: 'api',
+      p_title: 'Duplicate Test Alert',
+      p_time_window_minutes: 60,
+    });
+
     assert.equal(isDuplicate, true, 'Duplicate should be detected');
 
     // Clean up
@@ -110,18 +114,18 @@ describe('Health Monitoring System', () => {
 
   timeoutTest('should get active alerts', async () => {
     const alerts = await getActiveAlerts(10);
-    
+
     assert.ok(Array.isArray(alerts), 'Should return an array');
     assert.ok(alerts.length > 0, 'Should have at least the test alert');
-    
-    const testAlert = alerts.find(a => a.id === testAlertId);
+
+    const testAlert = alerts.find((a) => a.id === testAlertId);
     assert.ok(testAlert, 'Test alert should be in active alerts');
     assert.equal(testAlert.resolved_at, null, 'Test alert should be unresolved');
   });
 
   timeoutTest('should get health stats', async () => {
     const stats = await getHealthStats();
-    
+
     assert.ok(stats, 'Should return stats');
     assert.ok(stats.active_alerts >= 1, 'Should have at least 1 active alert');
     assert.ok('critical_alerts' in stats, 'Should include critical_alerts');
@@ -132,13 +136,13 @@ describe('Health Monitoring System', () => {
 
   timeoutTest('should resolve an alert', async () => {
     const result = await resolveAlert(testAlertId, null);
-    
+
     assert.equal(result.success, true, 'Resolve should succeed');
     assert.ok(result.data.resolved_at, 'Alert should have resolved_at timestamp');
-    
+
     // Verify it's no longer in active alerts
     const activeAlerts = await getActiveAlerts(100);
-    const stillActive = activeAlerts.find(a => a.id === testAlertId);
+    const stillActive = activeAlerts.find((a) => a.id === testAlertId);
     assert.equal(stillActive, undefined, 'Resolved alert should not be in active list');
   });
 
@@ -155,7 +159,7 @@ describe('Health Monitoring System', () => {
 
   timeoutTest('should handle invalid alert ID gracefully', async () => {
     const result = await resolveAlert('00000000-0000-0000-0000-000000000000', null);
-    
+
     assert.equal(result.success, false, 'Invalid ID should fail gracefully');
     assert.ok(result.error, 'Should return error message');
   });
@@ -166,7 +170,7 @@ describe('Health Monitoring System', () => {
       .from('devai_health_alerts')
       .delete()
       .or('auto_detected.eq.false,title.ilike.%test%');
-    
+
     assert.equal(error, null, 'Cleanup should succeed');
   });
 });
@@ -175,7 +179,7 @@ describe('Log Pattern Analysis', () => {
   timeoutTest('should detect error spikes in logs', async () => {
     // This would be tested by generating fake logs, but for now we test the function exists
     const { readLogs } = await import('../../lib/developerAI.js');
-    
+
     // Mock log content with recurring errors
     const _mockLogs = `
 [2026-01-07 10:00:00] Error: Database connection failed
@@ -195,42 +199,45 @@ describe('Log Pattern Analysis', () => {
 });
 
 describe('Developer AI Log Access Behavior', () => {
-  timeoutTest('readLogs in production Docker environment should not suggest platform dashboards', async () => {
-    const prevNodeEnv = process.env.NODE_ENV;
-    const prevDockerFlag = process.env.DOCKER_CONTAINER;
+  timeoutTest(
+    'readLogs in production Docker environment should not suggest platform dashboards',
+    async () => {
+      const prevNodeEnv = process.env.NODE_ENV;
+      const prevDockerFlag = process.env.DOCKER_CONTAINER;
 
-    try {
-      process.env.NODE_ENV = 'production';
-      process.env.DOCKER_CONTAINER = 'true';
+      try {
+        process.env.NODE_ENV = 'production';
+        process.env.DOCKER_CONTAINER = 'true';
 
-      const { readLogs } = await import('../../lib/developerAI.js');
+        const { readLogs } = await import('../../lib/developerAI.js');
 
-      const result = await readLogs({
-        log_type: 'backend',
-        lines: 50,
-        analyze_patterns: false,
-        since_minutes: 15,
-      });
+        const result = await readLogs({
+          log_type: 'backend',
+          lines: 50,
+          analyze_patterns: false,
+          since_minutes: 15,
+        });
 
-      assert.ok(result, 'readLogs should return a result object');
+        assert.ok(result, 'readLogs should return a result object');
 
-      const note = (result.note || '').toLowerCase();
-      const suggestion = (result.suggestion || '').toLowerCase();
+        const note = (result.note || '').toLowerCase();
+        const suggestion = (result.suggestion || '').toLowerCase();
 
-      assert.ok(
-        !note.includes('platform') && !note.includes('dashboard'),
-        'readLogs note should not direct users to a platform logging dashboard',
-      );
+        assert.ok(
+          !note.includes('platform') && !note.includes('dashboard'),
+          'readLogs note should not direct users to a platform logging dashboard',
+        );
 
-      assert.ok(
-        !suggestion.includes('platform') && !suggestion.includes('dashboard'),
-        'readLogs suggestion should not direct users to a platform logging dashboard',
-      );
-    } finally {
-      process.env.NODE_ENV = prevNodeEnv;
-      process.env.DOCKER_CONTAINER = prevDockerFlag;
-    }
-  });
+        assert.ok(
+          !suggestion.includes('platform') && !suggestion.includes('dashboard'),
+          'readLogs suggestion should not direct users to a platform logging dashboard',
+        );
+      } finally {
+        process.env.NODE_ENV = prevNodeEnv;
+        process.env.DOCKER_CONTAINER = prevDockerFlag;
+      }
+    },
+  );
 });
 
 describe('Health Alerts API Endpoints', () => {

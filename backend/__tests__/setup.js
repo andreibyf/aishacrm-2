@@ -9,17 +9,20 @@ import { config } from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
-// Load environment variables from root .env (backend doesn't have its own)
+// Load environment variables from common backend/root locations.
+// We load every candidate file with override=false so pre-set CI vars are preserved,
+// while missing keys can still be sourced from later files (e.g., repo root .env).
 const envPaths = [
-  join(__dirname, '../../.env'),       // /backend/test -> /backend -> root .env
+  join(__dirname, '../.env.local'),
+  join(__dirname, '../.env'),
+  join(__dirname, '../../.env.local'),
+  join(__dirname, '../../.env'),
 ];
 
 for (const envPath of envPaths) {
-  const result = config({ path: envPath });
-  if (!result.error) {
-    break;
-  }
+  config({ path: envPath, override: false });
 }
 
 /**
@@ -29,12 +32,12 @@ for (const envPath of envPaths) {
 export async function initSupabaseForTests() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!url || !key) {
     console.warn('[Test Setup] Supabase credentials not found - some tests may be skipped');
     return false;
   }
-  
+
   try {
     const { initSupabaseDB } = await import('../lib/supabase-db.js');
     initSupabaseDB(url, key);
