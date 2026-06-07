@@ -7,7 +7,10 @@
  * secrets, displayed-page only. Mirrors downloadCsv's posture.
  */
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jspdf-autotable v5 documents `autoTable` as a NAMED export (it also re-exports it
+// as default — both resolve to the same function in 5.x — but the named form is the
+// documented, future-proof one).
+import { autoTable } from 'jspdf-autotable';
 
 /**
  * Download labeled records as a table PDF. Header = the first record's keys (column

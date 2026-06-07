@@ -10,7 +10,10 @@ vi.mock('jspdf', () => ({
     return { save, text };
   }),
 }));
-vi.mock('jspdf-autotable', () => ({ default: autoTable }));
+// Mirror the real jspdf-autotable v5 shape: `autoTable` is a NAMED export (also
+// re-exported as default). Providing both means the mock can't mask a default/named
+// import mismatch in financePdf.js — the source uses the named import.
+vi.mock('jspdf-autotable', () => ({ autoTable, default: autoTable }));
 
 import { downloadPdf } from '../financePdf';
 
