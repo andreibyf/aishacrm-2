@@ -391,6 +391,37 @@ export async function assertPostedSandboxAllowed({
   }
 }
 
+// Process-local keyed async mutex. runExclusive(key, fn) runs fn() only after all
+// prior calls for the SAME key have settled, serializing them; different keys run
+// concurrently. Each key's queue is a chained promise; the entry is dropped when no
+// callers remain (no unbounded growth). This is the in-process serialization the
+// finance write path uses to close the COA concurrency races (Codex PR #651 P2):
+// it protects a SINGLE process/instance only — it is NOT durable, multi-instance
+// protection. Multi-instance persistent mode still needs durable DB serialization
+// (RPC-wrapped pg_advisory_xact_lock + finance.accounts unique constraints), deferred
+// to the persistent-activation hardening.
+export function createKeyedMutex() {
+  const chains = new Map(); // key -> { tail: Promise, waiters: number }
+  return async function runExclusive(key, fn) {
+    const entry = chains.get(key) || { tail: Promise.resolve(), waiters: 0 };
+    entry.waiters += 1;
+    chains.set(key, entry);
+    const prev = entry.tail;
+    let release;
+    entry.tail = new Promise((res) => {
+      release = res;
+    });
+    try {
+      await prev; // wait my turn
+      return await fn();
+    } finally {
+      release();
+      entry.waiters -= 1;
+      if (entry.waiters === 0 && chains.get(key) === entry) chains.delete(key);
+    }
+  };
+}
+
 export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
   // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
@@ -425,6 +456,16 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // persistent mode the command runs through the durable write runner (hydrate →
   // run → advance); in default mode it runs directly against the in-memory
   // domain service. Behaviour is identical to the per-handler branch it replaces.
+  // Process-local serialization of the finance write path (Codex PR #651 P2, Option 2).
+  // Concurrent writes for the same (tenant, data-mode) run one-at-a-time, so the COA
+  // races close for the in-memory / single-instance beta: two creates can't allocate
+  // the same account_code (the 2nd sees the 1st's account), and a PATCH can't bypass the
+  // posted-history lock by racing a concurrent approval (the approval's posting is also
+  // serialized, so the PATCH's hasPostedHistory check — run inside the critical section —
+  // is authoritative). Beta-only / process-local; multi-instance persistent still needs
+  // durable DB serialization (deferred to persistent-activation hardening).
+  const financeWriteMutex = createKeyedMutex();
+
   async function runWrite(req, command, { isTestData: isTestDataOverride } = {}) {
     if (persistentEvents) {
       // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
@@ -459,19 +500,27 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           throw e;
         }
       }
-      return runPersistentWriteFn({
-        tenantId: req.financeTenantId,
-        eventStore: persistentEventStore,
-        storeProvider: createStoreProvider(),
-        // Codex PR #633 P1: the pool used to materialize finance.adapter_jobs rows
-        // so the SQL adapter worker can claim jobs created via the persistent write.
-        adapterJobPool: pgPool,
-        logger,
-        command,
-        isTestData,
-      });
+      // Lock key = tenant + resolved data mode (partitions don't share state, so
+      // test/live writes need not serialize against each other). The mode is resolved
+      // above; if it couldn't be, we already threw 503 and never reach here.
+      const lockKey = `${req.financeTenantId}::${isTestData ? 'test' : 'live'}`;
+      return financeWriteMutex(lockKey, () =>
+        runPersistentWriteFn({
+          tenantId: req.financeTenantId,
+          eventStore: persistentEventStore,
+          storeProvider: createStoreProvider(),
+          // Codex PR #633 P1: the pool used to materialize finance.adapter_jobs rows
+          // so the SQL adapter worker can claim jobs created via the persistent write.
+          adapterJobPool: pgPool,
+          logger,
+          command,
+          isTestData,
+        }),
+      );
     }
-    return command(service);
+    // In-memory: one shared bucket, no data-mode partition → serialize per tenant
+    // (the conservative tenant-only fallback Option 2 allows when no mode is available).
+    return financeWriteMutex(`${req.financeTenantId}::mem`, () => command(service));
   }
 
   // Slice 6 (Codex P1): resolve the Test/Live read partition for the two raw

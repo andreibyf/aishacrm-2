@@ -140,7 +140,8 @@ COA events are partition-stamped like every other finance event: `runWrite` stam
 ## 9. Activation posture & out of scope
 
 - **In-memory-first; no migration, no env-flag flip, no provider writes, no staging/prod mutation.** Events fold in both modes; the persistent path works unchanged when `ENABLE_FINANCE_PERSISTENT_EVENTS` eventually flips.
-- **Out of scope (deferred):** materializing the `finance.accounts` table (Approach B); editing/renaming system accounts; custom (non-curated) account types; account hierarchy/`parent_account_id` editing; provider-COA mapping. These belong to the persistent-activation / provider-integration work.
+- **Concurrency (Codex PR #651 P2, Option 2):** finance writes are serialized **per (tenant, data-mode)** by a **process-local async mutex** around the shared `runWrite` path (`createKeyedMutex` in `finance.v2.js`). This closes the COA concurrency races for the **in-memory / single-instance beta** — two concurrent creates can't allocate the same `account_code` (the 2nd sees the 1st's account), and a PATCH can't bypass the posted-history/balance lock by racing a concurrent approval (the approval's posting is also serialized, so the guard — run inside the critical section — is authoritative). **This is process-local only — NOT durable, multi-instance protection.** Multi-instance persistent mode still needs **durable DB serialization** (an RPC-wrapped `pg_advisory_xact_lock` per (tenant, mode) + `finance.accounts` materialization with `unique(tenant_id, account_code)`), deferred to the persistent-activation hardening.
+- **Out of scope (deferred):** materializing the `finance.accounts` table (Approach B); editing/renaming system accounts; custom (non-curated) account types; account hierarchy/`parent_account_id` editing; provider-COA mapping; the durable multi-instance write serialization noted above. These belong to the persistent-activation / provider-integration work.
 
 ---
 

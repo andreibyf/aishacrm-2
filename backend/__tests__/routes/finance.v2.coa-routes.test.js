@@ -22,7 +22,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import request from 'supertest';
-import createFinanceV2Routes from '../../routes/finance.v2.js';
+import createFinanceV2Routes, { createKeyedMutex } from '../../routes/finance.v2.js';
 import createFinanceDomainService from '../../lib/finance/financeDomainService.js';
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000011';
@@ -347,5 +347,44 @@ describe('POST /api/v2/finance/accounts/:id/reactivate', () => {
       .send({ reason: 'nope' });
     assert.equal(res.status, 403, JSON.stringify(res.body));
     assert.equal(res.body.code, 'FINANCE_COA_FORBIDDEN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Process-local write serialization (Codex PR #651 P2, Option 2)
+// ---------------------------------------------------------------------------
+describe('createKeyedMutex — process-local write serialization', () => {
+  test('same key runs exclusively (no interleave); different keys run concurrently', async () => {
+    const mutex = createKeyedMutex();
+    const log = [];
+    const op = (key, tag) =>
+      mutex(key, async () => {
+        log.push(`${tag}:enter`);
+        await new Promise((r) => setTimeout(r, 5));
+        log.push(`${tag}:exit`);
+      });
+
+    // Same key → B waits for A to fully settle (no interleave).
+    await Promise.all([op('t1', 'A'), op('t1', 'B')]);
+    assert.deepEqual(log, ['A:enter', 'A:exit', 'B:enter', 'B:exit']);
+
+    // Different keys → both enter before either exits (concurrent).
+    log.length = 0;
+    await Promise.all([op('x', 'C'), op('y', 'D')]);
+    assert.ok(log[0].endsWith(':enter') && log[1].endsWith(':enter'), 'both entered before either exited');
+  });
+});
+
+describe('POST /accounts — concurrency serialization', () => {
+  test('concurrent creates in the same classification get DISTINCT account_codes (Codex PR #651 P2)', async () => {
+    const { app } = buildApp();
+    const [r1, r2] = await Promise.all([
+      request(app).post('/api/v2/finance/accounts').send({ name: 'Acct One', classification: 'Revenue', account_type: 'Revenue' }),
+      request(app).post('/api/v2/finance/accounts').send({ name: 'Acct Two', classification: 'Revenue', account_type: 'Revenue' }),
+    ]);
+    assert.equal(r1.status, 201, JSON.stringify(r1.body));
+    assert.equal(r2.status, 201, JSON.stringify(r2.body));
+    // Serialized: the 2nd create sees the 1st's account, so codes never collide.
+    assert.notEqual(r1.body.data.account_code, r2.body.data.account_code);
   });
 });
