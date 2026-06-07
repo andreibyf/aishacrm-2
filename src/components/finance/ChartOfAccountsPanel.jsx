@@ -9,9 +9,10 @@
  * here is PRESENTATION ONLY — it mirrors the server rules to guide the operator,
  * never to gate the write. Rejections are surfaced via the mapped error message.
  *
- * Lock rendering (design §2/§4), driven by per-account flags from GET /accounts
- * (is_system, has_posted_history, is_active):
- *   - is_system            → no edit / deactivate affordance at all.
+ * Lock rendering (design §2/§4; system-rename design 2026-06-07), driven by
+ * per-account flags from GET /accounts (is_system, has_posted_history, is_active):
+ *   - is_system            → name + account_type editable WITH a reason;
+ *                             classification + account_code locked; deactivate hidden.
  *   - has_posted_history    → classification + account_code inputs DISABLED;
  *                             name + account_type editable; a reason is required.
  *   - no history            → all fields editable; reason optional.
@@ -78,6 +79,7 @@ const COA_ERROR_MESSAGES = {
   FINANCE_COA_DUPLICATE_NAME: 'An account with that name already exists in this classification.',
   FINANCE_COA_DUPLICATE_CODE: 'That account code is already in use.',
   FINANCE_COA_SYSTEM_ACCOUNT_LOCKED: 'System accounts cannot be changed.',
+  FINANCE_COA_FIELD_LOCKED_SYSTEM: 'Classification and code are locked on a system account.',
   FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY:
     'Classification and code are locked once an account has posted history.',
   FINANCE_COA_DEACTIVATE_NONZERO_BALANCE:
@@ -163,8 +165,8 @@ export default function ChartOfAccountsPanel({ tenantId }) {
               Chart of accounts
             </CardTitle>
             <p className="mt-1 text-xs text-slate-400">
-              Create, edit and deactivate accounts. System accounts are locked; an account with
-              posted history keeps its classification and code. The server enforces every rule.
+              Create, edit and deactivate accounts. System accounts keep their classification and
+              code; name and type can be changed with a reason. The server enforces every rule.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -381,13 +383,16 @@ function AccountRow({
   const isSystem = Boolean(account.is_system);
   const hasHistory = Boolean(account.has_posted_history);
   const isActive = account.is_active !== false;
+  const fieldsLocked = isSystem || hasHistory; // classification + code disabled in edit
+  const reasonRequired = isSystem || hasHistory; // reason input shown + required
 
-  if (isEditing && !isSystem) {
+  if (isEditing) {
     return (
       <EditAccountRow
         account={account}
         busy={busy}
-        hasHistory={hasHistory}
+        fieldsLocked={fieldsLocked}
+        reasonRequired={reasonRequired}
         onCancel={onCancel}
         onSave={onSave}
       />
@@ -406,49 +411,48 @@ function AccountRow({
       <td className="py-1.5 pr-3 text-slate-100">{yesNo(isSystem)}</td>
       <td className="py-1.5 pr-3 text-slate-100">{yesNo(isActive)}</td>
       <td className="py-1.5 pr-3 text-slate-100">
-        {isSystem ? (
-          <span className="text-slate-500" data-testid={`coa-row-locked-${account.id}`}>
-            Locked
-          </span>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onEdit}
-              disabled={busy}
-              data-testid={`coa-edit-${account.id}`}
-              className="text-sky-300 hover:underline disabled:opacity-50"
-            >
-              Edit
-            </button>
-            {isActive ? (
-              <ReasonAction
-                account={account}
-                busy={busy}
-                action="deactivate"
-                label="Deactivate"
-                onConfirm={onDeactivate}
-              />
-            ) : (
-              <ReasonAction
-                account={account}
-                busy={busy}
-                action="reactivate"
-                label="Reactivate"
-                onConfirm={onReactivate}
-              />
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={busy}
+            data-testid={`coa-edit-${account.id}`}
+            className="text-sky-300 hover:underline disabled:opacity-50"
+          >
+            Edit
+          </button>
+          {isSystem ? (
+            <span className="text-xs text-slate-500" data-testid={`coa-row-system-${account.id}`}>
+              System
+            </span>
+          ) : isActive ? (
+            <ReasonAction
+              account={account}
+              busy={busy}
+              action="deactivate"
+              label="Deactivate"
+              onConfirm={onDeactivate}
+            />
+          ) : (
+            <ReasonAction
+              account={account}
+              busy={busy}
+              action="reactivate"
+              label="Reactivate"
+              onConfirm={onReactivate}
+            />
+          )}
+        </div>
       </td>
     </tr>
   );
 }
 
-// Inline edit row. Per design §2: a posted-history account locks classification +
-// code (disabled) and requires a reason; a no-history account is fully editable
-// with an optional reason. The server re-validates everything.
-function EditAccountRow({ account, busy, hasHistory, onCancel, onSave }) {
+// Inline edit row. Per design §2/§4: a system OR posted-history account locks
+// classification + code (disabled) and requires a reason; a plain no-history
+// account is fully editable with an optional reason. The server re-validates
+// everything (FINANCE_COA_FIELD_LOCKED_SYSTEM / _POSTED_HISTORY on violation).
+function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel, onSave }) {
   const [name, setName] = useState(account.name || '');
   const [classification, setClassification] = useState(account.classification || 'Asset');
   const [accountType, setAccountType] = useState(account.account_type || '');
@@ -467,7 +471,7 @@ function EditAccountRow({ account, busy, hasHistory, onCancel, onSave }) {
   function onSubmit(e) {
     e.preventDefault();
     const payload = { name, account_type: accountType };
-    if (!hasHistory) {
+    if (!fieldsLocked) {
       payload.classification = classification;
       payload.account_code = code;
     }
@@ -501,7 +505,7 @@ function EditAccountRow({ account, busy, hasHistory, onCancel, onSave }) {
               className={inputCls}
               value={classification}
               onChange={(e) => onClassificationChange(e.target.value)}
-              disabled={hasHistory}
+              disabled={fieldsLocked}
               data-testid={`coa-edit-classification-${account.id}`}
             >
               {CLASSIFICATIONS.map((c) => (
@@ -532,11 +536,11 @@ function EditAccountRow({ account, busy, hasHistory, onCancel, onSave }) {
               className={inputCls}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              disabled={hasHistory}
+              disabled={fieldsLocked}
               data-testid={`coa-edit-code-${account.id}`}
             />
           </label>
-          {hasHistory ? (
+          {reasonRequired ? (
             <label className="text-xs text-slate-400">
               Reason (required)
               <input

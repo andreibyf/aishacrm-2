@@ -171,11 +171,81 @@ describe('ChartOfAccountsPanel', () => {
   });
 
   describe('Task 18 — edit + lock rendering', () => {
-    it('a system account shows NO edit control (Locked)', async () => {
-      await renderWith([SYSTEM_ACCT]);
-      expect(screen.queryByTestId('coa-edit-sys1')).not.toBeInTheDocument();
+    it('shows an Edit affordance for a SYSTEM account row (rename is allowed)', async () => {
+      finance.getAccounts.mockResolvedValue({
+        accounts: [
+          {
+            id: 'sys1',
+            account_code: '1000',
+            name: 'Cash',
+            classification: 'Asset',
+            account_type: 'Cash',
+            is_system: true,
+            is_active: true,
+            has_posted_history: true,
+          },
+        ],
+      });
+      render(<ChartOfAccountsPanel tenantId={TENANT} />);
+      expect(await screen.findByTestId('coa-edit-sys1')).toBeInTheDocument();
+      // no deactivate control for a system account
       expect(screen.queryByTestId('coa-deactivate-sys1')).not.toBeInTheDocument();
-      expect(screen.getByTestId('coa-row-locked-sys1')).toBeInTheDocument();
+      // labelled "System" rather than "Locked"
+      expect(screen.getByTestId('coa-row-system-sys1')).toBeInTheDocument();
+    });
+
+    it('locks classification + code and requires a reason when editing a SYSTEM account', async () => {
+      finance.getAccounts.mockResolvedValue({
+        accounts: [
+          {
+            id: 'sys1',
+            account_code: '1000',
+            name: 'Cash',
+            classification: 'Asset',
+            account_type: 'Cash',
+            is_system: true,
+            is_active: true,
+            has_posted_history: false,
+          },
+        ],
+      });
+      render(<ChartOfAccountsPanel tenantId={TENANT} />);
+      fireEvent.click(await screen.findByTestId('coa-edit-sys1'));
+      expect(screen.getByTestId('coa-edit-classification-sys1')).toBeDisabled();
+      expect(screen.getByTestId('coa-edit-code-sys1')).toBeDisabled();
+      expect(screen.getByTestId('coa-edit-reason-sys1')).toBeInTheDocument();
+    });
+
+    it('a SYSTEM edit save includes the reason and omits classification/code', async () => {
+      finance.getAccounts.mockResolvedValue({
+        accounts: [
+          {
+            id: 'sys1',
+            account_code: '1000',
+            name: 'Cash',
+            classification: 'Asset',
+            account_type: 'Cash',
+            is_system: true,
+            is_active: true,
+            has_posted_history: false,
+          },
+        ],
+      });
+      render(<ChartOfAccountsPanel tenantId={TENANT} />);
+      fireEvent.click(await screen.findByTestId('coa-edit-sys1'));
+      fireEvent.change(screen.getByTestId('coa-edit-name-sys1'), {
+        target: { value: 'Operating Cash' },
+      });
+      fireEvent.change(screen.getByTestId('coa-edit-reason-sys1'), {
+        target: { value: 'beta display rename' },
+      });
+      fireEvent.click(screen.getByTestId('coa-edit-save-sys1'));
+      await waitFor(() => expect(writes.updateAccount).toHaveBeenCalled());
+      const payload = writes.updateAccount.mock.calls[0][2];
+      expect(payload.name).toBe('Operating Cash');
+      expect(payload.reason).toBe('beta display rename');
+      expect(payload).not.toHaveProperty('classification');
+      expect(payload).not.toHaveProperty('account_code');
     });
 
     it('a posted-history row renders classification + code DISABLED with a reason field', async () => {
