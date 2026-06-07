@@ -64,7 +64,12 @@ describe('GET /api/v2/finance/accounts (COA Slice 1)', () => {
       actor: { id: 'u1', type: 'human' },
       payload: {
         lines: [
-          { account_name: 'Consulting Fees', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+          {
+            account_name: 'Consulting Fees',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: 5000,
+          },
           { account_name: 'Cash', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
         ],
       },
@@ -82,6 +87,7 @@ describe('GET /api/v2/finance/accounts (COA Slice 1)', () => {
 // Shared authorization matrix — every read endpoint runs the same 3-gate stack.
 // ---------------------------------------------------------------------------
 const READ_ENDPOINTS = [
+  '/api/v2/finance/accounts',
   '/api/v2/finance/draft-invoices',
   '/api/v2/finance/journal-drafts',
   '/api/v2/finance/approvals',

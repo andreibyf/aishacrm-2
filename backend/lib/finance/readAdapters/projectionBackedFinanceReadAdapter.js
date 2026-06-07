@@ -16,6 +16,25 @@ import { profitAndLossFromLedger, balanceSheetFromLedger } from '../accountingEn
 import { seedAccountsForTenant } from '../chartOfAccounts.js';
 import { buildCashFlowStatement } from '../cashFlowStatement.js';
 
+// Phase 5 (editable COA manager): "has posted history" = the account_id appears
+// in any posted/reversed journal line. Mirrors financeDomainService.hasPostedHistory
+// and the ledger/cash-flow posted+reversed filter so all read paths agree.
+const POSTED_STATUSES = new Set(['posted', 'reversed']);
+
+// Build the set of account_ids that appear in any posted/reversed journal line,
+// from the journal_entries projection read model (an array of entry snapshots).
+function postedAccountIds(entries) {
+  const ids = new Set();
+  const list = Array.isArray(entries) ? entries : [];
+  for (const entry of list) {
+    if (!POSTED_STATUSES.has(entry?.status) || !Array.isArray(entry.lines)) continue;
+    for (const line of entry.lines) {
+      if (line?.account_id != null) ids.add(line.account_id);
+    }
+  }
+  return ids;
+}
+
 export class FinanceReadDegradedError extends Error {
   constructor(message, cause) {
     super(message);
@@ -83,31 +102,109 @@ export function createProjectionBackedFinanceReadAdapter({
     };
   }
 
-  // COA Slice 1: the event-sourced chart of accounts — baseline seed merged with
-  // auto-created accounts folded from `finance.account.created` (partition-aware).
-  // Fail-closed: a reader error propagates → 503. Deduped by account_id (Codex
-  // PR #647 P1). Shared by listAccounts + getCashFlow.
+  // COA Slice 1 + Phase 4: the event-sourced chart of accounts — baseline seed
+  // merged with the accounts folded from the `finance.account.*` event stream
+  // (partition-aware). Folds ALL THREE account events in ONE TRUE GLOBAL-ORDER
+  // pass (created_at ASC, then seq/_seq ASC), EXACTLY mirroring
+  // financeDomainReplay.js's create/update/deactivate cases so the persistent
+  // read path sees edits, deactivations AND reactivations (design §8/§9), not
+  // just the original-field create snapshot:
+  //   - created:     flat payload → new account (source carried; is_active:true)
+  //   - updated:     payload.account is the FULL post-edit snapshot → full-replace
+  //                  by id (reactivation rides this with is_active:true)
+  //   - deactivated: payload.account_id → flip is_active:false (no-op if absent)
+  // Fail-closed: a reader error propagates → 503. Iteration order is stable (Map
+  // insertion order). Deduped/upserted by account_id (Codex PR #647 P1).
+  //
+  // ORDERING: a SINGLE ordered multi-type read (auditEventsReader.listByTypesOrdered)
+  // preserves the global append order across all three types. This is required for
+  // an interleaved create→deactivate→reactivate stream: the reactivation rides
+  // finance.account.updated (is_active:true) and must fold AFTER the deactivation.
+  // Per-type passes (the previous approach) folded the reactivation before the
+  // deactivation, so the deactivated pass wrongly re-flipped is_active off. Shared
+  // by listAccounts + getCashFlow.
   async function foldChartOfAccounts(tenantId, isTestData) {
-    let created;
+    // A Map keyed by account_id gives "upsert-in-place, preserve insertion order"
+    // for free — `Map.set` on an existing key updates the value without moving it
+    // — exactly reproducing financeDomainReplay.js's fold.
+    const folded = new Map();
     try {
-      const payloads = await auditEventsReader.listByType(tenantId, 'finance.account.created', isTestData);
-      created = payloads.map((p) => ({
-        id: p.account_id,
-        tenant_id: tenantId,
-        account_code: p.account_code,
-        name: p.name,
-        classification: p.classification,
-        account_type: p.account_type,
-        parent_account_id: null,
-        is_system: false,
-        is_active: true,
-      }));
+      const ordered = await auditEventsReader.listByTypesOrdered(
+        tenantId,
+        [
+          'finance.account.created',
+          'finance.account.updated',
+          'finance.account.deactivated',
+          'finance.account.reactivated',
+        ],
+        { isTestData },
+      );
+
+      // Switch on event_type (NOT payload shape) — exactly mirroring
+      // financeDomainReplay.js. A shape-only fold misreads a SECOND concurrent
+      // finance.account.created (which shares the first's name-derived account_id, so
+      // the id is already folded) as a deactivation; event_type makes the three cases
+      // unambiguous (Codex PR #651 P2).
+      for (const { event_type: eventType, payload: p } of ordered) {
+        if (eventType === 'finance.account.updated') {
+          // payload.account is the FULL post-edit snapshot → full-replace fields by id
+          // (upsert; preserves insertion order). Activation is PRESERVED from the
+          // existing folded value, NOT the snapshot — an ordinary edit's hydrated
+          // snapshot can carry a stale is_active that raced a concurrent deactivate
+          // (Codex PR #651 P2). Activation changes only via created/deactivated/reactivated.
+          const incoming = p.account;
+          if (!incoming || !incoming.id) continue;
+          const existing = folded.get(incoming.id);
+          folded.set(incoming.id, {
+            id: incoming.id,
+            tenant_id: incoming.tenant_id ?? tenantId,
+            account_code: incoming.account_code,
+            name: incoming.name,
+            classification: incoming.classification,
+            account_type: incoming.account_type,
+            parent_account_id: incoming.parent_account_id ?? null,
+            is_system: incoming.is_system ?? existing?.is_system ?? false,
+            is_active: existing?.is_active ?? incoming.is_active ?? true,
+            source: incoming.source ?? existing?.source ?? 'manual',
+          });
+        } else if (eventType === 'finance.account.deactivated') {
+          // flip is_active:false in place (no-op if the id is not yet folded).
+          if (p.account_id && folded.has(p.account_id)) {
+            folded.set(p.account_id, { ...folded.get(p.account_id), is_active: false });
+          }
+        } else if (eventType === 'finance.account.reactivated') {
+          // dedicated reactivation event → flip is_active:true (no-op if not folded).
+          if (p.account_id && folded.has(p.account_id)) {
+            folded.set(p.account_id, { ...folded.get(p.account_id), is_active: true });
+          }
+        } else if (eventType === 'finance.account.created') {
+          // IDEMPOTENT: the FIRST create initializes the account; a later DUPLICATE
+          // create (same name-derived id from a concurrent POST race, appended after
+          // intervening edit/deactivation) must NOT reset that state (Codex PR #651 P2).
+          if (!p.account_id || folded.has(p.account_id)) continue;
+          folded.set(p.account_id, {
+            id: p.account_id,
+            tenant_id: tenantId,
+            account_code: p.account_code,
+            name: p.name,
+            classification: p.classification,
+            account_type: p.account_type,
+            parent_account_id: null,
+            is_system: false,
+            is_active: true,
+            source: p.source || 'auto_resolution',
+          });
+        }
+      }
     } catch (err) {
       throw new FinanceReadDegradedError('Failed to read chart of accounts', err);
     }
+    // Baseline-seed merge: the system accounts are NOT events — re-seed them
+    // deterministically, then append the folded (auto/manual) accounts in append
+    // order, skipping any whose id already seeds a baseline account.
     const accounts = seedAccountsForTenant(tenantId);
     const seenIds = new Set(accounts.map((a) => a.id));
-    for (const acc of created) {
+    for (const acc of folded.values()) {
       if (acc.id && !seenIds.has(acc.id)) {
         accounts.push(acc);
         seenIds.add(acc.id);
@@ -135,8 +232,22 @@ export function createProjectionBackedFinanceReadAdapter({
     // merged with the auto-created accounts folded from `finance.account.created`
     // events in append order. Fail-closed: a reader error propagates → 503
     // (no in-memory fallback), per the §6 no-silent-fallback contract.
+    //
+    // Phase 5 (editable COA manager): stamp each account with `has_posted_history`
+    // computed from the journal_entries projection (an account_id appearing in any
+    // posted/reversed journal line). Mirrors the in-memory listAccounts so the
+    // manager UI renders the same lock state in both read paths. Fail-closed on
+    // the projection read via readProjection (→ 503).
     async listAccounts(tenantId, { isTestData = null } = {}) {
-      return foldChartOfAccounts(tenantId, isTestData);
+      const [accounts, entries] = await Promise.all([
+        foldChartOfAccounts(tenantId, isTestData),
+        readProjection(createStoreProvider(), journalEntries, tenantId),
+      ]);
+      const postedIds = postedAccountIds(entries);
+      return accounts.map((account) => ({
+        ...account,
+        has_posted_history: postedIds.has(account.id),
+      }));
     },
 
     // COA Slice 1 + Cash Flow Slice 2: the cash-flow statement, derived from the

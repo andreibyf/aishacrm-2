@@ -5,8 +5,10 @@
  *
  * These call the existing Finance v2 mutating endpoints (no new backend
  * surface). The backend governs each command (financeGovernanceDecision +
- * actor checks); the UI only exposes them when the tenant is in TEST mode, so
- * the entries created here are sandbox/test data.
+ * actor checks). The SIMULATE helpers are only exposed in TEST mode (their
+ * entries are sandbox/test data); the CHART-OF-ACCOUNTS mutations
+ * (create/update/deactivate/reactivate) are admin-gated and live-capable —
+ * the backend (`requireCoaManage` + the domain lock rules) is the authority.
  *
  * Tenant is forwarded as `x-tenant-id` (also satisfies validateTenantAccess for
  * superadmins). Errors are thrown with the structured { status, code, details }
@@ -73,6 +75,54 @@ export function approveFinanceAction(tenantId, approvalId, { signal } = {}) {
   return mutate(`/approvals/${encodeURIComponent(approvalId)}/approve`, {
     tenantId,
     method: 'POST',
+    signal,
+  });
+}
+
+// ============================================================================
+// Editable Chart of Accounts manager (design 2026-06-06, Phase 5 / Task 16).
+//
+// The four COA mutations. The backend enforces EVERY lock rule (system-locked,
+// posted-history field locks, nonzero-balance, uniqueness, AI-blocked, RBAC) and
+// returns a stable `FINANCE_COA_*` code on failure (design §6) which `mutate`
+// surfaces as err.code — the panel maps it to a human message. The UI's
+// disabling/hiding is presentation only; the server is the authority.
+// ============================================================================
+
+/** POST /accounts — create a manual account `{ name, classification, account_type }`. */
+export function createAccount(tenantId, payload = {}, { signal } = {}) {
+  return mutate('/accounts', { tenantId, method: 'POST', body: payload, signal });
+}
+
+/**
+ * PATCH /accounts/:id — edit a non-system account. `payload` is a subset of
+ * `{ name, classification, account_code, account_type, reason }`.
+ */
+export function updateAccount(tenantId, accountId, payload = {}, { signal } = {}) {
+  return mutate(`/accounts/${encodeURIComponent(accountId)}`, {
+    tenantId,
+    method: 'PATCH',
+    body: payload,
+    signal,
+  });
+}
+
+/** POST /accounts/:id/deactivate — deactivate an account `{ reason }` (required). */
+export function deactivateAccount(tenantId, accountId, payload = {}, { signal } = {}) {
+  return mutate(`/accounts/${encodeURIComponent(accountId)}/deactivate`, {
+    tenantId,
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+}
+
+/** POST /accounts/:id/reactivate — reactivate an inactive account `{ reason }` (required). */
+export function reactivateAccount(tenantId, accountId, payload = {}, { signal } = {}) {
+  return mutate(`/accounts/${encodeURIComponent(accountId)}/reactivate`, {
+    tenantId,
+    method: 'POST',
+    body: payload,
     signal,
   });
 }

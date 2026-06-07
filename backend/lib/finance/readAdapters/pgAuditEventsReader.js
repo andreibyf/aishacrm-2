@@ -48,6 +48,30 @@ export function createPgAuditEventsReader({ pool }) {
         typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload || {},
       );
     },
+
+    // COA Phase 4 ORDERING fix: fold MULTIPLE event types in TRUE global append
+    // order (created_at ASC, then seq ASC) in ONE pass. listByType reads one type
+    // at a time, which loses the cross-type order of an interleaved
+    // create→deactivate→reactivate stream; this returns all the matching types in
+    // the single ordered sequence the event store wrote them in. Partitioned by the
+    // active Test/Live mode when `isTestData` is given (null/undefined = no partition
+    // filter). Returns `{ event_type, payload }` in order — event_type is carried so
+    // the fold switches on it rather than GUESSING from the payload shape (Codex PR
+    // #651 P2 — two concurrent finance.account.created events share a name-derived id,
+    // and a shape-only fold misreads the second as a deactivation).
+    async listByTypesOrdered(tenantId, eventTypes, { isTestData = null } = {}) {
+      const filterMode = isTestData !== null && isTestData !== undefined;
+      const result = await pool.query(
+        filterMode
+          ? 'SELECT event_type, payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = ANY($2) AND is_test_data = $3 ORDER BY created_at ASC, seq ASC'
+          : 'SELECT event_type, payload FROM finance.audit_events WHERE tenant_id = $1 AND event_type = ANY($2) ORDER BY created_at ASC, seq ASC',
+        filterMode ? [tenantId, eventTypes, isTestData] : [tenantId, eventTypes],
+      );
+      return (result?.rows ?? []).map((r) => ({
+        event_type: r.event_type,
+        payload: typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload || {},
+      }));
+    },
   };
 }
 

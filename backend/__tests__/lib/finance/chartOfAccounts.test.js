@@ -2,6 +2,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_COA,
+  ACCOUNT_TYPES_BY_CLASSIFICATION,
+  isValidAccountType,
+  buildManualAccount,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,
@@ -54,6 +57,61 @@ describe('chartOfAccounts — nextCodeForClassification', () => {
   test('throws when the reserved range is exhausted', () => {
     const full = Array.from({ length: 100 }, (_, i) => String(5500 + i)); // Expense 5500-5599
     assert.throws(() => nextCodeForClassification('Expense', full), /exhausted/i);
+  });
+});
+
+describe('chartOfAccounts — account_type curation (Task 1)', () => {
+  test('ACCOUNT_TYPES_BY_CLASSIFICATION maps each classification to its curated list', () => {
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Asset, ['Asset', 'Cash', 'Bank', 'Receivable', 'Suspense']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Liability, ['Liability', 'Payable']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Equity, ['Equity']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Revenue, ['Revenue']);
+    assert.deepEqual(ACCOUNT_TYPES_BY_CLASSIFICATION.Expense, ['Expense']);
+  });
+
+  test('isValidAccountType accepts curated type/classification pairs', () => {
+    assert.equal(isValidAccountType('Asset', 'Bank'), true);
+    assert.equal(isValidAccountType('Asset', 'Cash'), true);
+    assert.equal(isValidAccountType('Liability', 'Payable'), true);
+  });
+
+  test('isValidAccountType rejects wrong classification or uncurated type', () => {
+    assert.equal(isValidAccountType('Revenue', 'Bank'), false); // wrong classification
+    assert.equal(isValidAccountType('Asset', 'Checking'), false); // not curated
+  });
+});
+
+describe('chartOfAccounts — buildManualAccount (Task 2)', () => {
+  test('builds a non-system Asset/Bank account with a name-derived id and reserved code', () => {
+    const acct = buildManualAccount({
+      tenantId: TENANT,
+      classification: 'Asset',
+      name: 'Operating Account',
+      account_type: 'Bank',
+      existingCodes: [],
+    });
+    assert.equal(acct.is_system, false);
+    assert.equal(acct.is_active, true);
+    assert.equal(acct.classification, 'Asset');
+    assert.equal(acct.account_type, 'Bank');
+    assert.equal(acct.name, 'Operating Account');
+    assert.equal(acct.parent_account_id, null);
+    // name-derived id (immutable, concurrency-safe), NOT code-derived
+    assert.equal(acct.id, autoAccountId(TENANT, 'Asset', 'Operating Account'));
+    // account_code in the Asset reserved auto-create range (1500–1599)
+    const codeNum = Number(acct.account_code);
+    assert.ok(codeNum >= 1500 && codeNum <= 1599, `code ${acct.account_code} in 1500–1599`);
+  });
+
+  test('does not mutate the existingCodes input', () => {
+    const existing = ['1500'];
+    buildManualAccount({ tenantId: TENANT, classification: 'Asset', name: 'Reserve', account_type: 'Asset', existingCodes: existing });
+    assert.deepEqual(existing, ['1500']);
+  });
+
+  test('defaults a blank name to "Unnamed" (matches resolveAccount)', () => {
+    const acct = buildManualAccount({ tenantId: TENANT, classification: 'Expense', name: '   ', account_type: 'Expense', existingCodes: [] });
+    assert.equal(acct.name, 'Unnamed');
   });
 });
 

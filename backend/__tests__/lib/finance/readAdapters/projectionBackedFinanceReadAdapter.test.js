@@ -11,8 +11,36 @@ import {
   createProjectionBackedFinanceReadAdapter,
   FinanceReadDegradedError,
 } from '../../../../lib/finance/readAdapters/projectionBackedFinanceReadAdapter.js';
+import { seedAccountsForTenant } from '../../../../lib/finance/chartOfAccounts.js';
 
 const T = '00000000-0000-4000-8000-000000000011';
+
+// A minimal projection-store-shaped stub so the journal_entries read inside
+// listAccounts (Phase 5 has_posted_history stamping) resolves to an empty list
+// instead of crashing on a bare `{}` provider. Returns NO journal entries, so
+// every folded account gets has_posted_history:false unless the test seeds lines.
+const EMPTY_STORE = {
+  get: () => undefined,
+  set: () => {},
+  delete: () => {},
+  keys: () => [],
+  clear: () => {},
+};
+const emptyStoreProvider = () => ({ getLiveStore: async () => EMPTY_STORE });
+
+// A store provider whose journal_entries projection returns the given entry
+// snapshots (with `lines`), so has_posted_history can be exercised.
+function storeProviderWithJournalEntries(entries) {
+  const store = {
+    get: (k) => store._m.get(k),
+    set: (k, v) => store._m.set(k, v),
+    delete: (k) => store._m.delete(k),
+    keys: () => Array.from(store._m.keys()),
+    clear: () => store._m.clear(),
+    _m: new Map((entries || []).map((e) => [e.id, e])),
+  };
+  return () => ({ getLiveStore: async () => store });
+}
 
 function workers() {
   return {
@@ -99,26 +127,29 @@ async function seededProvider(w) {
 }
 
 describe('ProjectionBackedFinanceReadAdapter', () => {
-  test('listAccounts folds finance.account.created over the baseline + threads the Test/Live partition (Codex PR #647 P2)', async () => {
+  test('listAccounts folds the ordered account stream over the baseline + threads the Test/Live partition (Codex PR #647 P2)', async () => {
     const w = workers();
     const calls = [];
     const auditEventsReader = {
       count: async () => 0,
-      listByType: async (tenantId, eventType, isTestData) => {
-        calls.push({ tenantId, eventType, isTestData });
+      listByTypesOrdered: async (tenantId, eventTypes, { isTestData } = {}) => {
+        calls.push({ tenantId, eventTypes, isTestData });
         return [
           {
-            account_id: 'acct_x_4500',
-            account_code: '4500',
-            name: 'Consulting Fees',
-            classification: 'Revenue',
-            account_type: 'Revenue',
+            event_type: 'finance.account.created',
+            payload: {
+              account_id: 'acct_x_4500',
+              account_code: '4500',
+              name: 'Consulting Fees',
+              classification: 'Revenue',
+              account_type: 'Revenue',
+            },
           },
         ];
       },
     };
     const adapter = createProjectionBackedFinanceReadAdapter({
-      createStoreProvider: () => ({}),
+      createStoreProvider: emptyStoreProvider,
       auditEventsReader,
       workers: w,
     });
@@ -129,18 +160,148 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     const created = accounts.find((a) => a.account_code === '4500');
     assert.equal(created.is_system, false);
     assert.equal(created.name, 'Consulting Fees');
-    // partition threaded through to the reader
-    assert.equal(calls[0].eventType, 'finance.account.created');
+    // ordered multi-type read: all three account event types, partition threaded
+    assert.deepEqual(calls[0].eventTypes, [
+      'finance.account.created',
+      'finance.account.updated',
+      'finance.account.deactivated',
+      'finance.account.reactivated',
+    ]);
+    assert.equal(calls[0].tenantId, T);
     assert.equal(calls[0].isTestData, true);
+  });
+
+  // ORDERING regression (Phase 4): a create→deactivate→reactivate stream folds in
+  // global append order, so the reactivation (finance.account.updated, is_active:true)
+  // — which arrives AFTER the deactivation — wins. A per-type fold would re-flip it off.
+  test('listAccounts folds create→deactivate→reactivate in order → is_active:true', async () => {
+    const w = workers();
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        // Events already returned in global append order by the reader.
+        listByTypesOrdered: async () => [
+          {
+            event_type: 'finance.account.created',
+            payload: {
+              account_id: 'acct_bank',
+              account_code: '1500',
+              name: 'Operating Bank',
+              classification: 'Asset',
+              account_type: 'Bank',
+              source: 'manual',
+            },
+          },
+          { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_bank', reason: 'closing' } },
+          // reactivated (dedicated finance.account.reactivated event)
+          { event_type: 'finance.account.reactivated', payload: { account_id: 'acct_bank', reason: 'back' } },
+        ],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const acc = accounts.find((a) => a.id === 'acct_bank');
+    assert.ok(acc, 'folded account is present');
+    assert.equal(acc.is_active, true, 'reactivation (last in order) wins');
+  });
+
+  // A second concurrent finance.account.created shares the first's name-derived
+  // account_id (append-always store, each write hydrates before the other appends).
+  // The fold MUST switch on event_type — a shape-only fold sees account_id already
+  // folded and misreads the second create as a deactivation, flipping it inactive.
+  test('a SECOND concurrent finance.account.created (same id) stays ACTIVE — not a deactivation (Codex PR #651 P2)', async () => {
+    const w = workers();
+    const created = {
+      account_id: 'acct_dup',
+      account_code: '1500',
+      name: 'Operating Bank',
+      classification: 'Asset',
+      account_type: 'Bank',
+      source: 'manual',
+    };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [
+          { event_type: 'finance.account.created', payload: created },
+          { event_type: 'finance.account.created', payload: created },
+        ],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const acc = accounts.find((a) => a.id === 'acct_dup');
+    assert.ok(acc, 'the concurrently-created account is present');
+    assert.equal(acc.is_active, true, 'a duplicate create must NOT be misread as a deactivation');
+  });
+
+  // Codex PR #651 P2: a field-edit finance.account.updated carries a full snapshot
+  // whose is_active can be STALE (raced ahead of a concurrent deactivate). The fold
+  // must preserve activation so the edit does NOT silently reactivate.
+  test('a field-edit finance.account.updated after a deactivate stays INACTIVE (no silent reactivation)', async () => {
+    const w = workers();
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [
+          {
+            event_type: 'finance.account.created',
+            payload: { account_id: 'acct_x', account_code: '1500', name: 'X', classification: 'Asset', account_type: 'Asset', source: 'manual' },
+          },
+          { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_x', reason: 'closed' } },
+          {
+            event_type: 'finance.account.updated',
+            payload: {
+              account: { id: 'acct_x', tenant_id: T, account_code: '1500', name: 'X renamed', classification: 'Asset', account_type: 'Bank', is_system: false, is_active: true, source: 'manual' },
+            },
+          },
+        ],
+      },
+      workers: w,
+    });
+    const acc = (await adapter.listAccounts(T, { isTestData: true })).find((a) => a.id === 'acct_x');
+    assert.equal(acc.name, 'X renamed', 'the field edit is applied');
+    assert.equal(acc.is_active, false, 'but activation is preserved — no silent reactivation');
+  });
+
+  // Codex PR #651 P2: a delayed duplicate create (concurrent POST race) appended AFTER
+  // an edit/deactivation must be idempotent in the persistent fold — not reset the state.
+  test('a LATE duplicate finance.account.created does not reset an edited/deactivated account (persistent)', async () => {
+    const w = workers();
+    const created = { account_id: 'acct_x', account_code: '1500', name: 'X', classification: 'Asset', account_type: 'Asset', source: 'manual' };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: emptyStoreProvider,
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [
+          { event_type: 'finance.account.created', payload: created },
+          {
+            event_type: 'finance.account.updated',
+            payload: { account: { id: 'acct_x', tenant_id: T, account_code: '1500', name: 'X renamed', classification: 'Asset', account_type: 'Bank', is_system: false, is_active: true, source: 'manual' } },
+          },
+          { event_type: 'finance.account.deactivated', payload: { account_id: 'acct_x', reason: 'closed' } },
+          { event_type: 'finance.account.created', payload: created }, // delayed duplicate
+        ],
+      },
+      workers: w,
+    });
+    const acc = (await adapter.listAccounts(T, { isTestData: true })).find((a) => a.id === 'acct_x');
+    assert.equal(acc.name, 'X renamed', 'the edit survives the late duplicate create');
+    assert.equal(acc.is_active, false, 'the deactivation survives the late duplicate create');
   });
 
   test('listAccounts fails closed (FinanceReadDegradedError) when the reader throws', async () => {
     const w = workers();
     const adapter = createProjectionBackedFinanceReadAdapter({
-      createStoreProvider: () => ({}),
+      // Working journal_entries store so the failure is isolated to the COA
+      // (auditEventsReader) read, not the Phase 5 has_posted_history read.
+      createStoreProvider: emptyStoreProvider,
       auditEventsReader: {
         count: async () => 0,
-        listByType: async () => {
+        listByTypesOrdered: async () => {
           throw new Error('db down');
         },
       },
@@ -435,6 +596,77 @@ describe('ProjectionBackedFinanceReadAdapter', () => {
     // The error must land on `last_error` (route-consumed), not be dropped.
     assert.equal(job.last_error, 'provider sync timed out');
     assert.equal('error_message' in job, false, 'reconstruct to last_error, not error_message');
+  });
+
+  // Phase 5 (editable COA manager): listAccounts stamps has_posted_history true
+  // for an account appearing in a posted/reversed journal line, false otherwise.
+  test('listAccounts stamps has_posted_history from the journal_entries projection', async () => {
+    const w = workers();
+    const folded = {
+      account_id: 'acct_posted',
+      account_code: '4500',
+      name: 'Consulting Fees',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+      source: 'manual',
+    };
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: storeProviderWithJournalEntries([
+        {
+          id: 'je_posted',
+          status: 'posted',
+          lines: [
+            { account_id: 'acct_posted', debit_cents: 0, credit_cents: 5000 },
+            { account_id: 'acct_1000_cash', debit_cents: 5000, credit_cents: 0 },
+          ],
+        },
+        {
+          id: 'je_draft',
+          status: 'draft',
+          lines: [{ account_id: 'acct_never', debit_cents: 1000, credit_cents: 0 }],
+        },
+      ]),
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [{ event_type: 'finance.account.created', payload: folded }],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const posted = accounts.find((a) => a.id === 'acct_posted');
+    assert.equal(posted.has_posted_history, true, 'account in a posted line is flagged');
+    // A folded account NOT in any posted line is false.
+    const consultingByCode = accounts.find((a) => a.account_code === '4500');
+    assert.equal(consultingByCode.has_posted_history, true);
+    // The draft-only account never folded into the chart, so assert a baseline
+    // account with no posted lines is false.
+    const baseline = accounts.find((a) => a.account_code === '2000');
+    assert.equal(baseline.has_posted_history, false, 'baseline with no posted line is false');
+  });
+
+  test('listAccounts stamps has_posted_history true for a baseline account with a reversed line', async () => {
+    const w = workers();
+    const accountsBaseline = seedAccountsForTenant(T);
+    const cash = accountsBaseline.find((a) => a.account_code === '1000');
+    const adapter = createProjectionBackedFinanceReadAdapter({
+      createStoreProvider: storeProviderWithJournalEntries([
+        {
+          id: 'je_reversed',
+          status: 'reversed',
+          lines: [{ account_id: cash.id, debit_cents: 1000, credit_cents: 0 }],
+        },
+      ]),
+      auditEventsReader: {
+        count: async () => 0,
+        listByTypesOrdered: async () => [],
+      },
+      workers: w,
+    });
+    const accounts = await adapter.listAccounts(T, { isTestData: true });
+    const cashRow = accounts.find((a) => a.account_code === '1000');
+    assert.equal(cashRow.has_posted_history, true, 'reversed lines count as posted history');
+    const revenue = accounts.find((a) => a.account_code === '4000');
+    assert.equal(revenue.has_posted_history, false);
   });
 
   test('listAdapterJobs surfaces next_attempt_at for a retryable (queued) job (Codex PR #633 P2)', async () => {

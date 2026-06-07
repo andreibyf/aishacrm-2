@@ -19,8 +19,45 @@ import {
   seedAccountsForTenant,
   resolveAccount,
   normalizeAccountKey,
+  normalizeName,
+  buildManualAccount,
+  isValidAccountType,
 } from './chartOfAccounts.js';
+import { FINANCE_CLASSIFICATIONS } from './accountingEngine.js';
 import { buildCashFlowStatement } from './cashFlowStatement.js';
+
+// Phase 3a (editable COA manager, design §2). "Has posted history" = the
+// account_id appears in any posted/reversed journal line. Renaming/locking
+// decisions key on this; pure, no I/O. Mirrors the ledger projection's
+// posted+reversed filter so the two agree on what counts as money truth.
+const POSTED_STATUSES = new Set(['posted', 'reversed']);
+
+function hasPostedHistory(bucket, accountId) {
+  const entries = Array.isArray(bucket?.journalEntries) ? bucket.journalEntries : [];
+  return entries.some(
+    (entry) =>
+      POSTED_STATUSES.has(entry.status) &&
+      Array.isArray(entry.lines) &&
+      entry.lines.some((line) => line.account_id === accountId),
+  );
+}
+
+// Net posted balance (Σ debit_cents − Σ credit_cents) for an account across
+// posted/reversed entries. Same filter as hasPostedHistory so a nonzero balance
+// implies posted history. Used by the deactivate guard (design §2 — nonzero
+// posted balance blocks deactivation).
+function accountBalanceCents(bucket, accountId) {
+  const entries = Array.isArray(bucket?.journalEntries) ? bucket.journalEntries : [];
+  let net = 0;
+  for (const entry of entries) {
+    if (!POSTED_STATUSES.has(entry.status) || !Array.isArray(entry.lines)) continue;
+    for (const line of entry.lines) {
+      if (line.account_id !== accountId) continue;
+      net += Number(line.debit_cents || 0) - Number(line.credit_cents || 0);
+    }
+  }
+  return net;
+}
 
 function createStore() {
   return {
@@ -39,7 +76,9 @@ function createStore() {
 // recorded as approved, so persistentWriteRunner never advances a losing approval into
 // the approval_queue while its reversal stays unpostable. Non-secret — a stable id.
 function reversalApprovalEventId(sourceEntryId) {
-  const h = createHash('sha256').update(`finance.reversal.approval-claim:${sourceEntryId}`).digest('hex');
+  const h = createHash('sha256')
+    .update(`finance.reversal.approval-claim:${sourceEntryId}`)
+    .digest('hex');
   const variant = ((parseInt(h.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(18, 20)}-${h.slice(20, 32)}`;
 }
@@ -195,9 +234,18 @@ export function createFinanceDomainService(opts = {}) {
 
     // COA Slice 1: the tenant chart of accounts (baseline seed + any accounts
     // auto-created by journal-draft resolution this process). Read-only.
+    //
+    // Phase 5 (editable COA manager): each account additionally carries a
+    // per-account `has_posted_history` boolean so the manager UI can render the
+    // posted-history lock rules (classification/code disabled, reason required).
+    // The server remains the authority — this is purely a presentation signal.
     listAccounts(tenantId) {
       const bucket = getTenantBucket(store, tenantId);
-      return clone(getTenantCoa(bucket, tenantId));
+      const accounts = clone(getTenantCoa(bucket, tenantId));
+      return accounts.map((account) => ({
+        ...account,
+        has_posted_history: hasPostedHistory(bucket, account.id),
+      }));
     },
 
     // Cash Flow Slice 2 (Bridge B): read-only cash-flow statement derived from
@@ -455,6 +503,47 @@ export function createFinanceDomainService(opts = {}) {
       // account_code (Codex PR #647 P2), so read the caller-supplied code from the
       // raw payload line at the same index (validateJournalLines maps in order).
       const inputLines = Array.isArray(payload.lines) ? payload.lines : [];
+
+      // Codex PR #651 P2: make deactivation ENFORCEABLE. A draft line that resolves
+      // to an EXISTING but INACTIVE account must be refused — otherwise a deactivated
+      // account could still receive new posted lines (resolveAccount matches by
+      // id/code/name and does NOT check is_active; we keep matching inactive accounts
+      // so global name/code uniqueness holds and we never auto-create a duplicate).
+      // PRE-PASS (resolveAccount is pure — no coa mutation) so we reject BEFORE any
+      // account-created event/push, leaving no orphan auto-created account on refusal.
+      for (let i = 0; i < validation.lines.length; i += 1) {
+        const line = validation.lines[i];
+        const { account, created } = resolveAccount({
+          tenantId,
+          accounts: coa,
+          classification: line.classification,
+          account_name: line.account_name,
+          account_code: inputLines[i]?.account_code,
+          account_id: line.account_id,
+        });
+        if (!created && account.is_active === false) {
+          const e = new Error(
+            `Account "${account.name}" (${account.account_code}) is inactive; reactivate it or use a different account before posting to it.`,
+          );
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_ACCOUNT_INACTIVE';
+          throw e;
+        }
+        // Codex PR #651 P1: an AUTO-create whose name-derived id collides with an
+        // existing (renamed-away) account would mint a second account with that id.
+        // A name-match would have returned created:false, so created:true + an id
+        // already in the chart means the old name's id-slot is held by a renamed
+        // account — refuse rather than corrupt the id-keyed chart.
+        if (created && coa.some((a) => a.id === account.id)) {
+          const e = new Error(
+            `The account name "${line.account_name}" is reserved by a renamed account and cannot be auto-created; rename or reactivate it, or use a different name.`,
+          );
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_NAME_RESERVED';
+          throw e;
+        }
+      }
+
       const resolvedLines = [];
       for (let i = 0; i < validation.lines.length; i += 1) {
         const line = validation.lines[i];
@@ -467,6 +556,9 @@ export function createFinanceDomainService(opts = {}) {
           account_id: line.account_id,
         });
         if (created) {
+          // Phase 2: stamp provenance so the in-memory chart matches the
+          // replayed shape (the fold carries source onto folded accounts).
+          account.source = 'auto_resolution';
           coa.push(account);
           await appendEvent(
             bucket,
@@ -486,6 +578,7 @@ export function createFinanceDomainService(opts = {}) {
                 classification: account.classification,
                 account_type: account.account_type,
                 is_system: false,
+                source: 'auto_resolution',
                 match_key: normalizeAccountKey(account.classification, account.name),
                 source_journal_draft_id: journalEntryId,
                 correlation_id: requestId || null,
@@ -494,7 +587,8 @@ export function createFinanceDomainService(opts = {}) {
                 allowed: true,
                 requiresApproval: false,
                 riskLevel: 'low',
-                explanation: 'Auto-created chart-of-accounts account (COA management; not money movement).',
+                explanation:
+                  'Auto-created chart-of-accounts account (COA management; not money movement).',
                 braidTraceId,
               }),
             }),
@@ -736,7 +830,13 @@ export function createFinanceDomainService(opts = {}) {
     // a general approve control. Surfaced ONLY by the test-mode create panel; live
     // posting still goes through the real human approval flow. Human-gated:
     // approveFinanceAction blocks AI actors.
-    async simulatePostedDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+    async simulatePostedDealWon({
+      tenantId,
+      actor,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       // A posted CASH sale (Debit Cash / Credit Revenue) — touches a cash account
       // so it shows in the cash-flow statement, unlike simulateDealWon's default
       // Debit-AR credit sale (revenue accrued, cash not yet received). Callers may
@@ -746,11 +846,27 @@ export function createFinanceDomainService(opts = {}) {
         ...payload,
         memo: payload.memo || 'Simulated posted cash sale',
         lines: payload.lines || [
-          { account_name: 'Cash', classification: 'Asset', debit_cents: amountCents, credit_cents: 0 },
-          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: amountCents },
+          {
+            account_name: 'Cash',
+            classification: 'Asset',
+            debit_cents: amountCents,
+            credit_cents: 0,
+          },
+          {
+            account_name: 'Revenue',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: amountCents,
+          },
         ],
       };
-      const sim = await this.simulateDealWon({ tenantId, actor, payload: simPayload, requestId, braidTraceId });
+      const sim = await this.simulateDealWon({
+        tenantId,
+        actor,
+        payload: simPayload,
+        requestId,
+        braidTraceId,
+      });
       const approved = await this.approveFinanceAction({
         tenantId,
         approvalId: sim.approval.id,
@@ -900,12 +1016,44 @@ export function createFinanceDomainService(opts = {}) {
       let reversalSourceId = null;
       if (approval.target_type === 'journal_entry') {
         const target = bucket.journalEntries.find((e) => e.id === approval.target_id);
+
+        // Codex PR #651 P2: re-check account activity at the POSTING boundary, symmetric
+        // with the createJournalDraft inactive-account guard. A draft created while its
+        // account was active can be left pending, the account then deactivated (deactivation
+        // only checks posted BALANCE, so a zero-balance account with a pending draft can
+        // still be deactivated), and approving it here would append finance.journal.posted
+        // lines to an INACTIVE account — bypassing deactivation. Run BEFORE the approval is
+        // durably recorded so a rejection leaves no orphaned approval. Reversals are exempt
+        // (a reversal is a correction of already-posted activity, governed by its own guards).
+        if (
+          target &&
+          !target.reversal_of &&
+          target.status !== 'posted' &&
+          target.status !== 'reversed'
+        ) {
+          const coa = getTenantCoa(bucket, tenantId);
+          for (const line of target.lines || []) {
+            if (!line.account_id) continue;
+            const acct = coa.find((a) => a.id === line.account_id);
+            if (acct && acct.is_active === false) {
+              const e = new Error(
+                `Cannot post to inactive account "${acct.name}" (${acct.account_code}); reactivate it or void this entry.`,
+              );
+              e.statusCode = 409;
+              e.code = 'FINANCE_COA_ACCOUNT_INACTIVE';
+              throw e;
+            }
+          }
+        }
+
         if (target?.reversal_of) {
           reversalSourceId = target.reversal_of;
           const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);
           if (source) {
             if (source.reversed_by && source.reversed_by !== target.id) {
-              const error = new Error('This entry has already been reversed by another reversal; a second reversal cannot be posted.');
+              const error = new Error(
+                'This entry has already been reversed by another reversal; a second reversal cannot be posted.',
+              );
               error.statusCode = 409;
               throw error;
             }
@@ -960,7 +1108,9 @@ export function createFinanceDomainService(opts = {}) {
         } catch (err) {
           // The durable PK rejected a concurrent reversal approval of the same source.
           if (err?.code === 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID' && reversalSourceId) {
-            const e = new Error('This entry is already being reversed by a concurrent request; a second reversal cannot be approved.');
+            const e = new Error(
+              'This entry is already being reversed by a concurrent request; a second reversal cannot be approved.',
+            );
             e.statusCode = 409;
             throw e;
           }
@@ -978,13 +1128,44 @@ export function createFinanceDomainService(opts = {}) {
       // (finance.ai.no_money_movement), so an AI actor can never post. Idempotent:
       // an already-posted/reversed entry is left untouched.
       let postedEntry = null;
+      // The posted, non-reversal entry whose LINKED draft adapter-job payloads must
+      // be re-canonicalized below. Tracked SEPARATELY from `postedEntry` (which is
+      // only the entry THIS call freshly posted, and stays the return-value contract)
+      // so the refresh also fires on an idempotent heal-retry — see the gate below.
+      let recanonicalizeTargetEntry = null;
       if (approval.target_type === 'journal_entry') {
         const entry = bucket.journalEntries.find((e) => e.id === approval.target_id);
         if (entry) {
           // 1. Post the target entry if not already posted/reversed.
           if (entry.status !== 'posted' && entry.status !== 'reversed') {
+            // Codex PR #651 P2: RE-CANONICALIZE each line's denormalized account metadata
+            // (account_code, account_name, classification) against the CURRENT account (by
+            // account_id) at the POSTING boundary. A no-history account can be renamed /
+            // reclassified / re-coded while a draft is still pending (the field lock only
+            // counts POSTED lines), so the draft's metadata — frozen at draft time — would
+            // otherwise post STALE, and the ledger / P&L / balance-sheet derive from each
+            // line's classification/account_name. account_id is the identity; the line
+            // follows the account. Reversals are EXEMPT — they reverse already-posted
+            // activity faithfully (and a reversed account has posted history, so its
+            // classification/code are locked anyway).
+            const postCoa = getTenantCoa(bucket, tenantId);
+            const canonicalLines = (entry.lines || []).map((line) => {
+              const acct =
+                !entry.reversal_of && line.account_id
+                  ? postCoa.find((a) => a.id === line.account_id)
+                  : null;
+              return acct
+                ? {
+                    ...clone(line),
+                    account_code: acct.account_code,
+                    account_name: acct.name,
+                    classification: acct.classification,
+                  }
+                : clone(line);
+            });
             postedEntry = {
               ...clone(entry),
+              lines: canonicalLines,
               status: 'posted',
               posted_at: now(),
               posted_by: normalizedActor.id,
@@ -1028,7 +1209,12 @@ export function createFinanceDomainService(opts = {}) {
               // reject) from an idempotent re-approval of the same one (same id →
               // heal). Carried by the finance.journal.reversed payload, so it
               // survives projection rebuild + persistent rehydration.
-              const reversedOriginal = { ...clone(original), status: 'reversed', reversed_by: entry.id, updated_at: now() };
+              const reversedOriginal = {
+                ...clone(original),
+                status: 'reversed',
+                reversed_by: entry.id,
+                updated_at: now(),
+              };
               await appendEvent(
                 bucket,
                 createFinanceEventEnvelope({
@@ -1047,6 +1233,17 @@ export function createFinanceDomainService(opts = {}) {
               Object.assign(original, reversedOriginal);
             }
           }
+
+          // After the posting step `entry` carries the canonical posted lines —
+          // whether THIS call posted it (step 1 ran) OR it was already posted on an
+          // idempotent heal-retry. Drive the linked-adapter-draft refresh below off
+          // `entry`, NOT the just-posted `postedEntry`: a retry after a crash between
+          // the durable finance.journal.posted and the promoter must still refresh the
+          // draft, otherwise the (unconditional) promoter would queue the STALE
+          // pre-edit payload. Reversals are exempt — their lines aren't re-canonicalized.
+          if (entry.status === 'posted' && !entry.reversal_of) {
+            recanonicalizeTargetEntry = entry;
+          }
         }
       }
 
@@ -1055,6 +1252,45 @@ export function createFinanceDomainService(opts = {}) {
       // linkage is structural via shared `aggregate_id` — see §4.1 of the
       // slice-2 adapter runtime design freeze. The promoter is a no-op for
       // approvals whose target has no linked adapter_jobs.
+      // Codex PR #651 P2: re-canonicalizing the posted journal lines (step 1 above) must
+      // also refresh any LINKED draft adapter-job payload. simulateDealWon builds that
+      // payload from the PRE-EDIT draft, so without this the ledger posts canonical account
+      // metadata while the provider worker would queue a stale account_ref/classification.
+      // Rebuild the canonical from the re-canonicalized entry before the promoter queues
+      // the job. Keyed off `recanonicalizeTargetEntry` (any posted, non-reversal target),
+      // NOT `postedEntry` (this-call-only): a heal-retry whose entry was already posted
+      // still has a draft adapter_job to refresh — otherwise the unconditional promoter
+      // below would queue the stale pre-edit payload.
+      if (recanonicalizeTargetEntry && Array.isArray(bucket.adapterJobs)) {
+        const linkedDrafts = bucket.adapterJobs.filter(
+          (job) =>
+            job.status === 'draft' &&
+            job.aggregate_type === 'journal_entry' &&
+            job.aggregate_id === approval.target_id,
+        );
+        // Only re-map when a linked draft actually exists AND the posted entry has lines —
+        // the canonical mapper requires a balanced journal, and most approvals have no
+        // linked adapter job (a line-less entry has nothing to re-canonicalize).
+        if (
+          linkedDrafts.length > 0 &&
+          Array.isArray(recanonicalizeTargetEntry.lines) &&
+          recanonicalizeTargetEntry.lines.length > 0
+        ) {
+          const refreshedCanonical =
+            mapJournalEntryToQuickBooksCanonical(recanonicalizeTargetEntry);
+          for (const job of linkedDrafts) {
+            // clone() per job: each draft must OWN its payload. Sharing one
+            // `refreshedCanonical` reference across multiple linked drafts (e.g. one
+            // per provider) would alias them — and the promoter's `{...job}` snapshot
+            // is shallow, so the aliasing survives into the emitted sync_queued events.
+            // A later in-place payload mutation on one job would silently corrupt the
+            // others; clone keeps the service's clone-everywhere isolation posture.
+            job.payload = clone(refreshedCanonical);
+            job.updated_at = now();
+          }
+        }
+      }
+
       const promotion = await promoteLinkedAdapterJobs({
         bucket,
         tenantId,
@@ -1072,6 +1308,552 @@ export function createFinanceDomainService(opts = {}) {
         promoted_adapter_jobs: promotion.promoted_jobs,
         posted_entry: postedEntry ? clone(postedEntry) : null,
       };
+    },
+
+    // Phase 3a (editable COA manager, design §2 + plan Task 6). Create a MANUAL,
+    // non-system chart-of-accounts account. Event-sourced (Approach A): append a
+    // FLAT `finance.account.created` (source:'manual') BEFORE mutating the chart,
+    // mirroring the auto-create event's PAYLOAD SHAPE so the replay fold upserts it
+    // identically — but deliberately append-before-mutate (unlike the older auto-create
+    // path, which pushes onto the chart before appending). Human-only: an ai_agent is fail-closed by the governance default
+    // (ManageChartOfAccountsCommand is an unknown command type → blocked for AI)
+    // before any event lands. No update/deactivate/reactivate here (Phase 3b).
+    async createAccount({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+      const { name, classification, account_type } = payload;
+
+      // 1. Governance: COA management is human-only. The governance default
+      // fail-closes ai_agent for unknown command types (ManageChartOfAccountsCommand
+      // is intentionally NOT in any allow-list).
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. classification must be one of the 5 canonical values.
+      if (!FINANCE_CLASSIFICATIONS.includes(classification)) {
+        const e = new Error(`Invalid account classification: ${classification}`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CLASSIFICATION';
+        throw e;
+      }
+
+      // 3. account_type must be curated AND valid for the classification.
+      if (!isValidAccountType(classification, account_type)) {
+        const e = new Error(
+          `Invalid account_type '${account_type}' for classification '${classification}'`,
+        );
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
+        throw e;
+      }
+
+      // 4. name must be present and non-blank. buildManualAccount substitutes
+      // 'Unnamed' for a blank name, but the duplicate guard below keys on the RAW
+      // input — so two blank-name creates key the dup-check on "asset:" while both
+      // STORE as "asset:unnamed" with the SAME autoAccountId(...,'Unnamed'), bypassing
+      // the dup guard and minting two rows with one id (COA fragmentation this manager
+      // exists to prevent). chartOfAccounts.normalizeName isn't exported, so replicate
+      // its blank check minimally here. Placed BEFORE the duplicate-name check.
+      if (String(name ?? '').trim() === '') {
+        const e = new Error('Account name is required');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_NAME';
+        throw e;
+      }
+
+      // 5. Reject a duplicate normalized (classification, name) — prevents the
+      // fragmentation the manager exists to retire (design §2).
+      const coa = getTenantCoa(bucket, tenantId);
+      const matchKey = normalizeAccountKey(classification, name);
+      if (coa.some((a) => normalizeAccountKey(a.classification, a.name) === matchKey)) {
+        const e = new Error(`An account named '${name}' already exists in ${classification}`);
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DUPLICATE_NAME';
+        throw e;
+      }
+
+      const account = buildManualAccount({
+        tenantId,
+        classification,
+        name,
+        account_type,
+        existingCodes: coa.map((a) => a.account_code),
+      });
+      // Stamp provenance so the in-memory chart matches the replayed shape (the
+      // fold carries `source` onto folded accounts), exactly like the auto-create path.
+      account.source = 'manual';
+
+      // Codex PR #651 P1: ids are NAME-DERIVED (autoAccountId), so a RENAMED account
+      // keeps its original id (= hash of its OLD classification:name) while its old key
+      // becomes free. Creating a NEW account on that old name would regenerate the SAME
+      // id → two accounts, one id, corrupting the id-keyed replay Map. Refuse any create
+      // whose minted id already belongs to an account (the renamed account's lingering id
+      // reserves the old name). This is distinct from the DUPLICATE_NAME guard above,
+      // which only catches a CURRENT name match.
+      if (coa.some((a) => a.id === account.id)) {
+        const e = new Error(
+          `The name '${name}' in ${classification} is reserved by a renamed account and cannot be reused; choose a different name.`,
+        );
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_NAME_RESERVED';
+        throw e;
+      }
+
+      // Append-before-mutate (PR #632 P2): persist the FLAT created event first;
+      // only push onto the chart after the append resolves.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.created',
+          aggregateType: 'account',
+          aggregateId: account.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            account_id: account.id,
+            account_code: account.account_code,
+            name: account.name,
+            classification: account.classification,
+            account_type: account.account_type,
+            is_system: false,
+            source: 'manual',
+            match_key: normalizeAccountKey(account.classification, account.name),
+          },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation:
+              'Manually created chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      coa.push(account);
+
+      return clone(account);
+    },
+
+    // Phase 3b (editable COA manager, design §2 + plan Task 7). Edit a non-system
+    // account. Event-sourced (Approach A): append the FULL post-edit snapshot under
+    // `finance.account.updated.payload.account` BEFORE mutating the chart, so the
+    // replay fold upserts it identically. Server is the authority for every lock
+    // rule (§2): UI hiding is presentation only. Human-only (ai_agent fail-closed
+    // by the governance default for ManageChartOfAccountsCommand).
+    async updateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: COA management is human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find the account by id (re-seeds the baseline first via getTenantCoa).
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts are fully locked — no field is editable (design §2).
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be edited.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // A field is "changed" only when present in the payload AND different from the
+      // current stored value. `account_code` is compared as a string (the stored
+      // shape) so a same-value re-submit isn't treated as a change.
+      const has = (field) => Object.prototype.hasOwnProperty.call(payload, field);
+      const nameChanged = has('name') && String(payload.name ?? '') !== String(current.name ?? '');
+      const classificationChanged =
+        has('classification') && payload.classification !== current.classification;
+      const codeChanged =
+        has('account_code') &&
+        String(payload.account_code ?? '') !== String(current.account_code ?? '');
+      const typeChanged = has('account_type') && payload.account_type !== current.account_type;
+      const anyChange = nameChanged || classificationChanged || codeChanged || typeChanged;
+
+      // 4. Posted-history lock rules (design §2).
+      const posted = hasPostedHistory(bucket, accountId);
+      if (posted && (classificationChanged || codeChanged)) {
+        const e = new Error(
+          'Classification and account_code are locked on an account with posted history.',
+        );
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY';
+        throw e;
+      }
+      if (posted && anyChange && String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to edit an account with posted history.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 5. Validate the EFFECTIVE (merged) result.
+      const effectiveClassification = classificationChanged
+        ? payload.classification
+        : current.classification;
+      // Canonicalize a changed name to the same whitespace-collapsed form
+      // createAccount stores (via buildManualAccount → normalizeName), so a rename
+      // can never persist a non-canonical "  Spaced    Name  " into the snapshot the
+      // replay fold saves. This single derivation feeds the non-blank validation,
+      // the duplicate-name guard (normalizeAccountKey), AND the stored value, so
+      // they can't diverge.
+      const effectiveName = nameChanged ? normalizeName(payload.name) : current.name;
+      const effectiveType = typeChanged ? payload.account_type : current.account_type;
+      // Trim a changed code so the stored value is canonical (mirrors name handling).
+      const effectiveCode = codeChanged
+        ? String(payload.account_code ?? '').trim()
+        : current.account_code;
+
+      if (classificationChanged && !FINANCE_CLASSIFICATIONS.includes(effectiveClassification)) {
+        const e = new Error(`Invalid account classification: ${effectiveClassification}`);
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CLASSIFICATION';
+        throw e;
+      }
+      if (nameChanged && String(effectiveName ?? '').trim() === '') {
+        const e = new Error('Account name is required');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_NAME';
+        throw e;
+      }
+      // account_code is the editable control/display field — a blank/whitespace code is
+      // unusable (and code-based journal resolution ignores blank codes), so reject it
+      // before storing rather than persisting an account with no usable code (Codex PR
+      // #651 P2). effectiveCode is already trimmed above.
+      if (codeChanged && effectiveCode === '') {
+        const e = new Error('Account code cannot be blank.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_CODE';
+        throw e;
+      }
+      // The effective (classification, account_type) pair must always be valid — a
+      // classification change can invalidate the existing type, and vice-versa.
+      if (!isValidAccountType(effectiveClassification, effectiveType)) {
+        const e = new Error(
+          `Invalid account_type '${effectiveType}' for classification '${effectiveClassification}'`,
+        );
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
+        throw e;
+      }
+      // Uniqueness: only when the match key (name/classification) actually changes,
+      // and only against OTHER accounts.
+      if (nameChanged || classificationChanged) {
+        const newKey = normalizeAccountKey(effectiveClassification, effectiveName);
+        if (
+          coa.some(
+            (a) => a.id !== accountId && normalizeAccountKey(a.classification, a.name) === newKey,
+          )
+        ) {
+          const e = new Error(
+            `An account named '${effectiveName}' already exists in ${effectiveClassification}`,
+          );
+          e.statusCode = 409;
+          e.code = 'FINANCE_COA_DUPLICATE_NAME';
+          throw e;
+        }
+      }
+      if (codeChanged && coa.some((a) => a.id !== accountId && a.account_code === effectiveCode)) {
+        const e = new Error(`Account code '${effectiveCode}' is already in use`);
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DUPLICATE_CODE';
+        throw e;
+      }
+
+      // 6. Build the full merged snapshot (id / is_system / is_active / source unchanged).
+      const updated = {
+        ...current,
+        account_code: effectiveCode,
+        name: effectiveName,
+        classification: effectiveClassification,
+        account_type: effectiveType,
+      };
+
+      // Append-before-mutate (PR #632 P2): persist the FULL snapshot first.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.updated',
+          aggregateType: 'account',
+          aggregateId: updated.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            account: clone(updated),
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation: 'Edited chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      Object.assign(current, updated);
+
+      return clone(current);
+    },
+
+    // Phase 3b (editable COA manager, design §2 + plan Task 8). Deactivate a
+    // non-system account with a zero posted balance. Append `finance.account.deactivated`
+    // {account_id, reason} before flipping is_active. Human-only.
+    async deactivateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find by id.
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts cannot be deactivated.
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be deactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // 4. Idempotent no-op: an already-inactive account returns OK with NO event
+      // (and no reason requirement). Placed BEFORE the reason/balance guards so a
+      // redundant deactivate is always safe.
+      if (current.is_active === false) {
+        return clone(current);
+      }
+
+      // 5. A reason is required.
+      if (String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to deactivate an account.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 6. A nonzero posted balance blocks deactivation (design §2).
+      if (accountBalanceCents(bucket, accountId) !== 0) {
+        const e = new Error('An account with a nonzero posted balance cannot be deactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_DEACTIVATE_NONZERO_BALANCE';
+        throw e;
+      }
+
+      // Append-before-mutate: persist the deactivation first.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.deactivated',
+          aggregateType: 'account',
+          aggregateId: current.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            account_id: current.id,
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation:
+              'Deactivated chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      current.is_active = false;
+
+      return clone(current);
+    },
+
+    // Phase 3b (editable COA manager, design §2 + plan Task 9). Reactivate a
+    // non-system, currently-inactive account — preserving its id — after re-checking
+    // uniqueness against currently-ACTIVE accounts. Rides `finance.account.updated`
+    // with an is_active:true snapshot (same event the replay fold flips on). Human-only.
+    async reactivateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      // 1. Governance: human-only.
+      const decision = evaluateFinanceGovernance({
+        commandType: 'ManageChartOfAccountsCommand',
+        actorType: normalizedActor.type,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const e = new Error('AI actors cannot manage the chart of accounts.');
+        e.statusCode = 403;
+        e.code = 'FINANCE_COA_AI_FORBIDDEN';
+        e.decision = decision;
+        throw e;
+      }
+
+      // 2. Find by id.
+      const coa = getTenantCoa(bucket, tenantId);
+      const current = coa.find((a) => a.id === accountId);
+      if (!current) {
+        const e = new Error(`Account ${accountId} not found`);
+        e.statusCode = 404;
+        e.code = 'FINANCE_COA_ACCOUNT_NOT_FOUND';
+        throw e;
+      }
+
+      // 3. System accounts cannot be reactivated.
+      if (current.is_system) {
+        const e = new Error('System accounts cannot be reactivated.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
+        throw e;
+      }
+
+      // 4. Must currently be inactive.
+      if (current.is_active === true) {
+        const e = new Error('Account is already active.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_NOT_INACTIVE';
+        throw e;
+      }
+
+      // 5. A reason is required.
+      if (String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to reactivate an account.');
+        e.statusCode = 400;
+        e.code = 'FINANCE_COA_REASON_REQUIRED';
+        throw e;
+      }
+
+      // 6. Re-check uniqueness against currently-ACTIVE OTHER accounts: a code OR a
+      // normalized (classification, name) collision blocks reactivation (design §2).
+      const key = normalizeAccountKey(current.classification, current.name);
+      const conflict = coa.some(
+        (a) =>
+          a.id !== accountId &&
+          a.is_active === true &&
+          (a.account_code === current.account_code ||
+            normalizeAccountKey(a.classification, a.name) === key),
+      );
+      if (conflict) {
+        const e = new Error('Reactivation conflicts with an active account on code or name.');
+        e.statusCode = 409;
+        e.code = 'FINANCE_COA_REACTIVATE_CONFLICT';
+        throw e;
+      }
+
+      // Append-before-mutate. Emit a DEDICATED finance.account.reactivated event
+      // (symmetric with finance.account.deactivated), NOT finance.account.updated with
+      // an is_active:true snapshot (Codex PR #651 P2). Overloading `updated` made the
+      // fold treat its snapshot's is_active as authoritative, so an ordinary field-edit
+      // PATCH that raced with a /deactivate (its hydrated snapshot still carrying
+      // is_active:true) would silently REACTIVATE the account, bypassing this route's
+      // reason + conflict checks. Activation state now changes ONLY via
+      // created/deactivated/reactivated; `updated` carries field edits and preserves it.
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.account.reactivated',
+          aggregateType: 'account',
+          aggregateId: current.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            account_id: current.id,
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
+          policyDecision: createGovernanceDecision({
+            allowed: true,
+            requiresApproval: false,
+            riskLevel: 'low',
+            explanation:
+              'Reactivated chart-of-accounts account (COA management; not money movement).',
+            braidTraceId,
+          }),
+        }),
+      );
+      current.is_active = true;
+
+      return clone(current);
     },
 
     seedJournalEntry(entry) {
@@ -1115,6 +1897,21 @@ export function createFinanceDomainService(opts = {}) {
 
     getEventStore() {
       return eventStore;
+    },
+
+    // Phase 3a test seams (plan Task 5). Expose the pure COA history/balance
+    // helpers and the live bucket so unit tests can assert posted-history +
+    // net-balance directly over seeded journal entries.
+    __getBucket(tenantId) {
+      return getTenantBucket(store, tenantId);
+    },
+
+    __hasPostedHistory(bucket, accountId) {
+      return hasPostedHistory(bucket, accountId);
+    },
+
+    __accountBalanceCents(bucket, accountId) {
+      return accountBalanceCents(bucket, accountId);
     },
   };
 }

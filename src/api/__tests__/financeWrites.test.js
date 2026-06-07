@@ -73,4 +73,86 @@ describe('financeWrites', () => {
       code: 'NOPE',
     });
   });
+
+  // Editable Chart of Accounts manager clients (Phase 5 / Task 16).
+  describe('COA manager clients', () => {
+    it('createAccount POSTs /accounts with the create body', async () => {
+      const fetchMock = mockFetch({ body: { status: 'success', data: { id: 'acct_1' } } });
+      const result = await writes.createAccount(TENANT_ID, {
+        name: 'Operating Bank',
+        classification: 'Asset',
+        account_type: 'Bank',
+      });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BACKEND}/api/v2/finance/accounts`);
+      expect(init.method).toBe('POST');
+      expect(init.headers['x-tenant-id']).toBe(TENANT_ID);
+      expect(JSON.parse(init.body)).toEqual({
+        name: 'Operating Bank',
+        classification: 'Asset',
+        account_type: 'Bank',
+      });
+      expect(result).toEqual({ id: 'acct_1' });
+    });
+
+    it('updateAccount PATCHes /accounts/:id with the edit body', async () => {
+      const fetchMock = mockFetch({});
+      await writes.updateAccount(TENANT_ID, 'acct_42', {
+        name: 'Renamed',
+        account_type: 'Cash',
+        reason: 'fixing a typo',
+      });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BACKEND}/api/v2/finance/accounts/acct_42`);
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({
+        name: 'Renamed',
+        account_type: 'Cash',
+        reason: 'fixing a typo',
+      });
+    });
+
+    it('deactivateAccount POSTs /accounts/:id/deactivate with a reason', async () => {
+      const fetchMock = mockFetch({});
+      await writes.deactivateAccount(TENANT_ID, 'acct_7', { reason: 'closed' });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BACKEND}/api/v2/finance/accounts/acct_7/deactivate`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toEqual({ reason: 'closed' });
+    });
+
+    it('reactivateAccount POSTs /accounts/:id/reactivate with a reason', async () => {
+      const fetchMock = mockFetch({});
+      await writes.reactivateAccount(TENANT_ID, 'acct_7', { reason: 'reopening' });
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BACKEND}/api/v2/finance/accounts/acct_7/reactivate`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toEqual({ reason: 'reopening' });
+    });
+
+    it('url-encodes the account id', async () => {
+      const fetchMock = mockFetch({});
+      await writes.updateAccount(TENANT_ID, 'acct/weird id', { name: 'x' });
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        `${BACKEND}/api/v2/finance/accounts/acct%2Fweird%20id`,
+      );
+    });
+
+    it('surfaces a FINANCE_COA_* error code from a rejected mutation', async () => {
+      mockFetch({
+        ok: false,
+        status: 409,
+        body: { code: 'FINANCE_COA_DUPLICATE_NAME', message: 'already exists' },
+      });
+      await expect(
+        writes.createAccount(TENANT_ID, { name: 'Cash', classification: 'Asset', account_type: 'Cash' }),
+      ).rejects.toMatchObject({ status: 409, code: 'FINANCE_COA_DUPLICATE_NAME' });
+    });
+
+    it('requires a tenant id client-side for COA mutations', async () => {
+      await expect(writes.createAccount(undefined, {})).rejects.toMatchObject({
+        code: 'CLIENT_MISSING_TENANT',
+      });
+    });
+  });
 });

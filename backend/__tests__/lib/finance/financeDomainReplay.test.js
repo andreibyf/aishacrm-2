@@ -258,3 +258,164 @@ describe('rebuildBucketFromEvents — focused folds for paths not reachable via 
     assert.equal(bucket.adapterJobs.length, 0);
   });
 });
+
+// Phase 2 Task 4 — COA edit/deactivate folds. The replay fold applies the two
+// new mutation events (Phase 3 emits them from the COA manager):
+//   - finance.account.updated — payload { account: <full snapshot>, reason }.
+//     Upserts/replaces the account by account.id (full replace) — handles edits
+//     AND reactivation (snapshot carries is_active:true).
+//   - finance.account.deactivated — payload { account_id, reason }. Flips the
+//     existing account's is_active to false (no-op if id absent).
+describe('rebuildBucketFromEvents — COA account.updated / account.deactivated folds', () => {
+  const ACCOUNT_ID = 'account_coa_1';
+
+  const createdEvent = () => ({
+    event_type: 'finance.account.created',
+    tenant_id: T,
+    payload: {
+      account_id: ACCOUNT_ID,
+      account_code: '1050',
+      name: 'Petty Cash',
+      classification: 'Asset',
+      account_type: 'Asset',
+      source: 'manual',
+    },
+  });
+
+  const findAccount = (bucket) => bucket.accounts.find((a) => a.id === ACCOUNT_ID);
+
+  test('created → updated replaces account_type + name in the rebuilt chart', () => {
+    const updatedSnapshot = {
+      id: ACCOUNT_ID,
+      tenant_id: T,
+      account_code: '1050',
+      name: 'Ops Bank',
+      classification: 'Asset',
+      account_type: 'Bank',
+      is_system: false,
+      is_active: true,
+      parent_account_id: null,
+      source: 'manual',
+    };
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.updated',
+        tenant_id: T,
+        payload: { account: updatedSnapshot, reason: 'mark as bank' },
+      },
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.ok(account, 'account present after update');
+    assert.equal(account.account_type, 'Bank');
+    assert.equal(account.name, 'Ops Bank');
+    assert.equal(account.is_active, true);
+  });
+
+  test('created → deactivated flips is_active to false', () => {
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.deactivated',
+        tenant_id: T,
+        payload: { account_id: ACCOUNT_ID, reason: 'no longer used' },
+      },
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.ok(account, 'account stays in the chart after deactivation');
+    assert.equal(account.is_active, false);
+  });
+
+  test('created → deactivated → reactivated flips is_active back to true', () => {
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.deactivated',
+        tenant_id: T,
+        payload: { account_id: ACCOUNT_ID, reason: 'no longer used' },
+      },
+      {
+        event_type: 'finance.account.reactivated',
+        tenant_id: T,
+        payload: { account_id: ACCOUNT_ID, reason: 'back in use' },
+      },
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.ok(account, 'account present after reactivation');
+    assert.equal(account.is_active, true);
+  });
+
+  // Codex PR #651 P2: an ordinary finance.account.updated (FIELD edit) carries a full
+  // snapshot whose is_active can be STALE (hydrated while active, raced ahead of a
+  // concurrent deactivate). The fold must PRESERVE the existing activation, so the edit
+  // does NOT silently reactivate — only created/deactivated/reactivated change is_active.
+  test('created → deactivated → updated(stale is_active:true field edit) stays INACTIVE', () => {
+    const staleEditSnapshot = {
+      id: ACCOUNT_ID,
+      tenant_id: T,
+      account_code: '1050',
+      name: 'Petty Cash (renamed)',
+      classification: 'Asset',
+      account_type: 'Bank',
+      is_system: false,
+      is_active: true, // STALE — hydrated before the deactivate
+      parent_account_id: null,
+      source: 'manual',
+    };
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.deactivated',
+        tenant_id: T,
+        payload: { account_id: ACCOUNT_ID, reason: 'closed' },
+      },
+      {
+        event_type: 'finance.account.updated',
+        tenant_id: T,
+        payload: { account: staleEditSnapshot, reason: 'rename' },
+      },
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.ok(account, 'account present');
+    assert.equal(account.name, 'Petty Cash (renamed)', 'the field edit IS applied');
+    assert.equal(account.is_active, false, 'but activation is preserved — no silent reactivation');
+  });
+
+  // Codex PR #651 P2: a duplicate create event (same name-derived id from a concurrent
+  // POST race) appended AFTER an edit/deactivation must be idempotent — it must NOT
+  // reset the account to its created (active, original-fields) state.
+  test('a LATE duplicate finance.account.created does not reset an edited/deactivated account', () => {
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.updated',
+        tenant_id: T,
+        payload: {
+          account: {
+            id: ACCOUNT_ID, tenant_id: T, account_code: '1050', name: 'Renamed', classification: 'Asset',
+            account_type: 'Bank', is_system: false, is_active: true, parent_account_id: null, source: 'manual',
+          },
+          reason: 'rename',
+        },
+      },
+      { event_type: 'finance.account.deactivated', tenant_id: T, payload: { account_id: ACCOUNT_ID, reason: 'close' } },
+      createdEvent(), // the delayed duplicate create lands last
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.equal(account.name, 'Renamed', 'the edit survives the late duplicate create');
+    assert.equal(account.account_type, 'Bank');
+    assert.equal(account.is_active, false, 'the deactivation survives the late duplicate create');
+  });
+
+  test('account.deactivated for an unknown id is a no-op', () => {
+    const events = [
+      {
+        event_type: 'finance.account.deactivated',
+        tenant_id: T,
+        payload: { account_id: 'account_does_not_exist', reason: 'x' },
+      },
+    ];
+    const bucket = rebuildBucketFromEvents(events);
+    assert.deepEqual(bucket.accounts, []);
+  });
+});

@@ -14,6 +14,7 @@ import { listFinanceAdapters } from '../lib/finance/financeAdapterRegistry.js';
 import { createInMemoryFinanceReadAdapter } from '../lib/finance/readAdapters/inMemoryFinanceReadAdapter.js';
 import { createProjectionBackedFinanceReadAdapter } from '../lib/finance/readAdapters/projectionBackedFinanceReadAdapter.js';
 import { createPgAuditEventsReader } from '../lib/finance/readAdapters/pgAuditEventsReader.js';
+import { createEventStoreAuditEventsReader } from '../lib/finance/readAdapters/eventStoreAuditEventsReader.js';
 import { createPgProjectionStoreProvider } from '../lib/finance/projections/projectionStore.pg.js';
 import { createFinancePgEventStore } from '../lib/finance/financeEventStore.pg.js';
 import {
@@ -37,6 +38,7 @@ export function defaultFinanceReadAdapterFactory({
   pgPool,
   service,
   createStoreProvider,
+  eventStore,
 }) {
   if (!persistentEvents) {
     return createInMemoryFinanceReadAdapter({ service });
@@ -47,7 +49,21 @@ export function defaultFinanceReadAdapterFactory({
         'projection-backed reads; refusing to mount the finance v2 routes.',
     );
   }
-  const auditEventsReader = createPgAuditEventsReader({ pool: pgPool });
+  // The COA fold (listAccounts/getCashFlow) reads finance.account.* events via
+  // `auditEventsReader`. In production that is the Postgres reader bound to the
+  // real pool. But when the caller injects an in-memory `eventStore` (the
+  // persistent-write tests, and any non-PG deployment shape) while passing a
+  // pool that is not a real PG pool (no `.query`), the PG reader would throw on
+  // first COA read — failing it closed (503) even though the durable events are
+  // in the injected store. Bind the reader to that store instead so the COA
+  // read-your-write + Test/Live partition contract (editable-COA design §7)
+  // holds under the injected-store path exactly as it does against Postgres. The
+  // production PG path (real pool with `.query`) is unchanged.
+  const poolIsRealPg = pgPool && typeof pgPool.query === 'function';
+  const auditEventsReader =
+    !poolIsRealPg && eventStore && typeof eventStore.query === 'function'
+      ? createEventStoreAuditEventsReader({ eventStore })
+      : createPgAuditEventsReader({ pool: pgPool });
   const workers = {
     ledger: createLedgerProjectionWorker(),
     journalEntries: createJournalEntriesProjectionWorker(),
@@ -223,6 +239,46 @@ function isSuperAdmin(req) {
   return req.user?.role === 'superadmin' || req.user?.is_superadmin === true;
 }
 
+// COA-manager RBAC gate (editable-coa-manager design §5).
+//
+// RBAC INVESTIGATION OUTCOME / DEVIATION (recorded here per the design doc):
+// The design wants a NARROW capability `finance.accounts.manage`. The repo has
+// NO granular capability system — `req.user` carries only a normalized `role`
+// (superadmin/admin/manager/user/employee), coarse `perm_*` booleans, and a
+// `nav_permissions` map; there is no per-tenant role-assignment table and no
+// capability store (`backend/routes/permissions.js` is a stub). The Track E RBAC
+// & Access Matrix (#626, docs/architecture/finance/finance-ops-rbac-access-matrix.md
+// §4.3–4.4, §8.1) documents that a finance-admin/finance-viewer split does NOT
+// exist today and is Deferred. So `finance.accounts.manage` is NOT expressible.
+//
+// FALLBACK (design §5 sanctioned): gate on the closest finance-MANAGEMENT
+// permission that DOES exist — tenant admin OR superadmin — mirroring
+// `requireAdminRole` (validateTenant.js), which already guards the finance-module
+// enable toggle (`POST /api/modulesettings`, RBAC matrix §5.1/§8.1). COA
+// management is a structural finance-config change, so admin is the natural
+// analog. This satisfies the §8.2 binding rule (backend-first, route-layer
+// check). The domain-layer AI block (FINANCE_COA_AI_FORBIDDEN) is independent of
+// and additional to this gate — defense in depth.
+//
+// On failure throws 403 FINANCE_COA_FORBIDDEN (design §6). When a true
+// `finance.accounts.manage` capability lands, swap this body for the capability
+// check; the route wiring does not change.
+function requireCoaManage(req) {
+  // AI actors are governed by the domain-layer block (FINANCE_COA_AI_FORBIDDEN),
+  // which is the authoritative, more-specific signal (design §5: AI blocking is
+  // independent of and additional to RBAC). Let an AI actor through this RBAC
+  // gate so the domain layer emits that specific code rather than masking it with
+  // a generic FINANCE_COA_FORBIDDEN — the write is still refused, just with the
+  // accurate reason. (A human caller never reaches the domain AI block.)
+  if (buildActor(req).type === 'ai_agent') return;
+  const role = req.user?.role;
+  if (isSuperAdmin(req) || role === 'admin') return;
+  const err = new Error('You do not have permission to manage the chart of accounts');
+  err.statusCode = 403;
+  err.code = 'FINANCE_COA_FORBIDDEN';
+  throw err;
+}
+
 function sendError(res, error) {
   const statusCode = Number(error?.statusCode) || 500;
   return res.status(statusCode).json({
@@ -335,6 +391,37 @@ export async function assertPostedSandboxAllowed({
   }
 }
 
+// Process-local keyed async mutex. runExclusive(key, fn) runs fn() only after all
+// prior calls for the SAME key have settled, serializing them; different keys run
+// concurrently. Each key's queue is a chained promise; the entry is dropped when no
+// callers remain (no unbounded growth). This is the in-process serialization the
+// finance write path uses to close the COA concurrency races (Codex PR #651 P2):
+// it protects a SINGLE process/instance only — it is NOT durable, multi-instance
+// protection. Multi-instance persistent mode still needs durable DB serialization
+// (RPC-wrapped pg_advisory_xact_lock + finance.accounts unique constraints), deferred
+// to the persistent-activation hardening.
+export function createKeyedMutex() {
+  const chains = new Map(); // key -> { tail: Promise, waiters: number }
+  return async function runExclusive(key, fn) {
+    const entry = chains.get(key) || { tail: Promise.resolve(), waiters: 0 };
+    entry.waiters += 1;
+    chains.set(key, entry);
+    const prev = entry.tail;
+    let release;
+    entry.tail = new Promise((res) => {
+      release = res;
+    });
+    try {
+      await prev; // wait my turn
+      return await fn();
+    } finally {
+      release();
+      entry.waiters -= 1;
+      if (entry.waiters === 0 && chains.get(key) === entry) chains.delete(key);
+    }
+  };
+}
+
 export default function createFinanceV2Routes(pgPool, opts = {}) {
   const router = express.Router();
   // Phase 4-1 §5: persistence mode is a deploy-time decision — read the env ONCE
@@ -369,6 +456,16 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // persistent mode the command runs through the durable write runner (hydrate →
   // run → advance); in default mode it runs directly against the in-memory
   // domain service. Behaviour is identical to the per-handler branch it replaces.
+  // Process-local serialization of the finance write path (Codex PR #651 P2, Option 2).
+  // Concurrent writes for the same (tenant, data-mode) run one-at-a-time, so the COA
+  // races close for the in-memory / single-instance beta: two creates can't allocate
+  // the same account_code (the 2nd sees the 1st's account), and a PATCH can't bypass the
+  // posted-history lock by racing a concurrent approval (the approval's posting is also
+  // serialized, so the PATCH's hasPostedHistory check — run inside the critical section —
+  // is authoritative). Beta-only / process-local; multi-instance persistent still needs
+  // durable DB serialization (deferred to persistent-activation hardening).
+  const financeWriteMutex = createKeyedMutex();
+
   async function runWrite(req, command, { isTestData: isTestDataOverride } = {}) {
     if (persistentEvents) {
       // Slice 6b-1: resolve the tenant's active Test/Live data mode and thread it
@@ -403,19 +500,27 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
           throw e;
         }
       }
-      return runPersistentWriteFn({
-        tenantId: req.financeTenantId,
-        eventStore: persistentEventStore,
-        storeProvider: createStoreProvider(),
-        // Codex PR #633 P1: the pool used to materialize finance.adapter_jobs rows
-        // so the SQL adapter worker can claim jobs created via the persistent write.
-        adapterJobPool: pgPool,
-        logger,
-        command,
-        isTestData,
-      });
+      // Lock key = tenant + resolved data mode (partitions don't share state, so
+      // test/live writes need not serialize against each other). The mode is resolved
+      // above; if it couldn't be, we already threw 503 and never reach here.
+      const lockKey = `${req.financeTenantId}::${isTestData ? 'test' : 'live'}`;
+      return financeWriteMutex(lockKey, () =>
+        runPersistentWriteFn({
+          tenantId: req.financeTenantId,
+          eventStore: persistentEventStore,
+          storeProvider: createStoreProvider(),
+          // Codex PR #633 P1: the pool used to materialize finance.adapter_jobs rows
+          // so the SQL adapter worker can claim jobs created via the persistent write.
+          adapterJobPool: pgPool,
+          logger,
+          command,
+          isTestData,
+        }),
+      );
     }
-    return command(service);
+    // In-memory: one shared bucket, no data-mode partition → serialize per tenant
+    // (the conservative tenant-only fallback Option 2 allows when no mode is available).
+    return financeWriteMutex(`${req.financeTenantId}::mem`, () => command(service));
   }
 
   // Slice 6 (Codex P1): resolve the Test/Live read partition for the two raw
@@ -456,6 +561,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     pgPool,
     service,
     createStoreProvider,
+    // Thread the (possibly injected) persistent event store so the factory can
+    // back the COA audit-events reader with it when there is no real PG pool.
+    eventStore: persistentEventStore,
   });
   const getSupabaseClient = opts.getSupabaseClient || defaultGetSupabaseClient;
   const isFinanceModuleEnabled =
@@ -610,12 +718,33 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
   // (fail-closed → 503 on a reader error). No create/edit/deactivate here.
   router.get('/accounts', async (req, res) => {
     try {
-      // Codex PR #647 P2: thread the active Test/Live partition so persistent-mode
-      // test-created accounts don't leak into the live chart (or vice versa) —
-      // same posture as /audit-events + /evidence-packs. In-memory ignores it.
-      const isTestData = await resolveReadIsTestData(req);
+      // The COA fold is partition-filtered (folds finance.account.* for the active
+      // partition), BUT `has_posted_history` is derived from the journal_entries
+      // PROJECTION, which (like /cash-flow) is NOT partition-filtered at read. So
+      // resolveReadIsTestData's fail-SAFE-to-test default is UNSAFE here: on an
+      // unresolved data mode it would fold the test COA while stamping
+      // has_posted_history from whatever partition the projection holds — leaking a
+      // live activity bit and wrongly locking test-mode edits. Fail CLOSED instead
+      // (503), mirroring /cash-flow + the write path (Codex PR #651 P2).
+      let isTestData = null;
+      if (persistentEvents) {
+        try {
+          isTestData =
+            (await getFinanceDataMode({ tenantId: req.financeTenantId, req })) ===
+            FINANCE_DATA_MODES.TEST;
+        } catch {
+          const e = new Error(
+            'Cannot resolve the finance data mode; refusing the accounts read to avoid serving the wrong (test/live) partition.',
+          );
+          e.statusCode = 503;
+          e.code = 'FINANCE_DATA_MODE_UNRESOLVED';
+          throw e;
+        }
+      }
       const accounts = await readAdapter.listAccounts(req.financeTenantId, { isTestData });
-      res.json({ status: 'success', data: { accounts } });
+      // Provenance/freshness block — same shared contract as the other finance read
+      // endpoints (the COA folds from finance.account.* events, no named projection).
+      res.json({ status: 'success', data: { accounts, source: buildSource(null) } });
     } catch (error) {
       logger.error('[finance.v2] list accounts failed:', error);
       sendError(res, error);
@@ -1091,6 +1220,92 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] approve finance action failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Editable Chart of Accounts manager (design 2026-06-06 §3). Four
+  // human-only, RBAC-gated mutations that mirror the draft-invoices template
+  // (runWrite → domain method → sendError). The domain service enforces every
+  // lock rule (§2) and the AI-actor block; requireCoaManage adds the RBAC gate
+  // (§5) BEFORE any write so a forbidden caller never reaches the domain layer.
+  // -------------------------------------------------------------------------
+  router.post('/accounts', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.createAccount({
+          tenantId: req.financeTenantId,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] create account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.patch('/accounts/:id', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.updateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] update account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.post('/accounts/:id/deactivate', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.deactivateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] deactivate account failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  router.post('/accounts/:id/reactivate', async (req, res) => {
+    try {
+      requireCoaManage(req);
+      const command = (svc) =>
+        svc.reactivateAccount({
+          tenantId: req.financeTenantId,
+          accountId: req.params.id,
+          actor: buildActor(req),
+          payload: req.body || {},
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] reactivate account failed:', error);
       sendError(res, error);
     }
   });

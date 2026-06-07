@@ -75,8 +75,12 @@ export function rebuildBucketFromEvents(events = []) {
       // (no business projection consumes it), but folded into the bucket so the
       // tenant chart is durable across restarts in persistent mode. The baseline
       // system accounts are NOT events — getTenantCoa re-seeds those on access.
+      // IDEMPOTENT: the FIRST create initializes the account; a later DUPLICATE
+      // create — same name-derived account_id from a concurrent POST race, appended
+      // after the account was already edited/deactivated — must NOT reset that state
+      // (Codex PR #651 P2). Skip if the id is already folded.
       case 'finance.account.created':
-        if (payload.account_id) {
+        if (payload.account_id && !accounts.has(payload.account_id)) {
           accounts.set(payload.account_id, {
             id: payload.account_id,
             tenant_id: event.tenant_id,
@@ -87,7 +91,57 @@ export function rebuildBucketFromEvents(events = []) {
             parent_account_id: null,
             is_system: false,
             is_active: true,
+            // Phase 2: provenance of the account. Pre-source events (auto-create
+            // only existed before the manager) default to 'auto_resolution'.
+            source: payload.source || 'auto_resolution',
           });
+        }
+        break;
+
+      // Phase 2: COA FIELD edit. The COA manager emits the FULL post-edit account
+      // snapshot under payload.account. Upsert/replace by account.id — preserving
+      // first-insertion order (Map.set on an existing key updates in place).
+      // Activation state is PRESERVED from the existing folded value, NOT taken from
+      // the snapshot (Codex PR #651 P2): an ordinary edit's hydrated snapshot can
+      // carry a STALE is_active that raced ahead of a concurrent deactivate, which
+      // would silently reactivate. Activation changes ONLY via created / deactivated /
+      // reactivated. `source` is carried from the snapshot, then existing, then 'manual'.
+      case 'finance.account.updated':
+        if (payload.account && payload.account.id) {
+          const incoming = payload.account;
+          const existing = accounts.get(incoming.id);
+          accounts.set(incoming.id, {
+            id: incoming.id,
+            tenant_id: incoming.tenant_id ?? event.tenant_id,
+            account_code: incoming.account_code,
+            name: incoming.name,
+            classification: incoming.classification,
+            account_type: incoming.account_type,
+            parent_account_id: incoming.parent_account_id ?? null,
+            is_system: incoming.is_system ?? existing?.is_system ?? false,
+            is_active: existing?.is_active ?? incoming.is_active ?? true,
+            source: incoming.source ?? existing?.source ?? 'manual',
+          });
+        }
+        break;
+
+      // Phase 2: COA deactivation. Flip the existing account's is_active to
+      // false in place (no-op if the id is absent — e.g. a deactivation that
+      // races ahead of its create in a malformed stream).
+      case 'finance.account.deactivated':
+        if (payload.account_id && accounts.has(payload.account_id)) {
+          const target = accounts.get(payload.account_id);
+          accounts.set(payload.account_id, { ...target, is_active: false });
+        }
+        break;
+
+      // COA reactivation — a DEDICATED event (symmetric with deactivated), so an
+      // ordinary field edit can never carry activation. Flip is_active:true in place
+      // (no-op if the id is absent). (Codex PR #651 P2)
+      case 'finance.account.reactivated':
+        if (payload.account_id && accounts.has(payload.account_id)) {
+          const target = accounts.get(payload.account_id);
+          accounts.set(payload.account_id, { ...target, is_active: true });
         }
         break;
       // Invoices — both create and update carry the full post-transition invoice

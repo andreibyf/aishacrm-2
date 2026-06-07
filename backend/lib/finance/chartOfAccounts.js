@@ -58,11 +58,32 @@ const AUTO_ACCOUNT_TYPE = Object.freeze({
   Expense: 'Expense',
 });
 
+/**
+ * Curated, closed `account_type` enum per classification (design §2). Grounded in
+ * the types the baseline DEFAULT_COA seeds plus the generic AUTO_ACCOUNT_TYPE per
+ * classification — the editable COA manager may only set a type from this list, and
+ * only one valid for the chosen classification (e.g. `Bank` cannot be Revenue). The
+ * generic per-classification type is listed first so it reads as the default.
+ */
+export const ACCOUNT_TYPES_BY_CLASSIFICATION = Object.freeze({
+  Asset: Object.freeze(['Asset', 'Cash', 'Bank', 'Receivable', 'Suspense']),
+  Liability: Object.freeze(['Liability', 'Payable']),
+  Equity: Object.freeze(['Equity']),
+  Revenue: Object.freeze(['Revenue']),
+  Expense: Object.freeze(['Expense']),
+});
+
+/** True iff `accountType` is curated AND valid for `classification`. */
+export function isValidAccountType(classification, accountType) {
+  const allowed = ACCOUNT_TYPES_BY_CLASSIFICATION[classification];
+  return Array.isArray(allowed) && allowed.includes(accountType);
+}
+
 function safeClassification(classification) {
   return FINANCE_CLASSIFICATIONS.includes(classification) ? classification : 'Expense';
 }
 
-function normalizeName(name) {
+export function normalizeName(name) {
   return String(name ?? '').trim().replace(/\s+/g, ' ');
 }
 
@@ -179,8 +200,41 @@ export function resolveAccount({ tenantId, accounts, classification, account_nam
   return { account, created: true };
 }
 
+/**
+ * Pure factory for a MANUALLY-created account (editable COA manager, design §2).
+ * Mints a name-derived id (immutable, concurrency-safe per Codex #647) — never a
+ * code-derived one — and an `account_code` from the classification's reserved
+ * auto-create range. The display name falls back to 'Unnamed' for a blank name,
+ * matching resolveAccount so the same name keys/ids/stores consistently.
+ *
+ * Does NOT mutate inputs and does NOT validate `account_type` — type/per-
+ * classification validation (`isValidAccountType`) is the caller's job.
+ *
+ * @returns {object} a new non-system, active account object
+ */
+export function buildManualAccount({ tenantId, classification, name, account_type, existingCodes }) {
+  const cls = safeClassification(classification);
+  const displayName = normalizeName(name) || 'Unnamed';
+  const code = nextCodeForClassification(cls, Array.isArray(existingCodes) ? existingCodes : []);
+  return {
+    id: autoAccountId(tenantId, cls, displayName),
+    tenant_id: tenantId,
+    account_code: code,
+    name: displayName,
+    classification: cls,
+    account_type,
+    parent_account_id: null,
+    is_system: false,
+    is_active: true,
+  };
+}
+
 export default {
   DEFAULT_COA,
+  ACCOUNT_TYPES_BY_CLASSIFICATION,
+  isValidAccountType,
+  buildManualAccount,
+  normalizeName,
   normalizeAccountKey,
   deterministicAccountId,
   autoAccountId,
