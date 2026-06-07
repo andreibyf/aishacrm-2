@@ -53,6 +53,7 @@ Three append-only events (validated by the existing `finance.*` pattern in `asse
 - **Account with posted history → display `name` + `account_type` only.** `classification` and `account_code` are **locked**. A `reason` is **required**.
 - **Account with no posted history → full edit** (name, classification, code, type). No `reason` required.
 - "Has posted history" = the `account_id` appears in any `posted`/`reversed` journal line in the active partition.
+- **Pending references:** a no-history account can still be edited while a DRAFT/pending-approval journal references it (those don't count as posted history). The line denormalizes `account_code`/`account_name`/`classification`, so at the **posting boundary** (`approveFinanceAction`) each line is **re-canonicalized against the current account by `account_id`** — the account is the source of truth, so a rename/reclassify/recode before posting is reflected, never posted stale (Codex PR #651 P2). Reversals are exempt (they reverse already-posted activity faithfully). Posting to a now-**inactive** account is refused (`FINANCE_COA_ACCOUNT_INACTIVE`).
 
 **Deactivate** (`POST :id/deactivate`, `reason` **required**):
 - Blocked if `is_system`.

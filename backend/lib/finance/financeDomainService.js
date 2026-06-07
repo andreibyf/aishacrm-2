@@ -1099,8 +1099,33 @@ export function createFinanceDomainService(opts = {}) {
         if (entry) {
           // 1. Post the target entry if not already posted/reversed.
           if (entry.status !== 'posted' && entry.status !== 'reversed') {
+            // Codex PR #651 P2: RE-CANONICALIZE each line's denormalized account metadata
+            // (account_code, account_name, classification) against the CURRENT account (by
+            // account_id) at the POSTING boundary. A no-history account can be renamed /
+            // reclassified / re-coded while a draft is still pending (the field lock only
+            // counts POSTED lines), so the draft's metadata — frozen at draft time — would
+            // otherwise post STALE, and the ledger / P&L / balance-sheet derive from each
+            // line's classification/account_name. account_id is the identity; the line
+            // follows the account. Reversals are EXEMPT — they reverse already-posted
+            // activity faithfully (and a reversed account has posted history, so its
+            // classification/code are locked anyway).
+            const postCoa = getTenantCoa(bucket, tenantId);
+            const canonicalLines = (entry.lines || []).map((line) => {
+              const acct = !entry.reversal_of && line.account_id
+                ? postCoa.find((a) => a.id === line.account_id)
+                : null;
+              return acct
+                ? {
+                    ...clone(line),
+                    account_code: acct.account_code,
+                    account_name: acct.name,
+                    classification: acct.classification,
+                  }
+                : clone(line);
+            });
             postedEntry = {
               ...clone(entry),
+              lines: canonicalLines,
               status: 'posted',
               posted_at: now(),
               posted_by: normalizedActor.id,

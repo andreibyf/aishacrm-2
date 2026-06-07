@@ -302,6 +302,45 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal(service.listJournalEntries(TENANT)[0].status, 'pending_approval');
   });
 
+  test('approving a pending journal RE-CANONICALIZES line metadata against the current account (Codex PR #651 P2)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await service.createAccount({
+      tenantId: TENANT,
+      actor,
+      payload: { name: 'Foo', classification: 'Asset', account_type: 'Asset' },
+    });
+    service.seedJournalEntry({
+      id: 'je_meta',
+      tenant_id: TENANT,
+      status: 'pending_approval',
+      currency: 'usd',
+      lines: [
+        { account_id: acct.id, account_code: acct.account_code, account_name: 'Foo', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+        { account_id: 'a_rev', account_code: '4000', account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+      ],
+    });
+    service.seedApproval({ id: 'appr_meta', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'je_meta', status: 'pending' });
+
+    // no posted history → full edit allowed: rename + reclassify + recode BEFORE posting
+    await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: 'Bar', classification: 'Liability', account_type: 'Liability', account_code: '2099' },
+    });
+
+    await service.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_meta', actor });
+
+    // the posted line reflects the CURRENT account metadata, not the stale draft snapshot
+    const posted = (await service.listAuditEvents(TENANT)).find(
+      (e) => e.event_type === 'finance.journal.posted' && e.payload?.journal_entry?.id === 'je_meta',
+    );
+    const line = posted.payload.journal_entry.lines.find((l) => l.account_id === acct.id);
+    assert.equal(line.account_name, 'Bar');
+    assert.equal(line.classification, 'Liability');
+    assert.equal(line.account_code, '2099');
+  });
+
   test('approving a pending journal that posts to a DEACTIVATED account is rejected at the posting boundary (Codex PR #651 P2)', async () => {
     const service = createFinanceDomainService();
     const acct = await service.createAccount({
