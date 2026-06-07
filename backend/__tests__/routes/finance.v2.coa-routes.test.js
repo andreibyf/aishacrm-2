@@ -179,7 +179,7 @@ describe('PATCH /api/v2/finance/accounts/:id', () => {
     assert.equal(res.body.code, 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY');
   });
 
-  test('editing a system account → 409 FINANCE_COA_SYSTEM_ACCOUNT_LOCKED', async () => {
+  test('renaming a system account WITHOUT a reason → 400 FINANCE_COA_REASON_REQUIRED (system-rename design 2026-06-07)', async () => {
     const service = createFinanceDomainService();
     // 'Cash' (1000) is a seeded system account.
     const cash = service.listAccounts(TENANT_ID).find((a) => a.account_code === '1000');
@@ -188,8 +188,33 @@ describe('PATCH /api/v2/finance/accounts/:id', () => {
     const res = await request(app)
       .patch(`/api/v2/finance/accounts/${cash.id}`)
       .send({ name: 'My Cash' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.code, 'FINANCE_COA_REASON_REQUIRED');
+  });
+
+  test('changing a system account classification/code → 409 FINANCE_COA_FIELD_LOCKED_SYSTEM', async () => {
+    const service = createFinanceDomainService();
+    const cash = service.listAccounts(TENANT_ID).find((a) => a.account_code === '1000');
+    const { app } = buildApp({ service });
+    const res = await request(app)
+      .patch(`/api/v2/finance/accounts/${cash.id}`)
+      .send({ account_code: '9999', reason: 'x' });
     assert.equal(res.status, 409, JSON.stringify(res.body));
-    assert.equal(res.body.code, 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED');
+    assert.equal(res.body.code, 'FINANCE_COA_FIELD_LOCKED_SYSTEM');
+  });
+
+  test('renaming a system account WITH a reason → 200, stays system (system-rename design 2026-06-07)', async () => {
+    const service = createFinanceDomainService();
+    const cash = service.listAccounts(TENANT_ID).find((a) => a.account_code === '1000');
+    const { app } = buildApp({ service });
+    const res = await request(app)
+      .patch(`/api/v2/finance/accounts/${cash.id}`)
+      .send({ name: 'Operating Cash', reason: 'beta display rename' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.status, 'success');
+    assert.equal(res.body.data.name, 'Operating Cash');
+    assert.equal(res.body.data.is_system, true);
+    assert.equal(res.body.data.account_code, '1000');
   });
 
   test('a posted-history edit WITHOUT a reason → 400 FINANCE_COA_REASON_REQUIRED', async () => {
