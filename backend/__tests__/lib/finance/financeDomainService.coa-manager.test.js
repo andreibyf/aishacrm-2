@@ -13,7 +13,9 @@ const updatedEvents = async (service) =>
   (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.updated');
 
 const deactivatedEvents = async (service) =>
-  (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.deactivated');
+  (await service.listAuditEvents(TENANT)).filter(
+    (e) => e.event_type === 'finance.account.deactivated',
+  );
 
 // Seed a journal entry directly into the bucket with a given status + lines so the
 // helpers (__hasPostedHistory / __accountBalanceCents) have posted/reversed history
@@ -28,8 +30,20 @@ describe('financeDomainService — COA helpers (Task 5)', () => {
       id: 'je_posted',
       status: 'posted',
       lines: [
-        { account_id: 'acct_X', account_name: 'X', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
-        { account_id: 'acct_Y', account_name: 'Y', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+        {
+          account_id: 'acct_X',
+          account_name: 'X',
+          classification: 'Asset',
+          debit_cents: 5000,
+          credit_cents: 0,
+        },
+        {
+          account_id: 'acct_Y',
+          account_name: 'Y',
+          classification: 'Revenue',
+          debit_cents: 0,
+          credit_cents: 5000,
+        },
       ],
     });
     const bucket = service.__getBucket(TENANT);
@@ -44,17 +58,41 @@ describe('financeDomainService — COA helpers (Task 5)', () => {
     seedEntry(service, {
       id: 'je_reversed',
       status: 'reversed',
-      lines: [{ account_id: 'acct_R', account_name: 'R', classification: 'Asset', debit_cents: 1000, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_R',
+          account_name: 'R',
+          classification: 'Asset',
+          debit_cents: 1000,
+          credit_cents: 0,
+        },
+      ],
     });
     seedEntry(service, {
       id: 'je_draft',
       status: 'draft',
-      lines: [{ account_id: 'acct_D', account_name: 'D', classification: 'Asset', debit_cents: 2000, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_D',
+          account_name: 'D',
+          classification: 'Asset',
+          debit_cents: 2000,
+          credit_cents: 0,
+        },
+      ],
     });
     seedEntry(service, {
       id: 'je_pending',
       status: 'pending_approval',
-      lines: [{ account_id: 'acct_P', account_name: 'P', classification: 'Asset', debit_cents: 3000, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_P',
+          account_name: 'P',
+          classification: 'Asset',
+          debit_cents: 3000,
+          credit_cents: 0,
+        },
+      ],
     });
     const bucket = service.__getBucket(TENANT);
 
@@ -69,25 +107,57 @@ describe('financeDomainService — COA helpers (Task 5)', () => {
     seedEntry(service, {
       id: 'je_1',
       status: 'posted',
-      lines: [{ account_id: 'acct_A', account_name: 'A', classification: 'Asset', debit_cents: 7000, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_A',
+          account_name: 'A',
+          classification: 'Asset',
+          debit_cents: 7000,
+          credit_cents: 0,
+        },
+      ],
     });
     // posted: −2500 (credit)
     seedEntry(service, {
       id: 'je_2',
       status: 'posted',
-      lines: [{ account_id: 'acct_A', account_name: 'A', classification: 'Asset', debit_cents: 0, credit_cents: 2500 }],
+      lines: [
+        {
+          account_id: 'acct_A',
+          account_name: 'A',
+          classification: 'Asset',
+          debit_cents: 0,
+          credit_cents: 2500,
+        },
+      ],
     });
     // reversed: +500 debit (still counted)
     seedEntry(service, {
       id: 'je_3',
       status: 'reversed',
-      lines: [{ account_id: 'acct_A', account_name: 'A', classification: 'Asset', debit_cents: 500, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_A',
+          account_name: 'A',
+          classification: 'Asset',
+          debit_cents: 500,
+          credit_cents: 0,
+        },
+      ],
     });
     // draft: must be ignored
     seedEntry(service, {
       id: 'je_4',
       status: 'draft',
-      lines: [{ account_id: 'acct_A', account_name: 'A', classification: 'Asset', debit_cents: 99999, credit_cents: 0 }],
+      lines: [
+        {
+          account_id: 'acct_A',
+          account_name: 'A',
+          classification: 'Asset',
+          debit_cents: 99999,
+          credit_cents: 0,
+        },
+      ],
     });
     const bucket = service.__getBucket(TENANT);
 
@@ -206,7 +276,11 @@ describe('financeDomainService — createAccount (Task 6)', () => {
         service.createAccount({
           tenantId: TENANT,
           actor,
-          payload: { name: 'CONSULTING INCOME', classification: 'Revenue', account_type: 'Revenue' },
+          payload: {
+            name: 'CONSULTING INCOME',
+            classification: 'Revenue',
+            account_type: 'Revenue',
+          },
         }),
       (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_DUPLICATE_NAME',
     );
@@ -277,23 +351,44 @@ const makeAccount = (service, payload) =>
 
 // Helper: seed one posted journal line against an account id so it has posted
 // history (and a balance). Posts +amount debit by default.
-const postLine = (service, accountId, { id = `je_${accountId}`, debit = 1000, credit = 0, status = 'posted' } = {}) =>
+const postLine = (
+  service,
+  accountId,
+  { id = `je_${accountId}`, debit = 1000, credit = 0, status = 'posted' } = {},
+) =>
   seedEntry(service, {
     id,
     status,
-    lines: [{ account_id: accountId, account_name: 'X', classification: 'Asset', debit_cents: debit, credit_cents: credit }],
+    lines: [
+      {
+        account_id: accountId,
+        account_name: 'X',
+        classification: 'Asset',
+        debit_cents: debit,
+        credit_cents: credit,
+      },
+    ],
   });
 
 describe('financeDomainService — updateAccount (Task 7)', () => {
   test('no-history full edit: name + classification + account_code + account_type all change', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Misc Asset', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Misc Asset',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     const updated = await service.updateAccount({
       tenantId: TENANT,
       actor,
       accountId: acct.id,
-      payload: { name: 'Service Revenue', classification: 'Revenue', account_code: '4567', account_type: 'Revenue' },
+      payload: {
+        name: 'Service Revenue',
+        classification: 'Revenue',
+        account_code: '4567',
+        account_type: 'Revenue',
+      },
     });
 
     assert.equal(updated.id, acct.id, 'identity is immutable');
@@ -326,14 +421,22 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('posted-history account allows name + account_type change WITH a reason', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Operating', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Operating',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
     postLine(service, acct.id);
 
     const updated = await service.updateAccount({
       tenantId: TENANT,
       actor,
       accountId: acct.id,
-      payload: { name: 'Operating Bank', account_type: 'Bank', reason: 'mark as bank for cash flow' },
+      payload: {
+        name: 'Operating Bank',
+        account_type: 'Bank',
+        reason: 'mark as bank for cash flow',
+      },
     });
 
     assert.equal(updated.name, 'Operating Bank');
@@ -347,7 +450,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('posted-history account rejects a classification change with 409 FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Has History', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Has History',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
     postLine(service, acct.id);
 
     await assert.rejects(
@@ -365,7 +472,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('posted-history account rejects an account_code change with 409 FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Has History 2', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Has History 2',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
     postLine(service, acct.id);
 
     await assert.rejects(
@@ -383,7 +494,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('posted-history change WITHOUT a reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Needs Reason', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Needs Reason',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
     postLine(service, acct.id);
 
     await assert.rejects(
@@ -399,23 +514,107 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
     assert.equal((await updatedEvents(service)).length, 0);
   });
 
-  test('a system account is fully locked: 409 FINANCE_COA_SYSTEM_ACCOUNT_LOCKED on any field', async () => {
+  test('updateAccount: a SYSTEM account can be renamed (name) with a reason; stays system, code/classification unchanged (system-rename design 2026-06-07)', async () => {
     const service = createFinanceDomainService();
-    // 'Cash' (1000) is a seeded system account.
-    const cash = service.listAccounts(TENANT).find((a) => a.account_code === '1000');
-    assert.ok(cash && cash.is_system, 'Cash is a seeded system account');
+    const sys = service.listAccounts(TENANT).find((a) => a.is_system);
+    assert.ok(sys, 'a baseline system account exists');
+    const before = { code: sys.account_code, classification: sys.classification };
 
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: sys.id,
+      payload: { name: `${sys.name} (Operating)`, reason: 'beta display rename' },
+    });
+
+    assert.equal(updated.name, `${sys.name} (Operating)`);
+    assert.equal(updated.is_system, true);
+    assert.equal(updated.account_code, before.code);
+    assert.equal(updated.classification, before.classification);
+
+    // The rename is event-sourced: exactly one finance.account.updated carries the
+    // post-edit snapshot with is_system PRESERVED (replay/rehydration depends on it).
+    const events = await updatedEvents(service);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].payload.account.name, `${sys.name} (Operating)`);
+    assert.equal(events[0].payload.account.is_system, true);
+    assert.equal(events[0].payload.account.account_code, before.code);
+  });
+
+  test('updateAccount: a SYSTEM account account_type change (valid for its classification) with a reason succeeds', async () => {
+    const service = createFinanceDomainService();
+    const sys = service
+      .listAccounts(TENANT)
+      .find((a) => a.is_system && a.classification === 'Asset');
+    const updated = await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: sys.id,
+      payload: { account_type: 'Bank', reason: 'mark as bank' },
+    });
+    assert.equal(updated.account_type, 'Bank');
+  });
+
+  test('updateAccount: a SYSTEM account REJECTS a classification or code change (FINANCE_COA_FIELD_LOCKED_SYSTEM)', async () => {
+    const service = createFinanceDomainService();
+    const sys = service.listAccounts(TENANT).find((a) => a.is_system);
     await assert.rejects(
       () =>
         service.updateAccount({
           tenantId: TENANT,
           actor,
-          accountId: cash.id,
-          payload: { name: 'My Cash' },
+          accountId: sys.id,
+          payload: { account_code: '9999', reason: 'x' },
         }),
-      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED',
+      (e) => e.statusCode === 409 && e.code === 'FINANCE_COA_FIELD_LOCKED_SYSTEM',
     );
     assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('updateAccount: a SYSTEM account rename with a BLANK reason is rejected (FINANCE_COA_REASON_REQUIRED)', async () => {
+    const service = createFinanceDomainService();
+    const sys = service.listAccounts(TENANT).find((a) => a.is_system);
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: sys.id,
+          payload: { name: `${sys.name} X` },
+        }),
+      (e) => e.statusCode === 400 && e.code === 'FINANCE_COA_REASON_REQUIRED',
+    );
+    assert.equal((await updatedEvents(service)).length, 0);
+  });
+
+  test('updateAccount: a SYSTEM account still CANNOT be deactivated (FINANCE_COA_SYSTEM_ACCOUNT_LOCKED)', async () => {
+    const service = createFinanceDomainService();
+    const sys = service.listAccounts(TENANT).find((a) => a.is_system);
+    await assert.rejects(
+      () =>
+        service.deactivateAccount({
+          tenantId: TENANT,
+          actor,
+          accountId: sys.id,
+          payload: { reason: 'x' },
+        }),
+      (e) => e.statusCode === 409 && e.code === 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED',
+    );
+  });
+
+  test('updateAccount: an AI actor still cannot edit a SYSTEM account (FINANCE_COA_AI_FORBIDDEN)', async () => {
+    const service = createFinanceDomainService();
+    const sys = service.listAccounts(TENANT).find((a) => a.is_system);
+    await assert.rejects(
+      () =>
+        service.updateAccount({
+          tenantId: TENANT,
+          actor: aiActor,
+          accountId: sys.id,
+          payload: { name: 'X', reason: 'x' },
+        }),
+      (e) => e.statusCode === 403 && e.code === 'FINANCE_COA_AI_FORBIDDEN',
+    );
   });
 
   test('an unknown account id is 404 FINANCE_COA_ACCOUNT_NOT_FOUND', async () => {
@@ -435,8 +634,16 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('renaming onto another account name collides with 409 FINANCE_COA_DUPLICATE_NAME', async () => {
     const service = createFinanceDomainService();
-    await makeAccount(service, { name: 'Alpha Revenue', classification: 'Revenue', account_type: 'Revenue' });
-    const beta = await makeAccount(service, { name: 'Beta Revenue', classification: 'Revenue', account_type: 'Revenue' });
+    await makeAccount(service, {
+      name: 'Alpha Revenue',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
+    const beta = await makeAccount(service, {
+      name: 'Beta Revenue',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
 
     await assert.rejects(
       () =>
@@ -453,7 +660,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('renaming a no-history account stores the CANONICAL (whitespace-collapsed) name, not the raw input', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Misc', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Misc',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     const updated = await service.updateAccount({
       tenantId: TENANT,
@@ -478,8 +689,16 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('changing account_code onto a code already held by ANOTHER account is 409 FINANCE_COA_DUPLICATE_CODE', async () => {
     const service = createFinanceDomainService();
-    const a = await makeAccount(service, { name: 'Code A', classification: 'Revenue', account_type: 'Revenue' });
-    const b = await makeAccount(service, { name: 'Code B', classification: 'Revenue', account_type: 'Revenue' });
+    const a = await makeAccount(service, {
+      name: 'Code A',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
+    const b = await makeAccount(service, {
+      name: 'Code B',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
 
     // No posted history on `a`, so account_code is editable — but the target code
     // is already held by `b`, so it must collide.
@@ -498,21 +717,38 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('editing account_code to blank/whitespace is rejected with 400 FINANCE_COA_INVALID_CODE (Codex PR #651 P2)', async () => {
     const service = createFinanceDomainService();
-    const a = await makeAccount(service, { name: 'Blank Code', classification: 'Revenue', account_type: 'Revenue' });
+    const a = await makeAccount(service, {
+      name: 'Blank Code',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
     for (const code of ['', '   ']) {
       await assert.rejects(
-        () => service.updateAccount({ tenantId: TENANT, actor, accountId: a.id, payload: { account_code: code } }),
+        () =>
+          service.updateAccount({
+            tenantId: TENANT,
+            actor,
+            accountId: a.id,
+            payload: { account_code: code },
+          }),
         (err) => err.statusCode === 400 && err.code === 'FINANCE_COA_INVALID_CODE',
       );
     }
     // no update event emitted, and the account keeps its original code
     assert.equal((await updatedEvents(service)).length, 0);
-    assert.equal(service.listAccounts(TENANT).find((x) => x.id === a.id).account_code, a.account_code);
+    assert.equal(
+      service.listAccounts(TENANT).find((x) => x.id === a.id).account_code,
+      a.account_code,
+    );
   });
 
   test('an invalid effective account_type for the classification is 400 FINANCE_COA_INVALID_ACCOUNT_TYPE (Bank on Revenue)', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Sales', classification: 'Revenue', account_type: 'Revenue' });
+    const acct = await makeAccount(service, {
+      name: 'Sales',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
 
     await assert.rejects(
       () =>
@@ -529,7 +765,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 
   test('an ai_agent actor is blocked with 403 FINANCE_COA_AI_FORBIDDEN and NO event', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Guarded', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Guarded',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     await assert.rejects(
       () =>
@@ -549,7 +789,11 @@ describe('financeDomainService — updateAccount (Task 7)', () => {
 describe('financeDomainService — deactivateAccount (Task 8)', () => {
   test('success: deactivates an account (is_active false, one deactivated event)', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'To Close', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'To Close',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     const result = await service.deactivateAccount({
       tenantId: TENANT,
@@ -590,7 +834,11 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
 
   test('a nonzero posted balance blocks deactivation: 409 FINANCE_COA_DEACTIVATE_NONZERO_BALANCE', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Has Balance', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Has Balance',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
     postLine(service, acct.id, { debit: 5000, credit: 0 });
 
     await assert.rejects(
@@ -608,7 +856,11 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
 
   test('a missing reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'No Reason Close', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'No Reason Close',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     await assert.rejects(
       () =>
@@ -625,8 +877,17 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
 
   test('deactivating an already-inactive account is an idempotent no-op (returns ok, NO second event)', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Double Close', classification: 'Asset', account_type: 'Asset' });
-    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close once' } });
+    const acct = await makeAccount(service, {
+      name: 'Double Close',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
+    await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'close once' },
+    });
     assert.equal((await deactivatedEvents(service)).length, 1);
 
     // Second deactivation: no-op. reason is NOT required for the no-op path.
@@ -645,8 +906,17 @@ describe('financeDomainService — deactivateAccount (Task 8)', () => {
 describe('financeDomainService — reactivateAccount (Task 9)', () => {
   test('success: reactivates an inactive account, same id preserved, is_active true, dedicated finance.account.reactivated emitted', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Comeback', classification: 'Asset', account_type: 'Asset' });
-    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close' } });
+    const acct = await makeAccount(service, {
+      name: 'Comeback',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
+    await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'close' },
+    });
 
     const result = await service.reactivateAccount({
       tenantId: TENANT,
@@ -665,7 +935,9 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
     // NOT finance.account.updated — so an ordinary field edit can never carry activation
     const updated = await updatedEvents(service);
     assert.equal(updated.length, 0, 'no finance.account.updated emitted for a reactivation');
-    const reactivated = (await service.listAuditEvents(TENANT)).filter((e) => e.event_type === 'finance.account.reactivated');
+    const reactivated = (await service.listAuditEvents(TENANT)).filter(
+      (e) => e.event_type === 'finance.account.reactivated',
+    );
     assert.equal(reactivated.length, 1);
     assert.equal(reactivated[0].payload.account_id, acct.id);
     assert.equal(reactivated[0].payload.reason, 'reopen');
@@ -673,7 +945,11 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
 
   test('reactivating an already-active account is rejected with 409 FINANCE_COA_NOT_INACTIVE', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Still Active', classification: 'Asset', account_type: 'Asset' });
+    const acct = await makeAccount(service, {
+      name: 'Still Active',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
 
     await assert.rejects(
       () =>
@@ -706,15 +982,28 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
 
   test('reactivation that would collide on a name with another active account is 409 FINANCE_COA_REACTIVATE_CONFLICT', async () => {
     const service = createFinanceDomainService();
-    const original = await makeAccount(service, { name: 'Consulting', classification: 'Revenue', account_type: 'Revenue' });
+    const original = await makeAccount(service, {
+      name: 'Consulting',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
     // A second active account, created with a distinct name (so create's dup-name
     // guard passes), then renamed in the bucket onto the SAME normalized
     // (classification, name) as `original` — i.e. a conflict that only exists at
     // reactivate time, after `original` was deactivated. (createAccount/updateAccount
     // reject names that collide with ANY account incl. inactive, so the only way to
     // stage a reactivate-time-only conflict is to seed the colliding active account.)
-    const rival = await makeAccount(service, { name: 'Advisory', classification: 'Revenue', account_type: 'Revenue' });
-    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: original.id, payload: { reason: 'close' } });
+    const rival = await makeAccount(service, {
+      name: 'Advisory',
+      classification: 'Revenue',
+      account_type: 'Revenue',
+    });
+    await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: original.id,
+      payload: { reason: 'close' },
+    });
     // Rename the rival (active) onto the deactivated original's key directly in the bucket.
     const rivalRow = service.__getBucket(TENANT).accounts.find((a) => a.id === rival.id);
     rivalRow.name = 'consulting';
@@ -734,8 +1023,17 @@ describe('financeDomainService — reactivateAccount (Task 9)', () => {
 
   test('a missing reason is rejected with 400 FINANCE_COA_REASON_REQUIRED', async () => {
     const service = createFinanceDomainService();
-    const acct = await makeAccount(service, { name: 'Reopen No Reason', classification: 'Asset', account_type: 'Asset' });
-    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'close' } });
+    const acct = await makeAccount(service, {
+      name: 'Reopen No Reason',
+      classification: 'Asset',
+      account_type: 'Asset',
+    });
+    await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'close' },
+    });
 
     await assert.rejects(
       () =>
@@ -811,8 +1109,20 @@ describe('financeDomainService — #10-retirement integration (custom account �
       id: 'je_stripe_receipt',
       status: 'posted',
       lines: [
-        { account_id: payouts.id, account_name: payouts.name, classification: 'Asset', debit_cents: 30000, credit_cents: 0 },
-        { account_id: revenue.id, account_name: revenue.name, classification: 'Revenue', debit_cents: 0, credit_cents: 30000 },
+        {
+          account_id: payouts.id,
+          account_name: payouts.name,
+          classification: 'Asset',
+          debit_cents: 30000,
+          credit_cents: 0,
+        },
+        {
+          account_id: revenue.id,
+          account_name: revenue.name,
+          classification: 'Revenue',
+          debit_cents: 0,
+          credit_cents: 30000,
+        },
       ],
     });
     // Give the bucket entry a posted_at so the cash flow period buckets deterministically.
@@ -825,7 +1135,11 @@ describe('financeDomainService — #10-retirement integration (custom account �
       false,
       'BEFORE: a generic Asset is not recognized as cash',
     );
-    assert.equal(before.totals.inflow_cents, 0, 'BEFORE: no cash inflow is reported for the Asset-typed account');
+    assert.equal(
+      before.totals.inflow_cents,
+      0,
+      'BEFORE: no cash inflow is reported for the Asset-typed account',
+    );
     assert.deepEqual(before.periods, [], 'BEFORE: no cash-flow period exists at all');
 
     // (3) Mark it Bank. The account now has posted history, so account_type is editable
@@ -834,7 +1148,10 @@ describe('financeDomainService — #10-retirement integration (custom account �
       tenantId: TENANT,
       actor,
       accountId: payouts.id,
-      payload: { account_type: 'Bank', reason: 'reclassify Stripe payout account as a bank account' },
+      payload: {
+        account_type: 'Bank',
+        reason: 'reclassify Stripe payout account as a bank account',
+      },
     });
     assert.equal(updated.account_type, 'Bank');
     assert.equal(updated.classification, 'Asset', 'classification unchanged');
@@ -846,12 +1163,18 @@ describe('financeDomainService — #10-retirement integration (custom account �
       true,
       'AFTER: the now-Bank account_code is in cash_account_codes',
     );
-    assert.equal(after.totals.inflow_cents, 30000, 'AFTER: the posted receipt is reported as a cash inflow');
+    assert.equal(
+      after.totals.inflow_cents,
+      30000,
+      'AFTER: the posted receipt is reported as a cash inflow',
+    );
     assert.equal(after.totals.outflow_cents, 0);
     assert.equal(after.totals.net_cents, 30000);
     assert.equal(after.periods.length, 1, 'AFTER: exactly one cash-flow period');
     assert.equal(after.periods[0].period, '2026-06');
-    const revenueCategory = after.periods[0].by_category.find((c) => c.classification === 'Revenue');
+    const revenueCategory = after.periods[0].by_category.find(
+      (c) => c.classification === 'Revenue',
+    );
     assert.ok(revenueCategory, 'AFTER: the inflow is attributed to the Revenue contra leg');
     assert.equal(revenueCategory.inflow_cents, 30000);
   });
@@ -865,7 +1188,12 @@ describe('financeDomainService — #10-retirement integration (custom account �
     });
     const originalId = acct.id;
     // rename (no posted history → full edit allowed); id is immutable, derived from the OLD name
-    await service.updateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { name: 'Stripe Payouts' } });
+    await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: 'Stripe Payouts' },
+    });
     const renamed = service.listAccounts(TENANT).find((a) => a.id === originalId);
     assert.equal(renamed.name, 'Stripe Payouts');
 
@@ -890,7 +1218,12 @@ describe('financeDomainService — #10-retirement integration (custom account �
       actor,
       payload: { name: 'Stripe', classification: 'Asset', account_type: 'Asset' },
     });
-    await service.updateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { name: 'Stripe Payouts' } });
+    await service.updateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { name: 'Stripe Payouts' },
+    });
 
     // a journal line on the freed OLD name would auto-create an account with the renamed
     // account's id (name-derived) → refuse rather than corrupt the id-keyed chart
@@ -901,8 +1234,18 @@ describe('financeDomainService — #10-retirement integration (custom account �
           actor,
           payload: {
             lines: [
-              { account_name: 'Stripe', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
-              { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+              {
+                account_name: 'Stripe',
+                classification: 'Asset',
+                debit_cents: 5000,
+                credit_cents: 0,
+              },
+              {
+                account_name: 'Revenue',
+                classification: 'Revenue',
+                debit_cents: 0,
+                credit_cents: 5000,
+              },
             ],
           },
         }),
@@ -917,7 +1260,12 @@ describe('financeDomainService — #10-retirement integration (custom account �
       actor,
       payload: { name: 'Old Bank', classification: 'Asset', account_type: 'Bank' },
     });
-    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'closing it' } });
+    await service.deactivateAccount({
+      tenantId: TENANT,
+      actor,
+      accountId: acct.id,
+      payload: { reason: 'closing it' },
+    });
 
     // a draft posting to the inactive account (by id) is refused BEFORE any posting
     await assert.rejects(
@@ -927,8 +1275,19 @@ describe('financeDomainService — #10-retirement integration (custom account �
           actor,
           payload: {
             lines: [
-              { account_id: acct.id, account_name: 'Old Bank', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
-              { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+              {
+                account_id: acct.id,
+                account_name: 'Old Bank',
+                classification: 'Asset',
+                debit_cents: 5000,
+                credit_cents: 0,
+              },
+              {
+                account_name: 'Revenue',
+                classification: 'Revenue',
+                debit_cents: 0,
+                credit_cents: 5000,
+              },
             ],
           },
         }),
@@ -945,7 +1304,12 @@ describe('financeDomainService — #10-retirement integration (custom account �
       payload: {
         lines: [
           { account_name: 'Cash', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
-          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+          {
+            account_name: 'Revenue',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: 5000,
+          },
         ],
       },
     });
