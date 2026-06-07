@@ -29,7 +29,7 @@ import {
   deactivateAccount,
   reactivateAccount,
 } from '@/api/financeWrites';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 import { columnsToRecords } from './financeCsv';
 
 const yesNo = (v) => (v ? 'Yes' : 'No');
@@ -179,10 +179,11 @@ export default function ChartOfAccountsPanel({ tenantId }) {
               />
               Show inactive
             </label>
-            <FinanceCsvExportButton
+            <FinanceExportButtons
               records={columnsToRecords(EXPORT_COLUMNS, visible)}
               area="chart-of-accounts"
               tenantId={tenantId}
+              title="Chart of accounts"
             />
             <Button
               type="button"

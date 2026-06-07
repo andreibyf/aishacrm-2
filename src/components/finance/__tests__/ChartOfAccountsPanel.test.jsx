@@ -98,6 +98,12 @@ describe('ChartOfAccountsPanel', () => {
       expect(screen.getByTestId('finance-export-chart-of-accounts')).toBeInTheDocument();
     });
 
+    it('exposes a PDF export alongside the CSV export', async () => {
+      await renderWith(ALL);
+      // FinancePdfExportButton renders data-testid `finance-pdf-<area>`
+      expect(screen.getByTestId('finance-pdf-chart-of-accounts')).toBeInTheDocument();
+    });
+
     it('renders the empty state when there are no accounts', async () => {
       finance.getAccounts.mockResolvedValue({ accounts: [] });
       render(<ChartOfAccountsPanel tenantId={TENANT} />);

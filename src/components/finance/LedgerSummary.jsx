@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 
 /** Format an integer-cents value as USD currency, defaulting null/NaN to $0.00. */
 function formatCents(cents) {
@@ -241,10 +241,11 @@ export default function LedgerSummary({ tenantId }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <FinanceCsvExportButton
+          <FinanceExportButtons
             records={ledgerStatementRecords(state)}
             area="ledger"
             tenantId={tenantId}
+            title="Ledger summary"
           />
           <Button
             type="button"

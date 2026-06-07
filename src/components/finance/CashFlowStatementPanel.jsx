@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 
 function formatCents(cents) {
   const n = Number.isFinite(cents) ? cents : 0;
@@ -29,12 +29,36 @@ function cashFlowRecords(stmt) {
   const rec = (Period, Line, Inflow, Outflow, Net) => ({ Period, Line, Inflow, Outflow, Net });
   const out = [];
   asArray(stmt.periods).forEach((p) => {
-    out.push(rec(p.period, 'Total', formatCents(p.inflow_cents), formatCents(p.outflow_cents), formatCents(p.net_cents)));
+    out.push(
+      rec(
+        p.period,
+        'Total',
+        formatCents(p.inflow_cents),
+        formatCents(p.outflow_cents),
+        formatCents(p.net_cents),
+      ),
+    );
     asArray(p.by_category).forEach((c) =>
-      out.push(rec(p.period, c.classification, formatCents(c.inflow_cents), formatCents(c.outflow_cents), '')),
+      out.push(
+        rec(
+          p.period,
+          c.classification,
+          formatCents(c.inflow_cents),
+          formatCents(c.outflow_cents),
+          '',
+        ),
+      ),
     );
   });
-  out.push(rec('All periods', 'Total', formatCents(stmt.totals?.inflow_cents), formatCents(stmt.totals?.outflow_cents), formatCents(stmt.totals?.net_cents)));
+  out.push(
+    rec(
+      'All periods',
+      'Total',
+      formatCents(stmt.totals?.inflow_cents),
+      formatCents(stmt.totals?.outflow_cents),
+      formatCents(stmt.totals?.net_cents),
+    ),
+  );
   return out;
 }
 
@@ -78,10 +102,11 @@ export default function CashFlowStatementPanel({ tenantId }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <FinanceCsvExportButton
+            <FinanceExportButtons
               records={cashFlowRecords(stmt)}
               area="cash-flow"
               tenantId={tenantId}
+              title="Cash flow"
             />
             <Button
               type="button"
@@ -93,7 +118,10 @@ export default function CashFlowStatementPanel({ tenantId }) {
               aria-label="Refresh cash flow"
               className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
             >
-              <RefreshCcw className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <RefreshCcw
+                className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
               <span className="ml-1.5 text-xs">Refresh</span>
             </Button>
           </div>
@@ -120,12 +148,28 @@ export default function CashFlowStatementPanel({ tenantId }) {
           ) : (
             <div className="space-y-4" data-testid="finance-cash-flow-statement">
               <div className="grid grid-cols-3 gap-2 text-sm">
-                <Total label="Inflow" value={formatCents(stmt.totals?.inflow_cents)} testId="finance-cash-flow-total-inflow" />
-                <Total label="Outflow" value={formatCents(stmt.totals?.outflow_cents)} testId="finance-cash-flow-total-outflow" />
-                <Total label="Net" value={formatCents(stmt.totals?.net_cents)} testId="finance-cash-flow-total-net" />
+                <Total
+                  label="Inflow"
+                  value={formatCents(stmt.totals?.inflow_cents)}
+                  testId="finance-cash-flow-total-inflow"
+                />
+                <Total
+                  label="Outflow"
+                  value={formatCents(stmt.totals?.outflow_cents)}
+                  testId="finance-cash-flow-total-outflow"
+                />
+                <Total
+                  label="Net"
+                  value={formatCents(stmt.totals?.net_cents)}
+                  testId="finance-cash-flow-total-net"
+                />
               </div>
               {periods.map((p) => (
-                <div key={p.period} className="rounded-md border border-slate-700/40 p-3" data-testid={`finance-cash-flow-period-${p.period}`}>
+                <div
+                  key={p.period}
+                  className="rounded-md border border-slate-700/40 p-3"
+                  data-testid={`finance-cash-flow-period-${p.period}`}
+                >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-slate-100">{p.period}</span>
                     <span className="text-xs text-slate-400">
@@ -137,17 +181,26 @@ export default function CashFlowStatementPanel({ tenantId }) {
                     <table className="mt-2 w-full text-xs">
                       <thead>
                         <tr className="border-b border-slate-700/60 text-left text-slate-400">
-                          <th className="py-1 pr-3 font-medium uppercase tracking-wide">Category</th>
+                          <th className="py-1 pr-3 font-medium uppercase tracking-wide">
+                            Category
+                          </th>
                           <th className="py-1 pr-3 font-medium uppercase tracking-wide">Inflow</th>
                           <th className="py-1 pr-3 font-medium uppercase tracking-wide">Outflow</th>
                         </tr>
                       </thead>
                       <tbody>
                         {p.by_category.map((c) => (
-                          <tr key={c.classification} className="border-b border-slate-700/40 last:border-b-0">
+                          <tr
+                            key={c.classification}
+                            className="border-b border-slate-700/40 last:border-b-0"
+                          >
                             <td className="py-1 pr-3 text-slate-100">{c.classification}</td>
-                            <td className="py-1 pr-3 text-slate-100">{formatCents(c.inflow_cents)}</td>
-                            <td className="py-1 pr-3 text-slate-100">{formatCents(c.outflow_cents)}</td>
+                            <td className="py-1 pr-3 text-slate-100">
+                              {formatCents(c.inflow_cents)}
+                            </td>
+                            <td className="py-1 pr-3 text-slate-100">
+                              {formatCents(c.outflow_cents)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
