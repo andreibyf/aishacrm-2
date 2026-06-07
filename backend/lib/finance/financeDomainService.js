@@ -991,6 +991,31 @@ export function createFinanceDomainService(opts = {}) {
       let reversalSourceId = null;
       if (approval.target_type === 'journal_entry') {
         const target = bucket.journalEntries.find((e) => e.id === approval.target_id);
+
+        // Codex PR #651 P2: re-check account activity at the POSTING boundary, symmetric
+        // with the createJournalDraft inactive-account guard. A draft created while its
+        // account was active can be left pending, the account then deactivated (deactivation
+        // only checks posted BALANCE, so a zero-balance account with a pending draft can
+        // still be deactivated), and approving it here would append finance.journal.posted
+        // lines to an INACTIVE account — bypassing deactivation. Run BEFORE the approval is
+        // durably recorded so a rejection leaves no orphaned approval. Reversals are exempt
+        // (a reversal is a correction of already-posted activity, governed by its own guards).
+        if (target && !target.reversal_of && target.status !== 'posted' && target.status !== 'reversed') {
+          const coa = getTenantCoa(bucket, tenantId);
+          for (const line of target.lines || []) {
+            if (!line.account_id) continue;
+            const acct = coa.find((a) => a.id === line.account_id);
+            if (acct && acct.is_active === false) {
+              const e = new Error(
+                `Cannot post to inactive account "${acct.name}" (${acct.account_code}); reactivate it or void this entry.`,
+              );
+              e.statusCode = 409;
+              e.code = 'FINANCE_COA_ACCOUNT_INACTIVE';
+              throw e;
+            }
+          }
+        }
+
         if (target?.reversal_of) {
           reversalSourceId = target.reversal_of;
           const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);

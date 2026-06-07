@@ -301,4 +301,40 @@ describe('financeDomainService — journal posting on approval (Cash Flow Slice 
     assert.equal((await postedEvents(service)).length, 0);
     assert.equal(service.listJournalEntries(TENANT)[0].status, 'pending_approval');
   });
+
+  test('approving a pending journal that posts to a DEACTIVATED account is rejected at the posting boundary (Codex PR #651 P2)', async () => {
+    const service = createFinanceDomainService();
+    const acct = await service.createAccount({
+      tenantId: TENANT,
+      actor,
+      payload: { name: 'Pending Acct', classification: 'Asset', account_type: 'Bank' },
+    });
+    // a PENDING (unposted) journal referencing the account → posted balance stays 0
+    service.seedJournalEntry({
+      id: 'je_pending',
+      tenant_id: TENANT,
+      status: 'pending_approval',
+      currency: 'usd',
+      lines: [
+        { account_id: acct.id, account_name: 'Pending Acct', classification: 'Asset', debit_cents: 5000, credit_cents: 0 },
+        { account_id: 'a_rev', account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: 5000 },
+      ],
+    });
+    service.seedApproval({ id: 'appr_pending', tenant_id: TENANT, target_type: 'journal_entry', target_id: 'je_pending', status: 'pending' });
+
+    // deactivation is allowed (zero POSTED balance) even though a pending draft references it
+    await service.deactivateAccount({ tenantId: TENANT, actor, accountId: acct.id, payload: { reason: 'closing' } });
+
+    // approving the pending journal must now be refused — it would post to an inactive account
+    await assert.rejects(
+      () => service.approveFinanceAction({ tenantId: TENANT, approvalId: 'appr_pending', actor }),
+      (err) => err.statusCode === 409 && err.code === 'FINANCE_COA_ACCOUNT_INACTIVE',
+    );
+    // nothing posted, and the rejection happened BEFORE the approval was recorded (no orphan)
+    assert.equal((await postedEvents(service)).length, 0);
+    const approved = (await service.listAuditEvents(TENANT)).filter(
+      (e) => e.event_type === 'finance.approval.approved' && e.payload?.approval?.id === 'appr_pending',
+    );
+    assert.equal(approved.length, 0);
+  });
 });
