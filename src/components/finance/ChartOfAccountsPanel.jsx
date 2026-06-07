@@ -28,6 +28,31 @@ import {
   deactivateAccount,
   reactivateAccount,
 } from '@/api/financeWrites';
+import FinanceCsvExportButton from './FinanceCsvExportButton';
+import { columnsToRecords } from './financeCsv';
+
+const yesNo = (v) => (v ? 'Yes' : 'No');
+
+// Columns for the read-only CSV export — preserves the per-panel export affordance
+// the COA tab had before it became editable (it previously used FinanceTablePanel).
+// A serialization of the displayed accounts; no mutation.
+const EXPORT_COLUMNS = [
+  { key: 'account_code', label: 'Code' },
+  { key: 'name', label: 'Name' },
+  { key: 'classification', label: 'Classification' },
+  { key: 'account_type', label: 'Type' },
+  { key: 'is_system', label: 'System', render: (r) => yesNo(r.is_system) },
+  { key: 'is_active', label: 'Active', render: (r) => yesNo(r.is_active) },
+  {
+    key: 'has_posted_history',
+    label: 'Posted history',
+    render: (r) => yesNo(r.has_posted_history),
+  },
+  // NOTE: no `source` column. The COA read API (`listAccounts`) returns the raw
+  // account objects + `has_posted_history`; account objects carry no `source` field
+  // (only the finance.account.created EVENT payload does, read back solely by the
+  // projection-backed adapter). A `source` column would export '—' for every row.
+];
 
 // Curated, closed account_type enum per classification (design §2). KEEP IN SYNC
 // with backend/lib/finance/chartOfAccounts.js `ACCOUNT_TYPES_BY_CLASSIFICATION`
@@ -59,8 +84,7 @@ const COA_ERROR_MESSAGES = {
     'This account has a nonzero posted balance and cannot be deactivated.',
   FINANCE_COA_REASON_REQUIRED: 'A reason is required for this change.',
   FINANCE_COA_NOT_INACTIVE: 'That account is already active.',
-  FINANCE_COA_REACTIVATE_CONFLICT:
-    'Reactivation conflicts with an active account on code or name.',
+  FINANCE_COA_REACTIVATE_CONFLICT: 'Reactivation conflicts with an active account on code or name.',
   FINANCE_COA_AI_FORBIDDEN: 'AI assistants cannot manage the chart of accounts.',
   FINANCE_COA_FORBIDDEN: 'You do not have permission to manage the chart of accounts.',
 };
@@ -72,7 +96,6 @@ function messageForError(err) {
 
 const inputCls =
   'mt-1 w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 placeholder:text-slate-500 disabled:opacity-50';
-const yesNo = (v) => (v ? 'Yes' : 'No');
 
 function defaultTypeFor(classification) {
   return (ACCOUNT_TYPES_BY_CLASSIFICATION[classification] || [])[0] || '';
@@ -154,6 +177,11 @@ export default function ChartOfAccountsPanel({ tenantId }) {
               />
               Show inactive
             </label>
+            <FinanceCsvExportButton
+              records={columnsToRecords(EXPORT_COLUMNS, visible)}
+              area="chart-of-accounts"
+              tenantId={tenantId}
+            />
             <Button
               type="button"
               variant="outline"
@@ -327,7 +355,9 @@ function CreateAccountForm({ busy, onCreate }) {
         data-testid="coa-create-submit"
         className="bg-amber-600 text-white hover:bg-amber-700"
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
           <>
             <PlusCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
             New account

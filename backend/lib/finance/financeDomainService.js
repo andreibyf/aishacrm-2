@@ -76,7 +76,9 @@ function createStore() {
 // recorded as approved, so persistentWriteRunner never advances a losing approval into
 // the approval_queue while its reversal stays unpostable. Non-secret — a stable id.
 function reversalApprovalEventId(sourceEntryId) {
-  const h = createHash('sha256').update(`finance.reversal.approval-claim:${sourceEntryId}`).digest('hex');
+  const h = createHash('sha256')
+    .update(`finance.reversal.approval-claim:${sourceEntryId}`)
+    .digest('hex');
   const variant = ((parseInt(h.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${variant}${h.slice(18, 20)}-${h.slice(20, 32)}`;
 }
@@ -585,7 +587,8 @@ export function createFinanceDomainService(opts = {}) {
                 allowed: true,
                 requiresApproval: false,
                 riskLevel: 'low',
-                explanation: 'Auto-created chart-of-accounts account (COA management; not money movement).',
+                explanation:
+                  'Auto-created chart-of-accounts account (COA management; not money movement).',
                 braidTraceId,
               }),
             }),
@@ -827,7 +830,13 @@ export function createFinanceDomainService(opts = {}) {
     // a general approve control. Surfaced ONLY by the test-mode create panel; live
     // posting still goes through the real human approval flow. Human-gated:
     // approveFinanceAction blocks AI actors.
-    async simulatePostedDealWon({ tenantId, actor, payload = {}, requestId = null, braidTraceId = null }) {
+    async simulatePostedDealWon({
+      tenantId,
+      actor,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       // A posted CASH sale (Debit Cash / Credit Revenue) — touches a cash account
       // so it shows in the cash-flow statement, unlike simulateDealWon's default
       // Debit-AR credit sale (revenue accrued, cash not yet received). Callers may
@@ -837,11 +846,27 @@ export function createFinanceDomainService(opts = {}) {
         ...payload,
         memo: payload.memo || 'Simulated posted cash sale',
         lines: payload.lines || [
-          { account_name: 'Cash', classification: 'Asset', debit_cents: amountCents, credit_cents: 0 },
-          { account_name: 'Revenue', classification: 'Revenue', debit_cents: 0, credit_cents: amountCents },
+          {
+            account_name: 'Cash',
+            classification: 'Asset',
+            debit_cents: amountCents,
+            credit_cents: 0,
+          },
+          {
+            account_name: 'Revenue',
+            classification: 'Revenue',
+            debit_cents: 0,
+            credit_cents: amountCents,
+          },
         ],
       };
-      const sim = await this.simulateDealWon({ tenantId, actor, payload: simPayload, requestId, braidTraceId });
+      const sim = await this.simulateDealWon({
+        tenantId,
+        actor,
+        payload: simPayload,
+        requestId,
+        braidTraceId,
+      });
       const approved = await this.approveFinanceAction({
         tenantId,
         approvalId: sim.approval.id,
@@ -1000,7 +1025,12 @@ export function createFinanceDomainService(opts = {}) {
         // lines to an INACTIVE account — bypassing deactivation. Run BEFORE the approval is
         // durably recorded so a rejection leaves no orphaned approval. Reversals are exempt
         // (a reversal is a correction of already-posted activity, governed by its own guards).
-        if (target && !target.reversal_of && target.status !== 'posted' && target.status !== 'reversed') {
+        if (
+          target &&
+          !target.reversal_of &&
+          target.status !== 'posted' &&
+          target.status !== 'reversed'
+        ) {
           const coa = getTenantCoa(bucket, tenantId);
           for (const line of target.lines || []) {
             if (!line.account_id) continue;
@@ -1021,7 +1051,9 @@ export function createFinanceDomainService(opts = {}) {
           const source = bucket.journalEntries.find((e) => e.id === target.reversal_of);
           if (source) {
             if (source.reversed_by && source.reversed_by !== target.id) {
-              const error = new Error('This entry has already been reversed by another reversal; a second reversal cannot be posted.');
+              const error = new Error(
+                'This entry has already been reversed by another reversal; a second reversal cannot be posted.',
+              );
               error.statusCode = 409;
               throw error;
             }
@@ -1076,7 +1108,9 @@ export function createFinanceDomainService(opts = {}) {
         } catch (err) {
           // The durable PK rejected a concurrent reversal approval of the same source.
           if (err?.code === 'FINANCE_EVENT_STORE_DUPLICATE_EVENT_ID' && reversalSourceId) {
-            const e = new Error('This entry is already being reversed by a concurrent request; a second reversal cannot be approved.');
+            const e = new Error(
+              'This entry is already being reversed by a concurrent request; a second reversal cannot be approved.',
+            );
             e.statusCode = 409;
             throw e;
           }
@@ -1094,6 +1128,11 @@ export function createFinanceDomainService(opts = {}) {
       // (finance.ai.no_money_movement), so an AI actor can never post. Idempotent:
       // an already-posted/reversed entry is left untouched.
       let postedEntry = null;
+      // The posted, non-reversal entry whose LINKED draft adapter-job payloads must
+      // be re-canonicalized below. Tracked SEPARATELY from `postedEntry` (which is
+      // only the entry THIS call freshly posted, and stays the return-value contract)
+      // so the refresh also fires on an idempotent heal-retry — see the gate below.
+      let recanonicalizeTargetEntry = null;
       if (approval.target_type === 'journal_entry') {
         const entry = bucket.journalEntries.find((e) => e.id === approval.target_id);
         if (entry) {
@@ -1111,9 +1150,10 @@ export function createFinanceDomainService(opts = {}) {
             // classification/code are locked anyway).
             const postCoa = getTenantCoa(bucket, tenantId);
             const canonicalLines = (entry.lines || []).map((line) => {
-              const acct = !entry.reversal_of && line.account_id
-                ? postCoa.find((a) => a.id === line.account_id)
-                : null;
+              const acct =
+                !entry.reversal_of && line.account_id
+                  ? postCoa.find((a) => a.id === line.account_id)
+                  : null;
               return acct
                 ? {
                     ...clone(line),
@@ -1169,7 +1209,12 @@ export function createFinanceDomainService(opts = {}) {
               // reject) from an idempotent re-approval of the same one (same id →
               // heal). Carried by the finance.journal.reversed payload, so it
               // survives projection rebuild + persistent rehydration.
-              const reversedOriginal = { ...clone(original), status: 'reversed', reversed_by: entry.id, updated_at: now() };
+              const reversedOriginal = {
+                ...clone(original),
+                status: 'reversed',
+                reversed_by: entry.id,
+                updated_at: now(),
+              };
               await appendEvent(
                 bucket,
                 createFinanceEventEnvelope({
@@ -1188,6 +1233,17 @@ export function createFinanceDomainService(opts = {}) {
               Object.assign(original, reversedOriginal);
             }
           }
+
+          // After the posting step `entry` carries the canonical posted lines —
+          // whether THIS call posted it (step 1 ran) OR it was already posted on an
+          // idempotent heal-retry. Drive the linked-adapter-draft refresh below off
+          // `entry`, NOT the just-posted `postedEntry`: a retry after a crash between
+          // the durable finance.journal.posted and the promoter must still refresh the
+          // draft, otherwise the (unconditional) promoter would queue the STALE
+          // pre-edit payload. Reversals are exempt — their lines aren't re-canonicalized.
+          if (entry.status === 'posted' && !entry.reversal_of) {
+            recanonicalizeTargetEntry = entry;
+          }
         }
       }
 
@@ -1196,6 +1252,45 @@ export function createFinanceDomainService(opts = {}) {
       // linkage is structural via shared `aggregate_id` — see §4.1 of the
       // slice-2 adapter runtime design freeze. The promoter is a no-op for
       // approvals whose target has no linked adapter_jobs.
+      // Codex PR #651 P2: re-canonicalizing the posted journal lines (step 1 above) must
+      // also refresh any LINKED draft adapter-job payload. simulateDealWon builds that
+      // payload from the PRE-EDIT draft, so without this the ledger posts canonical account
+      // metadata while the provider worker would queue a stale account_ref/classification.
+      // Rebuild the canonical from the re-canonicalized entry before the promoter queues
+      // the job. Keyed off `recanonicalizeTargetEntry` (any posted, non-reversal target),
+      // NOT `postedEntry` (this-call-only): a heal-retry whose entry was already posted
+      // still has a draft adapter_job to refresh — otherwise the unconditional promoter
+      // below would queue the stale pre-edit payload.
+      if (recanonicalizeTargetEntry && Array.isArray(bucket.adapterJobs)) {
+        const linkedDrafts = bucket.adapterJobs.filter(
+          (job) =>
+            job.status === 'draft' &&
+            job.aggregate_type === 'journal_entry' &&
+            job.aggregate_id === approval.target_id,
+        );
+        // Only re-map when a linked draft actually exists AND the posted entry has lines —
+        // the canonical mapper requires a balanced journal, and most approvals have no
+        // linked adapter job (a line-less entry has nothing to re-canonicalize).
+        if (
+          linkedDrafts.length > 0 &&
+          Array.isArray(recanonicalizeTargetEntry.lines) &&
+          recanonicalizeTargetEntry.lines.length > 0
+        ) {
+          const refreshedCanonical =
+            mapJournalEntryToQuickBooksCanonical(recanonicalizeTargetEntry);
+          for (const job of linkedDrafts) {
+            // clone() per job: each draft must OWN its payload. Sharing one
+            // `refreshedCanonical` reference across multiple linked drafts (e.g. one
+            // per provider) would alias them — and the promoter's `{...job}` snapshot
+            // is shallow, so the aliasing survives into the emitted sync_queued events.
+            // A later in-place payload mutation on one job would silently corrupt the
+            // others; clone keeps the service's clone-everywhere isolation posture.
+            job.payload = clone(refreshedCanonical);
+            job.updated_at = now();
+          }
+        }
+      }
+
       const promotion = await promoteLinkedAdapterJobs({
         bucket,
         tenantId,
@@ -1254,7 +1349,9 @@ export function createFinanceDomainService(opts = {}) {
 
       // 3. account_type must be curated AND valid for the classification.
       if (!isValidAccountType(classification, account_type)) {
-        const e = new Error(`Invalid account_type '${account_type}' for classification '${classification}'`);
+        const e = new Error(
+          `Invalid account_type '${account_type}' for classification '${classification}'`,
+        );
         e.statusCode = 400;
         e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
         throw e;
@@ -1339,7 +1436,8 @@ export function createFinanceDomainService(opts = {}) {
             allowed: true,
             requiresApproval: false,
             riskLevel: 'low',
-            explanation: 'Manually created chart-of-accounts account (COA management; not money movement).',
+            explanation:
+              'Manually created chart-of-accounts account (COA management; not money movement).',
             braidTraceId,
           }),
         }),
@@ -1355,7 +1453,14 @@ export function createFinanceDomainService(opts = {}) {
     // replay fold upserts it identically. Server is the authority for every lock
     // rule (§2): UI hiding is presentation only. Human-only (ai_agent fail-closed
     // by the governance default for ManageChartOfAccountsCommand).
-    async updateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+    async updateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
 
@@ -1396,15 +1501,20 @@ export function createFinanceDomainService(opts = {}) {
       // shape) so a same-value re-submit isn't treated as a change.
       const has = (field) => Object.prototype.hasOwnProperty.call(payload, field);
       const nameChanged = has('name') && String(payload.name ?? '') !== String(current.name ?? '');
-      const classificationChanged = has('classification') && payload.classification !== current.classification;
-      const codeChanged = has('account_code') && String(payload.account_code ?? '') !== String(current.account_code ?? '');
+      const classificationChanged =
+        has('classification') && payload.classification !== current.classification;
+      const codeChanged =
+        has('account_code') &&
+        String(payload.account_code ?? '') !== String(current.account_code ?? '');
       const typeChanged = has('account_type') && payload.account_type !== current.account_type;
       const anyChange = nameChanged || classificationChanged || codeChanged || typeChanged;
 
       // 4. Posted-history lock rules (design §2).
       const posted = hasPostedHistory(bucket, accountId);
       if (posted && (classificationChanged || codeChanged)) {
-        const e = new Error('Classification and account_code are locked on an account with posted history.');
+        const e = new Error(
+          'Classification and account_code are locked on an account with posted history.',
+        );
         e.statusCode = 409;
         e.code = 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY';
         throw e;
@@ -1417,7 +1527,9 @@ export function createFinanceDomainService(opts = {}) {
       }
 
       // 5. Validate the EFFECTIVE (merged) result.
-      const effectiveClassification = classificationChanged ? payload.classification : current.classification;
+      const effectiveClassification = classificationChanged
+        ? payload.classification
+        : current.classification;
       // Canonicalize a changed name to the same whitespace-collapsed form
       // createAccount stores (via buildManualAccount → normalizeName), so a rename
       // can never persist a non-canonical "  Spaced    Name  " into the snapshot the
@@ -1427,7 +1539,9 @@ export function createFinanceDomainService(opts = {}) {
       const effectiveName = nameChanged ? normalizeName(payload.name) : current.name;
       const effectiveType = typeChanged ? payload.account_type : current.account_type;
       // Trim a changed code so the stored value is canonical (mirrors name handling).
-      const effectiveCode = codeChanged ? String(payload.account_code ?? '').trim() : current.account_code;
+      const effectiveCode = codeChanged
+        ? String(payload.account_code ?? '').trim()
+        : current.account_code;
 
       if (classificationChanged && !FINANCE_CLASSIFICATIONS.includes(effectiveClassification)) {
         const e = new Error(`Invalid account classification: ${effectiveClassification}`);
@@ -1454,7 +1568,9 @@ export function createFinanceDomainService(opts = {}) {
       // The effective (classification, account_type) pair must always be valid — a
       // classification change can invalidate the existing type, and vice-versa.
       if (!isValidAccountType(effectiveClassification, effectiveType)) {
-        const e = new Error(`Invalid account_type '${effectiveType}' for classification '${effectiveClassification}'`);
+        const e = new Error(
+          `Invalid account_type '${effectiveType}' for classification '${effectiveClassification}'`,
+        );
         e.statusCode = 400;
         e.code = 'FINANCE_COA_INVALID_ACCOUNT_TYPE';
         throw e;
@@ -1463,8 +1579,14 @@ export function createFinanceDomainService(opts = {}) {
       // and only against OTHER accounts.
       if (nameChanged || classificationChanged) {
         const newKey = normalizeAccountKey(effectiveClassification, effectiveName);
-        if (coa.some((a) => a.id !== accountId && normalizeAccountKey(a.classification, a.name) === newKey)) {
-          const e = new Error(`An account named '${effectiveName}' already exists in ${effectiveClassification}`);
+        if (
+          coa.some(
+            (a) => a.id !== accountId && normalizeAccountKey(a.classification, a.name) === newKey,
+          )
+        ) {
+          const e = new Error(
+            `An account named '${effectiveName}' already exists in ${effectiveClassification}`,
+          );
           e.statusCode = 409;
           e.code = 'FINANCE_COA_DUPLICATE_NAME';
           throw e;
@@ -1498,7 +1620,10 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account: clone(updated), reason: payload.reason != null ? String(payload.reason).trim() : null },
+          payload: {
+            account: clone(updated),
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,
@@ -1516,7 +1641,14 @@ export function createFinanceDomainService(opts = {}) {
     // Phase 3b (editable COA manager, design §2 + plan Task 8). Deactivate a
     // non-system account with a zero posted balance. Append `finance.account.deactivated`
     // {account_id, reason} before flipping is_active. Human-only.
-    async deactivateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+    async deactivateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
 
@@ -1587,12 +1719,16 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account_id: current.id, reason: payload.reason != null ? String(payload.reason).trim() : null },
+          payload: {
+            account_id: current.id,
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,
             riskLevel: 'low',
-            explanation: 'Deactivated chart-of-accounts account (COA management; not money movement).',
+            explanation:
+              'Deactivated chart-of-accounts account (COA management; not money movement).',
             braidTraceId,
           }),
         }),
@@ -1606,7 +1742,14 @@ export function createFinanceDomainService(opts = {}) {
     // non-system, currently-inactive account — preserving its id — after re-checking
     // uniqueness against currently-ACTIVE accounts. Rides `finance.account.updated`
     // with an is_active:true snapshot (same event the replay fold flips on). Human-only.
-    async reactivateAccount({ tenantId, actor, accountId, payload = {}, requestId = null, braidTraceId = null }) {
+    async reactivateAccount({
+      tenantId,
+      actor,
+      accountId,
+      payload = {},
+      requestId = null,
+      braidTraceId = null,
+    }) {
       const bucket = getTenantBucket(store, tenantId);
       const normalizedActor = createActor(actor);
 
@@ -1694,12 +1837,16 @@ export function createFinanceDomainService(opts = {}) {
           actorType: normalizedActor.type,
           requestId,
           braidTraceId,
-          payload: { account_id: current.id, reason: payload.reason != null ? String(payload.reason).trim() : null },
+          payload: {
+            account_id: current.id,
+            reason: payload.reason != null ? String(payload.reason).trim() : null,
+          },
           policyDecision: createGovernanceDecision({
             allowed: true,
             requiresApproval: false,
             riskLevel: 'low',
-            explanation: 'Reactivated chart-of-accounts account (COA management; not money movement).',
+            explanation:
+              'Reactivated chart-of-accounts account (COA management; not money movement).',
             braidTraceId,
           }),
         }),

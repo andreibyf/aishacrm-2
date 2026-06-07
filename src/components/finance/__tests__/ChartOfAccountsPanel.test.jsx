@@ -27,23 +27,47 @@ import ChartOfAccountsPanel from '../ChartOfAccountsPanel';
 const TENANT = 'a11dfb63-4b18-4eb8-872e-747af2e37c46';
 
 const SYSTEM_ACCT = {
-  id: 'sys1', account_code: '1000', name: 'Cash', classification: 'Asset',
-  account_type: 'Cash', is_system: true, is_active: true, has_posted_history: false,
+  id: 'sys1',
+  account_code: '1000',
+  name: 'Cash',
+  classification: 'Asset',
+  account_type: 'Cash',
+  is_system: true,
+  is_active: true,
+  has_posted_history: false,
   source: 'system',
 };
 const NO_HISTORY_ACCT = {
-  id: 'nh1', account_code: '4500', name: 'Consulting Fees', classification: 'Revenue',
-  account_type: 'Revenue', is_system: false, is_active: true, has_posted_history: false,
+  id: 'nh1',
+  account_code: '4500',
+  name: 'Consulting Fees',
+  classification: 'Revenue',
+  account_type: 'Revenue',
+  is_system: false,
+  is_active: true,
+  has_posted_history: false,
   source: 'manual',
 };
 const POSTED_ACCT = {
-  id: 'ph1', account_code: '1500', name: 'Operating Bank', classification: 'Asset',
-  account_type: 'Bank', is_system: false, is_active: true, has_posted_history: true,
+  id: 'ph1',
+  account_code: '1500',
+  name: 'Operating Bank',
+  classification: 'Asset',
+  account_type: 'Bank',
+  is_system: false,
+  is_active: true,
+  has_posted_history: true,
   source: 'manual',
 };
 const INACTIVE_ACCT = {
-  id: 'in1', account_code: '5500', name: 'Old Expense', classification: 'Expense',
-  account_type: 'Expense', is_system: false, is_active: false, has_posted_history: false,
+  id: 'in1',
+  account_code: '5500',
+  name: 'Old Expense',
+  classification: 'Expense',
+  account_type: 'Expense',
+  is_system: false,
+  is_active: false,
+  has_posted_history: false,
   source: 'manual',
 };
 
@@ -66,6 +90,12 @@ describe('ChartOfAccountsPanel', () => {
       await renderWith(ALL);
       expect(screen.getByText('Consulting Fees')).toBeInTheDocument();
       expect(screen.getByText('Operating Bank')).toBeInTheDocument();
+    });
+
+    it('preserves the per-panel CSV export affordance (regression: the COA tab was exportable)', async () => {
+      await renderWith(ALL);
+      // FinanceCsvExportButton renders data-testid `finance-export-<area>`
+      expect(screen.getByTestId('finance-export-chart-of-accounts')).toBeInTheDocument();
     });
 
     it('renders the empty state when there are no accounts', async () => {
@@ -98,19 +128,25 @@ describe('ChartOfAccountsPanel', () => {
       await renderWith(ALL);
       const typeSelect = screen.getByTestId('coa-create-type');
       // Asset (default) → Asset/Cash/Bank/Receivable/Suspense
-      let opts = within(typeSelect).getAllByRole('option').map((o) => o.value);
+      let opts = within(typeSelect)
+        .getAllByRole('option')
+        .map((o) => o.value);
       expect(opts).toEqual(['Asset', 'Cash', 'Bank', 'Receivable', 'Suspense']);
 
       fireEvent.change(screen.getByTestId('coa-create-classification'), {
         target: { value: 'Liability' },
       });
-      opts = within(typeSelect).getAllByRole('option').map((o) => o.value);
+      opts = within(typeSelect)
+        .getAllByRole('option')
+        .map((o) => o.value);
       expect(opts).toEqual(['Liability', 'Payable']);
 
       fireEvent.change(screen.getByTestId('coa-create-classification'), {
         target: { value: 'Revenue' },
       });
-      opts = within(typeSelect).getAllByRole('option').map((o) => o.value);
+      opts = within(typeSelect)
+        .getAllByRole('option')
+        .map((o) => o.value);
       expect(opts).toEqual(['Revenue']);
     });
 

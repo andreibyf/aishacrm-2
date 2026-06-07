@@ -742,7 +742,9 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
         }
       }
       const accounts = await readAdapter.listAccounts(req.financeTenantId, { isTestData });
-      res.json({ status: 'success', data: { accounts } });
+      // Provenance/freshness block — same shared contract as the other finance read
+      // endpoints (the COA folds from finance.account.* events, no named projection).
+      res.json({ status: 'success', data: { accounts, source: buildSource(null) } });
     } catch (error) {
       logger.error('[finance.v2] list accounts failed:', error);
       sendError(res, error);
