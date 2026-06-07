@@ -75,8 +75,12 @@ export function rebuildBucketFromEvents(events = []) {
       // (no business projection consumes it), but folded into the bucket so the
       // tenant chart is durable across restarts in persistent mode. The baseline
       // system accounts are NOT events — getTenantCoa re-seeds those on access.
+      // IDEMPOTENT: the FIRST create initializes the account; a later DUPLICATE
+      // create — same name-derived account_id from a concurrent POST race, appended
+      // after the account was already edited/deactivated — must NOT reset that state
+      // (Codex PR #651 P2). Skip if the id is already folded.
       case 'finance.account.created':
-        if (payload.account_id) {
+        if (payload.account_id && !accounts.has(payload.account_id)) {
           accounts.set(payload.account_id, {
             id: payload.account_id,
             tenant_id: event.tenant_id,

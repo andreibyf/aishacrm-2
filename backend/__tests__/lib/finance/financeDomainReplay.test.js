@@ -381,6 +381,32 @@ describe('rebuildBucketFromEvents — COA account.updated / account.deactivated 
     assert.equal(account.is_active, false, 'but activation is preserved — no silent reactivation');
   });
 
+  // Codex PR #651 P2: a duplicate create event (same name-derived id from a concurrent
+  // POST race) appended AFTER an edit/deactivation must be idempotent — it must NOT
+  // reset the account to its created (active, original-fields) state.
+  test('a LATE duplicate finance.account.created does not reset an edited/deactivated account', () => {
+    const events = [
+      createdEvent(),
+      {
+        event_type: 'finance.account.updated',
+        tenant_id: T,
+        payload: {
+          account: {
+            id: ACCOUNT_ID, tenant_id: T, account_code: '1050', name: 'Renamed', classification: 'Asset',
+            account_type: 'Bank', is_system: false, is_active: true, parent_account_id: null, source: 'manual',
+          },
+          reason: 'rename',
+        },
+      },
+      { event_type: 'finance.account.deactivated', tenant_id: T, payload: { account_id: ACCOUNT_ID, reason: 'close' } },
+      createdEvent(), // the delayed duplicate create lands last
+    ];
+    const account = findAccount(rebuildBucketFromEvents(events));
+    assert.equal(account.name, 'Renamed', 'the edit survives the late duplicate create');
+    assert.equal(account.account_type, 'Bank');
+    assert.equal(account.is_active, false, 'the deactivation survives the late duplicate create');
+  });
+
   test('account.deactivated for an unknown id is a no-op', () => {
     const events = [
       {

@@ -178,9 +178,10 @@ export function createProjectionBackedFinanceReadAdapter({
             folded.set(p.account_id, { ...folded.get(p.account_id), is_active: true });
           }
         } else if (eventType === 'finance.account.created') {
-          // flat payload → upsert the account (is_active:true; a duplicate concurrent
-          // create just re-asserts it active, matching replay).
-          if (!p.account_id) continue;
+          // IDEMPOTENT: the FIRST create initializes the account; a later DUPLICATE
+          // create (same name-derived id from a concurrent POST race, appended after
+          // intervening edit/deactivation) must NOT reset that state (Codex PR #651 P2).
+          if (!p.account_id || folded.has(p.account_id)) continue;
           folded.set(p.account_id, {
             id: p.account_id,
             tenant_id: tenantId,
