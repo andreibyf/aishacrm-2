@@ -30,4 +30,5 @@ describe('[PLATFORM] functions.js exports', () => {
     expect(functions.getAuthorizationHeader).toBeDefined();
     expect(typeof functions.getAuthorizationHeader).toBe('function');
   });
-});
+
+  t

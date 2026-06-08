@@ -126,6 +126,8 @@ export default function ContactDetailPanel({
         recipientName: `${contact.first_name} ${contact.last_name}`,
         context: `Contact from ${accountName || contact.account_name || 'company'}, current status: ${contact.status}`,
         prompt: emailPrompt,
+        // Required for superadmin users — validateTenantAccess returns 400 on POST without tenant_id
+        tenant_id: contact.tenant_id || user?.tenant_id,
       });
 
       if (response.data && response.data.draft) {
@@ -410,10 +412,4 @@ export default function ContactDetailPanel({
         onOpenChange={setShowSendDocDialog}
         relatedTo="contact"
         relatedId={contact.id}
-        defaultRecipientEmail={contact.email || ''}
-        defaultRecipientName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
-        onSent={handleDocumentSent}
-      />
-    </>
-  );
-}
+        defaultRecipientEmail={contact.email |

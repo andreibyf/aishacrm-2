@@ -571,9 +571,15 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
         }
       }
 
-      // Filter by assigned_to_team (team UUID)
+      // Filter by assigned_to_team (team UUID) — validate before querying; Braid may pass
+      // literal placeholder strings (e.g. "team_id_placeholder") that crash PostgREST
+      // with "invalid input syntax for type uuid".
       if (assigned_to_team !== undefined && assigned_to_team !== null && assigned_to_team !== '') {
-        q = q.eq('assigned_to_team', assigned_to_team);
+        if (UUID_REGEX.test(assigned_to_team)) {
+          q = q.eq('assigned_to_team', assigned_to_team);
+        } else {
+          logger.warn(`[Activities V2] Ignoring non-UUID assigned_to_team: ${assigned_to_team}`);
+        }
       }
 
       // Handle simple text search via 'q' parameter (WAF-safe alternative to MongoDB $regex)
@@ -791,7 +797,8 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
         if (
           assigned_to_team !== undefined &&
           assigned_to_team !== null &&
-          assigned_to_team !== ''
+          assigned_to_team !== '' &&
+          UUID_REGEX.test(assigned_to_team)
         ) {
           statsQuery = statsQuery.eq('assigned_to_team', assigned_to_team);
         }
@@ -1629,14 +1636,4 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
-      logger.error('Error in v2 activity delete:', error);
-      // Ensure CORS headers are present in error responses (using secure origin whitelist)
-      if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
-        setCorsHeaders(req.headers.origin, res, true);
-      }
-      res.status(500).json({ status: 'error', message: error.message });
-    }
-  });
-
-  return router;
-}
+      logg

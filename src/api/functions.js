@@ -1240,9 +1240,13 @@ const createFunctionProxy = (functionName) => {
       try {
         const BACKEND_URL = getBackendUrl();
         const payload = args[0] || {};
+        const authHeader = await getAuthorizationHeader();
         const response = await fetch(`${BACKEND_URL}/api/ai/generate-email-draft`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {}),
+          },
           credentials: 'include',
           body: JSON.stringify(payload),
         });
@@ -1706,8 +1710,4 @@ export const seedDocumentation = functionsProxy.seedDocumentation;
 
 export const submitClientRequirement = functionsProxy.submitClientRequirement;
 
-export const approveClientRequirement = functionsProxy.approveClientRequirement;
-
-export const elevenLabsCRMAccess = functionsProxy.elevenLabsCRMAccess;
-
-export const executeWorkflow = functionsProxy.executeWorkflow;
+export const approveClientRequirement = functionsProxy.approveClientR
