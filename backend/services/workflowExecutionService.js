@@ -1239,8 +1239,15 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
           case 'ai_summarize': {
             const textToSummarize = replaceVariables(cfg.text || '');
-            const explicitProvider = cfg.provider ? String(cfg.provider).toLowerCase() : null;
-            const explicitModel = cfg.model || null;
+            // Per-step cfg.provider wins; fallback to env var (default: local AI server).
+            const explicitProvider = cfg.provider
+              ? String(cfg.provider).toLowerCase()
+              : process.env.WORKFLOW_SUMMARY_LLM_PROVIDER || 'local';
+            const explicitModel =
+              cfg.model ||
+              process.env.WORKFLOW_SUMMARY_LLM_MODEL ||
+              process.env.LOCAL_LLM_MODEL ||
+              null;
             const tenantConfig = selectLLMConfigForTenant({
               capability: 'chat_light',
               tenantSlugOrId: context.tenantId,
