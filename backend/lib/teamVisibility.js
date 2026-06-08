@@ -167,6 +167,15 @@ export async function getVisibilityScope(user, supabase) {
     return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
   }
 
+  // Internal service tokens (Braid, MCP server-to-server) are pre-authenticated
+  // trusted callers. Their user.id may be a non-UUID role string such as
+  // "agent:ops_manager:dev" which would crash the UUID-typed team_members
+  // columns below. They have no team memberships and need full tenant visibility
+  // to execute on behalf of users — bypass immediately.
+  if (user.internal === true) {
+    return { bypass: true, teamIds: [], employeeIds: [], mode: 'bypass', highestRole: 'admin' };
+  }
+
   const tenantId = user.tenant_id || user.tenant_uuid;
   if (!tenantId) {
     logger.warn('[TeamVisibility] User has no tenant_id → own-only');

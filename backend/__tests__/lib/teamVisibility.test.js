@@ -113,6 +113,50 @@ describe('teamVisibility — getVisibilityScope', () => {
     });
   });
 
+  // ── Internal service tokens ────────────────────────────────────────────
+
+  describe('internal service tokens (Braid / MCP)', () => {
+    it('internal=true token gets bypass=true without hitting team_members', async () => {
+      // Braid uses non-UUID sub values like "agent:ops_manager:dev".
+      // Passing that to the UUID-typed team_members columns crashes Postgres.
+      // The bypass must trigger before any DB query.
+      const user = {
+        id: 'agent:ops_manager:dev',
+        role: 'employee',
+        internal: true,
+        tenant_id: 't1',
+      };
+      // mockSupabase with no tables — any DB call would return empty, but
+      // more importantly the UUID crash would surface if bypass doesn't fire first.
+      const scope = await getVisibilityScope(user, mockSupabase());
+      assert.strictEqual(scope.bypass, true);
+      assert.strictEqual(scope.mode, 'bypass');
+      assert.strictEqual(scope.highestRole, 'admin');
+    });
+
+    it('internal=true with no tenant_id still gets bypass (tenant validated upstream)', async () => {
+      const user = { id: 'agent:sales_agent:dev', internal: true };
+      const scope = await getVisibilityScope(user, mockSupabase());
+      assert.strictEqual(scope.bypass, true);
+    });
+
+    it('internal=false employee does NOT get bypass', async () => {
+      const user = {
+        id: 'u-regular',
+        role: 'employee',
+        internal: false,
+        tenant_id: 't1',
+        employee_role: 'member',
+      };
+      const sb = mockSupabase({
+        modulesettings: { data: { settings: { visibility_mode: 'hierarchical' } }, error: null },
+        team_members: { data: [], error: null },
+      });
+      const scope = await getVisibilityScope(user, sb);
+      assert.strictEqual(scope.bypass, false);
+    });
+  });
+
   // ── No user / no tenant ────────────────────────────────────────────────
 
   describe('edge cases — missing user or tenant', () => {
