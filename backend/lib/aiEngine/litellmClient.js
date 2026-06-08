@@ -41,19 +41,30 @@ export async function callLiteLLMVirtual({
   const headers = { 'Content-Type': 'application/json' };
   if (masterKey) headers.Authorization = `Bearer ${masterKey}`;
 
-  const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(300_000),
-  });
+  let resp;
+  try {
+    resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(300_000),
+    });
+  } catch (err) {
+    return { status: 'error', error: `LiteLLM transport error: ${err.message}` };
+  }
 
   if (!resp.ok) {
-    const text = await resp.text();
+    const text = await resp.text().catch(() => '(unreadable body)');
     return { status: 'error', error: `LiteLLM HTTP ${resp.status}: ${text}` };
   }
 
-  const json = await resp.json();
+  let json;
+  try {
+    json = await resp.json();
+  } catch {
+    return { status: 'error', error: 'LiteLLM response was not valid JSON' };
+  }
+
   return {
     status: 'success',
     content: String(json?.choices?.[0]?.message?.content || ''),

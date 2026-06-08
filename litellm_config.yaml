@@ -75,6 +75,16 @@ router_settings:
   num_retries: 2
   timeout: 300
   fallbacks:
+    # Virtual alias fallbacks — when the primary provider/model for an alias fails,
+    # LiteLLM falls back to these. Provider-wildcard fallbacks below do NOT cover aliases.
+    - aisha-mcp: ['openai/gpt-4o']
+    - aisha-task: ['openai/gpt-4o']
+    - aisha-summary: ['groq/llama-3.3-70b-versatile']
+    - aisha-workflow: ['groq/llama-3.3-70b-versatile']
+    - aisha-whatsapp: ['openai/gpt-4o']
+    # aisha-vision primary is gpt-4o; fall back to claude-sonnet which is also vision-capable
+    - aisha-vision: ['anthropic/claude-sonnet-4-20250514']
+    # Provider-level fallbacks (for explicit provider/* pass-through calls)
     - 'anthropic/*': ['openai/*']
     - 'openai/*': ['groq/*']
     - 'local/*': ['groq/*']

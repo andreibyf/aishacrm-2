@@ -97,9 +97,13 @@ async function callLLMWithFailover({
   explicitApiKey = null,
 } = {}) {
   // If caller passes explicit provider+model, use the LiteLLM wildcard pass-through route
-  // (e.g. "anthropic/claude-sonnet-4-20250514"). Otherwise default to the aisha-mcp alias.
+  // (e.g. "anthropic/claude-sonnet-4-20250514"). If only model is supplied (no provider),
+  // pass it as-is — it may be a virtual alias or a fully-qualified model string.
+  // Default to the aisha-mcp alias when neither is provided.
   const virtualModel =
-    explicitProvider && explicitModel ? `${explicitProvider}/${explicitModel}` : 'aisha-mcp';
+    explicitProvider && explicitModel
+      ? `${explicitProvider}/${explicitModel}`
+      : explicitModel || 'aisha-mcp';
 
   const startMs = Date.now();
   const result = await callLiteLLMVirtual({
