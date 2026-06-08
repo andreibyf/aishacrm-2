@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Contacts — Compose AI Email returns 500 (LLM key not found): wrong call signatures on `selectLLMConfigForTenant` / `resolveLLMApiKey`** (`backend/routes/ai.js`, `backend/__tests__/lib/aiEngine.callSignature.test.js`): the legacy `/api/ai/generate-email-draft` path called `selectLLMConfigForTenant(tenantId, 'chat_tools')` and `resolveLLMApiKey(llmConfig.provider, tenantId)` — both functions take a **single object argument** (`{ capability, tenantSlugOrId }` / `{ provider, tenantSlugOrId }`). Passing positional args caused silent destructuring failure: `tenantSlugOrId` was always `undefined`, `provider` always defaulted to `'openai'` regardless of tenant config, and the key lookup exhausted all fallbacks and returned `null`. `createProviderClient` then received a null API key, and the downstream provider call threw a 500. Fix: (1) rewrite both calls to the correct object-arg form matching every other caller in `ai.js`; (2) add explicit `!apiKey → 400` guard so a missing key returns a useful error instead of crashing with 500. Regression test added verifying `selectLLMConfigForTenant` returns a valid config shape when called correctly.
+
 - **Braid activities — non-UUID `assigned_to_team` crashes `GET /api/v2/activities` with Postgres UUID parse error** (`backend/routes/activities.v2.js`, `backend/__tests__/routes/activities.filters.test.js`): `listActivities` in Braid passes literal placeholder strings (`user_id_placeholder`, `team_id_placeholder`) for parameters the LLM doesn't have values for. The `assigned_to_team` query param was forwarded directly to PostgREST `.eq()` on a UUID column without validation, causing `invalid input syntax for type uuid: "team_id_placeholder"` (error surfacing at line 740). `assigned_to` was already safe (goes through `resolveAssignedTo()` which returns null on lookup failure). Fix: add `UUID_REGEX.test()` guard around the two `assigned_to_team` `.eq()` calls (main query + stats subquery) — invalid values are silently ignored with a `logger.warn`. The upstream Braid tool is intentionally left unchanged; filtering bad params at the route boundary is the correct defence-in-depth layer. Tests: 3 new cases in `activities.filters.test.js` (non-UUID `assigned_to_team`, non-UUID `assigned_to`, both placeholders together) all assert 200 + valid response.
 
 - **Contacts — Compose AI Email returns 400 for superadmin users (missing `tenant_id`)** (`src/components/contacts/ContactDetailPanel.jsx`, `src/api/functions.js`, `src/api/functions.test.js`): `handleGenerateEmail` called `generateAIEmailDraft` without a `tenant_id` in the payload. `validateTenantAccess` returns `400 "Superadmin write operations require a tenant_id"` for superadmin users on POST without a tenant. For non-superadmin users the middleware auto-injects the tenant, so the bug was invisible until the user is a superadmin. Fix: (1) `ContactDetailPanel.jsx` — add `tenant_id: contact.tenant_id || user?.tenant_id` to the payload; (2) `functions.js` — add `Authorization: Bearer` header via `getAuthorizationHeader()` to harden against Docker cross-port cookie loss. Test added verifying `generateAIEmailDraft` is callable with `tenant_id` in the payload.
@@ -1871,4 +1873,173 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `get_contact_details` - Retrieve full details of a specific contact by ID
   - `get_note_details` - Retrieve full details of a specific note by ID
   - All tools registered in `TOOL_REGISTRY` and `BRAID_PARAM_ORDER`
-  - Functions add
+  - Functions added to respective `.braid` files (leads, opportunities, contacts, notes)
+
+- **Wake Word Detection:** Added hands-free "Hey Aisha" wake word activation for realtime voice
+  - New `useWakeWordDetection` hook using Web Speech API (free, browser-native)
+  - Wake words: "Aisha", "Hey Aisha", "Hi Aisha" (and common mishearings)
+  - End phrases: "Thanks", "Thank you", "Goodbye", "That's all" - returns to listening mode
+  - Auto-sleep timeout after 60 seconds of silence
+  - Visual indicator shows listening status (pulsing green dot when waiting for wake word)
+  - "Wake Word" toggle button in AiSidebar - enables continuous background listening
+  - When wake word detected: activates realtime voice session automatically
+  - When end phrase detected: gracefully ends session and returns to standby
+
+---
+
+## [Unreleased]
+
+### Added
+
+- Phase 4 closure documentation
+
+### Security
+
+- **[CRITICAL] AI Tenant Authorization:** Added `validateUserTenantAccess` helper function to `ai.js` routes
+  - Prevents cross-tenant data access via AI assistant
+  - All AI conversation and chat endpoints now validate user is authorized for requested tenant
+  - Superadmins can access any tenant; other roles restricted to their assigned tenant
+  - Returns friendly error messages for unauthorized access attempts
+  - Comprehensive security logging for blocked access attempts
+  - Secured endpoints: `/conversations`, `/conversations/:id`, `/conversations/:id/messages`, `/conversations/:id/stream`, `/chat`, `/snapshot-internal`
+
+- **[CRITICAL] Braid Tool Access Token:** Added `TOOL_ACCESS_TOKEN` contract to `braidIntegration-v2.js`
+  - Acts as a "key to the toolshed" - tools cannot execute without a valid access token
+  - Token is only provided after tenant authorization passes in `ai.js`
+  - Double-layer security: authorization must pass AND token must be present
+  - All `executeBraidTool` calls now require the access token parameter
+  - Invalid/missing tokens are logged and blocked with friendly error messages
+
+---
+
+## [1.1.x] - December 4, 2025
+
+### Phase 4 – Full Cutover Complete
+
+#### Changed
+
+- **AiSHA Executive Avatar:** New branded portrait applied across all AI assistant surfaces
+  - `AiSidebar.jsx` - Main assistant panel hero
+  - `AiAssistantLauncher.jsx` - Header pill avatar
+  - `AvatarWidget.jsx` - Floating avatar widget
+  - `FloatingAIWidget.jsx` - Secondary floating widget
+  - `AIAssistantWidget.jsx` - Legacy widget (updated)
+  - `AgentChat.jsx` - Agent chat interface (updated)
+  - `Layout.jsx` - Navigation sidebar (updated)
+
+#### Fixed
+
+- **Documentation relevance and coverage refresh (`src/pages/Documentation.jsx`, `src/pages/Layout.jsx`, `src/utils/navigationConfig.js`):** Documentation visibility now derives from the same shared sidebar navigation source used by Layout instead of a separate docs-only mapping, reducing drift between visible modules and visible docs. Updated section coverage with missing module docs for Communications, AI Campaigns, AI Suggestions, Project Management, Workers, Payment Portal, Client Onboarding, Client Requirements, and Developer AI, and expanded the universal AI documentation to cover the AiSHA side panel, Task AiSHA, optional voice, and WhatsApp access. Changes remain scoped to navigation metadata and Documentation UI/content only.
+- Legacy `/aisha-avatar.jpg` references migrated to `/assets/aisha-executive-portrait.jpg`
+- Documentation updated with correct avatar paths
+
+#### Documentation
+
+- Created `PHASE_4_CLOSURE_SUMMARY.md`
+- Created `BRANDING_GUIDE.md`
+- Created `UI_STANDARDS.md`
+- Created `ASSET_LICENSES.md`
+- Updated `AISHA_ASSISTANT_USER_GUIDE.md`
+- Updated `AISHA_CRM_DEVELOPER_MANUAL.md`
+
+---
+
+## [1.1.9] - November 29, 2025
+
+### Security & Monitoring Improvements
+
+#### Fixed
+
+- MCP/N8N container health check false negatives
+- IDR dashboard blocked IPs display
+- False positive bulk extraction alerts
+
+#### Added
+
+- External threat intelligence integration (GreyNoise, AbuseIPDB)
+- Blocked IPs management UI in Internal Performance Dashboard
+
+#### Changed
+
+- Renamed duplicate "Security" tabs to "Auth & Access" and "Intrusion Detection"
+
+---
+
+## [1.0.95] - November 28, 2025
+
+### Dashboard Fixes
+
+#### Fixed
+
+- Phantom counts showing incorrect data when tables empty
+- Cross-tenant cache leakage in dashboard bundle
+- Superadmin global view regression
+
+---
+
+## [1.0.92] - November 27, 2025
+
+### Performance
+
+#### Fixed
+
+- Tenant resolution cache consolidated to single canonical resolver
+- AI routes now use shared cache (previously bypassed)
+
+---
+
+## [1.0.91] - November 27, 2025
+
+### Integrations
+
+#### Fixed
+
+- GitHub health issue reporter idempotency
+- Duplicate issue prevention with Redis-backed deduplication
+- Retry logic with exponential backoff
+
+---
+
+## [1.0.90] - November 26, 2025
+
+### MCP/Braid Integration
+
+#### Fixed
+
+- MCP connectivity restored in production
+- Health proxy endpoint enhanced with diagnostics
+- GitHub token injection for container authentication
+
+---
+
+## [1.0.75] - November 26, 2025
+
+### API
+
+#### Added
+
+- Backend endpoint for `generateUniqueId` function
+- Eliminated console warnings in production
+
+---
+
+## [1.0.74] - November 25, 2025
+
+### Infrastructure
+
+#### Fixed
+
+- `APP_BUILD_VERSION` runtime injection via `env-config.js`
+- Tenant/employee fetch failures resolved
+
+---
+
+## [Earlier Versions]
+
+See `orchestra/PLAN.md` for detailed history of bugfixes and features.
+
+---
+
+_This changelog was created as part of Phase 4 closure on December 4, 2025._
+
+# migrated to gitea Sat, May 2, 2026 1:32:37 PM

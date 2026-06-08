@@ -5513,10 +5513,22 @@ ${conversationSummary}`;
       }
 
       // Legacy fallback: generate a simple draft via AI Engine (no entity context)
-      const llmConfig = tenantId
-        ? await selectLLMConfigForTenant(tenantId, 'chat_tools')
-        : { provider: 'openai', model: 'gpt-4o-mini' };
-      const apiKey = await resolveLLMApiKey(llmConfig.provider, tenantId);
+      // NOTE: Both selectLLMConfigForTenant and resolveLLMApiKey take a single object arg —
+      // calling them with positional args silently breaks provider/key resolution.
+      const llmConfig = selectLLMConfigForTenant({
+        capability: 'chat_tools',
+        tenantSlugOrId: tenantId || null,
+      });
+      const apiKey = await resolveLLMApiKey({
+        tenantSlugOrId: tenantId || null,
+        provider: llmConfig.provider,
+      });
+      if (!apiKey) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No LLM API key configured for this tenant. Add an API key in Settings → Integrations.',
+        });
+      }
       const client = createProviderClient(llmConfig.provider, apiKey);
 
       // Pick a random opener to force variety
