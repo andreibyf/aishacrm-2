@@ -1710,4 +1710,8 @@ export const seedDocumentation = functionsProxy.seedDocumentation;
 
 export const submitClientRequirement = functionsProxy.submitClientRequirement;
 
-export const approveClientRequirement = functionsProxy.approveClientR
+export const approveClientRequirement = functionsProxy.approveClientRequirement;
+
+export const elevenLabsCRMAccess = functionsProxy.elevenLabsCRMAccess;
+
+export const executeWorkflow = functionsProxy.executeWorkflow;

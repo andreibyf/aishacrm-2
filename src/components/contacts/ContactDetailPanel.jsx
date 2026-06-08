@@ -412,4 +412,10 @@ export default function ContactDetailPanel({
         onOpenChange={setShowSendDocDialog}
         relatedTo="contact"
         relatedId={contact.id}
-        defaultRecipientEmail={contact.email |
+        defaultRecipientEmail={contact.email || ''}
+        defaultRecipientName={`${contact.first_name || ''} ${contact.last_name || ''}`.trim()}
+        onSent={handleDocumentSent}
+      />
+    </>
+  );
+}
