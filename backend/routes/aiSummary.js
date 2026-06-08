@@ -53,7 +53,7 @@ router.post('/summarize-person-profile', async (req, res) => {
     let ai_summary = null;
     let source = 'fallback';
     const provider = process.env.SUMMARY_LLM_PROVIDER || 'local';
-    const model = process.env.SUMMARY_LLM_MODEL || 'llama3.2:3b';
+    const model = process.env.SUMMARY_LLM_MODEL || 'qwen-14b';
     const temperature = parseFloat(process.env.SUMMARY_TEMPERATURE ?? '0.1');
 
     try {

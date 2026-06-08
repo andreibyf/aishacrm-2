@@ -13,7 +13,9 @@ import {
 } from '../lib/telemetry/index.js';
 import { randomUUID } from 'crypto';
 import logger from '../lib/logger.js';
+import OpenAI from 'openai';
 import { getOpenAIClient } from '../lib/aiProvider.js';
+import { selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import {
   getBraidSystemPrompt,
   generateToolSchemas,
@@ -572,10 +574,28 @@ Provide a clear summary of what you did.`;
       const MAX_ITERATIONS = 5;
       let finalResponse = null;
 
-      // Get OpenAI client for tool calling
-      const client = getOpenAIClient();
-      const model = agentProfile.model || 'gpt-4o-mini';
+      // Route through LiteLLM when enabled (respects LLM_PROVIDER / per-tenant overrides),
+      // fall back to direct OpenAI client for local dev without LiteLLM.
       const temperature = agentProfile.temperature || 0.2;
+      let client;
+      let model;
+
+      if (process.env.LITELLM_ENABLED === 'true') {
+        const llmConfig = selectLLMConfigForTenant({
+          capability: 'chat_tools',
+          tenantSlugOrId: tenant_id,
+        });
+        client = new OpenAI({
+          apiKey: process.env.LITELLM_MASTER_KEY || 'no-key',
+          baseURL: `${(process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '')}/v1`,
+        });
+        model = `${llmConfig.provider}/${llmConfig.model}`;
+        logger.info(`[ExecuteTask] Routing via LiteLLM: ${model}`);
+      } else {
+        client = getOpenAIClient();
+        model = agentProfile.model || 'gpt-4o-mini';
+        logger.info(`[ExecuteTask] Routing direct OpenAI: ${model}`);
+      }
 
       logger.info(
         `[ExecuteTask] Calling LLM with ${allowedTools.length} tools for agent ${assignee}`,
