@@ -51,6 +51,26 @@ export function sanitizeUuidInput(value, options = {}) {
 }
 
 /**
+ * Resolve the tenant_id to use for system-originated rows (system_logs, audit_log, etc.).
+ * Prevents `invalid input syntax for type uuid: "system"` insert failures by coercing
+ * system aliases and invalid UUIDs:
+ *   1. If the supplied value is a valid UUID, use it.
+ *   2. Else, if SYSTEM_TENANT_ID env is a valid UUID, use that.
+ *   3. Else, return null (the column is nullable).
+ *
+ * @param {string|null|undefined} rawTenantId - Caller-supplied tenant id (defaults to 'system')
+ * @returns {string|null} A valid UUID or null
+ */
+export function resolveSystemTenantId(rawTenantId) {
+  const sanitized = sanitizeUuidInput(rawTenantId ?? 'system');
+  if (sanitized) return sanitized;
+  if (process.env.SYSTEM_TENANT_ID) {
+    return sanitizeUuidInput(process.env.SYSTEM_TENANT_ID);
+  }
+  return null;
+}
+
+/**
  * Sanitize filter object to ensure UUID columns only receive valid UUIDs
  *
  * @param {object} filter - Filter object (e.g., { tenant_id: 'abc', user_id: 'system' })

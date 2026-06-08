@@ -5,6 +5,7 @@
 
 import jwt from 'jsonwebtoken';
 import { getAccessSecret } from './jwtSecret.js';
+import { resolveSystemTenantId } from './uuidValidator.js';
 
 /**
  * Create an audit log entry
@@ -39,7 +40,7 @@ export async function createAuditLog(supabase, params) {
     }
 
     const auditLog = {
-      tenant_id,
+      tenant_id: resolveSystemTenantId(tenant_id),
       user_email,
       action,
       entity_type,
@@ -50,9 +51,7 @@ export async function createAuditLog(supabase, params) {
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
-      .from('audit_log')
-      .insert([auditLog]);
+    const { error } = await supabase.from('audit_log').insert([auditLog]);
 
     if (error) {
       throw new Error(error.message);
@@ -93,10 +92,12 @@ export function getUserEmailFromRequest(req) {
  * @returns {string} IP address
  */
 export function getClientIP(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0].trim() ||
+  return (
+    req.headers['x-forwarded-for']?.split(',')[0].trim() ||
     req.headers['x-real-ip'] ||
     req.connection?.remoteAddress ||
     req.socket?.remoteAddress ||
     req.ip ||
-    'unknown';
+    'unknown'
+  );
 }

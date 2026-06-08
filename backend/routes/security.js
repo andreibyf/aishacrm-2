@@ -10,14 +10,15 @@
  * Protected: Requires superadmin role
  */
 
-import express from "express";
+import express from 'express';
 import logger from '../lib/logger.js';
+import { resolveSystemTenantId } from '../lib/uuidValidator.js';
 import {
   getSecurityStatus,
   manuallyBlockIP,
   unblockIP,
-  clearTrackingData
-} from "../middleware/intrusionDetection.js";
+  clearTrackingData,
+} from '../middleware/intrusionDetection.js';
 
 /**
  * Enrich IP threat data with external free threat intelligence APIs
@@ -42,8 +43,8 @@ async function enrichIPThreatData(ipList) {
       // GreyNoise Community API (free, no key required)
       const greynoiseUrl = `https://api.greynoise.io/v3/community/${ipData.ip}`;
       const greynoiseResp = await fetch(greynoiseUrl, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3000),
       });
 
       if (greynoiseResp.ok) {
@@ -53,7 +54,7 @@ async function enrichIPThreatData(ipList) {
           riot: greynoiseData.riot || false,
           classification: greynoiseData.classification || 'unknown',
           name: greynoiseData.name || null,
-          link: greynoiseData.link || null
+          link: greynoiseData.link || null,
         };
 
         // Boost threat score if known malicious
@@ -71,10 +72,10 @@ async function enrichIPThreatData(ipList) {
         const abuseUrl = `https://api.abuseipdb.com/api/v2/check?ipAddress=${ipData.ip}&maxAgeInDays=90&verbose`;
         const abuseResp = await fetch(abuseUrl, {
           headers: {
-            'Key': ABUSEIPDB_KEY,
-            'Accept': 'application/json'
+            Key: ABUSEIPDB_KEY,
+            Accept: 'application/json',
           },
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(3000),
         });
 
         if (abuseResp.ok) {
@@ -87,7 +88,7 @@ async function enrichIPThreatData(ipList) {
               isp: abuseData.data.isp || null,
               domain: abuseData.data.domain || null,
               is_whitelisted: abuseData.data.isWhitelisted || false,
-              total_reports: abuseData.data.totalReports || 0
+              total_reports: abuseData.data.totalReports || 0,
             };
 
             // Boost threat score based on abuse confidence
@@ -105,7 +106,7 @@ async function enrichIPThreatData(ipList) {
     enrichedIPs.push(enriched);
 
     // Rate limiting: small delay between requests
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   // Re-sort by updated threat scores
@@ -139,15 +140,15 @@ export default function createSecurityRoutes(_pgPool) {
    * POST /api/security/emergency-unblock
    * Emergency endpoint to unblock IPs without authentication
    * Requires secret token from environment variable
-   * 
+   *
    * USE CASE: When admin is locked out and can't access UI
-   * 
+   *
    * Example:
    * curl -X POST http://localhost:4001/api/security/emergency-unblock \
    *   -H "Content-Type: application/json" \
    *   -d '{"secret":"YOUR_SECRET","ip":"203.0.113.42"}'
    */
-  router.post("/emergency-unblock", async (req, res) => {
+  router.post('/emergency-unblock', async (req, res) => {
     try {
       const { secret, ip } = req.body;
 
@@ -155,7 +156,7 @@ export default function createSecurityRoutes(_pgPool) {
       if (!secret || !ip) {
         return res.status(400).json({
           status: 'error',
-          message: 'Missing required fields: secret, ip'
+          message: 'Missing required fields: secret, ip',
         });
       }
 
@@ -165,7 +166,7 @@ export default function createSecurityRoutes(_pgPool) {
         return res.status(503).json({
           status: 'error',
           message: 'Emergency unblock not configured (missing IDR_EMERGENCY_SECRET)',
-          hint: 'Set IDR_EMERGENCY_SECRET in environment variables'
+          hint: 'Set IDR_EMERGENCY_SECRET in environment variables',
         });
       }
 
@@ -173,7 +174,7 @@ export default function createSecurityRoutes(_pgPool) {
         logger.warn(`[Security] Emergency unblock failed: Invalid secret from ${req.ip}`);
         return res.status(403).json({
           status: 'error',
-          message: 'Invalid emergency secret'
+          message: 'Invalid emergency secret',
         });
       }
 
@@ -185,13 +186,13 @@ export default function createSecurityRoutes(_pgPool) {
         status: 'success',
         message: `IP ${ip} has been unblocked`,
         unblocked_ip: ip,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       logger.error('[Security] Emergency unblock error:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message,
       });
     }
   });
@@ -200,7 +201,7 @@ export default function createSecurityRoutes(_pgPool) {
    * GET /api/security/policies
    * List security policies and settings
    */
-  router.get("/policies", async (req, res) => {
+  router.get('/policies', async (req, res) => {
     try {
       res.json({
         status: 'success',
@@ -208,9 +209,9 @@ export default function createSecurityRoutes(_pgPool) {
           policies: [
             { id: 'rate-limit', enabled: true, description: 'API rate limiting' },
             { id: 'idr', enabled: true, description: 'Intrusion detection' },
-            { id: 'mfa', enabled: false, description: 'Multi-factor authentication' }
-          ]
-        }
+            { id: 'mfa', enabled: false, description: 'Multi-factor authentication' },
+          ],
+        },
       });
     } catch (error) {
       res.status(500).json({ status: 'error', message: error.message });
@@ -221,7 +222,7 @@ export default function createSecurityRoutes(_pgPool) {
    * GET /api/security/alerts
    * Retrieve recent security alerts from system_logs
    */
-  router.get("/alerts", async (req, res) => {
+  router.get('/alerts', async (req, res) => {
     try {
       const {
         tenant_id,
@@ -230,7 +231,7 @@ export default function createSecurityRoutes(_pgPool) {
         limit = 100,
         offset = 0,
         start_date,
-        end_date
+        end_date,
       } = req.query;
 
       const { getSupabaseClient } = await import('../lib/supabase-db.js');
@@ -271,14 +272,14 @@ export default function createSecurityRoutes(_pgPool) {
       if (error) throw error;
 
       // Parse metadata for easier consumption
-      const alerts = data.map(alert => ({
+      const alerts = data.map((alert) => ({
         ...alert,
         severity: alert.metadata?.severity || 'unknown',
         violation_type: alert.metadata?.violation_type || 'unknown',
         user_email: alert.metadata?.user_email || 'unknown',
         ip_address: alert.metadata?.ip_address || 'unknown',
         attempted_tenant: alert.metadata?.attempted_tenant,
-        actual_tenant: alert.metadata?.actual_tenant
+        actual_tenant: alert.metadata?.actual_tenant,
       }));
 
       res.json({
@@ -287,15 +288,15 @@ export default function createSecurityRoutes(_pgPool) {
           alerts,
           total: count,
           limit: parseInt(limit),
-          offset: parseInt(offset)
-        }
+          offset: parseInt(offset),
+        },
       });
     } catch (error) {
       logger.error('Error fetching security alerts:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to fetch security alerts',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -304,7 +305,7 @@ export default function createSecurityRoutes(_pgPool) {
    * GET /api/security/statistics
    * Get aggregated security statistics
    */
-  router.get("/statistics", async (req, res) => {
+  router.get('/statistics', async (req, res) => {
     try {
       const { tenant_id, days = 7 } = req.query;
       const startDate = new Date();
@@ -335,10 +336,10 @@ export default function createSecurityRoutes(_pgPool) {
         by_tenant: {},
         by_hour: {},
         unique_ips: new Set(),
-        unique_users: new Set()
+        unique_users: new Set(),
       };
 
-      data.forEach(log => {
+      data.forEach((log) => {
         const metadata = log.metadata || {};
 
         // Count by severity
@@ -371,15 +372,15 @@ export default function createSecurityRoutes(_pgPool) {
           statistics: stats,
           period_days: parseInt(days),
           start_date: startDate.toISOString(),
-          end_date: new Date().toISOString()
-        }
+          end_date: new Date().toISOString(),
+        },
       });
     } catch (error) {
       logger.error('Error calculating security statistics:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to calculate statistics',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -388,7 +389,7 @@ export default function createSecurityRoutes(_pgPool) {
    * GET /api/security/status
    * Get current IDR system status
    */
-  router.get("/status", async (req, res) => {
+  router.get('/status', async (req, res) => {
     try {
       const status = await getSecurityStatus();
 
@@ -400,15 +401,15 @@ export default function createSecurityRoutes(_pgPool) {
           idr_status: 'active',
           ...status,
           uptime: process.uptime(),
-          memory_usage: process.memoryUsage()
-        }
+          memory_usage: process.memoryUsage(),
+        },
       });
     } catch (error) {
       logger.error('Error getting security status:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to get security status',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -417,14 +418,14 @@ export default function createSecurityRoutes(_pgPool) {
    * POST /api/security/block-ip
    * Manually block an IP address
    */
-  router.post("/block-ip", async (req, res) => {
+  router.post('/block-ip', async (req, res) => {
     try {
       const { ip, duration_ms = 900000, reason } = req.body; // Default 15 minutes
 
       if (!ip) {
         return res.status(400).json({
           status: 'error',
-          message: 'IP address is required'
+          message: 'IP address is required',
         });
       }
 
@@ -435,7 +436,7 @@ export default function createSecurityRoutes(_pgPool) {
 
       // Log the manual block
       await supabase.from('system_logs').insert({
-        tenant_id: 'system',
+        tenant_id: resolveSystemTenantId(),
         level: 'security_alert',
         message: `IP ${ip} manually blocked by administrator`,
         source: 'IDR:ManualBlock',
@@ -444,21 +445,21 @@ export default function createSecurityRoutes(_pgPool) {
           duration_ms,
           reason,
           blocked_by: req.user?.email || 'system',
-          blocked_at: new Date().toISOString()
-        }
+          blocked_at: new Date().toISOString(),
+        },
       });
 
       res.json({
         status: 'success',
         message: `IP ${ip} blocked for ${duration_ms}ms`,
-        data: { ip, duration_ms, expires_at: new Date(Date.now() + duration_ms) }
+        data: { ip, duration_ms, expires_at: new Date(Date.now() + duration_ms) },
       });
     } catch (error) {
       logger.error('Error blocking IP:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to block IP',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -467,14 +468,14 @@ export default function createSecurityRoutes(_pgPool) {
    * POST /api/security/unblock-ip
    * Manually unblock an IP address
    */
-  router.post("/unblock-ip", async (req, res) => {
+  router.post('/unblock-ip', async (req, res) => {
     try {
       const { ip, reason } = req.body;
 
       if (!ip) {
         return res.status(400).json({
           status: 'error',
-          message: 'IP address is required'
+          message: 'IP address is required',
         });
       }
 
@@ -485,7 +486,7 @@ export default function createSecurityRoutes(_pgPool) {
 
       // Log the unblock
       await supabase.from('system_logs').insert({
-        tenant_id: 'system',
+        tenant_id: resolveSystemTenantId(),
         level: 'info',
         message: `IP ${ip} manually unblocked by administrator`,
         source: 'IDR:ManualUnblock',
@@ -493,21 +494,21 @@ export default function createSecurityRoutes(_pgPool) {
           ip_address: ip,
           reason,
           unblocked_by: req.user?.email || 'system',
-          unblocked_at: new Date().toISOString()
-        }
+          unblocked_at: new Date().toISOString(),
+        },
       });
 
       res.json({
         status: 'success',
         message: `IP ${ip} unblocked`,
-        data: { ip }
+        data: { ip },
       });
     } catch (error) {
       logger.error('Error unblocking IP:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to unblock IP',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -516,7 +517,7 @@ export default function createSecurityRoutes(_pgPool) {
    * GET /api/security/threat-intelligence
    * Get threat intelligence summary with optional external enrichment
    */
-  router.get("/threat-intelligence", async (req, res) => {
+  router.get('/threat-intelligence', async (req, res) => {
     try {
       const { days = 30, enrich = 'false' } = req.query;
       const startDate = new Date();
@@ -538,7 +539,7 @@ export default function createSecurityRoutes(_pgPool) {
       const userThreatMap = new Map();
       const violationPatterns = {};
 
-      data.forEach(log => {
+      data.forEach((log) => {
         const metadata = log.metadata || {};
         const ip = metadata.ip_address;
         const userId = metadata.user_id;
@@ -554,7 +555,7 @@ export default function createSecurityRoutes(_pgPool) {
               violation_types: new Set(),
               severities: { critical: 0, high: 0, medium: 0, low: 0 },
               first_seen: metadata.timestamp,
-              last_seen: metadata.timestamp
+              last_seen: metadata.timestamp,
             });
           }
           const ipData = ipThreatMap.get(ip);
@@ -572,7 +573,7 @@ export default function createSecurityRoutes(_pgPool) {
               user_email: metadata.user_email,
               alert_count: 0,
               violation_types: new Set(),
-              tenant_violations: []
+              tenant_violations: [],
             });
           }
           const userData = userThreatMap.get(userId);
@@ -581,7 +582,7 @@ export default function createSecurityRoutes(_pgPool) {
           if (metadata.attempted_tenant && metadata.actual_tenant) {
             userData.tenant_violations.push({
               attempted: metadata.attempted_tenant,
-              actual: metadata.actual_tenant
+              actual: metadata.actual_tenant,
             });
           }
         }
@@ -601,10 +602,10 @@ export default function createSecurityRoutes(_pgPool) {
 
       // Convert maps to arrays and sort by threat level
       let topThreateningIPs = Array.from(ipThreatMap.values())
-        .map(ip => ({
+        .map((ip) => ({
           ...ip,
           violation_types: Array.from(ip.violation_types),
-          threat_score: ip.alert_count + (ip.severities.critical * 10) + (ip.severities.high * 5)
+          threat_score: ip.alert_count + ip.severities.critical * 10 + ip.severities.high * 5,
         }))
         .sort((a, b) => b.threat_score - a.threat_score)
         .slice(0, 20);
@@ -615,10 +616,10 @@ export default function createSecurityRoutes(_pgPool) {
       }
 
       const topThreateningUsers = Array.from(userThreatMap.values())
-        .map(user => ({
+        .map((user) => ({
           ...user,
           violation_types: Array.from(user.violation_types),
-          threat_score: user.alert_count + (user.tenant_violations.length * 3)
+          threat_score: user.alert_count + user.tenant_violations.length * 3,
         }))
         .sort((a, b) => b.threat_score - a.threat_score)
         .slice(0, 20);
@@ -631,20 +632,20 @@ export default function createSecurityRoutes(_pgPool) {
             unique_ips: ipThreatMap.size,
             unique_users: userThreatMap.size,
             period_days: parseInt(days),
-            external_enrichment: enrich === 'true'
+            external_enrichment: enrich === 'true',
           },
           top_threatening_ips: topThreateningIPs,
           top_threatening_users: topThreateningUsers,
           violation_patterns: violationPatterns,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       });
     } catch (error) {
       logger.error('Error generating threat intelligence:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to generate threat intelligence',
-        error: error.message
+        error: error.message,
       });
     }
   });
@@ -653,7 +654,7 @@ export default function createSecurityRoutes(_pgPool) {
    * DELETE /api/security/clear-tracking
    * Clear all IDR tracking data (for maintenance/testing)
    */
-  router.delete("/clear-tracking", async (req, res) => {
+  router.delete('/clear-tracking', async (req, res) => {
     try {
       clearTrackingData();
 
@@ -661,26 +662,26 @@ export default function createSecurityRoutes(_pgPool) {
       const supabase = getSupabaseClient();
 
       await supabase.from('system_logs').insert({
-        tenant_id: 'system',
+        tenant_id: resolveSystemTenantId(),
         level: 'info',
         message: 'IDR tracking data cleared by administrator',
         source: 'IDR:ClearTracking',
         metadata: {
           cleared_by: req.user?.email || 'system',
-          cleared_at: new Date().toISOString()
-        }
+          cleared_at: new Date().toISOString(),
+        },
       });
 
       res.json({
         status: 'success',
-        message: 'IDR tracking data cleared'
+        message: 'IDR tracking data cleared',
       });
     } catch (error) {
       logger.error('Error clearing tracking data:', error);
       res.status(500).json({
         status: 'error',
         message: 'Failed to clear tracking data',
-        error: error.message
+        error: error.message,
       });
     }
   });
