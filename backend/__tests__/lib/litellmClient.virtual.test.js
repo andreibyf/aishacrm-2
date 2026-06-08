@@ -9,6 +9,9 @@
  * - AbortSignal timeout applied (300s)
  *
  * [2026-06-08 Claude] Added as part of LiteLLM virtual model alias refactor
+ * [2026-06-08 Claude] Fixed: mock node-fetch module import, not global.fetch
+ *   callLiteLLMVirtual uses `import fetch from 'node-fetch'`, so global.fetch spy
+ *   was never invoked. Use mock.module() to intercept the imported binding.
  */
 
 import { describe, it, before, after, mock } from 'node:test';
@@ -21,32 +24,32 @@ let lastFetchUrl;
 let lastFetchOptions;
 let mockFetchResponse = null;
 
-// Patch global fetch with a spy
-const originalFetch = global.fetch;
-
 describe('callLiteLLMVirtual', () => {
   before(async () => {
-    // Install fetch spy before importing the module
-    global.fetch = async (url, opts) => {
-      lastFetchUrl = url;
-      lastFetchOptions = opts;
-      if (mockFetchResponse) return mockFetchResponse;
-      // Default: 200 success
-      return {
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'Hello from LiteLLM' } }],
-          usage: { prompt_tokens: 10, completion_tokens: 5 },
-          model: 'claude-sonnet-4-20250514',
-        }),
-        text: async () => 'ok',
-      };
-    };
+    // Mock the node-fetch module before importing litellmClient.
+    // callLiteLLMVirtual uses `import fetch from 'node-fetch'`, so patching
+    // global.fetch has no effect — mock.module intercepts the named import.
+    mock.module('node-fetch', {
+      defaultExport: async (url, opts) => {
+        lastFetchUrl = url;
+        lastFetchOptions = opts;
+        if (mockFetchResponse) return mockFetchResponse;
+        // Default: 200 success
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: 'Hello from LiteLLM' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+            model: 'claude-sonnet-4-20250514',
+          }),
+          text: async () => 'ok',
+        };
+      },
+    });
     ({ callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js'));
   });
 
   after(() => {
-    global.fetch = originalFetch;
     mock.restoreAll();
   });
 
