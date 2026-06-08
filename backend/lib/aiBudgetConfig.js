@@ -120,6 +120,10 @@ export const CORE_TOOLS = [
   'create_note',
   'update_activity',
   'suggest_next_actions',
+  // Critical detail-lookup tools — must survive applyToolHardCap
+  // Without these, the model claims it has no tool when asked for phone/email/details
+  'get_contact_details',
+  'get_contact_by_name',
 ];
 
 // ============================================================================
