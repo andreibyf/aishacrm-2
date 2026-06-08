@@ -26,22 +26,6 @@ model_list:
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
-  # The backend maps provider 'local' -> 'ollama/<model>' before calling
-  # LiteLLM (backend/lib/aiEngine/litellmClient.js:12), so the same vLLM server
-  # must also be reachable under the ollama/* names. Without these the
-  # ollama/* fallback (router_settings below) would divert local summaries to
-  # groq instead of the local server. Mirrors the local/* routes above.
-  - model_name: ollama/*
-    litellm_params:
-      model: openai/*
-      api_base: 'os.environ/LOCAL_LLM_BASE_URL'
-      api_key: 'os.environ/LOCAL_LLM_API_KEY'
-
-  - model_name: ollama/qwen2.5-14b
-    litellm_params:
-      model: 'openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ'
-      api_base: 'os.environ/LOCAL_LLM_BASE_URL'
-      api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
 router_settings:
   num_retries: 2
@@ -49,6 +33,7 @@ router_settings:
   fallbacks:
     - 'anthropic/*': ['openai/*']
     - 'openai/*': ['groq/*']
+    - 'local/*': ['groq/*']
     - 'ollama/*': ['groq/*']
 
 litellm_settings:

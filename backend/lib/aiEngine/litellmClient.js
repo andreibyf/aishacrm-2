@@ -8,8 +8,9 @@ export async function callViaLiteLLM({
   tenantId,
   maxTokens = null,
 }) {
-  // Map "local" provider to ollama prefix so LiteLLM routes to aishacrm-ollama.
-  const litellmModel = provider === 'local' ? `ollama/${model}` : `${provider}/${model}`;
+  // Pass provider/model directly — litellm_config.yaml has local/*, anthropic/*,
+  // openai/*, and groq/* wildcard routes so no prefix translation is needed here.
+  const litellmModel = `${provider}/${model}`;
   const baseUrl = process.env.LITELLM_BASE_URL || 'http://litellm:4000';
   const masterKey = process.env.LITELLM_MASTER_KEY;
 
