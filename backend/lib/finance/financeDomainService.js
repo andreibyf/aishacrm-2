@@ -1488,14 +1488,6 @@ export function createFinanceDomainService(opts = {}) {
         throw e;
       }
 
-      // 3. System accounts are fully locked — no field is editable (design §2).
-      if (current.is_system) {
-        const e = new Error('System accounts cannot be edited.');
-        e.statusCode = 409;
-        e.code = 'FINANCE_COA_SYSTEM_ACCOUNT_LOCKED';
-        throw e;
-      }
-
       // A field is "changed" only when present in the payload AND different from the
       // current stored value. `account_code` is compared as a string (the stored
       // shape) so a same-value re-submit isn't treated as a change.
@@ -1509,18 +1501,27 @@ export function createFinanceDomainService(opts = {}) {
       const typeChanged = has('account_type') && payload.account_type !== current.account_type;
       const anyChange = nameChanged || classificationChanged || codeChanged || typeChanged;
 
-      // 4. Posted-history lock rules (design §2).
+      // 4. Field-lock rules (design §2; system-rename design 2026-06-07). SYSTEM accounts
+      // AND posted-history accounts both lock classification + account_code and require a
+      // reason — the only difference is a system account can never be deactivated (enforced
+      // in deactivateAccount). Generalize rather than add a parallel system-account branch.
       const posted = hasPostedHistory(bucket, accountId);
-      if (posted && (classificationChanged || codeChanged)) {
+      const codeClassLocked = current.is_system || posted;
+      const reasonRequired = current.is_system || posted;
+      if (codeClassLocked && (classificationChanged || codeChanged)) {
         const e = new Error(
-          'Classification and account_code are locked on an account with posted history.',
+          current.is_system
+            ? 'Classification and account_code are locked on a system account.'
+            : 'Classification and account_code are locked on an account with posted history.',
         );
         e.statusCode = 409;
-        e.code = 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY';
+        e.code = current.is_system
+          ? 'FINANCE_COA_FIELD_LOCKED_SYSTEM'
+          : 'FINANCE_COA_FIELD_LOCKED_POSTED_HISTORY';
         throw e;
       }
-      if (posted && anyChange && String(payload.reason ?? '').trim() === '') {
-        const e = new Error('A reason is required to edit an account with posted history.');
+      if (reasonRequired && anyChange && String(payload.reason ?? '').trim() === '') {
+        const e = new Error('A reason is required to edit this account.');
         e.statusCode = 400;
         e.code = 'FINANCE_COA_REASON_REQUIRED';
         throw e;

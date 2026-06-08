@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 import { columnsToRecords } from './financeCsv';
 
 const COLUMN_DEFS = [
@@ -78,10 +78,11 @@ export default function JournalEntriesList({ tenantId }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <FinanceCsvExportButton
+          <FinanceExportButtons
             records={columnsToRecords(COLUMN_DEFS, state.entries)}
             area="journal-entries"
             tenantId={tenantId}
+            title="Journal entries"
           />
           <Button
             type="button"

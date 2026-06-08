@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 import { columnsToRecords } from './financeCsv';
 
 const COLUMNS = [
@@ -71,10 +71,11 @@ export default function AuditTimelinePanel({ tenantId }) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <FinanceCsvExportButton
+            <FinanceExportButtons
               records={columnsToRecords(COLUMNS, state.events)}
               area="audit-events"
               tenantId={tenantId}
+              title="Audit timeline"
             />
             <Button
               type="button"

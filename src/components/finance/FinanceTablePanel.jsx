@@ -25,7 +25,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
-import FinanceCsvExportButton from './FinanceCsvExportButton';
+import FinanceExportButtons from './FinanceExportButtons';
 import { columnsToRecords } from './financeCsv';
 
 export default function FinanceTablePanel({
@@ -73,10 +73,11 @@ export default function FinanceTablePanel({
         </div>
         <div className="flex items-center gap-2">
           {exportArea ? (
-            <FinanceCsvExportButton
+            <FinanceExportButtons
               records={columnsToRecords(columns, state.rows)}
               area={exportArea}
               tenantId={tenantId}
+              title={title}
             />
           ) : null}
           <Button
