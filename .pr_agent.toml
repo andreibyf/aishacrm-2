@@ -34,3 +34,21 @@ inline_code_comments          = true
 require_tests_review          = true
 require_security_review       = true
 require_estimate_effort_to_review = true
+
+[pr_description]
+# Mermaid "Diagram Walkthrough" renders on GitHub only if the fence is exact.
+# These instructions prevent the recurring "Unable to render rich display /
+# got 'TAGSTART'" failure caused by the closing ``` being glued to the last
+# diagram line instead of sitting on its own line.
+enable_pr_diagram = true
+extra_instructions = """
+Mermaid diagram formatting rules (mandatory):
+- Start the diagram with a line containing only: ```mermaid
+- End it with a line containing only: ```
+- The closing ``` must be on its own line, followed by one blank line.
+- Never place HTML (e.g. <details>) or any text on the same line as a fence.
+- Do not indent the fence lines or the flowchart keyword.
+- Do not use double quotes inside node labels; keep edge labels short.
+"""
+# Kill switch if it ever misrenders again:
+# enable_pr_diagram = false
