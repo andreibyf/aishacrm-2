@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { getBackendUrl } from '@/api/backendUrl';
 
 /**
  * Proactive JWT Token Refresh Manager
@@ -146,7 +147,11 @@ export function useTokenRefresh({ enabled = true, onSessionExpired = null } = {}
 
         console.log('[TokenRefresh] Refreshing:', reason);
 
-        const response = await fetch('/api/auth/refresh', {
+        // Use absolute URL so this works in local Docker dev where the
+        // frontend (port 4000) and backend (port 4001) are on different ports
+        // with no nginx reverse proxy to route relative /api/* paths.
+        const backendUrl = getBackendUrl();
+        const response = await fetch(`${backendUrl}/api/auth/refresh`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

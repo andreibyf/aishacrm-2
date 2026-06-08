@@ -13,6 +13,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { clearAiSettingsCache } from '../lib/aiSettingsLoader.js';
 import { requireSuperAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
+import { isValidUUID } from '../lib/uuidValidator.js';
 
 // Path to docker-compose.yml
 // Priority: explicit env var > mounted path inside container > repo-root for local dev
@@ -526,7 +527,7 @@ router.put('/:id', async (req, res) => {
       .update({
         setting_value: newSettingValue,
         updated_at: new Date().toISOString(),
-        updated_by: req.user?.id || null,
+        updated_by: isValidUUID(req.user?.id) ? req.user.id : null,
       })
       .eq('id', id)
       .select()

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { BACKEND_URL } from '@/api/entities';
+import { getAuthFetchOptions } from '@/api/core/httpClient';
 import {
   fetchJsonWithHandling,
   getErrorMessage,
@@ -148,12 +149,12 @@ export default function AiSettings({ tenantId }) {
       if (withRestart) setOllamaRestarting(true);
     }
     try {
+      const authOpts = await getAuthFetchOptions();
       const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/ollama`,
         {
+          ...authOpts,
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({ settings: ollamaPending, restart: withRestart }),
         },
         { fallbackMessage: 'Error saving Ollama settings' },
@@ -191,11 +192,12 @@ export default function AiSettings({ tenantId }) {
   const restartOllama = async () => {
     if (isMountedRef.current) setOllamaRestarting(true);
     try {
+      const authOpts = await getAuthFetchOptions();
       const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/ollama/restart`,
         {
+          ...authOpts,
           method: 'POST',
-          credentials: 'include',
         },
         { fallbackMessage: 'Restart failed' },
       );
@@ -296,12 +298,15 @@ export default function AiSettings({ tenantId }) {
     if (isMountedRef.current) setSaving((prev) => ({ ...prev, [setting.id]: true }));
 
     try {
+      // Include Supabase Authorization header so auth works even when the
+      // aisha_access cookie has expired (e.g. in local Docker dev where the
+      // token refresh relative URL can't reach the backend on a different port).
+      const authOpts = await getAuthFetchOptions();
       const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/${setting.id}?tenant_id=${tenantId}`,
         {
+          ...authOpts,
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({ value: newValue }),
         },
         { fallbackMessage: 'Error saving setting' },
@@ -347,11 +352,12 @@ export default function AiSettings({ tenantId }) {
 
   const clearCache = async () => {
     try {
+      const authOpts = await getAuthFetchOptions();
       const data = await fetchJsonWithHandling(
         `${BACKEND_URL}/api/ai-settings/clear-cache?tenant_id=${tenantId}`,
         {
+          ...authOpts,
           method: 'POST',
-          credentials: 'include',
         },
         { fallbackMessage: 'Error clearing cache' },
       );
