@@ -37,6 +37,7 @@ describe('callLiteLLMVirtual', () => {
         // Default: 200 success
         return {
           ok: true,
+          status: 200,
           json: async () => ({
             choices: [{ message: { content: 'Hello from LiteLLM' } }],
             usage: { prompt_tokens: 10, completion_tokens: 5 },
@@ -161,6 +162,7 @@ describe('callLiteLLMVirtual', () => {
   it('returns content string from first choice', async () => {
     mockFetchResponse = {
       ok: true,
+      status: 200,
       json: async () => ({
         choices: [{ message: { content: 'Generated summary text' } }],
         model: 'qwen2.5-14b',

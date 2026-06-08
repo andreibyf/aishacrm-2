@@ -16,9 +16,12 @@
  * - whatsapp.js       → aisha-whatsapp (via OpenAI SDK pointed at LiteLLM baseURL)
  *
  * [2026-06-08 Claude] Added as part of LiteLLM virtual model alias refactor
+ * [2026-06-08 Claude] Fixed: callLiteLLMVirtual model alias block now uses mock.module('node-fetch')
+ *   instead of global.fetch spy — callLiteLLMVirtual imports fetch from node-fetch, so
+ *   global.fetch was never invoked and capturedBody stayed null, causing all alias assertions to fail.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ─── Shared fetch mock ────────────────────────────────────────────────────────
@@ -51,8 +54,29 @@ function restoreFetch() {
 // ─── callLiteLLMVirtual ───────────────────────────────────────────────────────
 
 describe('callLiteLLMVirtual model alias', () => {
-  before(() => installFetchMock());
-  after(() => restoreFetch());
+  before(async () => {
+    // callLiteLLMVirtual uses `import fetch from 'node-fetch'`, so global.fetch spy
+    // is never invoked — mock.module intercepts the named import binding instead.
+    mock.module('node-fetch', {
+      defaultExport: async (url, opts) => {
+        capturedUrl = url;
+        capturedBody = opts?.body ? JSON.parse(opts.body) : null;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { content: 'mock response' }, finish_reason: 'stop' }],
+            usage: {},
+          }),
+          text: async () => 'ok',
+        };
+      },
+    });
+  });
+
+  after(() => {
+    mock.restoreAll();
+  });
 
   it('sends aisha-summary for summary calls', async () => {
     const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
