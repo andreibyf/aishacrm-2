@@ -4,11 +4,7 @@
  */
 
 import express from 'express';
-import {
-  generateChatCompletion,
-  selectLLMConfigForTenant,
-  resolveLLMApiKey,
-} from '../lib/aiEngine/index.js';
+import { callLiteLLMVirtual } from '../lib/aiEngine/litellmClient.js';
 import logger from '../lib/logger.js';
 import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
@@ -90,14 +86,6 @@ export default function createDocumentRoutes(_pgPool) {
       }
 
       const tenantId = req.tenant?.id || null;
-      const { provider, model } = selectLLMConfigForTenant({
-        capability: 'json_strict',
-        tenantSlugOrId: tenantId,
-        // Force gpt-4o for vision — gpt-4o-mini also supports images but 4o is more accurate
-        providerOverride: 'openai',
-        overrideModel: process.env.MODEL_VISION || 'gpt-4o',
-      });
-      const apiKey = resolveLLMApiKey(provider, tenantId);
 
       const schemaDescription = json_schema
         ? `Extract the following fields: ${Object.keys(json_schema.properties || {}).join(', ')}. Return a valid JSON object only.`
@@ -184,18 +172,16 @@ export default function createDocumentRoutes(_pgPool) {
         ];
       }
 
-      const result = await generateChatCompletion({
-        provider,
-        model,
-        apiKey,
+      const result = await callLiteLLMVirtual({
+        model: 'aisha-vision',
         temperature: 0,
         messages,
+        tenantId,
       });
 
       if (result.status !== 'success') {
         logger.warn('[documents] AI extraction failed', {
-          provider,
-          model,
+          model: 'aisha-vision',
           error: result.error,
         });
         return res.status(502).json({

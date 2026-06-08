@@ -6,8 +6,7 @@
  */
 
 import { initiateOutboundCall } from '../lib/outboundCallService.js';
-import { generateChatCompletion } from '../lib/aiEngine/llmClient.js';
-import { selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
+import { callLiteLLMVirtual } from '../lib/aiEngine/litellmClient.js';
 import { renderTemplate } from '../lib/templates/renderTemplate.js';
 import { getTemplateById } from '../lib/templates/templateService.js';
 import logger from '../lib/logger.js';
@@ -1239,28 +1238,9 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
 
           case 'ai_summarize': {
             const textToSummarize = replaceVariables(cfg.text || '');
-            // Per-step cfg.provider wins; fallback to env var (default: local AI server).
-            const explicitProvider = cfg.provider
-              ? String(cfg.provider).toLowerCase()
-              : process.env.WORKFLOW_SUMMARY_LLM_PROVIDER || 'local';
-            const explicitModel =
-              cfg.model ||
-              process.env.WORKFLOW_SUMMARY_LLM_MODEL ||
-              process.env.LOCAL_LLM_MODEL ||
-              null;
-            const tenantConfig = selectLLMConfigForTenant({
-              capability: 'chat_light',
-              tenantSlugOrId: context.tenantId,
-              overrideModel: explicitModel || null,
-              providerOverride: explicitProvider || null,
-            });
-            const provider = tenantConfig.provider;
-            const model = tenantConfig.model;
-
             try {
-              const result = await generateChatCompletion({
-                provider,
-                model,
+              const result = await callLiteLLMVirtual({
+                model: 'aisha-workflow',
                 messages: [
                   {
                     role: 'system',
@@ -1273,7 +1253,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
               });
 
               if (result.status === 'success') {
-                log.output = { summary: result.content, provider };
+                log.output = { summary: result.content, provider: 'aisha-workflow' };
                 context.variables.ai_summary = result.content;
               } else {
                 throw new Error(result.error || 'AI summarization failed');
@@ -1286,22 +1266,12 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
           }
 
           case 'ai_generate_email': {
-            const explicitProvider = cfg.provider ? String(cfg.provider).toLowerCase() : null;
-            const explicitModel = cfg.model || null;
-            const tenantConfig = selectLLMConfigForTenant({
-              capability: 'chat_light',
-              tenantSlugOrId: context.tenantId,
-              overrideModel: explicitModel || null,
-              providerOverride: explicitProvider || null,
-            });
-            const provider = tenantConfig.provider;
-            const model = tenantConfig.model;
             const prompt = String(replaceVariables(cfg.prompt || ''));
             const recipientName = replaceVariables(cfg.recipient_name || '{{first_name}}');
             const senderName = replaceVariables(cfg.sender_name || 'AiSHA CRM');
             const tone = cfg.tone || 'professional';
 
-            let email = { subject: '', body: '', provider };
+            let email = { subject: '', body: '', provider: 'aisha-workflow' };
 
             try {
               const lead = context.variables.found_lead;
@@ -1320,7 +1290,7 @@ export async function executeWorkflowById(workflow_id, triggerPayload) {
                 contextInfo += `Opportunity: ${opportunity.name} - Stage: ${opportunity.stage}, Value: $${opportunity.value || 0}\n`;
 
               const systemPrompt = `You are an AI email assistant. Generate a ${tone} email based on the user's instructions.
-              
+
 Context information:
 ${contextInfo || 'No additional context available.'}
 
@@ -1329,9 +1299,8 @@ Respond with ONLY a JSON object in this exact format:
 
               const userPrompt = `Generate an email for ${recipientName}. Instructions: ${prompt || 'Write a professional follow-up email.'}`;
 
-              const result = await generateChatCompletion({
-                provider,
-                model,
+              const result = await callLiteLLMVirtual({
+                model: 'aisha-workflow',
                 messages: [
                   { role: 'system', content: systemPrompt },
                   { role: 'user', content: userPrompt },
@@ -1346,10 +1315,14 @@ Respond with ONLY a JSON object in this exact format:
                   email = {
                     subject: parsed.subject || 'Follow-up',
                     body: parsed.body || result.content,
-                    provider,
+                    provider: 'aisha-workflow',
                   };
                 } catch {
-                  email = { subject: 'Follow-up', body: result.content, provider };
+                  email = {
+                    subject: 'Follow-up',
+                    body: result.content,
+                    provider: 'aisha-workflow',
+                  };
                 }
               } else {
                 throw new Error(result.error || 'AI generation failed');

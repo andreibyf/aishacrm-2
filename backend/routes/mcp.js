@@ -9,11 +9,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 // Import auth middleware to require an authenticated user for admin routes.
 import { authenticateRequest } from '../middleware/authenticate.js';
 import { requireSuperAdminRole } from '../middleware/validateTenant.js';
-import {
-  resolveLLMApiKey,
-  generateChatCompletion,
-  selectLLMConfigForTenant,
-} from '../lib/aiEngine/index.js';
+import { callLiteLLMVirtual } from '../lib/aiEngine/litellmClient.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { executeMcpToolViaBraid, getExecutionStrategy } from '../lib/braidMcpBridge.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
@@ -96,166 +92,50 @@ async function callLLMWithFailover({
   temperature = 0.2,
   explicitModel = null,
   explicitProvider = null,
+  // explicitApiKey retained for call-site compatibility — LiteLLM manages keys
+  // eslint-disable-next-line no-unused-vars
   explicitApiKey = null,
 } = {}) {
-  // Get base config from tenant settings
-  const baseConfig = selectLLMConfigForTenant({
-    capability,
-    tenantSlugOrId: tenantId,
-    overrideModel: explicitModel,
-    providerOverride: explicitProvider,
+  // If caller passes explicit provider+model, use the LiteLLM wildcard pass-through route
+  // (e.g. "anthropic/claude-sonnet-4-20250514"). If only model is supplied (no provider),
+  // pass it as-is — it may be a virtual alias or a fully-qualified model string.
+  // Default to the aisha-mcp alias when neither is provided.
+  const virtualModel =
+    explicitProvider && explicitModel
+      ? `${explicitProvider}/${explicitModel}`
+      : explicitModel || 'aisha-mcp';
+
+  const startMs = Date.now();
+  const result = await callLiteLLMVirtual({
+    model: virtualModel,
+    messages,
+    temperature,
+    tenantId,
   });
 
-  // Determine primary and secondary providers
-  const primaryProvider =
-    explicitProvider || baseConfig.provider || process.env.LLM_PROVIDER || 'openai';
+  logLLMActivity({
+    tenantId,
+    capability,
+    provider: explicitProvider || 'aisha-mcp',
+    model: result.raw?.model || explicitModel || 'aisha-mcp',
+    nodeId: 'mcp:callLLMWithFailover',
+    status: result.status,
+    durationMs: Date.now() - startMs,
+    usage: result.raw?.usage || null,
+    attempt: 1,
+    totalAttempts: 1,
+    ...(result.status === 'error' ? { error: result.error } : {}),
+  });
 
-  if (process.env.LITELLM_ENABLED === 'true') {
-    const startMs = Date.now();
-    const result = await generateChatCompletion({
-      provider: primaryProvider,
-      model: explicitModel || baseConfig.model,
-      messages,
-      temperature,
-      tenantId,
-    });
-
-    logLLMActivity({
-      tenantId,
-      capability,
-      provider: primaryProvider,
-      model: result.raw?.model || baseConfig.model,
-      nodeId: 'mcp:callLLMWithFailover:litellm',
-      status: result.status,
-      durationMs: Date.now() - startMs,
-      usage: result.raw?.usage || null,
-      attempt: 1,
-      totalAttempts: 1,
-      ...(result.status === 'error' ? { error: result.error } : {}),
-    });
-
-    return result.status === 'success'
-      ? {
-          ok: true,
-          result,
-          provider: primaryProvider,
-          model: result.raw?.model || explicitModel || baseConfig.model,
-          usage: result.raw?.usage || null,
-        }
-      : { ok: false, error: result.error };
-  }
-
-  const secondaryProvider = primaryProvider === 'anthropic' ? 'openai' : 'anthropic';
-
-  // Build candidate list: primary first, then secondary
-  const candidates = [
-    { provider: primaryProvider, model: explicitModel || baseConfig.model },
-    { provider: secondaryProvider, model: null }, // Will use default for this provider
-  ];
-
-  const errors = [];
-
-  const totalAttempts = candidates.length;
-
-  for (let attemptIndex = 0; attemptIndex < candidates.length; attemptIndex++) {
-    const candidate = candidates[attemptIndex];
-    const provider = candidate.provider;
-    const attempt = attemptIndex + 1;
-
-    // Get model for this provider
-    let model = candidate.model;
-    if (!model) {
-      const cfg = selectLLMConfigForTenant({
-        capability,
-        tenantSlugOrId: tenantId,
-        providerOverride: provider,
-      });
-      model = cfg.model;
-    }
-
-    // Resolve API key for this provider
-    const apiKey = await resolveLLMApiKey({
-      explicitKey: explicitApiKey,
-      tenantSlugOrId: tenantId,
-      provider,
-    });
-
-    if (!apiKey) {
-      errors.push({ provider, error: `No API key for provider ${provider}` });
-      // Log missing key with structured format
-      logLLMActivity({
-        tenantId,
-        capability,
-        provider,
-        model,
-        nodeId: 'mcp:callLLMWithFailover',
-        status: 'error',
-        error: `No API key for provider ${provider}`,
-        attempt,
-        totalAttempts,
-      });
-      continue;
-    }
-
-    // Attempt the call
-    const startTime = Date.now();
-    const result = await generateChatCompletion({
-      provider,
-      model,
-      messages,
-      temperature,
-      apiKey,
-    });
-    const durationMs = Date.now() - startTime;
-
-    if (result.status === 'success') {
-      // Log successful LLM activity with attempt info
-      logLLMActivity({
-        tenantId,
-        capability,
-        provider,
-        model: result.raw?.model || model,
-        nodeId: 'mcp:callLLMWithFailover',
-        status: errors.length > 0 ? 'failover' : 'success',
-        durationMs,
-        usage: result.raw?.usage || null,
-        attempt,
-        totalAttempts,
-      });
-
-      return {
+  return result.status === 'success'
+    ? {
         ok: true,
         result,
-        provider,
-        model: result.raw?.model || model,
+        provider: explicitProvider || 'aisha-mcp',
+        model: result.raw?.model || explicitModel || 'aisha-mcp',
         usage: result.raw?.usage || null,
-      };
-    }
-
-    // Log failure and continue to next candidate
-    errors.push({ provider, error: result.error });
-
-    // Log failed attempt with structured format
-    logLLMActivity({
-      tenantId,
-      capability,
-      provider,
-      model,
-      nodeId: 'mcp:callLLMWithFailover',
-      status: 'error',
-      durationMs,
-      error: result.error,
-      attempt,
-      totalAttempts,
-    });
-  }
-
-  // All candidates failed
-  return {
-    ok: false,
-    error: errors.map((e) => `${e.provider}: ${e.error}`).join('; '),
-    errors,
-  };
+      }
+    : { ok: false, error: result.error };
 }
 
 export default function createMCPRoutes(_pgPool) {

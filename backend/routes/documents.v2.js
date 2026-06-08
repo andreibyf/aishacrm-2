@@ -13,11 +13,7 @@ import { validateTenantAccess, requireAdminOrManagerRole } from '../middleware/v
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { cacheList, cacheDetail, invalidateCache } from '../lib/cacheMiddleware.js';
 import logger from '../lib/logger.js';
-import {
-  generateChatCompletion,
-  selectLLMConfigForTenant,
-  resolveLLMApiKey,
-} from '../lib/aiEngine/index.js';
+import { callLiteLLMVirtual } from '../lib/aiEngine/litellmClient.js';
 import { validateUrlAgainstWhitelist } from '../lib/urlValidator.js';
 
 export default function createDocumentV2Routes(_pgPool) {
@@ -429,14 +425,6 @@ export default function createDocumentV2Routes(_pgPool) {
       }
 
       const tenantId = req.tenant?.id || null;
-      const { provider, model } = selectLLMConfigForTenant({
-        capability: 'json_strict',
-        tenantSlugOrId: tenantId,
-        providerOverride: 'openai',
-        overrideModel: process.env.MODEL_VISION || 'gpt-4o',
-      });
-
-      const apiKey = resolveLLMApiKey(provider, tenantId);
       const schemaDescription = json_schema
         ? `Extract the following fields: ${Object.keys(json_schema.properties || {}).join(', ')}. Return a valid JSON object only.`
         : 'Extract all visible text and data. Return a valid JSON object only.';
@@ -523,18 +511,16 @@ export default function createDocumentV2Routes(_pgPool) {
         ];
       }
 
-      const result = await generateChatCompletion({
-        provider,
-        model,
-        apiKey,
+      const result = await callLiteLLMVirtual({
+        model: 'aisha-vision',
         temperature: 0,
         messages,
+        tenantId,
       });
 
       if (result.status !== 'success') {
         logger.warn('[documents.v2] AI extraction failed', {
-          provider,
-          model,
+          model: 'aisha-vision',
           error: result.error,
         });
         return res.status(502).json({

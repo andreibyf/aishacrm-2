@@ -18,6 +18,8 @@ if [ -n "$DOPPLER_TOKEN" ]; then
   set_secret_if_present "OPENAI_API_KEY"
   set_secret_if_present "ANTHROPIC_API_KEY"
   set_secret_if_present "GROQ_API_KEY"
+  set_secret_if_present "LOCAL_LLM_BASE_URL"
+  set_secret_if_present "LOCAL_LLM_API_KEY"
 else
   echo "[LITELLM ENTRYPOINT] WARNING: DOPPLER_TOKEN not set, starting without Doppler secrets"
 fi

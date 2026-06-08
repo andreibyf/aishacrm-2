@@ -26,11 +26,65 @@ model_list:
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Semantic virtual model aliases — capability-based routing for non-AiSHA
+  # backend callers (aiSummary, taskWorkers, documents, mcp, whatsapp,
+  # workflowExecutionService). Backend code sends the alias name; routing
+  # decisions live here, not in backend code.
+  # ──────────────────────────────────────────────────────────────────────────
+
+  # Contact/Lead profile summaries — private, fast, runs on AI cloud server
+  - model_name: aisha-summary
+    litellm_params:
+      model: 'openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ'
+      api_base: 'os.environ/LOCAL_LLM_BASE_URL'
+      api_key: 'os.environ/LOCAL_LLM_API_KEY'
+
+  # Agentic task execution (Task AiSHA) — needs strong reasoning + tool use
+  - model_name: aisha-task
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: 'os.environ/ANTHROPIC_API_KEY'
+
+  # Document/image extraction — must be vision-capable (gpt-4o sees images)
+  - model_name: aisha-vision
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: 'os.environ/OPENAI_API_KEY'
+
+  # MCP tool planning (json_strict + brain_read_only) — claude-sonnet for accuracy
+  - model_name: aisha-mcp
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: 'os.environ/ANTHROPIC_API_KEY'
+
+  # WhatsApp AI replies with Braid tool-calling
+  - model_name: aisha-whatsapp
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: 'os.environ/ANTHROPIC_API_KEY'
+
+  # C.A.R.E. workflow nodes (ai_summarize, ai_generate_email) — fast + cheap
+  - model_name: aisha-workflow
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-20241022
+      api_key: 'os.environ/ANTHROPIC_API_KEY'
+
 
 router_settings:
   num_retries: 2
   timeout: 300
   fallbacks:
+    # Virtual alias fallbacks — when the primary provider/model for an alias fails,
+    # LiteLLM falls back to these. Provider-wildcard fallbacks below do NOT cover aliases.
+    - aisha-mcp: ['openai/gpt-4o']
+    - aisha-task: ['openai/gpt-4o']
+    - aisha-summary: ['groq/llama-3.3-70b-versatile']
+    - aisha-workflow: ['groq/llama-3.3-70b-versatile']
+    - aisha-whatsapp: ['openai/gpt-4o']
+    # aisha-vision primary is gpt-4o; fall back to claude-sonnet which is also vision-capable
+    - aisha-vision: ['anthropic/claude-sonnet-4-20250514']
+    # Provider-level fallbacks (for explicit provider/* pass-through calls)
     - 'anthropic/*': ['openai/*']
     - 'openai/*': ['groq/*']
     - 'local/*': ['groq/*']

@@ -13,6 +13,7 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { clearAiSettingsCache } from '../lib/aiSettingsLoader.js';
 import { requireSuperAdminRole } from '../middleware/validateTenant.js';
 import logger from '../lib/logger.js';
+import { isValidUUID } from '../lib/uuidValidator.js';
 
 // Path to docker-compose.yml
 // Priority: explicit env var > mounted path inside container > repo-root for local dev
@@ -254,10 +255,10 @@ const DEFAULT_SETTINGS = {
     {
       category: 'tools',
       setting_key: 'max_tools',
-      setting_value: { value: 12, min: 5, max: 30, type: 'number' },
+      setting_value: { value: 20, min: 15, max: 30, type: 'number' },
       display_name: 'Max Tools per Request',
       description:
-        'Limits tool schemas sent to AI. More tools = more capabilities but higher token cost per request.',
+        'Limits tool schemas sent to AI. Minimum 15 (reserved for core AiSHA tools). More tools = more capabilities but higher token cost per request.',
     },
     {
       category: 'memory',
@@ -526,7 +527,7 @@ router.put('/:id', async (req, res) => {
       .update({
         setting_value: newSettingValue,
         updated_at: new Date().toISOString(),
-        updated_by: req.user?.id || null,
+        updated_by: isValidUUID(req.user?.id) ? req.user.id : null,
       })
       .eq('id', id)
       .select()

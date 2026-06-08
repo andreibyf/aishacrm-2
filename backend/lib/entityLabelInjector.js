@@ -235,9 +235,8 @@ export async function enhanceSystemPromptWithLabels(basePrompt, pool, tenantIdOr
 export async function enhanceSystemPromptWithFullContext(basePrompt, pool, tenantIdOrSlug) {
   try {
     // Dynamically import to avoid circular dependencies
-    const { buildTenantContextDictionary, generateContextDictionaryPrompt } = await import(
-      './tenantContextDictionary.js'
-    );
+    const { buildTenantContextDictionary, generateContextDictionaryPrompt } =
+      await import('./tenantContextDictionary.js');
 
     const dictionary = await buildTenantContextDictionary(pool, tenantIdOrSlug);
 
@@ -491,8 +490,10 @@ export function applyToolHardCap(focusedTools, options = {}) {
     mustPreserve.add(forcedTool);
   }
 
-  // Clamp maxTools within allowed range
-  const effectiveMax = Math.max(TOOL_CAP_MIN, Math.min(TOOL_CAP_MAX, maxTools));
+  // Clamp maxTools within allowed range.
+  // Floor at preserveTools.length + 1 so there is always ≥1 slot for non-core tools even when
+  // max_tools DB value was set before CORE_TOOLS grew (e.g. old default 12 < current 15).
+  const effectiveMax = Math.max(preserveTools.length + 1, Math.min(TOOL_CAP_MAX, maxTools));
 
   if (!Array.isArray(focusedTools) || focusedTools.length <= effectiveMax) {
     return focusedTools; // Already within cap

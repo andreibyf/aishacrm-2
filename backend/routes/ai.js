@@ -1742,11 +1742,12 @@ Use this summary for context about prior discussion topics, goals, and decisions
         // Low confidence (< 0.7): Use all tools with auto selection
       }
 
-      // HARD CAP: Limit tools to 3-20 to reduce token overhead
+      // HARD CAP: Limit tools to reduce token overhead
       // Always preserve core tools AND any forced tool from intent routing
+      // maxTools driven by ai_settings.max_tools (UI: Settings → Max Tools per Request)
       const forcedToolName = toolChoice?.function?.name || null;
       focusedTools = applyToolHardCap(focusedTools, {
-        maxTools: 12,
+        maxTools: aiSettings.max_tools,
         intent: classifiedIntent || 'none',
         forcedTool: forcedToolName,
       });
@@ -3918,11 +3919,12 @@ ${conversationSummary}`;
         // Low confidence (< 0.7): Use all tools with auto selection
       }
 
-      // HARD CAP: Limit tools to 3-20 to reduce token overhead
+      // HARD CAP: Limit tools to reduce token overhead
       // Always preserve core tools AND any forced tool from intent routing
+      // maxTools driven by ai_settings.max_tools (UI: Settings → Max Tools per Request)
       const forcedToolName = toolChoice?.function?.name || null;
       focusedTools = applyToolHardCap(focusedTools, {
-        maxTools: 12,
+        maxTools: aiSettings.max_tools,
         intent: classifiedIntent || 'none',
         forcedTool: forcedToolName,
       });
@@ -5526,7 +5528,8 @@ ${conversationSummary}`;
       if (!apiKey) {
         return res.status(400).json({
           status: 'error',
-          message: 'No LLM API key configured for this tenant. Add an API key in Settings → Integrations.',
+          message:
+            'No LLM API key configured for this tenant. Add an API key in Settings → Integrations.',
         });
       }
       const client = createProviderClient(llmConfig.provider, apiKey);
