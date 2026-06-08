@@ -15,7 +15,6 @@ import { randomUUID } from 'crypto';
 import logger from '../lib/logger.js';
 import OpenAI from 'openai';
 import { getOpenAIClient } from '../lib/aiProvider.js';
-import { selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
 import {
   getBraidSystemPrompt,
   generateToolSchemas,
@@ -581,15 +580,11 @@ Provide a clear summary of what you did.`;
       let model;
 
       if (process.env.LITELLM_ENABLED === 'true') {
-        const llmConfig = selectLLMConfigForTenant({
-          capability: 'chat_tools',
-          tenantSlugOrId: tenant_id,
-        });
         client = new OpenAI({
           apiKey: process.env.LITELLM_MASTER_KEY || 'no-key',
           baseURL: `${(process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '')}/v1`,
         });
-        model = `${llmConfig.provider}/${llmConfig.model}`;
+        model = 'aisha-task';
         logger.info(`[ExecuteTask] Routing via LiteLLM: ${model}`);
       } else {
         client = getOpenAIClient();

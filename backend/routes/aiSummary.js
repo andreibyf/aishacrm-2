@@ -1,6 +1,6 @@
 import express from 'express';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { generateChatCompletion } from '../lib/aiEngine/llmClient.js';
+import { callLiteLLMVirtual } from '../lib/aiEngine/litellmClient.js';
 import logger from '../lib/logger.js';
 
 const router = express.Router();
@@ -49,18 +49,15 @@ router.post('/summarize-person-profile', async (req, res) => {
     // ── Build context string ────────────────────────────────────────────────
     const context = buildProfileContext(profile_data, person_type);
 
-    // ── Try LLM via unified AI engine ──────────────────────────────────────
+    // ── Try LLM via LiteLLM virtual alias (aisha-summary → vLLM Qwen2.5-14B) ─
     let ai_summary = null;
     let source = 'fallback';
-    const provider = process.env.SUMMARY_LLM_PROVIDER || 'local';
-    const model = process.env.SUMMARY_LLM_MODEL || 'qwen-14b';
     const temperature = parseFloat(process.env.SUMMARY_TEMPERATURE ?? '0.1');
 
     try {
-      logger.debug(`[AI Summary] Generating via ${provider} model=${model} for ${person_id}`);
-      const result = await generateChatCompletion({
-        provider,
-        model,
+      logger.debug(`[AI Summary] Generating via aisha-summary for ${person_id}`);
+      const result = await callLiteLLMVirtual({
+        model: 'aisha-summary',
         maxTokens: 150,
         messages: [
           {
@@ -86,11 +83,11 @@ router.post('/summarize-person-profile', async (req, res) => {
       const text = result.status === 'success' ? String(result.content || '').trim() : '';
       if (text && text.length > 20) {
         ai_summary = text;
-        source = provider;
+        source = 'aisha-summary';
         logger.debug(`[AI Summary] Generated via ${source} for ${person_id}`);
       }
     } catch (llmErr) {
-      logger.warn({ err: llmErr }, `[AI Summary] ${provider} failed, falling back to template`);
+      logger.warn({ err: llmErr }, '[AI Summary] aisha-summary failed, falling back to template');
     }
 
     // ── Fallback: deterministic template ───────────────────────────────────

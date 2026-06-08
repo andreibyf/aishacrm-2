@@ -25,10 +25,9 @@ import { authenticateRequest } from '../middleware/authenticate.js';
 // AiSHA Chat Handler (v2 — full tool calling + context)
 // ---------------------------------------------------------------------------
 
-import { buildSystemPrompt, getOpenAIClient } from '../lib/aiProvider.js';
+import OpenAI from 'openai';
+import { buildSystemPrompt } from '../lib/aiProvider.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
-import { resolveLLMApiKey, selectLLMConfigForTenant } from '../lib/aiEngine/index.js';
-import { createAnthropicClientWrapper } from '../lib/aiEngine/anthropicAdapter.js';
 import {
   buildTenantContextDictionary,
   generateContextDictionaryPrompt,
@@ -142,25 +141,7 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
 
   const fullSystemPrompt = baseSystemPrompt + '\n\n' + braidPrompt + '\n\n' + whatsappInstructions;
 
-  // Resolve LLM config
-  // [2026-02-24 Claude] Use selectLLMConfigForTenant which handles provider+model together
-  let provider, apiKey, modelName;
-  try {
-    const llmConfig = selectLLMConfigForTenant({
-      capability: 'chat_tools',
-      tenantSlugOrId: tenantId,
-    });
-    provider = llmConfig?.provider || process.env.LLM_PROVIDER || 'anthropic';
-    modelName = llmConfig?.model;
-    apiKey = await resolveLLMApiKey({ tenantSlugOrId: tenantId, provider });
-  } catch (e) {
-    logger.warn(`[WhatsApp] LLM config resolution failed, using env defaults: ${e.message}`);
-    provider = process.env.LLM_PROVIDER || 'anthropic';
-    apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY;
-    modelName = provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o-mini';
-  }
-
-  if (!apiKey) throw new Error('No LLM API key available');
+  // LLM routing handled by LiteLLM — aisha-whatsapp alias → claude-sonnet
 
   // Generate tools with custom entity labels (base schemas are cached)
   let tools = [];
@@ -178,16 +159,14 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
     logger.warn(`[WhatsApp] Tool schema generation failed (chat-only mode): ${e.message}`);
   }
 
-  logger.info(
-    `[WhatsApp] Calling LLM: provider=${provider} model=${modelName} tools=${tools.length}`,
-  );
+  logger.info(`[WhatsApp] Calling LLM: model=aisha-whatsapp tools=${tools.length}`);
 
   const llmMessages = [{ role: 'system', content: fullSystemPrompt }, ...messages.slice(-8)];
 
-  const client =
-    provider === 'anthropic'
-      ? createAnthropicClientWrapper(apiKey)
-      : getOpenAIClient(apiKey, provider);
+  const client = new OpenAI({
+    apiKey: process.env.LITELLM_MASTER_KEY || 'litellm',
+    baseURL: `${process.env.LITELLM_BASE_URL || 'http://litellm:4000'}/v1`,
+  });
 
   const temperature = aiSettings?.temperature ?? 0.4;
 
@@ -195,7 +174,7 @@ IMPORTANT CONTEXT: This conversation is happening via WhatsApp.
   let finalReply = '';
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const completionOpts = {
-      model: modelName,
+      model: 'aisha-whatsapp',
       messages: llmMessages,
       temperature,
       max_tokens: 1024,
