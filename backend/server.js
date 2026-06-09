@@ -249,6 +249,7 @@ import createAuthRoutes from './routes/auth.js';
 import createGitHubIssuesRoutes from './routes/github-issues.js';
 import createSupabaseProxyRoutes from './routes/supabaseProxy.js';
 import createSuggestionsRoutes from './routes/suggestions.js';
+import createGrowthRoutes from './routes/growth.js';
 import createConstructionProjectsRoutes from './routes/construction-projects.js';
 import createConstructionAssignmentsRoutes from './routes/construction-assignments.js';
 import createWorkersRoutes from './routes/workers.js';
@@ -680,6 +681,14 @@ app.use(
   defaultLimiter,
   authenticateRequest,
   createSuggestionsRoutes(measuredPgPool),
+);
+// Growth — OSINT Opportunity Intelligence (Phase 1): business profile + insights
+app.use(
+  '/api/v2/growth',
+  defaultLimiter,
+  authenticateRequest,
+  validateTenantAccess,
+  createGrowthRoutes(measuredPgPool),
 );
 // Cal.com booking system routes
 logger.debug('Mounting /api/session-packages routes');
