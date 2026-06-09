@@ -1,4 +1,5 @@
 import { lazy, useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BarChart3,
   Building2,
@@ -57,14 +58,43 @@ import CustomQuery from '../components/reports/CustomQuery';
 import { exportReportToCSV } from '@/api/functions';
 import { getBackendUrl } from '@/api/backendUrl';
 
+// Known report tab ids — kept in sync with the `reportTabs` array below.
+// Used to validate the `?tab=` deep-link param (e.g. /reports?tab=insights).
+const REPORT_TAB_IDS = [
+  'overview',
+  'sales',
+  'leads',
+  'productivity',
+  'forecasting',
+  'insights',
+  'data-quality',
+  'custom-query',
+];
+
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams] = useSearchParams();
   const { user: currentUser, loading: userLoading } = useUser();
+
+  // Deep-link support: open a specific tab via `?tab=<id>` (e.g. completion
+  // notifications link to /reports?tab=insights). Falls back to 'overview'.
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (requestedTab && REPORT_TAB_IDS.includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, [searchParams]);
+
   const [loadingStats, setLoadingStats] = useState(false);
   const [stats, setStats] = useState(null);
   const { selectedTenantId } = useTenant();
-  const { getFilter, canViewAllRecords, selectedTeamId, selectedEmail, membersByTeam: _membersByTeam } =
-    useEmployeeScope();
+  const {
+    getFilter,
+    canViewAllRecords,
+    selectedTeamId,
+    selectedEmail,
+    membersByTeam: _membersByTeam,
+  } = useEmployeeScope();
   const [isExporting, setIsExporting] = useState(false);
   const { cachedRequest } = useApiManager();
   const [currentTenantData, setCurrentTenantData] = useState(null);
