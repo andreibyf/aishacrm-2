@@ -26,6 +26,7 @@ import {
 } from './lib/campaignWorker.js';
 import { startAiTriggersWorker } from './lib/aiTriggersWorker.js';
 import { startEmailWorker } from './workers/emailWorker.js';
+import { startGrowthInsightWorker } from './workers/growthInsightWorker.js';
 import { startTaskWorkers } from './workers/taskWorkers.js';
 import { startHealthMonitoring } from './lib/healthMonitor.js';
 
@@ -1090,6 +1091,16 @@ server.listen(PORT, async () => {
   if (pgPool) {
     startEmailWorker(pgPool);
   }
+  // Start growth insight worker if enabled (OSINT Opportunity Intelligence)
+  if (process.env.GROWTH_INSIGHT_WORKER_ENABLED === 'true') {
+    logger.info('[GrowthInsightWorker] Starting (processes queued insight runs)');
+    startGrowthInsightWorker(pgPool);
+  } else {
+    logger.debug(
+      '[GrowthInsightWorker] Disabled (set GROWTH_INSIGHT_WORKER_ENABLED=true to enable)',
+    );
+  }
+
   // Task workers use Supabase client, not pgPool
   startTaskWorkers();
 
