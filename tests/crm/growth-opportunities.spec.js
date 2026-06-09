@@ -99,7 +99,7 @@ test.describe('[CRM] Growth / Opportunity Intelligence API', () => {
     expect(listRes.status()).toBe(200);
     const list = await safeJson(listRes);
     expect(list.status).toBe('success');
-    expect(Array.isArray(list.data)).toBe(true);
+    expect(Array.isArray(list.data.opportunities)).toBe(true);
 
     const dashRes = await apiContext.get('v2/growth/dashboard');
     expect(dashRes.status()).toBe(200);

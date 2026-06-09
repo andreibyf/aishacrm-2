@@ -304,6 +304,8 @@ export async function generateForInsight(
         tenant_id: tenantId,
         insight_id: insightId,
         type: candidate.type,
+        subject: candidate.subject != null ? candidate.subject : null,
+        region: candidate.region != null ? candidate.region : null,
         title,
         reason,
         score: scored.score,

@@ -293,3 +293,32 @@ test('claimAndRunOne: runInsight rejects → claimAndRunOne still resolves (does
   // It claimed and attempted the run, so it reports processed:true.
   assert.deepEqual(result, { processed: true, insightId: INSIGHT_ID });
 });
+
+// ---------------------------------------------------------------------------
+// failure during buildDeps/run marks the claimed row failed (not stuck running)
+// ---------------------------------------------------------------------------
+
+test('claimAndRunOne: buildDeps throws → claimed row marked failed (not stuck running)', async () => {
+  const supabase = makeFakeSupabase({ rows: [runningRow()] });
+  let runCalls = 0;
+  const runInsight = async () => {
+    runCalls += 1;
+  };
+  const throwingBuildDeps = async () => {
+    throw new Error('profile load failed');
+  };
+
+  const result = await claimAndRunOne(supabase, {
+    runInsight,
+    buildDeps: throwingBuildDeps,
+    now: fixedNow,
+  });
+
+  assert.deepEqual(result, { processed: true, insightId: INSIGHT_ID });
+  assert.equal(runCalls, 0); // never reached runInsight
+
+  const row = supabase.store.rows.find((r) => r.id === INSIGHT_ID);
+  assert.equal(row.status, 'failed'); // not left 'running'
+  assert.equal(row.error, 'profile load failed');
+  assert.equal(row.completed_at, new Date(FIXED_NOW).toISOString());
+});

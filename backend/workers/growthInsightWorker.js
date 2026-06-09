@@ -141,10 +141,28 @@ export async function claimAndRunOne(
     const deps = await buildDeps(supabase, claimedRow);
     await runInsight(supabase, claimedRow, deps);
   } catch (err) {
-    logger.error(
-      `[GrowthInsightWorker] Insight ${claimedRow.id} run threw unexpectedly:`,
-      err && err.message ? err.message : err,
-    );
+    const message = err && err.message ? err.message : String(err);
+    logger.error(`[GrowthInsightWorker] Insight ${claimedRow.id} run threw unexpectedly:`, message);
+    // The row is already claimed (claimed_at set), so without this it would sit at
+    // status='running' forever — later polls only pick up `claimed_at IS NULL`.
+    // Mark it failed (runInsight normally does this itself; this covers a throw in
+    // buildDeps or any unexpected escape).
+    try {
+      await supabase
+        .from('growth_insights')
+        .update({
+          status: 'failed',
+          error: message,
+          completed_at: new Date(now()).toISOString(),
+        })
+        .eq('id', claimedRow.id)
+        .select('id');
+    } catch (updateErr) {
+      logger.error(
+        `[GrowthInsightWorker] Could not mark insight ${claimedRow.id} failed:`,
+        updateErr && updateErr.message ? updateErr.message : updateErr,
+      );
+    }
   }
 
   return { processed: true, insightId: claimedRow.id };

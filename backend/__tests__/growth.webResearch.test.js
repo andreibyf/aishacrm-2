@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { searchWeb, fetchPage, companyLookup } from '../lib/growth/webResearch.js';
+import { searchWeb, fetchPage, companyLookup, checkFetchUrl } from '../lib/growth/webResearch.js';
 import { research } from '../lib/growth/researchAgent.js';
 
 // ---------------------------------------------------------------------------
@@ -266,4 +266,49 @@ test('research optionally reads the top result page when readTopResult is set', 
 
   assert.equal(fetchedUrl, 'https://top.example');
   assert.equal(out.summary, 'used page'); // page extract reached the prompt
+});
+
+// ---------------------------------------------------------------------------
+// SSRF guard (checkFetchUrl) + fetchPage refusal
+// ---------------------------------------------------------------------------
+
+test('checkFetchUrl blocks non-http(s), loopback, private, link-local/metadata, IPv6', () => {
+  // allowed
+  assert.equal(checkFetchUrl('https://example.com/x').ok, true);
+  assert.equal(checkFetchUrl('http://news.example.org').ok, true);
+  // blocked schemes
+  assert.equal(checkFetchUrl('ftp://example.com').ok, false);
+  assert.equal(checkFetchUrl('file:///etc/passwd').ok, false);
+  assert.equal(checkFetchUrl('not a url').ok, false);
+  // blocked hosts / ranges
+  assert.equal(checkFetchUrl('http://localhost/x').ok, false);
+  assert.equal(checkFetchUrl('http://127.0.0.1/x').ok, false);
+  assert.equal(checkFetchUrl('http://169.254.169.254/latest/meta-data').ok, false); // cloud metadata
+  assert.equal(checkFetchUrl('http://10.0.0.5/x').ok, false);
+  assert.equal(checkFetchUrl('http://192.168.1.1/x').ok, false);
+  assert.equal(checkFetchUrl('http://172.16.0.9/x').ok, false);
+  assert.equal(checkFetchUrl('http://service.internal/x').ok, false);
+  assert.equal(checkFetchUrl('http://[::1]/x').ok, false);
+});
+
+test('fetchPage refuses a blocked URL WITHOUT launching the browser', async () => {
+  const browserFactory = makeBrowserFactory({ mode: 'ok' });
+  const out = await fetchPage(
+    { url: 'http://169.254.169.254/latest/meta-data' },
+    { browserFactory },
+  );
+  assert.match(out.error, /blocked/);
+  assert.equal(browserFactory.state.newPageCalls, 0); // never navigated
+  assert.equal(browserFactory.state.closed, false); // factory never invoked
+});
+
+test('searchWeb strips nested/split HTML completely (no residual markup)', async () => {
+  const fetchImpl = makeWikiFetch([
+    { title: 'X', snippet: '<scr<script>ipt>alert(1)</script> rising demand', pageid: 7 },
+  ]);
+  const out = await searchWeb({ q: 'x' }, { fetchImpl });
+  assert.equal(out.length, 1);
+  assert.ok(!out[0].snippet.includes('<'), 'no < remains');
+  assert.ok(!out[0].snippet.includes('>'), 'no > remains');
+  assert.ok(out[0].snippet.includes('rising demand'));
 });

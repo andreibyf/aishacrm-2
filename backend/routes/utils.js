@@ -7,6 +7,7 @@ import express from 'express';
 import crypto from 'crypto';
 
 import { searchWeb, fetchPage, companyLookup } from '../lib/growth/webResearch.js';
+import { authenticateRequest } from '../middleware/authenticate.js';
 
 export default function createUtilsRoutes(_pgPool) {
   const router = express.Router();
@@ -98,7 +99,7 @@ export default function createUtilsRoutes(_pgPool) {
   // GET /api/utils/web-search?q=<query>&limit=<n> - Web search (Phase 1: Wikipedia)
   // Backs Braid searchWeb() in web-research.braid. Fail-soft: empty data on
   // upstream failure (webResearch returns [] rather than throwing).
-  router.get('/web-search', async (req, res) => {
+  router.get('/web-search', authenticateRequest, async (req, res) => {
     try {
       const data = await searchWeb({
         q: req.query.q,
@@ -112,7 +113,7 @@ export default function createUtilsRoutes(_pgPool) {
 
   // POST /api/utils/fetch-page { url } - Fetch + extract a web page's text
   // Backs Braid fetchWebPage(). Uses a headless browser server-side.
-  router.post('/fetch-page', async (req, res) => {
+  router.post('/fetch-page', authenticateRequest, async (req, res) => {
     try {
       const url = req.body?.url;
       if (!url) {
@@ -127,7 +128,7 @@ export default function createUtilsRoutes(_pgPool) {
 
   // POST /api/utils/company-lookup { company_name } - Enrich company data
   // Backs Braid lookupCompanyInfo(). Phase 1: searchWeb composition (no LLM).
-  router.post('/company-lookup', async (req, res) => {
+  router.post('/company-lookup', authenticateRequest, async (req, res) => {
     try {
       const company_name = req.body?.company_name;
       if (!company_name) {

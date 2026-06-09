@@ -118,7 +118,8 @@ export async function listOpportunities(tenantId, params = {}) {
   });
   const json = await resp.json();
   if (!resp.ok) throw new Error(json.message || 'Failed to fetch opportunities');
-  return json.data || [];
+  // Backend returns { data: { opportunities: [...] } }; the consumer expects the array.
+  return json.data?.opportunities ?? [];
 }
 
 export async function getOpportunity(tenantId, id) {

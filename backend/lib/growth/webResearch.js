@@ -35,10 +35,70 @@ const MAX_PAGE_TEXT_CHARS = 20_000;
  */
 function stripHtml(html) {
   if (!html) return '';
-  return String(html)
-    .replace(/<[^>]*>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let out = String(html);
+  // Remove tags repeatedly until stable — a single pass can be bypassed by
+  // nested/split markup like "<scr<script>ipt>" (CodeQL: incomplete multi-char
+  // sanitization). Then drop any residual angle brackets so no partial markup
+  // can survive.
+  let prev;
+  do {
+    prev = out;
+    out = out.replace(/<[^>]*>/g, '');
+  } while (out !== prev);
+  return out.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Hosts that must never be fetched (SSRF guard).
+const BLOCKED_HOSTS = new Set(['localhost', '0.0.0.0', '::1', '[::1]']);
+
+/**
+ * Is an IPv4 literal in a private / loopback / link-local / CGNAT range?
+ * @param {string} host
+ * @returns {boolean}
+ */
+function isPrivateIpv4(host) {
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if (a === 0 || a === 10 || a === 127) return true; // this-network / 10.0.0.0/8 / loopback
+  if (a === 169 && b === 254) return true; // link-local + cloud metadata (169.254.169.254)
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  return false;
+}
+
+/**
+ * SSRF guard for fetchPage: only allow http(s) to public hosts. Rejects
+ * loopback/private/link-local/metadata IPv4 literals, IPv6 literals, and obvious
+ * internal hostnames. Hostname/literal based — DNS-rebinding is a residual risk,
+ * so the HTTP route is also auth-gated.
+ *
+ * @param {string} rawUrl
+ * @returns {{ok:true}|{ok:false, reason:string}}
+ */
+export function checkFetchUrl(rawUrl) {
+  let u;
+  try {
+    u = new URL(String(rawUrl));
+  } catch {
+    return { ok: false, reason: 'invalid url' };
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    return { ok: false, reason: 'unsupported scheme' };
+  }
+  const host = u.hostname.toLowerCase();
+  if (!host) return { ok: false, reason: 'no host' };
+  if (BLOCKED_HOSTS.has(host) || host.endsWith('.local') || host.endsWith('.internal')) {
+    return { ok: false, reason: 'blocked host' };
+  }
+  // Conservatively block IPv6 literals (URL hostnames keep the brackets).
+  if (host.startsWith('[') || host.includes(':')) {
+    return { ok: false, reason: 'ipv6 literal blocked' };
+  }
+  if (isPrivateIpv4(host)) return { ok: false, reason: 'private address' };
+  return { ok: true };
 }
 
 /**
@@ -131,6 +191,11 @@ export async function fetchPage({ url } = {}, deps = {}) {
   const target = String(url || '').trim();
   if (!target) return { url: target, error: 'url is required' };
 
+  // SSRF guard: refuse non-http(s) and internal/private targets BEFORE launching
+  // a browser (no metadata-service / internal-host access via a user-supplied url).
+  const safe = checkFetchUrl(target);
+  if (!safe.ok) return { url: target, error: `blocked: ${safe.reason}` };
+
   const browserFactory =
     typeof deps.browserFactory === 'function' ? deps.browserFactory : defaultBrowserFactory;
   const nowIso = typeof deps.nowIso === 'function' ? deps.nowIso : () => new Date().toISOString();
@@ -143,9 +208,7 @@ export async function fetchPage({ url } = {}, deps = {}) {
 
     const title = await page.title();
     const text = await page.evaluate(
-      () =>
-         
-        (document && document.body ? document.body.innerText : '') || '',
+      () => (document && document.body ? document.body.innerText : '') || '',
     );
 
     return {
