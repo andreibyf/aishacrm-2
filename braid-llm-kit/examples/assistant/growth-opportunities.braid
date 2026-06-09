@@ -1,0 +1,158 @@
+// Executive Assistant Tools - Growth / Opportunity Intelligence
+// OSINT market & demand intelligence: read scored, DIRECTIONAL growth
+// opportunities, the current persisted insight, and kick off a new insight run.
+//
+// NOTE: the internal entity is `growth_opportunities` (NOT `opportunities` — the
+// sales pipeline owns that word). UI copy says "Opportunities". All output is
+// DIRECTIONAL ("interest rising/falling") — never raw keyword counts or invented
+// percentages.
+
+import { Result, CRMError } from "../../spec/types.braid"
+
+@policy(READ_ONLY)
+fn getTopGrowthOpportunities(
+  tenant_id: String,
+  limit: Number,
+  opportunity_type: String
+) -> Result<Array, CRMError> !net {
+  let url = "/api/v2/growth/opportunities";
+  let params = {
+    tenant_id: tenant_id,
+    limit: limit,
+    category: opportunity_type
+  };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_top_growth_opportunities"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getGrowthOpportunityDetail(
+  tenant_id: String,
+  opportunity_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/opportunities/" + opportunity_id;
+  let params = { tenant_id: tenant_id };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_growth_opportunity_detail"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getLatestInsight(
+  tenant_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/insights/current";
+  let params = { tenant_id: tenant_id };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_latest_insight"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getGrowthDashboard(
+  tenant_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/dashboard";
+  let params = { tenant_id: tenant_id };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_growth_dashboard"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(READ_ONLY)
+fn getBusinessProfile(
+  tenant_id: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/profile";
+  let params = { tenant_id: tenant_id };
+
+  let response = http.get(url, { params: params });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "get_business_profile"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(WRITE_OPERATIONS)
+fn requestInsightRun(
+  tenant_id: String
+) -> Result<Object, CRMError> !net {
+  // Kicks off an async insight run (subject to the once-per-7-days throttle;
+  // superadmin is exempt). Returns { id, status:'running', eta_seconds, eta_range }
+  // on 202, or an APIError with code 429 when throttled.
+  let url = "/api/v2/growth/insights";
+  let body = { tenant_id: tenant_id };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "request_insight_run"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(WRITE_OPERATIONS)
+fn actionGrowthOpportunity(
+  tenant_id: String,
+  opportunity_id: String,
+  overrides: Object
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/opportunities/" + opportunity_id + "/action";
+  let body = {
+    tenant_id: tenant_id,
+    overrides: overrides
+  };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "action_growth_opportunity"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}
+
+@policy(WRITE_OPERATIONS)
+fn dismissGrowthOpportunity(
+  tenant_id: String,
+  opportunity_id: String,
+  reason: String
+) -> Result<Object, CRMError> !net {
+  let url = "/api/v2/growth/opportunities/" + opportunity_id + "/dismiss";
+  let body = {
+    tenant_id: tenant_id,
+    reason: reason
+  };
+
+  let response = http.post(url, { body: body });
+
+  return match response {
+    Ok{value} => Ok(value.data),
+    Err{error} => CRMError.fromHTTP(url, error.status, "dismiss_growth_opportunity"),
+    _ => CRMError.network(url, 500, "unknown")
+  };
+}

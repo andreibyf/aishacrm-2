@@ -165,7 +165,9 @@ export default function createGrowthRoutes(pgPool) {
       const supabase = getSupabaseClient();
       const { status, body } = await listOpportunities(supabase, {
         tenantId,
-        type: req.query.type,
+        // `category` is the alias used by the Braid tool (`type` is a reserved
+        // word in the Braid DSL and cannot be an object key there).
+        type: req.query.type || req.query.category,
         status: req.query.status,
         min_score: req.query.min_score,
       });
