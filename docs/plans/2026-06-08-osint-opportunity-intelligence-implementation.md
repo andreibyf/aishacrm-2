@@ -18,7 +18,7 @@
 - **Superadmin check:** `req.user?.role === 'superadmin' || req.user?.is_superadmin === true` (set in `backend/middleware/authenticate.js`).
 - **Route pattern:** `export default function createGrowthRoutes(pgPool){ const router = express.Router(); … return router; }`, mounted in `backend/server.js` next to other `/api/v2/*` mounts (see `createSuggestionsRoutes` at `server.js:251`/`:682`).
 - **Worker pattern:** mirror `backend/workers/emailWorker.js` — a poll loop that **atomically claims** rows (status transition guard so two workers never process the same run), processes, updates. Export `startGrowthInsightWorker(pgPool)`, gated behind `GROWTH_INSIGHT_WORKER_ENABLED`, started in the `server.js` bootstrap block (~1079, next to `startEmailWorker`).
-- **Notifications:** insert into the `notifications` table; shape per `backend/lib/callFlowHandler.js:97` — `{ tenant_id, user_email, title, message, type:'success'|'warning', is_read:false, link, metadata }`.
+- **Notifications:** insert into the `notifications` table. **Verified columns** (`001_init.sql:76`): `id, tenant_id (TEXT), user_email, type, title, message, is_read, metadata (jsonb), created_at` — **no `link` column.** Put the link in `metadata` (`expandMetadata()` in the route surfaces it on read): `{ tenant_id: req.tenant.id /* TEXT, no cast */, user_email, type:'success'|'warning', title, message, is_read:false, metadata:{ link:'/reports?tab=insights', insight_id, status } }`.
 - **Backend tests:** Node native runner, `backend/__tests__/`. Single file: `node --test backend/__tests__/<file>.test.js`. Assert cross-tenant isolation wherever a tenant_id is involved.
 - **Frontend tests:** Vitest, colocated `*.test.jsx`. `npm run test:file <path>`.
 - **Migrations:** `backend/migrations/NNN_growth_opportunity_intelligence.sql` (next free number). Apply via `npm run db:exec -- <path>`, then PostgREST reload + REST verify per `docs/developer-docs/COPILOT_PLAYBOOK.md`. Do **not** replay all migrations from zero (known-broken).
@@ -183,7 +183,7 @@ TDD: `estimate({ serviceCount, regionCount, recentDurations })` → base + per s
 **Files:** Create `backend/lib/growth/insightRunner.js`; Test `backend/__tests__/growth.insightRunner.test.js`.
 
 TDD with injected clients (trends/autocomplete/web fetch stubs, fake `scoreFn`, fake supabase, spy notifier):
-- happy path: writes `demand_signals` (tagged `insight_id`), calls `opportunityEngine`, sets `report` + `opportunity_ids` + `signal_summary`, `status='complete'`, `completed_at`; inserts a **success** notification for `generated_by_email` with `link:'/reports?tab=ai-insights'`.
+- happy path: writes `demand_signals` (tagged `insight_id`), calls `opportunityEngine`, sets `report` + `opportunity_ids` + `signal_summary`, `status='complete'`, `completed_at`; inserts a **success** notification for `generated_by_email` with `metadata.link:'/reports?tab=insights'` (no top-level `link` column — see conventions).
 - failure path: a throwing collector → `status='failed'` + `error`; inserts a **warning** notification; does not throw out of the runner.
 - fail-soft per source: one broken source still produces a run from the others.
 
@@ -237,15 +237,17 @@ Tools: `getTopGrowthOpportunities`, `getGrowthOpportunityDetail`, `getDemandTren
 
 ## Task 12: Frontend — rework Market Intelligence tab (async UX)
 
-**Files:** Modify `src/components/reports/AIMarketInsights.jsx`; Test `src/components/reports/AIMarketInsights.test.jsx`.
+**Files:** Modify `src/components/reports/AIMarketInsights.jsx`, `src/pages/Reports.jsx`; Test `src/components/reports/AIMarketInsights.test.jsx`.
 
-Vitest states: **idle** (Generate button), **cooldown-blocked** (button disabled + "next available <date>"; superadmin never blocked), **running** ("Running — about ~N min" from `eta_range`), **complete** (persisted report from `/insights/current`), **failed** (error + retry). Kickoff calls `POST /insights`, handles 202 and 429. Commit.
+Vitest states: **idle** (Generate button), **cooldown-blocked** (button disabled + "next available <date>"; superadmin never blocked), **running** ("Running — about ~N min" from `eta_range`), **complete** (persisted report from `/insights/current`), **failed** (error + retry). Kickoff calls `POST /insights`, handles 202 and 429.
+
+**Also add `?tab=` deep-link support to `Reports.jsx`** (it's currently `useState('overview')` with no URL handling): on mount, read `useSearchParams()` and `setActiveTab(param)` if it matches a known tab id. This is what makes the completion notification's `metadata.link='/reports?tab=insights'` actually open the Market Intelligence tab. The MI tab id is the existing **`insights`**. Commit.
 
 ---
 
 ## Task 13: Frontend — Opportunities tab, widget, profile editor
 
-**Files:** Create `src/components/reports/GrowthOpportunities.jsx`, `src/components/dashboard/TopOpportunitiesWidget.jsx`, `src/components/reports/GrowthProfileEditor.jsx`; Modify `src/pages/Reports.jsx` (add Opportunities tab per the `reports` array pattern ~`Reports.jsx:404–462`); Tests colocated.
+**Files:** Create `src/components/reports/GrowthOpportunities.jsx`, `src/components/dashboard/TopOpportunitiesWidget.jsx`, `src/components/reports/GrowthProfileEditor.jsx`; Modify `src/pages/Reports.jsx` (add a new entry to the `reportTabs` array — see the verified pattern at `Reports.jsx:401–467`; use tab **`id: 'opportunities'`**, render `<GrowthOpportunities/>`); Tests colocated.
 
 Vitest: opportunity cards render from mocked API; dismiss/action → optimistic update + `clearCacheByKey('GrowthOpportunities')`; widget shows top 3 or "Generate your first insight" CTA; profile editor loads pre-filled profile, edits, PUTs. Commit per component.
 

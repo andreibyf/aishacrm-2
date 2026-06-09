@@ -216,10 +216,23 @@ created `running` rows. Started in the `server.js` bootstrap block alongside `st
 
 ### Notifications
 
-On terminal status, insert into the existing `notifications` table (shape per
-`backend/lib/callFlowHandler.js:97`):
-`{ tenant_id, user_email: generated_by_email, title, message, type: 'success'|'warning',
-   is_read:false, link:'/reports?tab=ai-insights', metadata:{ insight_id, status } }`.
+On terminal status, insert into the existing `notifications` table. **Verified schema**
+(`001_init.sql:76`): `id, tenant_id (TEXT), user_email, type, title, message, is_read,
+metadata (jsonb), created_at` — **there is no `link` column.** The notifications route's
+`expandMetadata()` spreads `metadata` onto the top level on read, so the link lives in
+`metadata`:
+```
+{ tenant_id: req.tenant.id,        // TEXT column — pass the uuid string as-is, no cast
+  user_email: generated_by_email,
+  type: 'success' | 'warning',
+  title, message,
+  is_read: false,
+  metadata: { link: '/reports?tab=insights', insight_id, status } }
+```
+**Deep-link caveat:** `Reports.jsx` does not currently read a `?tab=` param (it's
+`useState('overview')`). The Market Intelligence tab id is **`insights`** (label "AI Insights").
+For the notification link to actually open the tab, add a small `useSearchParams → setActiveTab`
+effect to `Reports.jsx` (done in the frontend task).
 
 ---
 
