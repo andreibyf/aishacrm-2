@@ -1322,6 +1322,28 @@ const createFunctionProxy = (functionName) => {
       }
     }
 
+    // ── executeWorkflow: POST /api/workflows/execute ──────────────────────────
+    if (functionName === 'executeWorkflow') {
+      try {
+        const { workflow_id, payload, input_data } = args[0] || {};
+        const body = { workflow_id, payload: payload ?? input_data };
+        const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          return { data: { status: 'error', error: json?.message || response.statusText } };
+        }
+        return { data: json };
+      } catch (err) {
+        console.error('[executeWorkflow] Error:', err);
+        return { data: { status: 'error', error: err?.message || String(err) } };
+      }
+    }
+
     // Fallback: warn if function not found
     console.warn(`[Production Mode] Function '${functionName}' not available. Use backend routes.`);
     return Promise.reject(
@@ -1711,7 +1733,5 @@ export const seedDocumentation = functionsProxy.seedDocumentation;
 export const submitClientRequirement = functionsProxy.submitClientRequirement;
 
 export const approveClientRequirement = functionsProxy.approveClientRequirement;
-
-export const elevenLabsCRMAccess = functionsProxy.elevenLabsCRMAccess;
 
 export const executeWorkflow = functionsProxy.executeWorkflow;
