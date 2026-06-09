@@ -1326,11 +1326,18 @@ const createFunctionProxy = (functionName) => {
     if (functionName === 'executeWorkflow') {
       try {
         const BACKEND_URL = getBackendUrl();
-        const { workflow_id, payload, input_data } = args[0] || {};
-        const body = { workflow_id, payload: payload ?? input_data };
+        const { workflow_id, payload, input_data, tenant_id } = args[0] || {};
+        const body = {
+          workflow_id,
+          payload: payload ?? input_data,
+          ...(tenant_id && { tenant_id }),
+        };
+        const authHeader = await getAuthorizationHeader();
+        const headers = { 'Content-Type': 'application/json' };
+        if (authHeader) headers['Authorization'] = authHeader;
         const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           credentials: 'include',
           body: JSON.stringify(body),
         });
