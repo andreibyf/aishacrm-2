@@ -106,6 +106,28 @@ Format: `table_name` → columns (alphabetical within groups)
 
 ---
 
+### Growth / Opportunity Intelligence (OSINT)
+
+> Phase 1 — migrations `182_growth_opportunity_intelligence.sql` + `183_growth_insights_claimed_at.sql`. **Applied to the dev branch only** (`aishacrm-dev`, project ref `nrtrjsatmsosslxwlmoj` at apply time — note: non-persistent Supabase branch refs rotate on recreation, so this may differ from the Environments table above); **staging/prod pending**. All four tables: `tenant_id uuid NOT NULL`, RLS enabled with 4 per-operation policies each (`tenant_id = (SELECT public.current_tenant_id())`); the background worker runs as service_role.
+
+#### `business_profiles`
+
+`id`, `tenant_id`, `service_catalog`, `target_regions`, `tracked_keywords`, `competitors`, `settings`, `last_refreshed_at`, `created_at`, `updated_at` — `UNIQUE(tenant_id)`. Manually-declared market scope, seeded from tenant fields.
+
+#### `growth_insights`
+
+`id`, `tenant_id`, `status` (running|complete|failed), `trigger` (manual|admin_adhoc), `generated_by`, `generated_by_email`, `report`, `opportunity_ids`, `signal_summary`, `eta_seconds`, `error`, `started_at`, `completed_at`, `created_at`, `claimed_at`. One row per async, 7-day-throttled (superadmin-exempt) run; latest row is the current persisted insight. `claimed_at` is the worker's atomic-claim marker.
+
+#### `demand_signals`
+
+`id`, `tenant_id`, `insight_id`, `signal_type` (trends|autocomplete|community|web), `subject`, `region`, `period_start`, `period_end`, `value`, `delta_pct`, `source`, `payload`, `created_at`. Per-run provenance.
+
+#### `growth_opportunities`
+
+`id`, `tenant_id`, `insight_id`, `type` (geographic|service|content|reputation), `title`, `reason`, `score`, `expected_impact`, `difficulty`, `recommended_action`, `action_type`, `action_payload`, `signal_ids`, `status` (new|viewed|actioned|dismissed|expired), `actioned_entity`, `created_at`, `expires_at`. Scored, directional opportunities produced per run.
+
+---
+
 ### C.A.R.E. (Customer Automated Response Engine)
 
 #### `care_playbook`
