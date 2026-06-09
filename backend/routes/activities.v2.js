@@ -1636,7 +1636,7 @@ export default function createActivityV2Routes(_pgPool, options = {}) {
 
       res.json({ status: 'success', message: 'Activity deleted successfully' });
     } catch (error) {
-      logger.error('Error in v2 activity delete:', error);
+      logger.error('Error in v2 activity delete:', { error, id: req.params?.id, tenant_id: req.query?.tenant_id });
       // Ensure CORS headers are present in error responses (using secure origin whitelist)
       if (!res.getHeader('Access-Control-Allow-Origin') && isAllowedOrigin(req.headers.origin)) {
         setCorsHeaders(req.headers.origin, res, true);
