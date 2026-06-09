@@ -170,6 +170,10 @@ export default defineConfig({
           include: [
             'src/components/reports/**/*.test.{js,jsx,ts,tsx}',
             'src/components/reports/**/__tests__/**/*.{js,jsx,ts,tsx}',
+            // Dashboard widgets live in the reports project: they share the
+            // recharts mock from setup-reports.js and are analytics-adjacent.
+            'src/components/dashboard/**/*.test.{js,jsx,ts,tsx}',
+            'src/components/dashboard/**/__tests__/**/*.{js,jsx,ts,tsx}',
             'src/components/workflows/**/__tests__/**/*.pepQuery*.{js,jsx,ts,tsx}',
           ],
         },

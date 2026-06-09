@@ -53,6 +53,7 @@ const HistoricalTrends = lazy(() => import('../components/reports/HistoricalTren
 const ForecastingDashboard = lazy(() => import('../components/reports/ForecastingDashboard'));
 
 import AIMarketInsights from '../components/reports/AIMarketInsights';
+import GrowthOpportunities from '../components/reports/GrowthOpportunities';
 import DataQualityReport from '../components/reports/DataQualityReport';
 import CustomQuery from '../components/reports/CustomQuery';
 import { exportReportToCSV } from '@/api/functions';
@@ -67,6 +68,7 @@ const REPORT_TAB_IDS = [
   'productivity',
   'forecasting',
   'insights',
+  'opportunities',
   'data-quality',
   'custom-query',
 ];
@@ -479,6 +481,13 @@ export default function ReportsPage() {
       icon: Brain,
       iconColor: 'text-pink-500',
       component: <AIMarketInsights tenant={currentTenantData} />,
+    },
+    {
+      id: 'opportunities',
+      label: 'Opportunities',
+      icon: Target,
+      iconColor: 'text-emerald-400',
+      component: <GrowthOpportunities tenant={currentTenantData} />,
     },
     {
       id: 'data-quality',
