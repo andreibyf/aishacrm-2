@@ -222,8 +222,9 @@ Also fixes the long-standing **vaporware**: `web-research.braid`'s handlers (`/a
 - **New** `src/components/dashboard/TopOpportunitiesWidget.jsx` — top 3 by score → links to tab.
 - **Profile editor** — small modal/panel to set service catalog / target regions / competitors,
   pre-filled from tenant fields.
-- **Tier gating:** read the tenant tier field. **Action item: verify the exact column name**
-  (`subscription_tier` was not found in code during design; confirm before building gating).
+- **Tier gating:** **DEFERRED — not in scope.** The feature ships ungated (available to all
+  tenants) for now. If revived later, verify the exact tenant tier column name first
+  (`subscription_tier` was not found in code during design).
 - **No new top-level nav, no 4-registration dance.**
 - Testing per house rule: containerized FE (`docker compose up -d --build frontend`, port 4000).
 
@@ -250,7 +251,7 @@ Also fixes the long-standing **vaporware**: `web-research.braid`'s handlers (`/a
 - **P2 — Community:** `communityMiner` (Reddit) + `growthCommunityWorker` → community signals.
 - **P3 — Competitor depth:** on-demand agentic competitor analysis (no scheduled crawler) ·
   optional review-theme mining behind `GROWTH_REVIEW_SCRAPING_ENABLED` (default off, ToS-gray).
-- **P4 — Tiers:** tier gating (after confirming the tenant tier field name).
+- **P4 — Tiers:** tier gating. **Deferred — not scheduled.** Feature ships ungated until revived.
 
 ---
 
@@ -278,5 +279,4 @@ Also fixes the long-standing **vaporware**: `web-research.braid`'s handlers (`/a
 | LLM cost of scoring + on-demand research | Cooldowns + batching + route to local vLLM (`brain_plan_actions`) |
 | Reddit/autocomplete rate limits | Polite rate-limiting + aggressive caching (cache layer 6380) |
 | Review scraping ToS exposure | Default-off flag, low frequency, fail-soft, documented optional (P3) |
-| Tenant tier field name unverified | Confirm column name before P4 gating |
 | SearXNG infra dependency for web-search | Use fetch-based fallback if SearXNG isn't already zero-cost on VPS-2 |

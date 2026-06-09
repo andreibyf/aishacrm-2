@@ -307,7 +307,7 @@ Vitest: loads `/api/v2/growth/profile` (pre-filled from tenant), edits service c
 
 - **P2 — Community:** `communityMiner.js` (Reddit public JSON) + `growthCommunityWorker` (weekly) → `demand_signals(signal_type='community')`.
 - **P3 — Competitor depth:** on-demand agentic competitor analysis via `researchAgent`; optional review-theme mining behind `GROWTH_REVIEW_SCRAPING_ENABLED` (default off, ToS-gray, low frequency, fail-soft).
-- **P4 — Tiers:** tier gating. **Blocker:** confirm the tenant tier column name first (`subscription_tier` was not found in code during design).
+- **P4 — Tiers:** tier gating. **DEFERRED (not scheduled).** Until then the feature is available to all tenants ungated. When revived, confirm the tenant tier column name first (`subscription_tier` was not found in code during design).
 
 ## Known risks carried from design
 
