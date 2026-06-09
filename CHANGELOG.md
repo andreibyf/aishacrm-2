@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OSINT Opportunity Intelligence — Phase 1 foundation (migration)** (`backend/migrations/182_growth_opportunity_intelligence.sql`): four new tenant-isolated tables for a market & demand intelligence feature that synthesizes free public signals (no tenant website, no Google OAuth, no IP/intent tracking) into persisted, client-triggered "insight runs". `business_profiles` (manually declared scope, seeded from tenant fields, `UNIQUE(tenant_id)`), `growth_insights` (one row per async, 7-day-throttled, superadmin-exempt run; latest row is the current persisted insight), `demand_signals` (per-run provenance), `growth_opportunities` (scored, directional opportunities). RLS mirrors `163_signing_sessions.sql` (`tenant_id = (SELECT public.current_tenant_id())`, per-operation policies `TO authenticated`; worker runs as service_role). Design: `docs/plans/2026-06-08-osint-opportunity-intelligence-design.md`. Migration file added; **not yet applied** to any environment.
+
 ### Fixed
 
 - **`callLiteLLMVirtual` transport errors (DNS failure, abort timeout, ECONNREFUSED) became unhandled exceptions** (`backend/lib/aiEngine/litellmClient.js`): the `await fetch(...)` call could throw before reaching the `{ status: 'error' }` return path, so callers that branch on `result.status` (document extraction, MCP routes) received a generic 500 instead of a normalized error. Wrapped the fetch and `resp.json()` in try/catch; each error path returns `{ status: 'error', error: '...' }`.
