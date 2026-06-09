@@ -149,8 +149,9 @@ backend/test-parameter-descriptions.js
 backend/scripts/debug/test-openai-direct.js
 backend/scripts/debug/test-parameter-descriptions.js
 
-# Claude Code local config
-.claude/
+# Claude Code local config (track shared engineering skills, ignore the rest)
+.claude/*
+!.claude/skills/
 
 # Continue.dev local config
 .continue/
