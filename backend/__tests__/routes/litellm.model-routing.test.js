@@ -2,8 +2,8 @@
  * LiteLLM Virtual Model Alias Routing Tests
  *
  * Contract tests that each refactored non-AiSHA caller sends the correct
- * virtual model alias to LiteLLM. These tests mock callLiteLLMVirtual to
- * capture the model name without making real network calls.
+ * virtual model alias to LiteLLM. These tests use the _fetch dependency
+ * injection parameter added to callLiteLLMVirtual — no module mocking needed.
  *
  * Callers under test:
  * - aiSummary.js      → aisha-summary
@@ -16,153 +16,113 @@
  * - whatsapp.js       → aisha-whatsapp (via OpenAI SDK pointed at LiteLLM baseURL)
  *
  * [2026-06-08 Claude] Added as part of LiteLLM virtual model alias refactor
- * [2026-06-08 Claude] Fixed: callLiteLLMVirtual model alias block now uses mock.module('node-fetch')
- *   instead of global.fetch spy — callLiteLLMVirtual imports fetch from node-fetch, so
- *   global.fetch was never invoked and capturedBody stayed null, causing all alias assertions to fail.
+ * [2026-06-08 Claude] Fixed: replaced mock.module('node-fetch') with _fetch injection.
+ *   mock.module is experimental and absent in Node.js ≥25; _fetch param defaults to
+ *   the real node-fetch in production and accepts a stub in tests.
  */
 
-import { describe, it, before, after, mock } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { callLiteLLMVirtual } from '../../lib/aiEngine/litellmClient.js';
 
-// ─── Shared fetch mock ────────────────────────────────────────────────────────
+// ─── Shared fetch stub ────────────────────────────────────────────────────────
 
-let capturedBody = null;
-let capturedUrl = null;
-const originalFetch = global.fetch;
-
-function installFetchMock(response) {
-  global.fetch = async (url, opts) => {
-    capturedUrl = url;
+function makeFetchStub() {
+  let capturedBody = null;
+  const stub = async (_url, opts) => {
     capturedBody = opts?.body ? JSON.parse(opts.body) : null;
     return {
       ok: true,
       status: 200,
-      json: async () =>
-        response || {
-          choices: [{ message: { content: 'mock response' }, finish_reason: 'stop' }],
-          usage: {},
-        },
+      json: async () => ({
+        choices: [{ message: { content: 'mock response' }, finish_reason: 'stop' }],
+        usage: {},
+      }),
       text: async () => 'ok',
     };
   };
+  stub.body = () => capturedBody;
+  return stub;
 }
 
-function restoreFetch() {
-  global.fetch = originalFetch;
-}
-
-// ─── callLiteLLMVirtual ───────────────────────────────────────────────────────
+// ─── callLiteLLMVirtual model alias ──────────────────────────────────────────
 
 describe('callLiteLLMVirtual model alias', () => {
-  before(async () => {
-    // callLiteLLMVirtual uses `import fetch from 'node-fetch'`, so global.fetch spy
-    // is never invoked — mock.module intercepts the named import binding instead.
-    mock.module('node-fetch', {
-      defaultExport: async (url, opts) => {
-        capturedUrl = url;
-        capturedBody = opts?.body ? JSON.parse(opts.body) : null;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            choices: [{ message: { content: 'mock response' }, finish_reason: 'stop' }],
-            usage: {},
-          }),
-          text: async () => 'ok',
-        };
-      },
-    });
-  });
-
-  after(() => {
-    mock.restoreAll();
-  });
-
   it('sends aisha-summary for summary calls', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-summary',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-summary');
+    assert.equal(stub.body()?.model, 'aisha-summary');
   });
 
   it('sends aisha-workflow for workflow calls', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-workflow',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-workflow');
+    assert.equal(stub.body()?.model, 'aisha-workflow');
   });
 
   it('sends aisha-vision for document extraction', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-vision',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-vision');
+    assert.equal(stub.body()?.model, 'aisha-vision');
   });
 
   it('sends aisha-mcp for MCP default path', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-mcp',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-mcp');
+    assert.equal(stub.body()?.model, 'aisha-mcp');
   });
 
   it('sends aisha-task for task execution', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-task',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-task');
+    assert.equal(stub.body()?.model, 'aisha-task');
   });
 
   it('sends aisha-whatsapp for WhatsApp AI replies', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'aisha-whatsapp',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'aisha-whatsapp');
+    assert.equal(stub.body()?.model, 'aisha-whatsapp');
   });
 
   it('passes explicit provider/model through unchanged (MCP override path)', async () => {
-    const { callLiteLLMVirtual } = await import('../../lib/aiEngine/litellmClient.js');
-    capturedBody = null;
+    const stub = makeFetchStub();
     await callLiteLLMVirtual({
       model: 'anthropic/claude-3-5-haiku-20241022',
       messages: [{ role: 'user', content: 'test' }],
+      _fetch: stub,
     });
-    assert.equal(capturedBody?.model, 'anthropic/claude-3-5-haiku-20241022');
+    assert.equal(stub.body()?.model, 'anthropic/claude-3-5-haiku-20241022');
   });
 });
 
 // ─── mcp.js callLLMWithFailover contract ─────────────────────────────────────
+// callLLMWithFailover is not exported — verify routing by reading mcp.js source.
 
 describe('callLLMWithFailover virtual model routing', () => {
-  let callLLMWithFailover;
-
-  before(async () => {
-    installFetchMock();
-    // callLLMWithFailover is not exported — test via the module's internal behaviour
-    // by checking capturedBody after calling callLiteLLMVirtual with expected args
-    // (We verify the refactored function routes correctly by reading mcp.js source contract)
-  });
-
-  after(() => restoreFetch());
-
   it('mcp.js imports callLiteLLMVirtual (not selectLLMConfigForTenant)', async () => {
     // Verify no stale imports by reading module source
     const fs = await import('node:fs/promises');
@@ -180,7 +140,6 @@ describe('callLLMWithFailover virtual model routing', () => {
     const src = await (
       await import('node:fs/promises')
     ).readFile(new URL('../../routes/mcp.js', import.meta.url), 'utf8');
-    // The refactored function should default to 'aisha-mcp'
     assert.ok(src.includes("'aisha-mcp'"), "default model alias 'aisha-mcp' must appear in mcp.js");
   });
 
@@ -188,7 +147,6 @@ describe('callLLMWithFailover virtual model routing', () => {
     const src = await (
       await import('node:fs/promises')
     ).readFile(new URL('../../routes/mcp.js', import.meta.url), 'utf8');
-    // Should have the provider/model passthrough pattern
     assert.ok(
       src.includes('`${explicitProvider}/${explicitModel}`'),
       'should build provider/model passthrough string',

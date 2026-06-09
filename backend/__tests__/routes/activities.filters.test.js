@@ -435,3 +435,52 @@ after(async () => {
   assert.ok(found, 'Should find activity with special characters in search results');
   console.log('Successfully searched for activity with special characters');
 });
+
+// ── Braid placeholder guard ────────────────────────────────────────────────────
+// Braid tool: listActivities  @policy(READ_ONLY)  (activities.braid:150)
+//
+// Regression tests for the bug where Braid passes literal placeholder strings
+// (e.g. "team_id_placeholder") as query params, which previously caused Postgres
+// to throw "invalid input syntax for type uuid" at activities.v2.js:740.
+// The route must silently ignore non-UUID values for assigned_to / assigned_to_team.
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/activities with non-UUID assigned_to_team returns 200 and ignores the filter',
+  async () => {
+    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&assigned_to_team=team_id_placeholder&limit=1`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    assert.equal(
+      res.status,
+      200,
+      `Expected 200 OK for placeholder assigned_to_team, got ${res.status}`,
+    );
+    const json = await res.json();
+    assert.equal(json.status, 'success', 'Response should have success status');
+    // The placeholder is silently ignored — no crash, no filter applied
+    const activities = json.data?.activities;
+    assert.ok(Array.isArray(activities), 'data.activities should be an array');
+  },
+);
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/activities with non-UUID assigned_to returns 200 and ignores the filter',
+  async () => {
+    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&assigned_to=user_id_placeholder&limit=1`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    assert.equal(res.status, 200, `Expected 200 OK for placeholder assigned_to, got ${res.status}`);
+    const json = await res.json();
+    assert.equal(json.status, 'success', 'Response should have success status');
+  },
+);
+
+(SHOULD_RUN ? test : test.skip)(
+  'GET /api/v2/activities with both placeholder params returns 200 (Braid listActivities scenario)',
+  async () => {
+    const url = `${BASE_URL}/api/v2/activities?tenant_id=${TENANT_ID}&assigned_to=user_id_placeholder&assigned_to_team=team_id_placeholder&limit=5`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    assert.equal(res.status, 200, `Expected 200 OK for both placeholder params, got ${res.status}`);
+    const json = await res.json();
+    assert.equal(json.status, 'success', 'Response should have success status');
+    assert.ok(Array.isArray(json.data?.activities), 'data.activities should be an array');
+  },
+);

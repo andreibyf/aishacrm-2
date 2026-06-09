@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+import _defaultFetch from 'node-fetch';
 
 /**
  * callLiteLLMVirtual
@@ -25,6 +25,7 @@ export async function callLiteLLMVirtual({
   tenantId = null,
   maxTokens = null,
   tools = null,
+  _fetch = _defaultFetch,
 }) {
   const baseUrl = process.env.LITELLM_BASE_URL || 'http://litellm:4000';
   const masterKey = process.env.LITELLM_MASTER_KEY;
@@ -43,7 +44,7 @@ export async function callLiteLLMVirtual({
 
   let resp;
   try {
-    resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+    resp = await _fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -79,6 +80,7 @@ export async function callViaLiteLLM({
   temperature,
   tenantId,
   maxTokens = null,
+  _fetch = _defaultFetch,
 }) {
   // Pass provider/model directly — litellm_config.yaml has local/*, anthropic/*,
   // openai/*, and groq/* wildcard routes so no prefix translation is needed here.
@@ -98,7 +100,7 @@ export async function callViaLiteLLM({
   };
   if (masterKey) headers.Authorization = `Bearer ${masterKey}`;
 
-  const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const resp = await _fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
