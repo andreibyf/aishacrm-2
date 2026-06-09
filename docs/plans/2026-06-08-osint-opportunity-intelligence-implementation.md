@@ -249,7 +249,7 @@ TDD the **inner per-tenant function** (`runForTenant`) with injected clients —
 - Modify: wherever `/api/utils/*` is mounted (find the `utils` route file) to expose the three handlers
 - Test: `backend/__tests__/growth.webResearch.test.js`, `backend/__tests__/mcp.marketInsights.test.js`
 
-TDD with injected fetch/puppeteer stubs. For `/web-search`: use self-hosted SearXNG **only if** already zero-cost on VPS-2; otherwise fetch-based fallback (document the choice in code comments). Keep the `/market-insights` response schema backward-compatible (FE `AIMarketInsights.jsx` already consumes it). Commit.
+TDD with injected fetch/puppeteer stubs. **Phase 1 scope:** implement `/fetch-page` (puppeteer) and `/company-lookup` (crawl+LLM), and back `/api/utils/web-search` with the existing Wikipedia search only — **do not deploy SearXNG in Phase 1.** General metasearch is a Phase 3 need (competitor depth); see the design doc's "Web search backend" section for the SearXNG tool + hosting decision (default VPS-2, AI-server fallback, never Hetzner). Keep the `/market-insights` response schema backward-compatible (FE `AIMarketInsights.jsx` already consumes it). Commit.
 
 ---
 
@@ -314,4 +314,4 @@ Vitest: loads `/api/v2/growth/profile` (pre-filled from tenant), edits service c
 - Unofficial Trends API brittleness → circuit breaker + cached last-good (Task 3).
 - Thin/directional signals → honesty guardrails enforced in engine + Braid prompt (Tasks 5, 9).
 - LLM cost → cooldown + batching + route scoring to local vLLM (Task 5).
-- SearXNG infra dependency → fetch-based fallback (Task 8).
+- Web-search infra → not needed in P1 (puppeteer fetch + Wikipedia, Task 8). P3 adds SearXNG (default VPS-2, AI-server fallback, never Hetzner) — see design doc "Web search backend".

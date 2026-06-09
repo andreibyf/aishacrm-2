@@ -170,7 +170,37 @@ All routes go through standard auth + tenant middleware. `req.tenant.id` (uuid) 
 | `communityMiner.js` | Reddit public-JSON pulls for configured subs/queries → local-LLM embedding + clustering → `demand_signals(signal_type='community')` |
 | `opportunityEngine.js` | Reads recent `demand_signals` → deterministic candidate generation per type → LLM scoring/wording pass (`brain_plan_actions`, routed to local vLLM) → dedupe against open opportunities → insert. **Generation cooldown mirrors `aiTriggersWorker`** to prevent runaway LLM calls |
 | `researchAgent.js` | On-demand agentic depth (powers the upgraded `/market-insights`): live web search + fetch + LLM synthesis |
-| `webResearch.js` | Real implementations for the **three dead `web-research.braid` endpoints** (`/api/utils/web-search`, `/fetch-page` via puppeteer, `/company-lookup`). `web-search` uses self-hosted SearXNG only if already zero-cost-deployable on VPS-2; otherwise fetch-based fallback |
+| `webResearch.js` | Real implementations for the **three dead `web-research.braid` endpoints** (`/api/utils/web-search`, `/fetch-page` via puppeteer, `/company-lookup`). See "Web search backend" below — general `web-search` is a **Phase 3** need; Phase 1 uses puppeteer fetch + the existing Wikipedia search only |
+
+### Web search backend (SearXNG) — Phase 3, not Phase 1
+
+General-purpose web search is **only** needed by the on-demand competitor depth, which is
+**Phase 3**. Phase 1's `researchAgent` and the upgraded `/market-insights` use **puppeteer
+page-fetch + the existing Wikipedia search** — no new infra, no SearXNG. Defer the whole
+question until P3.
+
+When P3 lands, the backend is **SearXNG** (self-hosted metasearch, no API key, no per-query
+bill, fans out across 70+ engines for resilience). Rejected alternatives: Brave/Google
+Custom Search/Bing APIs (require account+key, usually a card → breaks the zero-paid rule);
+single-engine DDG scraping (SearXNG does this and more).
+
+**Hosting decision (with rationale, since the original spec left it unexplained):** SearXNG's
+job is heavy *outbound* scraping of search engines, which get rate-limited/captcha'd/blocked
+**by source IP**. That drives placement:
+
+- **VPS-2 (Services) — default.** Per `DEPLOY_TOPOLOGY.md`, self-hosted tooling (Coolify,
+  Cal.com, Uptime Kuma, Gitea) lives on VPS-2; SearXNG is that category. Coolify-managed,
+  Uptime-Kuma-monitored, **zero marginal cost** (Zap lifetime), isolated from app traffic and
+  customer data. Configure the engine mix to prefer datacenter-IP-tolerant engines (DuckDuckGo,
+  Brave, Mojeek, Startpage) and de-prioritize Google so datacenter-IP blocking isn't fatal.
+- **AI Cloud Server (HP Omen) — ready fallback.** Residential egress is blocked far less than
+  datacenter IPs; CPU is spare (SearXNG is CPU/network-light); backend already reaches it over
+  **Tailscale** for vLLM. Trade-off: home-box uptime + manual (non-Coolify) ops. Move here only
+  if datacenter-IP blocking proves to bite in practice.
+- **Hetzner (Production) — never.** Paid box running customer traffic; co-locating an outbound
+  scraper risks production IP reputation and adds cost/load. Ruled out.
+
+The feature degrades gracefully if search fails, so this is a low-stakes, reversible choice.
 
 ### Workers (Bull + `cron_job` registration; pattern: existing `backend/workers/*`)
 
@@ -279,4 +309,4 @@ Also fixes the long-standing **vaporware**: `web-research.braid`'s handlers (`/a
 | LLM cost of scoring + on-demand research | Cooldowns + batching + route to local vLLM (`brain_plan_actions`) |
 | Reddit/autocomplete rate limits | Polite rate-limiting + aggressive caching (cache layer 6380) |
 | Review scraping ToS exposure | Default-off flag, low frequency, fail-soft, documented optional (P3) |
-| SearXNG infra dependency for web-search | Use fetch-based fallback if SearXNG isn't already zero-cost on VPS-2 |
+| Web-search infra (SearXNG) | Not needed until P3; P1 uses puppeteer fetch + Wikipedia. P3 default host VPS-2 (zero-cost, isolated), AI-server fallback for residential egress; engine mix avoids Google-only dependency |
