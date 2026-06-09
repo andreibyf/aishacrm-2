@@ -33,30 +33,20 @@ import { runInsight as defaultRunInsight, defaultNotify } from '../lib/growth/in
 import { getOrSeedProfile } from '../lib/growth/profileService.js';
 import { createTrendsClient } from '../lib/growth/trendsClient.js';
 import { createAutocompleteClient } from '../lib/growth/autocompleteClient.js';
-
-/**
- * Conservative, deterministic opportunity scorer used by the default deps.
- * Honest by construction — no invented percentages, just bounded directional
- * scoring. Kept small here; richer scoring (LLM-backed) can replace it via
- * `buildDeps` without touching the worker loop.
- *
- * @param {object} candidate
- * @returns {{score:number, expected_impact:string, difficulty:string, recommended_action:string}}
- */
-function defaultScoreFn(candidate = {}) {
-  const isTrends = candidate.signal_type === 'trends';
-  return {
-    score: isTrends ? 70 : 55,
-    expected_impact: isTrends ? 'medium' : 'low',
-    difficulty: 'low',
-    recommended_action: 'Review this opportunity and decide whether to pursue it.',
-  };
-}
+import { fetchAutocomplete } from '../lib/growth/autocompleteFetcher.js';
+import { createLlmScoreFn } from '../lib/growth/scorer.js';
 
 /**
  * Default per-tenant dependency builder. Resolves the business_profile for the
- * claimed insight's tenant and wires the real trends / autocomplete clients,
- * the default scorer, and the default notifier.
+ * claimed insight's tenant and wires the real signal clients + the LLM scorer.
+ *
+ * Wired sources (Phase 1 value slice):
+ *  - **Autocomplete**: real, keyless Google suggest fetcher → content-gap signals.
+ *  - **Scorer**: real aiEngine LLM scorer (falls back to a deterministic score
+ *    when the LLM is unavailable).
+ *  - **Trends**: still a placeholder (the unofficial endpoint is brittle and needs
+ *    a token handshake — tracked as backlog). It fail-soft skips per source, so its
+ *    absence simply means no geographic signals yet, not a failed run.
  *
  * Injected as `buildDeps` so tests pass a fake and never touch live clients.
  *
@@ -67,23 +57,20 @@ function defaultScoreFn(candidate = {}) {
 async function defaultBuildDeps(supabase, claimedRow) {
   const profile = await getOrSeedProfile(supabase, claimedRow.tenant_id);
 
-  // The real clients require a fetchImpl. In production these are wired to the
-  // upstream HTTP fetchers; absent a configured fetcher we fail-soft per source
-  // (runInsight wraps each upstream call individually).
+  // Trends: brittle unofficial endpoint — not yet wired (backlog). Fail-soft.
   const trendsClient = createTrendsClient({
     fetchImpl: async () => {
-      throw new Error('trends fetchImpl not configured');
+      throw new Error('trends fetchImpl not configured (backlog)');
     },
   });
-  const autocompleteClient = createAutocompleteClient({
-    fetchImpl: async () => [],
-  });
+  // Autocomplete: real keyless Google suggest source.
+  const autocompleteClient = createAutocompleteClient({ fetchImpl: fetchAutocomplete });
 
   return {
     profile,
     trendsClient,
     autocompleteClient,
-    scoreFn: defaultScoreFn,
+    scoreFn: createLlmScoreFn({ tenantId: claimedRow.tenant_id }),
     notify: defaultNotify,
   };
 }

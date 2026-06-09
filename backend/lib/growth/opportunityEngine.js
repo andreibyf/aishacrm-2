@@ -290,31 +290,34 @@ export async function generateForInsight(
 
   const expiresAt = new Date(now() + ttlDays * MS_PER_DAY).toISOString();
 
-  // 3. Score + build rows.
-  const rows = survivors.map((candidate) => {
-    const scored = scoreFn(candidate) || {};
+  // 3. Score + build rows. scoreFn may be async (e.g. an LLM-backed scorer) or
+  // sync (a deterministic stub) — awaiting handles both.
+  const rows = await Promise.all(
+    survivors.map(async (candidate) => {
+      const scored = (await scoreFn(candidate)) || {};
 
-    const title = scored.title != null ? scored.title : buildDefaultTitle(candidate);
-    const rawReason = scored.reason != null ? scored.reason : buildDefaultReason(candidate);
-    const reason = sanitizeReason(rawReason, candidate.signal_type);
+      const title = scored.title != null ? scored.title : buildDefaultTitle(candidate);
+      const rawReason = scored.reason != null ? scored.reason : buildDefaultReason(candidate);
+      const reason = sanitizeReason(rawReason, candidate.signal_type);
 
-    return {
-      tenant_id: tenantId,
-      insight_id: insightId,
-      type: candidate.type,
-      title,
-      reason,
-      score: scored.score,
-      expected_impact: scored.expected_impact,
-      difficulty: scored.difficulty,
-      recommended_action: scored.recommended_action,
-      action_type: candidate.action_type != null ? candidate.action_type : null,
-      action_payload: scored.action_payload != null ? scored.action_payload : {},
-      signal_ids: candidate.signal_ids,
-      status: 'new',
-      expires_at: expiresAt,
-    };
-  });
+      return {
+        tenant_id: tenantId,
+        insight_id: insightId,
+        type: candidate.type,
+        title,
+        reason,
+        score: scored.score,
+        expected_impact: scored.expected_impact,
+        difficulty: scored.difficulty,
+        recommended_action: scored.recommended_action,
+        action_type: candidate.action_type != null ? candidate.action_type : null,
+        action_payload: scored.action_payload != null ? scored.action_payload : {},
+        signal_ids: candidate.signal_ids,
+        status: 'new',
+        expires_at: expiresAt,
+      };
+    }),
+  );
 
   // 4. Insert.
   const { data: inserted, error: insertError } = await supabase
