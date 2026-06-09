@@ -1325,6 +1325,7 @@ const createFunctionProxy = (functionName) => {
     // ── executeWorkflow: POST /api/workflows/execute ──────────────────────────
     if (functionName === 'executeWorkflow') {
       try {
+        const BACKEND_URL = getBackendUrl();
         const { workflow_id, payload, input_data } = args[0] || {};
         const body = { workflow_id, payload: payload ?? input_data };
         const response = await fetch(`${BACKEND_URL}/api/workflows/execute`, {
