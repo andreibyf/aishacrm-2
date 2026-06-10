@@ -116,7 +116,7 @@ Format: `table_name` → columns (alphabetical within groups)
 
 #### `growth_insights`
 
-`id`, `tenant_id`, `status` (running|complete|failed), `trigger` (manual|admin_adhoc), `generated_by`, `generated_by_email`, `report`, `opportunity_ids`, `signal_summary`, `eta_seconds`, `error`, `started_at`, `completed_at`, `created_at`, `claimed_at`. One row per async, 7-day-throttled (superadmin-exempt) run; latest row is the current persisted insight. `claimed_at` is the worker's atomic-claim marker.
+`id`, `tenant_id`, `status` (running|complete|failed), `trigger` (manual|admin_adhoc), `generated_by`, `generated_by_email`, `report`, `opportunity_ids`, `signal_summary`, `eta_seconds`, `error`, `started_at`, `completed_at`, `created_at`, `claimed_at`. One row per async, 7-day-throttled (superadmin-exempt) run; latest row is the current persisted insight. `claimed_at` is the worker's atomic-claim marker. `report` (jsonb) holds the thin fields `generated_at`/`signal_counts`/`opportunity_count`/`top`, plus the rich **Market Intelligence** report nested at `report.market_insights` (Claude, via `aisha-mcp`) — or `report.market_insights_error` if synthesis failed (fail-soft).
 
 #### `demand_signals`
 
