@@ -20,6 +20,7 @@ import {
   buildDefaultReason,
   generateForInsight,
   expireStale,
+  supersedePreviousOpportunities,
 } from '../lib/growth/opportunityEngine.js';
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111';
@@ -69,6 +70,7 @@ function makeFakeSupabase(resultsByTable = {}) {
     builder.insert = chain('insert');
     builder.update = chain('update');
     builder.eq = chain('eq');
+    builder.neq = chain('neq');
     builder.in = chain('in');
     builder.lt = chain('lt');
     builder.single = (...args) => {
@@ -342,6 +344,56 @@ test('generateForInsight: dedupes against existing open opportunities (inserts n
   assert.deepEqual(rows, []);
   // No insert was issued since the only candidate was a duplicate.
   assert.ok(!supabase.calls.some((c) => c.method === 'insert'));
+});
+
+test('generateForInsight: dedupeExisting=false skips the existing fetch and inserts the full set', async () => {
+  const supabase = makeFakeSupabase({
+    // Only the INSERT result is consumed — there is NO existing-open fetch.
+    growth_opportunities: [
+      {
+        data: [{ id: 'opp-1', type: 'geographic', subject: 'solar', region: 'Wellington' }],
+        error: null,
+      },
+    ],
+  });
+
+  const rows = await generateForInsight(supabase, {
+    tenantId: TENANT_ID,
+    insightId: INSIGHT_ID,
+    signals: [
+      { id: 's1', signal_type: 'trends', subject: 'solar', region: 'Wellington', delta_pct: 10 },
+    ],
+    profile: { service_catalog: [] },
+    scoreFn: defaultScoreFn,
+    now: () => 1_700_000_000_000,
+    dedupeExisting: false,
+  });
+
+  assert.equal(rows.length, 1);
+  assert.ok(
+    supabase.calls.some((c) => c.table === 'growth_opportunities' && c.method === 'insert'),
+  );
+});
+
+test('supersedePreviousOpportunities: expires open opportunities from OTHER insights, tenant-scoped', async () => {
+  const supabase = makeFakeSupabase({
+    growth_opportunities: [{ data: [{ id: 'old-1' }, { id: 'old-2' }], error: null }],
+  });
+
+  const { count } = await supersedePreviousOpportunities(supabase, {
+    tenantId: TENANT_ID,
+    currentInsightId: INSIGHT_ID,
+  });
+
+  assert.equal(count, 2);
+  const update = supabase.calls.find(
+    (c) => c.table === 'growth_opportunities' && c.method === 'update',
+  );
+  assert.deepEqual(update.args[0], { status: 'expired' });
+  const neq = supabase.calls.find((c) => c.method === 'neq');
+  assert.deepEqual(neq.args, ['insight_id', INSIGHT_ID]);
+  const tenantEq = supabase.calls.find((c) => c.method === 'eq' && c.args[0] === 'tenant_id');
+  assert.deepEqual(tenantEq.args, ['tenant_id', TENANT_ID]);
 });
 
 test('generateForInsight: honesty — scoreFn percent reason is scrubbed before storage', async () => {

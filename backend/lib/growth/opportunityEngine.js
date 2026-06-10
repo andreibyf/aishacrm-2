@@ -23,12 +23,15 @@
  * leaving directional language ("rising" / "increasing") intact. The final stored
  * reason for a trends candidate is guaranteed not to match /\d+\s*%/.
  *
- * Idempotency / cooldown
- * ----------------------
- * `generateForInsight` is safe to call repeatedly: it fetches the tenant's OPEN
- * opportunities (status new/viewed/actioned) and dedupes candidates against them,
- * so a re-run inserts nothing new. The per-run cooldown that decides WHEN a run
- * happens lives at the route/worker layer (Task 9), not here.
+ * Dedupe vs replace
+ * -----------------
+ * By default `generateForInsight` fetches the tenant's OPEN opportunities and
+ * dedupes candidates against them (idempotent re-runs add nothing new). The
+ * insight runner instead passes `dedupeExisting:false` to generate a fresh full
+ * set each run, then calls `supersedePreviousOpportunities` to expire the prior
+ * run's open set — so each "Generate" replaces the opportunities shown. The
+ * per-run cooldown that decides WHEN a run happens lives at the route/worker
+ * layer (Task 9), not here.
  */
 
 // Opportunity statuses considered "open" for dedupe purposes.
@@ -267,24 +270,39 @@ export function buildDefaultReason(candidate = {}) {
  */
 export async function generateForInsight(
   supabase,
-  { tenantId, insightId, signals, profile, scoreFn, now = Date.now, ttlDays = 30 },
+  {
+    tenantId,
+    insightId,
+    signals,
+    profile,
+    scoreFn,
+    now = Date.now,
+    ttlDays = 30,
+    dedupeExisting = true,
+  },
 ) {
   if (typeof scoreFn !== 'function') {
     throw new Error('generateForInsight requires a scoreFn function');
   }
 
-  // 1. Existing OPEN opportunities for this tenant (for dedupe).
-  const { data: existingOpen, error: fetchError } = await supabase
-    .from('growth_opportunities')
-    .select('type, subject, region, status')
-    .eq('tenant_id', tenantId)
-    .in('status', OPEN_STATUSES);
+  // 1. Existing OPEN opportunities for this tenant (for dedupe). Skipped when
+  // `dedupeExisting` is false — the caller (insight runner) generates a fresh
+  // full set each run and supersedes the previous one afterward, so deduping
+  // against prior runs here would wrongly suppress the new set.
+  let existingOpen = [];
+  if (dedupeExisting) {
+    const { data, error: fetchError } = await supabase
+      .from('growth_opportunities')
+      .select('type, subject, region, status')
+      .eq('tenant_id', tenantId)
+      .in('status', OPEN_STATUSES);
+    if (fetchError) throw fetchError;
+    existingOpen = data || [];
+  }
 
-  if (fetchError) throw fetchError;
-
-  // 2. Derive + dedupe candidates.
+  // 2. Derive + dedupe candidates (always de-dupes within the current batch).
   const candidates = generateCandidates(signals, profile);
-  const survivors = dedupeCandidates(candidates, existingOpen || []);
+  const survivors = dedupeCandidates(candidates, existingOpen);
 
   if (survivors.length === 0) return [];
 
@@ -361,6 +379,35 @@ export async function expireStale(supabase, { tenantId, now = Date.now }) {
   return { count, data };
 }
 
+/**
+ * Supersede prior runs' opportunities: move the tenant's OPEN opportunities that
+ * belong to a DIFFERENT insight than `currentInsightId` to 'expired', so the
+ * latest run's set is the one shown. Used by the insight runner to make each
+ * "Generate" replace the opportunity set. The caller should only invoke this
+ * AFTER the current run has produced opportunities, so a 0-result run never
+ * blanks the list.
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {object} opts
+ * @param {string} opts.tenantId - tenant UUID
+ * @param {string} opts.currentInsightId - the run whose opportunities to keep
+ * @returns {Promise<{count:number, data:any}>}
+ */
+export async function supersedePreviousOpportunities(supabase, { tenantId, currentInsightId }) {
+  const { data, error } = await supabase
+    .from('growth_opportunities')
+    .update({ status: 'expired' })
+    .eq('tenant_id', tenantId)
+    .neq('insight_id', currentInsightId)
+    .in('status', OPEN_STATUSES)
+    .select('id');
+
+  if (error) throw error;
+
+  const count = Array.isArray(data) ? data.length : 0;
+  return { count, data };
+}
+
 export default {
   candidateKey,
   generateCandidates,
@@ -370,4 +417,5 @@ export default {
   buildDefaultReason,
   generateForInsight,
   expireStale,
+  supersedePreviousOpportunities,
 };

@@ -31,7 +31,7 @@
  * `now`, and a spy `notify` — no live DB / LLM / network / timers.
  */
 
-import { generateForInsight } from './opportunityEngine.js';
+import { generateForInsight, supersedePreviousOpportunities } from './opportunityEngine.js';
 
 /**
  * Default notifier: insert one row into `notifications`.
@@ -273,7 +273,9 @@ export async function runInsight(supabase, insight, deps) {
       signals = inserted != null ? inserted : rows;
     }
 
-    // 2. Signals → scored opportunities (vLLM scorer).
+    // 2. Signals → scored opportunities (vLLM scorer). Each run generates a
+    // fresh full set (dedupeExisting:false), then supersedes the previous run's
+    // open opportunities below — so "Generate" visibly refreshes them.
     const opportunities = await generateForInsight(supabase, {
       tenantId,
       insightId,
@@ -281,7 +283,21 @@ export async function runInsight(supabase, insight, deps) {
       profile,
       scoreFn,
       now,
+      dedupeExisting: false,
     });
+
+    // 2a. Replace prior runs' opportunities with this run's set — but ONLY when
+    // this run actually produced opportunities, so a 0-result run never blanks
+    // the Opportunities tab. Fail-soft: a supersede error doesn't fail the run.
+    if (opportunities.length > 0) {
+      try {
+        await supersedePreviousOpportunities(supabase, { tenantId, currentInsightId: insightId });
+      } catch (err) {
+        console.warn(
+          `[insightRunner] failed to supersede previous opportunities for ${insightId}: ${err && err.message ? err.message : err}`,
+        );
+      }
+    }
 
     // 2b. Rich Market Intelligence report (Claude via aisha-mcp). FAIL-SOFT: a
     // synthesis failure records an error on the report but never fails the run

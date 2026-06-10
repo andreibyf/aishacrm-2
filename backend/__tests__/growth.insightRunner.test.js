@@ -85,6 +85,10 @@ function makeFakeSupabase({ failDemandInsert = false } = {}) {
       record('eq', args);
       return builder;
     };
+    builder.neq = (...args) => {
+      record('neq', args);
+      return builder;
+    };
     builder.in = (...args) => {
       record('in', args);
       return builder;
@@ -547,4 +551,64 @@ test('runInsight: synthesize throwing → market_insights_error recorded, run st
   assert.match(patch.report.market_insights_error, /claude unavailable/);
   // Still a success notification (opportunities were produced).
   assert.equal(notifyCalls[0].type, 'success');
+});
+
+// ---------------------------------------------------------------------------
+// runInsight — opportunities replace the previous run (supersede)
+// ---------------------------------------------------------------------------
+
+test('runInsight: supersedes prior opportunities when this run produced some', async () => {
+  const supabase = makeFakeSupabase();
+  const trendsClient = {
+    getTrend: async (kw, region) => ({ subject: kw, region, value: 80, delta_pct: 15 }),
+  };
+  const autocompleteClient = {
+    expand: async (seed) => [{ keyword: `${seed} reviews`, source: 'autocomplete', seed }],
+  };
+
+  await runInsight(supabase, baseInsight, {
+    profile: PROFILE,
+    trendsClient,
+    autocompleteClient,
+    scoreFn: defaultScoreFn,
+    now: () => FIXED_NOW,
+    notify: async () => {},
+  });
+
+  // A supersede = update growth_opportunities to status:'expired', scoped to the
+  // tenant, excluding the current insight.
+  const supersede = supabase.calls.find(
+    (c) =>
+      c.table === 'growth_opportunities' &&
+      c.method === 'update' &&
+      c.args[0] &&
+      c.args[0].status === 'expired',
+  );
+  assert.ok(supersede, 'should supersede prior opportunities after producing new ones');
+  const neq = supabase.calls.find((c) => c.table === 'growth_opportunities' && c.method === 'neq');
+  assert.deepEqual(neq.args, ['insight_id', INSIGHT_ID]);
+});
+
+test('runInsight: does NOT supersede when this run produced no opportunities', async () => {
+  const supabase = makeFakeSupabase();
+  const trendsClient = { getTrend: async () => null }; // no trends signal
+  const autocompleteClient = { expand: async () => [] }; // no autocomplete signals
+
+  await runInsight(supabase, baseInsight, {
+    profile: PROFILE,
+    trendsClient,
+    autocompleteClient,
+    scoreFn: defaultScoreFn,
+    now: () => FIXED_NOW,
+    notify: async () => {},
+  });
+
+  const supersede = supabase.calls.find(
+    (c) =>
+      c.table === 'growth_opportunities' &&
+      c.method === 'update' &&
+      c.args[0] &&
+      c.args[0].status === 'expired',
+  );
+  assert.equal(supersede, undefined, 'no supersede when the run produced 0 opportunities');
 });
