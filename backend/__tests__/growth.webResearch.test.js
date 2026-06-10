@@ -17,6 +17,7 @@ import {
   companyLookup,
   checkFetchUrl,
   assertUrlSafe,
+  makeRequestGuard,
 } from '../lib/growth/webResearch.js';
 import { research } from '../lib/growth/researchAgent.js';
 
@@ -364,4 +365,26 @@ test('fetchPage blocks a redirect that lands on an internal host', async () => {
   );
   assert.match(out.error, /redirect/);
   assert.equal(browserFactory.state.closed, true); // browser still closed
+});
+
+test('makeRequestGuard aborts internal requests and continues public ones (pre-send)', async () => {
+  const guard = makeRequestGuard(publicLookup);
+  const calls = { continued: [], aborted: [] };
+  const mkReq = (u) => ({
+    url: () => u,
+    continue: async () => calls.continued.push(u),
+    abort: async () => calls.aborted.push(u),
+  });
+
+  await guard(mkReq('https://example.com/page')); // public → continue
+  await guard(mkReq('http://169.254.169.254/latest/meta-data')); // metadata → abort
+  await guard(mkReq('http://10.0.0.1/')); // private → abort
+  await guard(mkReq('ftp://example.com/')); // bad scheme → abort
+
+  assert.deepEqual(calls.continued, ['https://example.com/page']);
+  assert.deepEqual(calls.aborted.sort(), [
+    'ftp://example.com/',
+    'http://10.0.0.1/',
+    'http://169.254.169.254/latest/meta-data',
+  ]);
 });

@@ -151,6 +151,33 @@ export async function assertUrlSafe(rawUrl, lookup) {
 }
 
 /**
+ * Build a Puppeteer request handler that aborts any request (the initial
+ * navigation, a redirect hop, OR a sub-resource) whose URL fails the SSRF check —
+ * BEFORE the browser sends it. This is the real redirect-SSRF control: a
+ * post-navigation `page.url()` check is too late (the request already went out).
+ *
+ * @param {Function} [lookup] dns.promises.lookup-compatible (injectable for tests).
+ * @returns {(req:object)=>Promise<void>}
+ */
+export function makeRequestGuard(lookup) {
+  return async (req) => {
+    try {
+      const url = typeof req.url === 'function' ? req.url() : req.url;
+      const verdict = await assertUrlSafe(url, lookup);
+      if (verdict.ok) await req.continue();
+      else await req.abort();
+    } catch {
+      // On any guard error, fail closed (abort the request).
+      try {
+        await req.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}
+
+/**
  * Resolve the fetch implementation: injected first, then global fetch (Node
  * 18+). Throws (caught by the fail-soft wrapper) if neither is available.
  * @param {object} deps
@@ -255,10 +282,18 @@ export async function fetchPage({ url } = {}, deps = {}) {
   try {
     browser = await browserFactory();
     const page = await browser.newPage();
+
+    // Primary redirect-SSRF control: intercept EVERY request (initial nav,
+    // redirect hops, sub-resources) and abort ones pointing at internal/private
+    // targets BEFORE the browser sends them.
+    if (typeof page.setRequestInterception === 'function' && typeof page.on === 'function') {
+      await page.setRequestInterception(true);
+      page.on('request', makeRequestGuard(lookupFn));
+    }
+
     await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
-    // Re-validate after navigation: a redirect could have landed on an internal
-    // host (SSRF via redirect). Block before reading any content.
+    // Belt-and-suspenders: also re-validate the final URL after navigation.
     const finalUrl = typeof page.url === 'function' ? page.url() : target;
     if (finalUrl && finalUrl !== target) {
       const finalSafe = await assertUrlSafe(finalUrl, lookupFn);

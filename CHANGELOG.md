@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **OSINT Opportunity Intelligence — PR #659 review fixes, round 3** (`backend/migrations/185_growth_insights_one_running_per_tenant.sql` (NEW), `backend/lib/growth/webResearch.js`, `backend/lib/growth/insightService.js`, + tests):
+  - **(P1, SSRF — redirect timing)** the post-navigation redirect check ran _after_ `page.goto` had already followed the redirect (the request was sent before it was blocked). Replaced with Puppeteer **request interception** (`makeRequestGuard` + `setRequestInterception`): every request — initial navigation, redirect hops, and sub-resources — is validated via `assertUrlSafe` and aborted BEFORE it is sent. (The post-nav check remains as a backup.)
+  - **(P2, race)** the cooldown check-and-insert was not atomic, so two concurrent `POST /insights` could both insert `running` rows. Migration 185 adds a partial unique index (`one running insight per tenant`); `createInsightRun` maps the resulting unique violation (23505) to **409** "a run is already in progress".
+  - New tests: `makeRequestGuard` (aborts internal / continues public, pre-send) and the 409 concurrent-insert path. Growth backend **123/123**.
+
 - **OSINT Opportunity Intelligence — PR #659 review fixes, round 2 (Codex re-review)** (`backend/lib/growth/webResearch.js`, `backend/lib/growth/insightService.js`, `src/components/reports/GrowthProfileEditor.jsx`, + tests):
   - **(P1, SSRF — DNS rebinding)** the literal-host SSRF guard still allowed a public hostname that DNS-resolves to a private/metadata IP. Added `assertUrlSafe` which resolves the host (injectable `lookup`) and rejects private/loopback/link-local/ULA results, plus a post-navigation re-check of the final URL (blocks redirect-to-internal). `fetchPage` now uses it before reading any content.
   - **(P2)** the insight cooldown counted `failed` runs, so a transient failure 429-locked a non-superadmin for 7 days despite the Retry button — the cooldown lookup now only considers `running`/`complete` runs.

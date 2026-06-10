@@ -640,3 +640,28 @@ test('getDashboard tolerates no insight and no opportunities', async () => {
   assert.equal(res.body.data.current_insight, null);
   assert.deepEqual(res.body.data.top_opportunities, []);
 });
+
+test('createInsightRun: 409 when a concurrent insert hits the one-running-per-tenant unique index', async () => {
+  const now = '2026-06-09T00:00:00.000Z';
+  const supabase = makeFakeSupabase({
+    growth_insights: [
+      { data: null, error: null }, // cooldown lookup → no qualifying recent run
+      { data: [], error: null }, // completed-durations lookup
+      { data: null, error: { code: '23505', message: 'duplicate key' } }, // insert loses the race
+    ],
+  });
+
+  const res = await createInsightRun(
+    supabase,
+    { tenantId: TENANT_ID, user: { id: 'u1', email: 'u@x.com', role: 'employee' } },
+    {
+      getProfile: async () => ({ service_catalog: [{}], target_regions: [{}] }),
+      estimate: () => ({ eta_seconds: 90, low: 63, high: 117 }),
+      now: fixedNow(now),
+    },
+  );
+
+  assert.equal(res.status, 409);
+  assert.equal(res.body.status, 'error');
+  assert.match(res.body.message, /already in progress/i);
+});

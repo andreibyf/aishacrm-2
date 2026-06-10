@@ -133,7 +133,22 @@ export async function createInsightRun(supabase, args, deps) {
     .insert(insertRow)
     .select('*')
     .single();
-  if (insertError) throw insertError;
+  if (insertError) {
+    // Partial unique index `uq_growth_insights_one_running_per_tenant` makes the
+    // check-and-insert atomic: a concurrent request that already started a run
+    // makes this insert fail with a unique violation (23505). Treat as "already
+    // running" rather than a 500, so the gate can't be raced.
+    if (insertError.code === '23505') {
+      return {
+        status: 409,
+        body: {
+          status: 'error',
+          message: 'A market insight run is already in progress for this tenant.',
+        },
+      };
+    }
+    throw insertError;
+  }
 
   return {
     status: 202,
