@@ -7,7 +7,9 @@
  */
 
 import * as finance from '@/api/finance';
+import { submitJournalDraft } from '@/api/financeWrites';
 import FinanceTablePanel from './FinanceTablePanel';
+import FinanceRowActionButton from './FinanceRowActionButton';
 import { formatCentsAmount } from './financeFormat';
 
 const COLUMNS = [
@@ -22,19 +24,35 @@ const COLUMNS = [
   { key: 'created_at', label: 'Created' },
 ];
 
-export default function JournalDraftsPanel({ tenantId }) {
+// `canWrite` turns on a per-row "Submit for approval" action on draft rows,
+// which enqueues the entry into the approval queue (where it can be posted).
+export default function JournalDraftsPanel({ tenantId, canWrite = false }) {
+  const renderRowActions = canWrite
+    ? (row, { reload }) =>
+        row.status === 'draft' ? (
+          <FinanceRowActionButton
+            label="Submit for approval"
+            successMessage="Submitted for approval."
+            onAct={() => submitJournalDraft(tenantId, row.id)}
+            reload={reload}
+            testId={`finance-submit-journal-${row.id}`}
+          />
+        ) : null
+    : undefined;
+
   return (
     <div data-testid="finance-journal-drafts-panel">
       <FinanceTablePanel
         tenantId={tenantId}
         testId="finance-journal-drafts"
         title="Journal drafts"
-        description="Read-only list of draft and pending-approval journal entries for this tenant."
+        description="Draft and pending-approval journal entries for this tenant."
         emptyText="No journal drafts for this tenant yet."
         columns={COLUMNS}
         exportArea="journal-drafts"
         fetcher={finance.getJournalDrafts}
         selectRows={(data) => (Array.isArray(data?.journal_drafts) ? data.journal_drafts : [])}
+        renderRowActions={renderRowActions}
       />
     </div>
   );

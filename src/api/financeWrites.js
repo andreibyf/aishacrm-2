@@ -65,16 +65,44 @@ export function createJournalDraft(tenantId, payload = {}, { signal } = {}) {
   return mutate('/journal-drafts', { tenantId, method: 'POST', body: payload, signal });
 }
 
+/** POST /journal-drafts/:id/submit — promote a draft journal entry to pending_approval. */
+export function submitJournalDraft(tenantId, entryId, { signal } = {}) {
+  return mutate(`/journal-drafts/${encodeURIComponent(entryId)}/submit`, {
+    tenantId,
+    method: 'POST',
+    signal,
+  });
+}
+
 /** POST /draft-invoices — create a draft invoice. */
 export function createDraftInvoice(tenantId, payload = {}, { signal } = {}) {
   return mutate('/draft-invoices', { tenantId, method: 'POST', body: payload, signal });
 }
 
-/** POST /approvals/:id/approve — approve a pending finance approval. */
+/** POST /draft-invoices/:id/submit — promote a draft invoice to pending_approval. */
+export function submitDraftInvoice(tenantId, invoiceId, { signal } = {}) {
+  return mutate(`/draft-invoices/${encodeURIComponent(invoiceId)}/submit`, {
+    tenantId,
+    method: 'POST',
+    signal,
+  });
+}
+
+/** POST /approvals/:id/approve — approve a pending finance approval (posts the journal / invoice). */
 export function approveFinanceAction(tenantId, approvalId, { signal } = {}) {
   return mutate(`/approvals/${encodeURIComponent(approvalId)}/approve`, {
     tenantId,
     method: 'POST',
+    signal,
+  });
+}
+
+/** POST /journal-entries/:id/reverse — request a reversal of a posted entry `{ reason }`. */
+export function reverseJournalEntry(tenantId, entryId, payload = {}, { signal } = {}) {
+  return mutate(`/journal-entries/${encodeURIComponent(entryId)}/reverse`, {
+    tenantId,
+    method: 'POST',
+    body: payload,
     signal,
   });
 }

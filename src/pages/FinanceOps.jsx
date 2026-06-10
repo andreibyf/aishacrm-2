@@ -56,6 +56,8 @@ import JournalEntriesList from '@/components/finance/JournalEntriesList';
 import DraftInvoicesPanel from '@/components/finance/DraftInvoicesPanel';
 import JournalDraftsPanel from '@/components/finance/JournalDraftsPanel';
 import ApprovalQueuePanel from '@/components/finance/ApprovalQueuePanel';
+import NewJournalEntryForm from '@/components/finance/NewJournalEntryForm';
+import NewInvoiceForm from '@/components/finance/NewInvoiceForm';
 import AdapterQueuePanel from '@/components/finance/AdapterQueuePanel';
 import AuditTimelinePanel from '@/components/finance/AuditTimelinePanel';
 import ProjectionStatusPanel from '@/components/finance/ProjectionStatusPanel';
@@ -301,6 +303,12 @@ export default function FinanceOpsPage() {
     [selectedTenantId, fetchStatus],
   );
 
+  // Write controls (create/submit/approve/reverse) are admin/superadmin-only AND
+  // limited to TEST mode for now (user testing). The backend independently
+  // enforces both (requireFinanceWrite + the test-mode posture), so this is a
+  // presentation gate over a server-authoritative one.
+  const canWrite = (isSuperadmin || user?.role === 'admin') && status?.runtime?.mode === 'test';
+
   // Top-level state selection. The order matters: route-disabled and
   // tenant-not-enrolled override the page chrome entirely (banners + tabs
   // would be confusing when the data surface is unavailable), while the
@@ -406,17 +414,23 @@ export default function FinanceOpsPage() {
         <TabsContent value="cash-flow" className="m-0">
           <CashFlowStatementPanel tenantId={selectedTenantId} />
         </TabsContent>
-        <TabsContent value="invoices" className="m-0">
-          <DraftInvoicesPanel tenantId={selectedTenantId} />
+        <TabsContent value="invoices" className="m-0 space-y-3">
+          {canWrite ? (
+            <NewInvoiceForm tenantId={selectedTenantId} onCreated={handleRefresh} />
+          ) : null}
+          <DraftInvoicesPanel tenantId={selectedTenantId} canWrite={canWrite} />
         </TabsContent>
-        <TabsContent value="journal-drafts" className="m-0">
-          <JournalDraftsPanel tenantId={selectedTenantId} />
+        <TabsContent value="journal-drafts" className="m-0 space-y-3">
+          {canWrite ? (
+            <NewJournalEntryForm tenantId={selectedTenantId} onCreated={handleRefresh} />
+          ) : null}
+          <JournalDraftsPanel tenantId={selectedTenantId} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="journal-entries" className="m-0">
-          <JournalEntriesList tenantId={selectedTenantId} />
+          <JournalEntriesList tenantId={selectedTenantId} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="approvals" className="m-0">
-          <ApprovalQueuePanel tenantId={selectedTenantId} />
+          <ApprovalQueuePanel tenantId={selectedTenantId} canWrite={canWrite} />
         </TabsContent>
         <TabsContent value="adapter-queue" className="m-0">
           <AdapterQueuePanel tenantId={selectedTenantId} />

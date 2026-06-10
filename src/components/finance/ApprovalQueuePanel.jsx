@@ -8,7 +8,9 @@
  */
 
 import * as finance from '@/api/finance';
+import { approveFinanceAction } from '@/api/financeWrites';
 import FinanceTablePanel from './FinanceTablePanel';
+import FinanceRowActionButton from './FinanceRowActionButton';
 
 const COLUMNS = [
   { key: 'id', label: 'ID' },
@@ -21,19 +23,40 @@ const COLUMNS = [
   { key: 'decided_at', label: 'Decided At' },
 ];
 
-export default function ApprovalQueuePanel({ tenantId }) {
+// `canWrite` (admin/superadmin + Test mode, decided by the page) turns on a
+// per-row Approve action that POSTS the underlying journal/invoice.
+export default function ApprovalQueuePanel({ tenantId, canWrite = false }) {
+  const renderRowActions = canWrite
+    ? (row, { reload }) =>
+        row.status === 'pending' ? (
+          <FinanceRowActionButton
+            label="Approve"
+            confirmMessage="Approve and post this item? Approving records ledger truth."
+            successMessage="Approved and posted."
+            onAct={() => approveFinanceAction(tenantId, row.id)}
+            reload={reload}
+            testId={`finance-approve-${row.id}`}
+          />
+        ) : null
+    : undefined;
+
   return (
     <div data-testid="finance-approval-queue-panel">
       <FinanceTablePanel
         tenantId={tenantId}
         testId="finance-approval-queue"
         title="Approval queue"
-        description="Read-only list of pending approvals for this tenant. Approve and reject actions are not available in this slice."
+        description={
+          canWrite
+            ? 'Pending approvals. Approving posts the journal or invoice to the ledger.'
+            : 'Read-only list of pending approvals for this tenant.'
+        }
         emptyText="No pending approvals for this tenant."
         columns={COLUMNS}
         exportArea="approvals"
         fetcher={(tenantId, opts) => finance.getApprovals(tenantId, { status: 'pending', ...opts })}
         selectRows={(data) => (Array.isArray(data?.approvals) ? data.approvals : [])}
+        renderRowActions={renderRowActions}
       />
     </div>
   );

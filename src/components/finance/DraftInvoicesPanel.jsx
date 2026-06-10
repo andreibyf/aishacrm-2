@@ -8,7 +8,9 @@
  */
 
 import * as finance from '@/api/finance';
+import { submitDraftInvoice } from '@/api/financeWrites';
 import FinanceTablePanel from './FinanceTablePanel';
+import FinanceRowActionButton from './FinanceRowActionButton';
 import { formatCentsAmount } from './financeFormat';
 
 const COLUMNS = [
@@ -24,19 +26,35 @@ const COLUMNS = [
   { key: 'updated_at', label: 'Updated' },
 ];
 
-export default function DraftInvoicesPanel({ tenantId }) {
+// `canWrite` turns on a per-row "Submit for approval" action on draft invoices;
+// approving the resulting queue item posts the invoice's AR journal.
+export default function DraftInvoicesPanel({ tenantId, canWrite = false }) {
+  const renderRowActions = canWrite
+    ? (row, { reload }) =>
+        row.status === 'draft' ? (
+          <FinanceRowActionButton
+            label="Submit for approval"
+            successMessage="Submitted for approval."
+            onAct={() => submitDraftInvoice(tenantId, row.id)}
+            reload={reload}
+            testId={`finance-submit-invoice-${row.id}`}
+          />
+        ) : null
+    : undefined;
+
   return (
     <div data-testid="finance-draft-invoices-panel">
       <FinanceTablePanel
         tenantId={tenantId}
         testId="finance-draft-invoices"
         title="Draft invoices"
-        description="Read-only list of draft invoices for this tenant. Create and edit actions are deferred to a later slice."
+        description="Draft invoices for this tenant."
         emptyText="No draft invoices for this tenant yet."
         columns={COLUMNS}
         exportArea="draft-invoices"
         fetcher={finance.getDraftInvoices}
         selectRows={(data) => (Array.isArray(data?.invoices) ? data.invoices : [])}
+        renderRowActions={renderRowActions}
       />
     </div>
   );

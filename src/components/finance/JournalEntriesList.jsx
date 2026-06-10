@@ -15,7 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw } from 'lucide-react';
 import * as finance from '@/api/finance';
+import { reverseJournalEntry } from '@/api/financeWrites';
 import FinanceExportButtons from './FinanceExportButtons';
+import FinanceRowActionButton from './FinanceRowActionButton';
 import { columnsToRecords } from './financeCsv';
 
 const COLUMN_DEFS = [
@@ -31,7 +33,9 @@ function compareByCreatedDesc(a, b) {
   return bT - aT;
 }
 
-export default function JournalEntriesList({ tenantId }) {
+// `canWrite` (admin/superadmin + Test mode) turns on a per-row Reverse action on
+// posted entries — it creates a reversal that must be approved in the queue.
+export default function JournalEntriesList({ tenantId, canWrite = false }) {
   const [state, setState] = useState({
     entries: [],
     loading: false,
@@ -130,6 +134,11 @@ export default function JournalEntriesList({ tenantId }) {
                     {c.label}
                   </th>
                 ))}
+                {canWrite ? (
+                  <th className="py-2 pr-3 text-right font-medium uppercase tracking-wide">
+                    Actions
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -144,6 +153,24 @@ export default function JournalEntriesList({ tenantId }) {
                       {row[c.key] != null ? String(row[c.key]) : '—'}
                     </td>
                   ))}
+                  {canWrite ? (
+                    <td className="py-1.5 pr-3 text-right">
+                      {row.status === 'posted' ? (
+                        <FinanceRowActionButton
+                          label="Reverse"
+                          confirmMessage="Reverse this posted entry? This creates a reversal that must be approved in the queue."
+                          successMessage="Reversal requested — approve it in the Approval queue."
+                          onAct={() =>
+                            reverseJournalEntry(tenantId, row.id, {
+                              reason: 'Reversed from console',
+                            })
+                          }
+                          reload={() => fetchEntries()}
+                          testId={`finance-reverse-${row.id}`}
+                        />
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
