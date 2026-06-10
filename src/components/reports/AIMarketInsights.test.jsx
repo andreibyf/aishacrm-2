@@ -6,7 +6,7 @@
  * Generate transition, 429 cooldown, and superadmin Generate visibility.
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 vi.mock('@/api/growth', () => ({
   getCurrentInsight: vi.fn(),
@@ -149,6 +149,46 @@ describe('[CRM] AIMarketInsights', () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByText(/claude unavailable/i)).toBeInTheDocument();
+  });
+
+  test('polls while running and stops once the insight completes', async () => {
+    vi.useFakeTimers();
+    try {
+      getCurrentInsight.mockResolvedValue({ id: 'p1', status: 'running', eta_seconds: 60 });
+
+      render(<AIMarketInsights tenant={tenant} />);
+
+      // Mount fetch → running.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(1);
+
+      // Each 10s tick triggers a background poll while still running.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(3);
+
+      // Next poll returns complete → the polling effect tears down.
+      getCurrentInsight.mockResolvedValue({ id: 'p1', status: 'complete', report: { top: [] } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      const callsAtComplete = getCurrentInsight.mock.calls.length;
+
+      // No further polling after completion.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(callsAtComplete);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('failed state shows error and retry button', async () => {

@@ -88,27 +88,44 @@ export default function AIMarketInsights({ tenant }) {
   const [generating, setGenerating] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState(null);
 
-  const fetchCurrent = useCallback(async () => {
-    if (!tenantId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const current = await getCurrentInsight(tenantId);
-      setInsight(current);
-    } catch (err) {
-      console.error('Failed to load current insight:', err);
-      setError(err.message || 'Failed to load market intelligence.');
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
+  const fetchCurrent = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!tenantId) {
+        setLoading(false);
+        return;
+      }
+      // Silent refetches (background polling) must not flash the full-screen
+      // spinner or clobber the rendered report while a poll is in flight.
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const current = await getCurrentInsight(tenantId);
+        setInsight(current);
+      } catch (err) {
+        console.error('Failed to load current insight:', err);
+        if (!silent) setError(err.message || 'Failed to load market intelligence.');
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [tenantId],
+  );
 
   useEffect(() => {
     fetchCurrent();
   }, [fetchCurrent]);
+
+  // While a run is in progress, poll so the view flips to the finished report
+  // automatically — without the user having to refresh or navigate away.
+  useEffect(() => {
+    if (insight?.status !== 'running') return undefined;
+    const id = setInterval(() => {
+      fetchCurrent({ silent: true });
+    }, 10000);
+    return () => clearInterval(id);
+  }, [insight?.status, fetchCurrent]);
 
   const handleGenerate = useCallback(async () => {
     if (!tenantId) return;
@@ -251,7 +268,7 @@ export default function AIMarketInsights({ tenant }) {
             </p>
             <Button
               variant="outline"
-              onClick={fetchCurrent}
+              onClick={() => fetchCurrent()}
               className="mt-4 bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600"
             >
               <RefreshCw className="w-4 h-4 mr-2" />
