@@ -569,7 +569,13 @@ Requirements:
 
 CRM data: The company has ${tenantStats.accounts} accounts, ${tenantStats.contacts} contacts, ${tenantStats.leads} leads, ${tenantStats.opportunities} opportunities, and ${tenantStats.activities} activities. Use this to tailor recommendations — if pipeline is thin, focus on lead gen; if leads are high but opps low, focus on conversion; if activity is low, recommend outreach campaigns.
 
+BRAND SAFETY — the company already operates an AI-native CRM / sales & marketing platform (the one delivering this report). Recommendations and action_items MUST be framed as capabilities to configure or processes to run WITHIN their existing platform — e.g. "set up lead scoring in your CRM using criteria X/Y/Z". Do NOT advise adopting, implementing, purchasing, migrating to, or evaluating any third-party or competing CRM, sales, or marketing-automation product or vendor, and do NOT name such products in recommendations or action_items (e.g. never "implement HubSpot/Pardot/Salesforce/Marketo lead scoring"). Naming competitors is permitted ONLY inside the competitive_landscape analysis — never as a tool to adopt.
+
 Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "improve communication" or "invest in technology". Every insight must be actionable within the context of a ${BUSINESS_MODEL} ${INDUSTRY} company.`;
+
+  const competitorNames = Array.isArray(profile && profile.competitors)
+    ? profile.competitors.map((c) => c && c.name).filter(Boolean)
+    : [];
 
   const context = [
     `Tenant: ${tenant.name || tenant.tenant_id}`,
@@ -582,9 +588,14 @@ Be SPECIFIC to ${INDUSTRY} in ${LOCATION}. Do NOT provide generic advice like "i
       .map((r) => `${r.title}: ${r.snippet || ''}`)
       .join(' | ')
       .slice(0, 1500)}`,
+    ...(competitorNames.length
+      ? [
+          `Known competitors (may be referenced in competitive_landscape analysis ONLY; never recommend adopting these or similar third-party tools): ${competitorNames.join(', ')}`,
+        ]
+      : []),
   ];
 
-  const SYSTEM = `You are an expert market intelligence analyst that outputs ONLY valid JSON matching the provided schema. No commentary, no markdown, no explanations — only the JSON object. Be specific, data-driven, and avoid generic business platitudes. Every insight must be tailored to the specific industry, location, and company data provided.`;
+  const SYSTEM = `You are an expert market intelligence analyst that outputs ONLY valid JSON matching the provided schema. No commentary, no markdown, no explanations — only the JSON object. Be specific, data-driven, and avoid generic business platitudes. Every insight must be tailored to the specific industry, location, and company data provided. The company already runs an AI-native CRM / sales & marketing platform; recommendations and action_items must use that platform's own capabilities and must NEVER advise adopting, implementing, or purchasing a competing or third-party CRM / sales / marketing tool. Competitors may be named only as analysis in competitive_landscape, never as something to adopt.`;
   const messages = [
     { role: 'system', content: SYSTEM },
     {

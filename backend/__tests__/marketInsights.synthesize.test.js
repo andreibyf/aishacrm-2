@@ -155,6 +155,31 @@ test('LOCATION falls back to profile.target_regions when tenant has no country',
   assert.ok(!userMsg.includes('North America'), 'should not fall back to the geo default');
 });
 
+test('prompt carries the brand-safety guardrail and injects declared competitors', async () => {
+  let seen = null;
+  const callLLM = async (args) => {
+    seen = args;
+    return { ok: true, content: JSON.stringify(VALID_REPORT), model: 'm', provider: 'p' };
+  };
+
+  await synthesizeMarketInsights({
+    supabase: makeFakeSupabase(),
+    tenantId: 't-uuid',
+    profile: { competitors: [{ name: 'HubSpot' }, { name: 'Pardot' }] },
+    deps: { callLLM, fetch: noWiki },
+  });
+
+  const systemMsg = seen.messages.find((m) => m.role === 'system').content;
+  const userMsg = seen.messages.find((m) => m.role === 'user').content;
+  // System instruction forbids recommending competing tools.
+  assert.match(systemMsg, /competing or third-party/i);
+  // User prompt has the BRAND SAFETY block scoped to recommendations.
+  assert.match(userMsg, /BRAND SAFETY/);
+  assert.match(userMsg, /competitive_landscape analysis/i);
+  // Declared competitors injected as "do not adopt" context.
+  assert.ok(userMsg.includes('HubSpot') && userMsg.includes('Pardot'));
+});
+
 test('requires tenantId', async () => {
   await assert.rejects(
     () => synthesizeMarketInsights({ supabase: makeFakeSupabase(), tenantId: null }),
