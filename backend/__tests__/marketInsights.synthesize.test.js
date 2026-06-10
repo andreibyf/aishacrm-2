@@ -134,6 +134,27 @@ test('non-key LLM error THROWS (route → 500, runner → fail-soft catch)', asy
   );
 });
 
+test('LOCATION falls back to profile.target_regions when tenant has no country', async () => {
+  let seen = null;
+  const callLLM = async (args) => {
+    seen = args;
+    return { ok: true, content: JSON.stringify(VALID_REPORT), model: 'm', provider: 'p' };
+  };
+  // Tenant row without country/major_city/geographic_focus.
+  const bareTenant = { id: 't-uuid', tenant_id: 't-slug', name: 'Kiwi Co' };
+
+  await synthesizeMarketInsights({
+    supabase: makeFakeSupabase({ tenantRow: bareTenant }),
+    tenantId: 't-uuid',
+    profile: { target_regions: [{ type: 'city', name: 'Wellington' }] },
+    deps: { callLLM, fetch: noWiki },
+  });
+
+  const userMsg = seen.messages.find((m) => m.role === 'user').content;
+  assert.ok(userMsg.includes('Wellington'), 'prompt should use the saved target region');
+  assert.ok(!userMsg.includes('North America'), 'should not fall back to the geo default');
+});
+
 test('requires tenantId', async () => {
   await assert.rejects(
     () => synthesizeMarketInsights({ supabase: makeFakeSupabase(), tenantId: null }),

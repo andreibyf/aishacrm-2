@@ -1509,27 +1509,15 @@ export default function createReportRoutes(_pgPool) {
         });
       }
 
-      // Growth opportunities for this tenant — scored on the same unified insight
-      // run as the report. Fail-soft: any error just omits the section.
-      let growthOpportunities = [];
-      try {
-        if (_tenant_id) {
-          const { getSupabaseClient } = await import('../lib/supabase-db.js');
-          const supabase = getSupabaseClient();
-          if (supabase) {
-            const { data: oppRows } = await supabase
-              .from('growth_opportunities')
-              .select('title, type, score, reason, recommended_action')
-              .eq('tenant_id', _tenant_id)
-              .in('status', ['new', 'viewed', 'actioned'])
-              .order('score', { ascending: false })
-              .limit(25);
-            growthOpportunities = Array.isArray(oppRows) ? oppRows : [];
-          }
-        }
-      } catch (oppErr) {
-        logger.warn('[export-insights-pdf] growth_opportunities fetch failed:', oppErr?.message);
-      }
+      // Growth opportunities are supplied by the (authenticated, RLS-scoped)
+      // client in the request body — the SAME trust model as `insights`. We do
+      // NOT read them server-side here: this export endpoint is mounted without
+      // auth/tenant middleware, so a body-`tenant_id`-driven DB lookup would let
+      // any caller harvest another tenant's opportunities. Render only what the
+      // caller posted.
+      const growthOpportunities = Array.isArray(req.body.growth_opportunities)
+        ? req.body.growth_opportunities.slice(0, 50)
+        : [];
 
       // Import puppeteer
       const puppeteer = await import('puppeteer');

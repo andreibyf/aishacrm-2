@@ -480,10 +480,17 @@ export async function synthesizeMarketInsights({
     'B2B'
   ).toUpperCase();
   const GEO = humanize(rawGeo, GEOGRAPHIC_LABELS) || 'North America';
+  // Prefer the user's saved market scope (target_regions) so the rich report's
+  // location matches the opportunities, which are collected against those same
+  // regions. Fall back to tenant city/country, then geographic focus.
+  const profileRegion =
+    Array.isArray(profile && profile.target_regions) && profile.target_regions[0]?.name
+      ? String(profile.target_regions[0].name).trim()
+      : '';
   const LOCATION =
     tenant.major_city && tenant.country
       ? `${tenant.major_city}, ${tenant.country}`
-      : tenant.country || GEO;
+      : tenant.country || profileRegion || GEO;
 
   // CRM stats. Data tables store the tenant UUID in their tenant_id column.
   const tenantUuid = tenant.id || tenantId;

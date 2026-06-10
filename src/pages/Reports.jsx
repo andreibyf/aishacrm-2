@@ -54,6 +54,7 @@ const ForecastingDashboard = lazy(() => import('../components/reports/Forecastin
 
 import AIMarketInsights from '../components/reports/AIMarketInsights';
 import GrowthOpportunities from '../components/reports/GrowthOpportunities';
+import { listOpportunities } from '@/api/growth';
 import DataQualityReport from '../components/reports/DataQualityReport';
 import CustomQuery from '../components/reports/CustomQuery';
 import { exportReportToCSV } from '@/api/functions';
@@ -323,6 +324,28 @@ export default function ReportsPage() {
 
           try {
             const insights = JSON.parse(insightsData);
+
+            // Fetch the tenant's own growth opportunities (authenticated +
+            // RLS-scoped) and pass them in the payload so the PDF can include a
+            // Growth Opportunities section. The export endpoint itself is
+            // unauthenticated, so it must NOT look these up server-side.
+            let growthOpportunities = [];
+            try {
+              const oppTenantId = currentScopedFilter?.tenant_id || currentTenantData?.id;
+              if (oppTenantId) {
+                const opps = await listOpportunities(oppTenantId, {});
+                growthOpportunities = (Array.isArray(opps) ? opps : []).slice(0, 50).map((o) => ({
+                  title: o.title,
+                  type: o.type,
+                  score: o.score,
+                  reason: o.reason,
+                  recommended_action: o.recommended_action,
+                }));
+              }
+            } catch {
+              // Fail-soft: export the report without the opportunities section.
+            }
+
             const response = await fetch(`${BACKEND_URL}/api/reports/export-insights-pdf`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -333,6 +356,7 @@ export default function ReportsPage() {
                 business_model: currentTenantData?.business_model || 'B2B',
                 geographic_focus: currentTenantData?.geographic_focus || 'North America',
                 insights,
+                growth_opportunities: growthOpportunities,
               }),
             });
 
