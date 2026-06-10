@@ -6,7 +6,7 @@
  * Generate transition, 429 cooldown, and superadmin Generate visibility.
  */
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 
 vi.mock('@/api/growth', () => ({
   getCurrentInsight: vi.fn(),
@@ -65,7 +65,7 @@ describe('[CRM] AIMarketInsights', () => {
     expect(screen.getByRole('button', { name: /Refresh/i })).toBeInTheDocument();
   });
 
-  test('complete state renders report summary and top opportunities', async () => {
+  test('complete state renders the rich market intelligence report + signals meta', async () => {
     getCurrentInsight.mockResolvedValue({
       id: 'ins-2',
       status: 'complete',
@@ -73,24 +73,122 @@ describe('[CRM] AIMarketInsights', () => {
         generated_at: '2026-06-08T12:00:00.000Z',
         signal_counts: { trends: 7, autocomplete: 12 },
         opportunity_count: 2,
-        top: [
-          { title: 'Expand into fintech', score: 88, type: 'market_entry' },
-          { title: 'Partner with X', score: 71, type: 'partnership' },
-        ],
+        top: [],
+        market_insights: {
+          executive_summary: 'Acme should double down on fintech.',
+          market_overview: 'The market is growing.',
+          swot_analysis: {
+            strengths: ['Strong brand'],
+            weaknesses: ['Thin pipeline'],
+            opportunities: ['Adjacent verticals'],
+            threats: ['New entrants'],
+          },
+          competitive_landscape: {
+            overview: 'Crowded but winnable.',
+            major_competitors: ['Globex'],
+            market_dynamics: 'Price pressure.',
+          },
+          industry_trends: [{ name: 'AI adoption', description: 'Everywhere', impact: 'high' }],
+          major_news: [
+            { title: 'Big merger', description: 'X buys Y', date: '2026-06-01', impact: 'neutral' },
+          ],
+          economic_indicators: [
+            { name: 'GDP Growth', current_value: 2.2, trend: 'up', unit: 'percent' },
+          ],
+          recommendations: [
+            {
+              title: 'Tighten ICP',
+              description: 'Focus on fintech buyers.',
+              priority: 'high',
+              action_items: ['Analyze closed-won'],
+              timeline: 'short-term (1-3 months)',
+              expected_impact: '15-25% more pipeline',
+            },
+          ],
+        },
       },
     });
 
     render(<AIMarketInsights tenant={tenant} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Top Opportunities')).toBeInTheDocument();
+      expect(screen.getByText('Acme should double down on fintech.')).toBeInTheDocument();
     });
-    expect(screen.getByText('Expand into fintech')).toBeInTheDocument();
-    expect(screen.getByText('Partner with X')).toBeInTheDocument();
-    expect(screen.getByText('88')).toBeInTheDocument();
+    // Rich report sections
+    expect(screen.getByText('Executive Summary')).toBeInTheDocument();
+    expect(screen.getByText('Strong brand')).toBeInTheDocument();
+    expect(screen.getByText('Competitive Landscape')).toBeInTheDocument();
+    expect(screen.getByText('Globex')).toBeInTheDocument();
+    expect(screen.getByText('Tighten ICP')).toBeInTheDocument();
+    expect(screen.getByText('2.2%')).toBeInTheDocument();
+    // Compact signals meta still present; the opportunities list is NOT here.
     expect(screen.getByText(/Trends: 7/i)).toBeInTheDocument();
     expect(screen.getByText(/Autocomplete: 12/i)).toBeInTheDocument();
+    expect(screen.queryByText('Top Opportunities')).not.toBeInTheDocument();
     expect(screen.getByText(/As of/i)).toBeInTheDocument();
+  });
+
+  test('complete state without a rich report shows the synthesis-error note', async () => {
+    getCurrentInsight.mockResolvedValue({
+      id: 'ins-2b',
+      status: 'complete',
+      report: {
+        generated_at: '2026-06-08T12:00:00.000Z',
+        signal_counts: { trends: 0, autocomplete: 5 },
+        opportunity_count: 3,
+        top: [],
+        market_insights_error: 'claude unavailable',
+      },
+    });
+
+    render(<AIMarketInsights tenant={tenant} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/market intelligence report could not be generated/i),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText(/claude unavailable/i)).toBeInTheDocument();
+  });
+
+  test('polls while running and stops once the insight completes', async () => {
+    vi.useFakeTimers();
+    try {
+      getCurrentInsight.mockResolvedValue({ id: 'p1', status: 'running', eta_seconds: 60 });
+
+      render(<AIMarketInsights tenant={tenant} />);
+
+      // Mount fetch → running.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(1);
+
+      // Each 10s tick triggers a background poll while still running.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(3);
+
+      // Next poll returns complete → the polling effect tears down.
+      getCurrentInsight.mockResolvedValue({ id: 'p1', status: 'complete', report: { top: [] } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      const callsAtComplete = getCurrentInsight.mock.calls.length;
+
+      // No further polling after completion.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(getCurrentInsight).toHaveBeenCalledTimes(callsAtComplete);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('failed state shows error and retry button', async () => {
@@ -170,7 +268,7 @@ describe('[CRM] AIMarketInsights', () => {
     render(<AIMarketInsights tenant={tenant} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Market Summary')).toBeInTheDocument();
+      expect(screen.getByText(/Trends: 1/i)).toBeInTheDocument();
     });
     const generateBtn = screen.getByRole('button', { name: /Generate Insight/i });
     expect(generateBtn).toBeInTheDocument();

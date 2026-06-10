@@ -1499,15 +1499,29 @@ export default function createReportRoutes(_pgPool) {
         industry,
         business_model: _business_model,
         geographic_focus,
-        insights,
       } = req.body;
 
-      if (!insights) {
+      // Growth opportunities are supplied by the (authenticated, RLS-scoped)
+      // client in the request body — the SAME trust model as `insights`. We do
+      // NOT read them server-side here: this export endpoint is mounted without
+      // auth/tenant middleware, so a body-`tenant_id`-driven DB lookup would let
+      // any caller harvest another tenant's opportunities. Render only what the
+      // caller posted.
+      const growthOpportunities = Array.isArray(req.body.growth_opportunities)
+        ? req.body.growth_opportunities.slice(0, 50)
+        : [];
+
+      // The report sections are optional — exporting from the Opportunities tab
+      // may carry only opportunities. Require at least one of the two. Each
+      // report section is individually guarded below, so an empty object simply
+      // renders the Growth Opportunities section.
+      if (!req.body.insights && growthOpportunities.length === 0) {
         return res.status(400).json({
           status: 'error',
-          message: 'No insights data provided. Please generate insights first.',
+          message: 'No insight data provided. Please generate an insight first.',
         });
       }
+      const insights = req.body.insights || {};
 
       // Import puppeteer
       const puppeteer = await import('puppeteer');
@@ -1985,6 +1999,54 @@ export default function createReportRoutes(_pgPool) {
               color: #334155;
             }
 
+            /* Growth opportunities */
+            .opportunity-card {
+              border: 1px solid #e2e8f0;
+              border-left: 4px solid #0891b2;
+              border-radius: 8px;
+              padding: 14px 16px;
+              margin-bottom: 12px;
+              background: #f8fafc;
+              page-break-inside: avoid;
+            }
+            .opp-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 12px;
+              margin-bottom: 6px;
+            }
+            .opp-title {
+              font-size: 15px;
+              font-weight: 600;
+              color: #0f172a;
+            }
+            .opp-score {
+              font-size: 13px;
+              font-weight: 700;
+              color: #0e7490;
+              white-space: nowrap;
+            }
+            .opp-type {
+              display: inline-block;
+              font-size: 11px;
+              text-transform: capitalize;
+              color: #475569;
+              background: #e2e8f0;
+              border-radius: 4px;
+              padding: 2px 8px;
+              margin-bottom: 6px;
+            }
+            .opp-reason {
+              font-size: 13px;
+              color: #334155;
+              margin-bottom: 6px;
+            }
+            .opp-action {
+              font-size: 12px;
+              color: #475569;
+            }
+
             /* Page breaks */
             .page-break {
               page-break-before: always;
@@ -2287,6 +2349,36 @@ export default function createReportRoutes(_pgPool) {
                       `
                           : ''
                       }
+                    </div>
+                  `,
+                    )
+                    .join('')}
+                </div>
+              </div>
+            `
+                : ''
+            }
+
+            <!-- Growth Opportunities (scored on the same unified insight run) -->
+            ${
+              safeArray(growthOpportunities).length > 0
+                ? `
+              <div class="section page-break">
+                <div class="section-title">
+                  <span class="section-icon">O</span> Growth Opportunities
+                </div>
+                <div>
+                  ${safeArray(growthOpportunities)
+                    .map(
+                      (opp) => `
+                    <div class="opportunity-card">
+                      <div class="opp-header">
+                        <div class="opp-title">${opp.title || ''}</div>
+                        ${opp.score != null ? `<div class="opp-score">${opp.score}/100</div>` : ''}
+                      </div>
+                      ${opp.type ? `<div class="opp-type">${opp.type}</div>` : ''}
+                      ${opp.reason ? `<div class="opp-reason">${opp.reason}</div>` : ''}
+                      ${opp.recommended_action ? `<div class="opp-action"><strong>Recommended:</strong> ${opp.recommended_action}</div>` : ''}
                     </div>
                   `,
                     )

@@ -35,6 +35,7 @@ import { createTrendsClient } from '../lib/growth/trendsClient.js';
 import { createAutocompleteClient } from '../lib/growth/autocompleteClient.js';
 import { fetchAutocomplete } from '../lib/growth/autocompleteFetcher.js';
 import { createLlmScoreFn } from '../lib/growth/scorer.js';
+import { synthesizeMarketInsights } from '../lib/marketInsights/synthesize.js';
 
 /**
  * Default per-tenant dependency builder. Resolves the business_profile for the
@@ -71,6 +72,11 @@ async function defaultBuildDeps(supabase, claimedRow) {
     trendsClient,
     autocompleteClient,
     scoreFn: createLlmScoreFn({ tenantId: claimedRow.tenant_id }),
+    // Rich Market Intelligence report (Claude via aisha-mcp). Pass the resolved
+    // business_profile so industry/model/geo enrich the synthesis. Fail-soft in
+    // runInsight, so a Claude outage never blocks the opportunities.
+    synthesize: ({ supabase: sb, tenantId, profile: prof }) =>
+      synthesizeMarketInsights({ supabase: sb, tenantId, profile: prof }),
     notify: defaultNotify,
   };
 }

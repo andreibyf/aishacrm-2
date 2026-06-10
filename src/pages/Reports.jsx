@@ -54,6 +54,7 @@ const ForecastingDashboard = lazy(() => import('../components/reports/Forecastin
 
 import AIMarketInsights from '../components/reports/AIMarketInsights';
 import GrowthOpportunities from '../components/reports/GrowthOpportunities';
+import { listOpportunities, getCurrentInsight } from '@/api/growth';
 import DataQualityReport from '../components/reports/DataQualityReport';
 import CustomQuery from '../components/reports/CustomQuery';
 import { exportReportToCSV } from '@/api/functions';
@@ -309,20 +310,59 @@ export default function ReportsPage() {
       if (format === 'pdf') {
         const BACKEND_URL = getBackendUrl();
 
-        // Special handling for AI Insights - use POST with insights data
-        if (activeTab === 'insights') {
-          // Try to get insights data from the component's data attribute
+        // AI Insights and Opportunities are two views of one insight — both
+        // export the SAME unified PDF (report sections + a Growth Opportunities
+        // section), so exporting works from either tab.
+        if (activeTab === 'insights' || activeTab === 'opportunities') {
+          const oppTenantId = currentScopedFilter?.tenant_id || currentTenantData?.id;
+
+          // Rich report: prefer the rendered AI Insights data attribute; if it
+          // isn't on the page (e.g. exporting from the Opportunities tab), fetch
+          // the latest insight's report.
+          let insights = null;
           const insightsElement = document.querySelector('[data-ai-insights]');
           const insightsData = insightsElement?.getAttribute('data-ai-insights');
+          if (insightsData && insightsData !== 'null') {
+            try {
+              insights = JSON.parse(insightsData);
+            } catch {
+              insights = null;
+            }
+          }
+          if (!insights && oppTenantId) {
+            try {
+              const current = await getCurrentInsight(oppTenantId);
+              insights = current?.report?.market_insights || null;
+            } catch {
+              insights = null;
+            }
+          }
 
-          if (!insightsData || insightsData === 'null') {
-            toast.error('Please generate insights first before exporting');
+          // Growth opportunities (authenticated + RLS-scoped). The export
+          // endpoint is unauthenticated, so it must NOT look these up server-side.
+          let growthOpportunities = [];
+          if (oppTenantId) {
+            try {
+              const opps = await listOpportunities(oppTenantId, {});
+              growthOpportunities = (Array.isArray(opps) ? opps : []).slice(0, 50).map((o) => ({
+                title: o.title,
+                type: o.type,
+                score: o.score,
+                reason: o.reason,
+                recommended_action: o.recommended_action,
+              }));
+            } catch {
+              // Fail-soft: export the report without the opportunities section.
+            }
+          }
+
+          if (!insights && growthOpportunities.length === 0) {
+            toast.error('Please generate an insight first before exporting');
             setIsExporting(false);
             return;
           }
 
           try {
-            const insights = JSON.parse(insightsData);
             const response = await fetch(`${BACKEND_URL}/api/reports/export-insights-pdf`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -332,7 +372,8 @@ export default function ReportsPage() {
                 industry: currentTenantData?.industry || 'Not specified',
                 business_model: currentTenantData?.business_model || 'B2B',
                 geographic_focus: currentTenantData?.geographic_focus || 'North America',
-                insights,
+                insights: insights || {},
+                growth_opportunities: growthOpportunities,
               }),
             });
 
@@ -355,9 +396,9 @@ export default function ReportsPage() {
             toast.success('AI Insights PDF downloaded successfully!');
             setIsExporting(false);
             return;
-          } catch (parseError) {
-            console.error('Error parsing insights data:', parseError);
-            toast.error('Failed to export insights. Please try regenerating them.');
+          } catch (exportError) {
+            console.error('Error exporting insights PDF:', exportError);
+            toast.error('Failed to export. Please try regenerating the insight.');
             setIsExporting(false);
             return;
           }
