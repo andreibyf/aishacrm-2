@@ -1,47 +1,58 @@
-﻿# Finance Operations - User Guide
+# Finance Operations - User Guide
 
-Finance Operations is a finance/accounting module for your tenant, enabling you to manage financial records in a double-entry style. Ensure Finance Operations is enabled for your tenant and select a tenant from the dropdown menu.
+Finance Operations is a double-entry finance/accounting console for your tenant. Make sure Finance Operations is enabled for your tenant and select a tenant from the dropdown.
 
-## Overview of System Health
+## Read-only by design
 
-- **Runtime Overview Panel**: Check the system health status (Healthy, Projection / degraded, Route disabled) to ensure smooth operations.
-- **Retry Option**: If there's an error on load, click Retry to attempt loading again.
+The Finance Operations console is **read-only except for the Chart of Accounts tab**. You can view ledgers, statements, drafts, approvals, adapter jobs, and the audit timeline, and export any panel — but the console intentionally has **no buttons to approve, post, reverse, or send money**. Money movement stays out of this interface by design, and **AI assistants can never approve or post finance actions**. The one editable area is the Chart of Accounts (admin / superadmin only).
 
-## Ledger Summary and Chart of Accounts
+Two controls you may notice:
 
-- **Ledger Summary**: View a summary of your financial ledger with key metrics.
-- **Chart of Accounts**: Explore your company’s account structure to manage financial accounts efficiently.
+- **Test vs Live data mode** — a tenant runs in **Test** mode by default; a superadmin can switch it to **Live** (Live requires the durable/persistent backend). Test and Live data are kept separate.
+- **Guardrail banners** — shown at the top of panels to flag the current mode and any safety limits.
 
-## Journal Entries and Drafts
+## Runtime overview
 
-- **Journal Entries List**: Review all recorded journal entries for transparency and accuracy.
-- **Journal Drafts**: Create new journal entries as drafts before finalizing them.
+- **Runtime Overview** — system health (Healthy, Projection / degraded, Route disabled). If a panel errors on load, click **Retry**.
 
-## Draft Invoices
+## Ledger & statements
 
-- **Draft Invoices**: Manage draft invoices, allowing you to review and finalize billing documents.
+- **Ledger Summary** — the financial ledger with key balances. It reflects entries that have been **posted** (see Approval Queue).
+- **Cash Flow** — a cash-flow statement built from posted cash/bank journal lines (period inflow / outflow / net), reconciled to the balance sheet's cash line. This is separate from the standalone Cash Flow module.
 
-## Cash Flow Statement
+> Profit & Loss and Balance Sheet figures are derived purely from posted journal lines, so they populate once entries are posted.
 
-- **Cash Flow Statement**: Generate a detailed cash flow statement to understand your financial liquidity.
+## Chart of Accounts (editable)
 
-## Approval Queue and Adapter Queue
+The **Chart of Accounts** tab is an **editable manager** (admin / superadmin only):
 
-- **Approval Queue**: Approve finance actions such as journal entries or invoices.
-- **Adapter Queue**: Manage adapters for integrating external systems, ensuring data consistency.
+- **Create**, **edit**, **deactivate**, and **reactivate** accounts.
+- **System / seeded accounts** can be **renamed** (name + account type, with a reason) — but their classification, account code, and system flag stay locked, and they can't be deactivated.
+- Accounts that already have posted history allow only name + type edits (classification and code lock once used).
+- All changes are human-only — AI actors are blocked.
 
-## Audit Timeline
+## Journal entries, drafts & invoices
 
-- **Audit Timeline**: Access a full history of finance actions with timestamps and details to maintain accountability.
+- **Journal Entries** — review all recorded entries.
+- **Journal Drafts** — review pending journal drafts. New drafts come from the accounting workflow, or from the **Create test entries** panel in Test mode — there is no general "new entry" button in the live console.
+- **Draft Invoices** — review draft invoices.
 
-## Projection Status, Sandbox Adapter, and Guardrail Banners
+## Approval Queue & Adapter Queue (read-only)
 
-- **Projection Status**: Monitor the financial projection status to make informed decisions.
-- **Sandbox Adapter**: Test integrations without affecting production data in a sandbox environment.
-- **Guardrail Banners**: Be aware of limits and safety warnings to avoid exceeding budget or other constraints.
+- **Approval Queue** — review finance actions awaiting approval. Approving an action **posts** its journal, which is what makes the Ledger, P&L, Balance Sheet, and Cash Flow reflect it. Approvals are **not initiated from this console** (and never by AI).
+- **Adapter Queue** — review external-system adapter jobs. The accounting adapter (ERPNext) is **sandbox / draft-only**; no writes are sent to external providers.
 
-## Evidence Attachments
+## Audit, projections, sandbox & evidence
 
-- **Evidence Attachments**: Attach supporting documents to finance records for better record-keeping and compliance.
+- **Audit Timeline** — full, append-only history of finance actions with timestamps and details.
+- **Projection / degraded** — status of the read-model projections.
+- **Sandbox Adapter** — inspect the sandbox integration without affecting any external system.
+- **Evidence** — view evidence packs for finance records (read-only).
 
-By following these steps, you can effectively manage your financial operations within AiSHA CRM.
+## Exporting
+
+Every panel offers **CSV** and **PDF** export. Both are generated in your browser from the rows currently displayed (no server round-trip), so they export the displayed page and columns.
+
+## Creating sample data (Test mode)
+
+In **Test** mode, a **Create test entries** panel lets you generate sample drafts or simulate a posted deal so you can watch the ledger and statements populate. It is for exploration only and is unavailable in Live mode.

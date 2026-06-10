@@ -1,9 +1,25 @@
 # AiSHA Opportunity Intelligence™ — Technical Specification
 
-**Status:** Draft for approval — design only, no code
-**Date:** 2026-06-07
+**Status:** Forward-looking vision spec. A Phase-1 "unified insight" slice is **implemented** — see _Implementation status_ below; the rest of this document remains the design target.
+**Date:** 2026-06-07 (spec); implementation note 2026-06-10
 **Source:** Product vision doc "AiSHA Opportunity Intelligence™" (Dre, June 2026)
-**Constraint (hard):** Zero new paid subscriptions. All data sources are free: official Google APIs the *tenant* OAuth-connects (their own data), unofficial/public APIs, first-party tracking, and self-hosted scraping/LLM analysis. No DataForSEO, no SEMrush, no Places API billing, no intent-data vendors.
+**Constraint (hard):** Zero new paid subscriptions. All data sources are free: official Google APIs the _tenant_ OAuth-connects (their own data), unofficial/public APIs, first-party tracking, and self-hosted scraping/LLM analysis. No DataForSEO, no SEMrush, no Places API billing, no intent-data vendors.
+
+---
+
+## Implementation status (2026-06-10)
+
+Phase 1 shipped as a focused **unified insight** slice that differs from the full spec below in places (the spec stays the forward-looking target):
+
+- **One async run produces both halves.** A single **Generate Insight** (manual/admin-triggered, 7-day throttle, superadmin-exempt) creates one `growth_insights` row holding **both** a rich **Market Intelligence report** and the scored **growth opportunities**.
+- **LLM routing (never swapped):** the report is synthesized by **Claude** via the `aisha-mcp` LiteLLM alias (`backend/lib/marketInsights/synthesize.js`) — capable model, full schema; opportunity scoring runs on the self-hosted **vLLM (Qwen2.5-14B)** via the `aisha-summary` alias (`backend/lib/growth/scorer.js`) — cheap, directional. The `report` is stored with the rich report nested at `report.market_insights` alongside the thin `signal_counts`/`opportunity_count`/`top` fields. Synthesis is fail-soft (a Claude failure records `report.market_insights_error` and still persists opportunities).
+- **Signals wired:** real, keyless **Google Autocomplete**; **Trends** is a fail-soft placeholder (backlog). GSC/GBP (Tier 1), Reddit/community (Tier 2), and first-party intent tracking (Tier 3) — Phases 2–4 — are **not yet built**.
+- **Opportunities replace each run:** a completed run supersedes the prior run's open opportunities (`opportunityEngine.supersedePreviousOpportunities`), so the Opportunities view always reflects the latest run (only when the run produced opportunities — a 0-result run never blanks the list).
+- **Brand safety:** report recommendations must use the tenant's **own** CRM capabilities and must never recommend adopting a competing product; the tenant's declared competitors are fed in as a "do not recommend" list.
+- **UI:** lives on the existing **Reports** page as two tabs — **AI Insights** (the report; auto-polls while a run is in progress so it appears without a refresh) and **Opportunities** (view-only) — rather than the standalone `GrowthOpportunities.jsx` command-center page in §7. The PDF export from either tab includes the report **and** a Growth Opportunities section.
+- **Surface shipped:** `/api/v2/growth/*` (profile, insights, opportunities, dashboard) + 8 Braid tools. The Google OAuth, intent-ingest, and auto-discovery routes in §5.1 are future phases.
+
+Specifics: `docs/plans/2026-06-10-unified-insight-report.md` and `CHANGELOG.md`.
 
 ---
 
@@ -13,16 +29,16 @@ The product name is **Opportunity Intelligence**, but the internal entity is **`
 
 ## 2. What already exists (verified 2026-06-07)
 
-| Spec requirement | Existing primitive | Gap |
-|---|---|---|
-| Recommendation engine | `ai_suggestions` table + `backend/routes/suggestions.js` (list/approve/reject/apply) + `aiTriggersWorker.js` polling pattern | Pattern reusable; needs its own entity (different lifecycle, scoring, dashboard) |
-| One-click actions | `aicampaigns.js` (email/sms/linkedin/whatsapp/social_post/sequence), workflow engine (send_email/create_task/webhook/…), audience resolution libs | Landing page / SEO page / blog generation are net-new |
-| Background jobs | `cron_job` table + routes, Bull queues (`workflowQueue.js`, `taskQueue.js`), 4 workers | None — new workers slot in |
-| Web research | `web-research.braid` | **Vaporware** — its `/api/utils/web-search`, `/fetch-page`, `/company-lookup` handlers do not exist. This spec implements real handlers |
-| Website tracking | Nothing (booking-analytics is Cal.com only) | Build first-party script + ingestion |
-| Business profile | `tenant` (name/branding/tier), `accounts` (industry/website) | New `business_profiles` model |
-| Crawling capability | `puppeteer` ^24 already in backend deps | Wire it |
-| AI analysis | Multi-provider aiEngine + local vLLM (Qwen2.5-14B) — embeddings/clustering/scoring run at zero marginal cost | None |
+| Spec requirement      | Existing primitive                                                                                                                                | Gap                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Recommendation engine | `ai_suggestions` table + `backend/routes/suggestions.js` (list/approve/reject/apply) + `aiTriggersWorker.js` polling pattern                      | Pattern reusable; needs its own entity (different lifecycle, scoring, dashboard)                                                        |
+| One-click actions     | `aicampaigns.js` (email/sms/linkedin/whatsapp/social_post/sequence), workflow engine (send_email/create_task/webhook/…), audience resolution libs | Landing page / SEO page / blog generation are net-new                                                                                   |
+| Background jobs       | `cron_job` table + routes, Bull queues (`workflowQueue.js`, `taskQueue.js`), 4 workers                                                            | None — new workers slot in                                                                                                              |
+| Web research          | `web-research.braid`                                                                                                                              | **Vaporware** — its `/api/utils/web-search`, `/fetch-page`, `/company-lookup` handlers do not exist. This spec implements real handlers |
+| Website tracking      | Nothing (booking-analytics is Cal.com only)                                                                                                       | Build first-party script + ingestion                                                                                                    |
+| Business profile      | `tenant` (name/branding/tier), `accounts` (industry/website)                                                                                      | New `business_profiles` model                                                                                                           |
+| Crawling capability   | `puppeteer` ^24 already in backend deps                                                                                                           | Wire it                                                                                                                                 |
+| AI analysis           | Multi-provider aiEngine + local vLLM (Qwen2.5-14B) — embeddings/clustering/scoring run at zero marginal cost                                      | None                                                                                                                                    |
 
 ## 3. Data source architecture (all free)
 
@@ -30,9 +46,9 @@ The product name is **Opportunity Intelligence**, but the internal entity is **`
 
 The key unlock: a tenant connecting **their own** Google properties gives AiSHA official, free, ToS-clean data. No scraping needed for the tenant's own visibility.
 
-| Source | API | What it provides | Quota |
-|---|---|---|---|
-| **Google Search Console** | Search Analytics API (free) | Real queries, impressions, clicks, position — per page, per country/region, per device, daily granularity | Generous (1,200 QPM) |
+| Source                      | API                                                             | What it provides                                                                                                                                         | Quota                                                                     |
+| --------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Google Search Console**   | Search Analytics API (free)                                     | Real queries, impressions, clicks, position — per page, per country/region, per device, daily granularity                                                | Generous (1,200 QPM)                                                      |
 | **Google Business Profile** | Business Profile APIs + Performance API (free to listing owner) | Verified name/address/categories/hours/**service areas**, own reviews, profile views, search keywords that surfaced the listing, direction/call requests | Free; needs one-time Google API access approval for the AiSHA GCP project |
 
 GSC answers "what does my market actually search for and where" with absolute numbers — this is what paid SEO tools approximate. GBP answers the entire spec "Initial Setup" auto-discovery section (name, address, categories, hours, service areas) with zero scraping.
@@ -41,13 +57,13 @@ Implementation: one Google OAuth consent flow (offline access, scopes `webmaster
 
 ### 3.2 Tier 2 — Public/unofficial free sources (directional signals)
 
-| Source | Method | Signal | Caveats |
-|---|---|---|---|
-| **Google Trends** | unofficial API (`google-trends-api` npm or direct widget endpoints) | Relative regional demand + rising queries for service keywords | Brittle (retry/backoff + circuit breaker mandatory); relative index not volume; metro-level geo. Phrase output as "demand rising/falling", never absolute counts |
-| **Google Autocomplete** | public suggest endpoint | "near me", city-qualified, and emerging service phrasings → keyword universe expansion | Rate-limit politely; cache aggressively |
-| **Reddit** | public `.json` endpoints / free OAuth API | Local subreddits + service-vertical subs: "looking for a plumber in X", complaint themes | 60 req/min free; topic-cluster with local LLM embeddings |
-| **Competitor websites** | Puppeteer crawl (already a dep) | Service/content coverage → content-gap detection | Respect robots.txt; cache pages; weekly cadence |
-| **Review pages** (Google Maps, Yelp) | Puppeteer scrape, low frequency | Competitor review velocity + complaint themes (slow response, scheduling…) | ToS-gray. Ship behind env flag `GROWTH_REVIEW_SCRAPING_ENABLED=false` default; per-competitor weekly, randomized timing, fail-soft |
+| Source                               | Method                                                              | Signal                                                                                   | Caveats                                                                                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Google Trends**                    | unofficial API (`google-trends-api` npm or direct widget endpoints) | Relative regional demand + rising queries for service keywords                           | Brittle (retry/backoff + circuit breaker mandatory); relative index not volume; metro-level geo. Phrase output as "demand rising/falling", never absolute counts |
+| **Google Autocomplete**              | public suggest endpoint                                             | "near me", city-qualified, and emerging service phrasings → keyword universe expansion   | Rate-limit politely; cache aggressively                                                                                                                          |
+| **Reddit**                           | public `.json` endpoints / free OAuth API                           | Local subreddits + service-vertical subs: "looking for a plumber in X", complaint themes | 60 req/min free; topic-cluster with local LLM embeddings                                                                                                         |
+| **Competitor websites**              | Puppeteer crawl (already a dep)                                     | Service/content coverage → content-gap detection                                         | Respect robots.txt; cache pages; weekly cadence                                                                                                                  |
+| **Review pages** (Google Maps, Yelp) | Puppeteer scrape, low frequency                                     | Competitor review velocity + complaint themes (slow response, scheduling…)               | ToS-gray. Ship behind env flag `GROWTH_REVIEW_SCRAPING_ENABLED=false` default; per-competitor weekly, randomized timing, fail-soft                               |
 
 ### 3.3 Tier 3 — First-party intent (build it, own it)
 
@@ -164,25 +180,25 @@ All routes except `/intent/ingest` and the OAuth callback go through standard au
 
 ### 5.2 Libraries — `backend/lib/growth/`
 
-| Module | Responsibility |
-|---|---|
-| `profileDiscovery.js` | Orchestrates: crawl website (puppeteer) → LLM extraction (services, areas, keywords — `json_strict` capability) → autocomplete expansion → candidate competitor identification (LLM + crawl of "best <service> in <city>" SERP-free heuristics: GBP categories, sitemap/footer analysis) → writes `business_profiles` as `discovered` |
-| `googleIntegration.js` | OAuth token lifecycle, GSC Search Analytics pulls, GBP profile + performance pulls |
-| `trendsClient.js` | Unofficial Trends wrapper: retry/backoff, circuit breaker, Redis-cached (cache layer, 6380), normalized output |
-| `intentClassifier.js` | Page-category classification at ingest (rules first, LLM fallback, cached per path) |
-| `communityMiner.js` | Reddit public-JSON pulls for configured subs/queries → local-LLM embedding + clustering → `demand_signals(signal_type='community')` |
-| `competitorCrawler.js` | Weekly puppeteer crawl of confirmed competitor sites → service/content coverage map → content-gap signals. Review scraping lives here behind `GROWTH_REVIEW_SCRAPING_ENABLED` |
+| Module                 | Responsibility                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `profileDiscovery.js`  | Orchestrates: crawl website (puppeteer) → LLM extraction (services, areas, keywords — `json_strict` capability) → autocomplete expansion → candidate competitor identification (LLM + crawl of "best <service> in <city>" SERP-free heuristics: GBP categories, sitemap/footer analysis) → writes `business_profiles` as `discovered`                                                            |
+| `googleIntegration.js` | OAuth token lifecycle, GSC Search Analytics pulls, GBP profile + performance pulls                                                                                                                                                                                                                                                                                                               |
+| `trendsClient.js`      | Unofficial Trends wrapper: retry/backoff, circuit breaker, Redis-cached (cache layer, 6380), normalized output                                                                                                                                                                                                                                                                                   |
+| `intentClassifier.js`  | Page-category classification at ingest (rules first, LLM fallback, cached per path)                                                                                                                                                                                                                                                                                                              |
+| `communityMiner.js`    | Reddit public-JSON pulls for configured subs/queries → local-LLM embedding + clustering → `demand_signals(signal_type='community')`                                                                                                                                                                                                                                                              |
+| `competitorCrawler.js` | Weekly puppeteer crawl of confirmed competitor sites → service/content coverage map → content-gap signals. Review scraping lives here behind `GROWTH_REVIEW_SCRAPING_ENABLED`                                                                                                                                                                                                                    |
 | `opportunityEngine.js` | The core: reads recent `demand_signals` + intent rollups + content gaps → deterministic candidate generation per opportunity type → LLM scoring/wording pass (reason, impact, difficulty, recommended action — `brain_plan_actions` capability) → dedupe against open opportunities → insert `growth_opportunities`. Generation cooldown mirrors `aiTriggersWorker` (prevents runaway LLM calls) |
-| `webResearch.js` | Real implementations for the three dead `web-research.braid` endpoints (`/api/utils/web-search` via self-hosted SearXNG **only if** already deployable on VPS-2 at zero cost, else fetch-based page search; `/fetch-page` via puppeteer; `/company-lookup` via crawl+LLM) |
+| `webResearch.js`       | Real implementations for the three dead `web-research.braid` endpoints (`/api/utils/web-search` via self-hosted SearXNG **only if** already deployable on VPS-2 at zero cost, else fetch-based page search; `/fetch-page` via puppeteer; `/company-lookup` via crawl+LLM)                                                                                                                        |
 
 ### 5.3 Workers (Bull + `cron_job` registration)
 
-| Worker | Cadence | Job |
-|---|---|---|
-| `growthDemandWorker` | daily | GSC pull (per connected tenant), Trends pull (per tracked keyword/region, batched + cached), autocomplete refresh weekly |
-| `growthIntentRollupWorker` | hourly | aggregate `intent_events` → `demand_signals(signal_type='intent_rollup')`; prune events > 90 days |
-| `growthCompetitorWorker` | weekly | competitor crawls, content-gap diff, community mining |
-| `growthOpportunityWorker` | daily (after demand worker) | run `opportunityEngine`; expire stale opportunities |
+| Worker                     | Cadence                     | Job                                                                                                                      |
+| -------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `growthDemandWorker`       | daily                       | GSC pull (per connected tenant), Trends pull (per tracked keyword/region, batched + cached), autocomplete refresh weekly |
+| `growthIntentRollupWorker` | hourly                      | aggregate `intent_events` → `demand_signals(signal_type='intent_rollup')`; prune events > 90 days                        |
+| `growthCompetitorWorker`   | weekly                      | competitor crawls, content-gap diff, community mining                                                                    |
+| `growthOpportunityWorker`  | daily (after demand worker) | run `opportunityEngine`; expire stale opportunities                                                                      |
 
 All workers: per-tenant iteration, skip tenants without confirmed profiles, fail-soft per tenant (one tenant's broken site must not kill the batch), structured logs.
 
@@ -212,6 +228,7 @@ Run `npm run braid:sync` after adding. The "AiSHA Opportunity Agent" from the sp
 ## 8. Phasing (Linear epic: "AiSHA Opportunity Intelligence" — cards map 1:1)
 
 **Phase 1 — Foundation (no external dependencies beyond own crawling):**
+
 1. Migration: 4 tables + RLS + indexes (+ PostgREST `NOTIFY pgrst, 'reload schema'` + REST verify, per runbook)
 2. `profileDiscovery` + `/profile/*` routes + onboarding wizard
 3. Intent tracking snippet + `/intent/ingest` + rollup worker + intent summary
@@ -220,20 +237,11 @@ Run `npm run braid:sync` after adding. The "AiSHA Opportunity Agent" from the sp
 6. `growth-opportunities.braid` + system-prompt section + `braid:sync`
 7. Real handlers for the three dead `web-research.braid` endpoints
 
-**Phase 2 — Official Google data:**
-8. Google OAuth (GSC + GBP scopes) + token storage + `googleIntegration`
-9. `growthDemandWorker`: GSC ingestion → geographic/service opportunity types with real numbers
-10. GBP sync: auto-discovery upgrade (verified profile, service areas) + own-review signals
+**Phase 2 — Official Google data:** 8. Google OAuth (GSC + GBP scopes) + token storage + `googleIntegration` 9. `growthDemandWorker`: GSC ingestion → geographic/service opportunity types with real numbers 10. GBP sync: auto-discovery upgrade (verified profile, service areas) + own-review signals
 
-**Phase 3 — Market & competitor (free/unofficial):**
-11. Trends + autocomplete ingestion (circuit-breakered)
-12. `competitorCrawler` content-gap detection → content opportunities
-13. `communityMiner` (Reddit) → service/reputation signals
-14. Review scraping behind `GROWTH_REVIEW_SCRAPING_ENABLED` (default off) → reputation opportunities
+**Phase 3 — Market & competitor (free/unofficial):** 11. Trends + autocomplete ingestion (circuit-breakered) 12. `competitorCrawler` content-gap detection → content opportunities 13. `communityMiner` (Reddit) → service/reputation signals 14. Review scraping behind `GROWTH_REVIEW_SCRAPING_ENABLED` (default off) → reputation opportunities
 
-**Phase 4 — Actions completion + tiers:**
-15. `generate_blog` / `generate_seo_page` / landing-page content generation actions (LLM → hosted page or export; design decision pending on hosting target)
-16. Tier gating + Agency multi-location model
+**Phase 4 — Actions completion + tiers:** 15. `generate_blog` / `generate_seo_page` / landing-page content generation actions (LLM → hosted page or export; design decision pending on hosting target) 16. Tier gating + Agency multi-location model
 
 ## 9. Test plan (per development, house rule)
 
@@ -244,11 +252,11 @@ Run `npm run braid:sync` after adding. The "AiSHA Opportunity Agent" from the sp
 
 ## 10. Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Unofficial Trends API breaks | Circuit breaker + cached last-good data; opportunities degrade gracefully (engine works without Trends) |
-| GBP API access approval lag (Google reviews the GCP project) | Phase 1 doesn't need it; apply at Phase 2 start |
-| Review scraping ToS exposure | Default-off flag, low frequency, fail-soft, documented as optional |
-| Tenant sites unscrapeable (JS-heavy, blocked) | Puppeteer headless; manual profile entry always available in wizard |
-| LLM cost of scoring | Cooldowns + batching + route scoring to local vLLM (`brain_plan_actions` capability already supports provider routing) |
-| Marketing copy promises absolute volumes pre-Phase-2 | Until GSC connected, all demand statements are directional ("rising", "high interest"), never invented percentages |
+| Risk                                                         | Mitigation                                                                                                             |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Unofficial Trends API breaks                                 | Circuit breaker + cached last-good data; opportunities degrade gracefully (engine works without Trends)                |
+| GBP API access approval lag (Google reviews the GCP project) | Phase 1 doesn't need it; apply at Phase 2 start                                                                        |
+| Review scraping ToS exposure                                 | Default-off flag, low frequency, fail-soft, documented as optional                                                     |
+| Tenant sites unscrapeable (JS-heavy, blocked)                | Puppeteer headless; manual profile entry always available in wizard                                                    |
+| LLM cost of scoring                                          | Cooldowns + batching + route scoring to local vLLM (`brain_plan_actions` capability already supports provider routing) |
+| Marketing copy promises absolute volumes pre-Phase-2         | Until GSC connected, all demand statements are directional ("rising", "high interest"), never invented percentages     |

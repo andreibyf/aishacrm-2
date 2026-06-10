@@ -18,8 +18,8 @@ The page is organized into tabs, each a different type of report:
 - **Productivity** — user activity and performance within the CRM.
 - **Forecasting** — predictive analytics based on historical data.
 - **Data Quality** — issues and inconsistencies found in your data.
-- **AI Insights (Market Intelligence)** — OSINT market & demand intelligence. Click **Generate Insight** to start a run; it works in the background (you'll get a notification when it's ready, and an approximate time is shown while it runs) and the result persists until you run a new one. Runs are limited to once every 7 days. Phrasing is always directional ("interest appears to be rising") — never raw search counts.
-- **Opportunities** — scored, directional growth opportunities (geographic, service, content, reputation) from the latest insight, each with a recommended action you can take or dismiss.
+- **AI Insights (Market Intelligence)** — a full market-intelligence report for the selected tenant: executive summary, market overview, SWOT, competitive landscape, industry trends, major news, strategic recommendations, and key economic indicators. Click **Generate Insight** to start a single background run that produces **both** this report **and** the scored growth opportunities (shown on the Opportunities tab). While it runs you'll see an approximate time, and the report appears **automatically** when it's ready — no need to refresh or leave the page (you also get a notification). Recommendations are always framed around your own CRM's capabilities, never "switch to a competitor tool". Demand phrasing is directional ("interest appears to be rising") — never raw search counts. Limited to once every 7 days (administrators can run on demand). Use **Edit market scope** to set the services, regions, and competitors the report and opportunities focus on — you'll get a "Market scope saved" confirmation.
+- **Opportunities** — scored, directional growth opportunities (geographic, service, content, reputation) produced by the latest insight run, each with a recommended action you can take or dismiss. **Each new Generate replaces this list with a fresh set**, so it always reflects your most recent run. Opportunities are generated from the **AI Insights** tab (there's no separate button here).
 - **Custom Query** — build and run your own tailored report.
 
 ## Viewing and filtering a report
@@ -34,6 +34,8 @@ The page is organized into tabs, each a different type of report:
 2. While it runs, you'll see "Exporting…".
 3. Choose your format: **CSV** or **PDF**.
 4. If the export fails you may see "Failed to generate PDF" or "Unknown export error" — try again or contact your AiSHA CRM administrator.
+
+**Market Intelligence PDF:** exporting from **either** the AI Insights or the Opportunities tab produces the same unified PDF — the full market-intelligence report **plus** a Growth Opportunities section. Generate an insight first; if nothing has been generated yet you'll be prompted to do so.
 
 ## Tips
 
