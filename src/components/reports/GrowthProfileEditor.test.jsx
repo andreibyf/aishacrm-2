@@ -12,13 +12,13 @@ vi.mock('@/api/growth', () => ({
   saveProfile: vi.fn(),
 }));
 
-vi.mock('react-hot-toast', () => ({
+vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 import GrowthProfileEditor from './GrowthProfileEditor';
 import { getProfile, saveProfile } from '@/api/growth';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 
 const tenant = { id: 'tenant-123', name: 'Acme Corp' };
 
