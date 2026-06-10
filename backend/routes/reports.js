@@ -1499,15 +1499,7 @@ export default function createReportRoutes(_pgPool) {
         industry,
         business_model: _business_model,
         geographic_focus,
-        insights,
       } = req.body;
-
-      if (!insights) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'No insights data provided. Please generate insights first.',
-        });
-      }
 
       // Growth opportunities are supplied by the (authenticated, RLS-scoped)
       // client in the request body — the SAME trust model as `insights`. We do
@@ -1518,6 +1510,18 @@ export default function createReportRoutes(_pgPool) {
       const growthOpportunities = Array.isArray(req.body.growth_opportunities)
         ? req.body.growth_opportunities.slice(0, 50)
         : [];
+
+      // The report sections are optional — exporting from the Opportunities tab
+      // may carry only opportunities. Require at least one of the two. Each
+      // report section is individually guarded below, so an empty object simply
+      // renders the Growth Opportunities section.
+      if (!req.body.insights && growthOpportunities.length === 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'No insight data provided. Please generate an insight first.',
+        });
+      }
+      const insights = req.body.insights || {};
 
       // Import puppeteer
       const puppeteer = await import('puppeteer');
