@@ -237,6 +237,36 @@ test('buildReport: counts by type and top-3 by score', () => {
   );
 });
 
+test('buildReport: nests market_insights / market_insights_error when provided', () => {
+  const signals = [{ signal_type: 'autocomplete' }];
+  const opportunities = [{ title: 'A', score: 50, type: 'content' }];
+  const rich = { executive_summary: 'hi', recommendations: [] };
+
+  const withReport = buildReport({
+    nowMs: FIXED_NOW,
+    signals,
+    opportunities,
+    marketInsights: rich,
+  });
+  assert.deepEqual(withReport.market_insights, rich);
+  assert.equal(withReport.opportunity_count, 1); // thin fields preserved
+  assert.equal(withReport.market_insights_error, undefined);
+
+  const withError = buildReport({
+    nowMs: FIXED_NOW,
+    signals,
+    opportunities,
+    marketInsightsError: 'claude down',
+  });
+  assert.equal(withError.market_insights, undefined);
+  assert.equal(withError.market_insights_error, 'claude down');
+
+  // No rich report and no error → neither key present (back-compat).
+  const plain = buildReport({ nowMs: FIXED_NOW, signals, opportunities });
+  assert.equal('market_insights' in plain, false);
+  assert.equal('market_insights_error' in plain, false);
+});
+
 test('buildSignalSummary: counts by source', () => {
   const signals = [
     { source: 'google_trends' },
@@ -439,5 +469,82 @@ test('runInsight: getTrend throws but expand succeeds → run still completes wi
 
   // Success notification (not a failure).
   assert.equal(notifyCalls.length, 1);
+  assert.equal(notifyCalls[0].type, 'success');
+});
+
+// ---------------------------------------------------------------------------
+// runInsight — unified rich report (synthesize) nesting + fail-soft
+// ---------------------------------------------------------------------------
+
+test('runInsight: synthesize result is nested under report.market_insights; receives profile', async () => {
+  const supabase = makeFakeSupabase();
+  const trendsClient = {
+    getTrend: async (kw, region) => ({ subject: kw, region, value: 80, delta_pct: 15 }),
+  };
+  const autocompleteClient = {
+    expand: async (seed) => [{ keyword: `${seed} reviews`, source: 'autocomplete', seed }],
+  };
+
+  let synthArgs = null;
+  const synthesize = async (args) => {
+    synthArgs = args;
+    return { insights: { executive_summary: 'Acme is positioned well.', recommendations: [] } };
+  };
+
+  const result = await runInsight(supabase, baseInsight, {
+    profile: PROFILE,
+    trendsClient,
+    autocompleteClient,
+    scoreFn: defaultScoreFn,
+    synthesize,
+    now: () => FIXED_NOW,
+    notify: async () => {},
+  });
+
+  assert.equal(result.status, 'complete');
+  // synthesize received the runner's supabase + tenantId + profile.
+  assert.equal(synthArgs.tenantId, TENANT_ID);
+  assert.equal(synthArgs.profile, PROFILE);
+
+  const patch = supabase.calls.find((c) => c.table === 'growth_insights' && c.method === 'update')
+    .args[0];
+  assert.equal(patch.report.market_insights.executive_summary, 'Acme is positioned well.');
+  // Thin fields still present alongside the rich report.
+  assert.ok(patch.report.signal_counts);
+  assert.equal(typeof patch.report.opportunity_count, 'number');
+  assert.equal(patch.report.market_insights_error, undefined);
+});
+
+test('runInsight: synthesize throwing → market_insights_error recorded, run still completes', async () => {
+  const supabase = makeFakeSupabase();
+  const trendsClient = {
+    getTrend: async (kw, region) => ({ subject: kw, region, value: 80, delta_pct: 15 }),
+  };
+  const autocompleteClient = {
+    expand: async (seed) => [{ keyword: `${seed} reviews`, source: 'autocomplete', seed }],
+  };
+  const synthesize = async () => {
+    throw new Error('claude unavailable');
+  };
+
+  const notifyCalls = [];
+  const result = await runInsight(supabase, baseInsight, {
+    profile: PROFILE,
+    trendsClient,
+    autocompleteClient,
+    scoreFn: defaultScoreFn,
+    synthesize,
+    now: () => FIXED_NOW,
+    notify: async (_sb, row) => notifyCalls.push(row),
+  });
+
+  // Synthesis failure is fail-soft: the run still completes + persists opportunities.
+  assert.equal(result.status, 'complete');
+  const patch = supabase.calls.find((c) => c.table === 'growth_insights' && c.method === 'update')
+    .args[0];
+  assert.equal(patch.status, 'complete');
+  assert.equal(patch.report.market_insights, undefined);
+  assert.match(patch.report.market_insights_error, /claude unavailable/);
+  // Still a success notification (opportunities were produced).
   assert.equal(notifyCalls[0].type, 'success');
 });

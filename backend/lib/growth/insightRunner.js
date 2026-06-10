@@ -167,9 +167,17 @@ export async function collectSignals({ keywords, regions, trendsClient, autocomp
  * @param {number} opts.nowMs - clock value in ms
  * @param {Array<object>} opts.signals - inserted demand_signals
  * @param {Array<object>} opts.opportunities - generated opportunities
+ * @param {object|null} [opts.marketInsights] - rich market-intelligence report (Claude), nested under `market_insights`
+ * @param {string|null} [opts.marketInsightsError] - synthesis error message when the rich report failed (fail-soft)
  * @returns {object} report
  */
-export function buildReport({ nowMs, signals, opportunities }) {
+export function buildReport({
+  nowMs,
+  signals,
+  opportunities,
+  marketInsights = null,
+  marketInsightsError = null,
+}) {
   const trends = signals.filter((s) => s.signal_type === 'trends').length;
   const autocomplete = signals.filter((s) => s.signal_type === 'autocomplete').length;
 
@@ -178,12 +186,17 @@ export function buildReport({ nowMs, signals, opportunities }) {
     .slice(0, 3)
     .map((o) => ({ title: o.title, score: o.score, type: o.type }));
 
-  return {
+  // Thin fields stay at the top level (existing FE/report consumers); the rich
+  // Market Intelligence report is nested so it is additive and fail-soft.
+  const report = {
     generated_at: new Date(nowMs).toISOString(),
     signal_counts: { trends, autocomplete },
     opportunity_count: opportunities.length,
     top,
   };
+  if (marketInsights) report.market_insights = marketInsights;
+  if (marketInsightsError) report.market_insights_error = marketInsightsError;
+  return report;
 }
 
 /**
@@ -223,6 +236,7 @@ export async function runInsight(supabase, insight, deps) {
     trendsClient,
     autocompleteClient,
     scoreFn,
+    synthesize = null,
     now = Date.now,
     notify = defaultNotify,
   } = deps || {};
@@ -259,7 +273,7 @@ export async function runInsight(supabase, insight, deps) {
       signals = inserted != null ? inserted : rows;
     }
 
-    // 2. Signals → scored opportunities.
+    // 2. Signals → scored opportunities (vLLM scorer).
     const opportunities = await generateForInsight(supabase, {
       tenantId,
       insightId,
@@ -269,9 +283,32 @@ export async function runInsight(supabase, insight, deps) {
       now,
     });
 
+    // 2b. Rich Market Intelligence report (Claude via aisha-mcp). FAIL-SOFT: a
+    // synthesis failure records an error on the report but never fails the run
+    // (the opportunities are still persisted).
+    let marketInsights = null;
+    let marketInsightsError = null;
+    if (typeof synthesize === 'function') {
+      try {
+        const synth = await synthesize({ supabase, tenantId, profile });
+        marketInsights = (synth && synth.insights) || null;
+      } catch (err) {
+        marketInsightsError = err && err.message ? err.message : String(err);
+        console.warn(
+          `[insightRunner] market-insights synthesis failed for ${insightId}: ${marketInsightsError}`,
+        );
+      }
+    }
+
     // 3. Build report + summary.
     const nowMs = now();
-    const report = buildReport({ nowMs, signals, opportunities });
+    const report = buildReport({
+      nowMs,
+      signals,
+      opportunities,
+      marketInsights,
+      marketInsightsError,
+    });
     const signalSummary = buildSignalSummary(signals);
     const opportunityIds = opportunities.map((o) => o.id).filter((id) => id != null);
     const completedAt = new Date(nowMs).toISOString();

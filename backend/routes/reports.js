@@ -1509,6 +1509,28 @@ export default function createReportRoutes(_pgPool) {
         });
       }
 
+      // Growth opportunities for this tenant — scored on the same unified insight
+      // run as the report. Fail-soft: any error just omits the section.
+      let growthOpportunities = [];
+      try {
+        if (_tenant_id) {
+          const { getSupabaseClient } = await import('../lib/supabase-db.js');
+          const supabase = getSupabaseClient();
+          if (supabase) {
+            const { data: oppRows } = await supabase
+              .from('growth_opportunities')
+              .select('title, type, score, reason, recommended_action')
+              .eq('tenant_id', _tenant_id)
+              .in('status', ['new', 'viewed', 'actioned'])
+              .order('score', { ascending: false })
+              .limit(25);
+            growthOpportunities = Array.isArray(oppRows) ? oppRows : [];
+          }
+        }
+      } catch (oppErr) {
+        logger.warn('[export-insights-pdf] growth_opportunities fetch failed:', oppErr?.message);
+      }
+
       // Import puppeteer
       const puppeteer = await import('puppeteer');
 
@@ -1985,6 +2007,54 @@ export default function createReportRoutes(_pgPool) {
               color: #334155;
             }
 
+            /* Growth opportunities */
+            .opportunity-card {
+              border: 1px solid #e2e8f0;
+              border-left: 4px solid #0891b2;
+              border-radius: 8px;
+              padding: 14px 16px;
+              margin-bottom: 12px;
+              background: #f8fafc;
+              page-break-inside: avoid;
+            }
+            .opp-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 12px;
+              margin-bottom: 6px;
+            }
+            .opp-title {
+              font-size: 15px;
+              font-weight: 600;
+              color: #0f172a;
+            }
+            .opp-score {
+              font-size: 13px;
+              font-weight: 700;
+              color: #0e7490;
+              white-space: nowrap;
+            }
+            .opp-type {
+              display: inline-block;
+              font-size: 11px;
+              text-transform: capitalize;
+              color: #475569;
+              background: #e2e8f0;
+              border-radius: 4px;
+              padding: 2px 8px;
+              margin-bottom: 6px;
+            }
+            .opp-reason {
+              font-size: 13px;
+              color: #334155;
+              margin-bottom: 6px;
+            }
+            .opp-action {
+              font-size: 12px;
+              color: #475569;
+            }
+
             /* Page breaks */
             .page-break {
               page-break-before: always;
@@ -2287,6 +2357,36 @@ export default function createReportRoutes(_pgPool) {
                       `
                           : ''
                       }
+                    </div>
+                  `,
+                    )
+                    .join('')}
+                </div>
+              </div>
+            `
+                : ''
+            }
+
+            <!-- Growth Opportunities (scored on the same unified insight run) -->
+            ${
+              safeArray(growthOpportunities).length > 0
+                ? `
+              <div class="section page-break">
+                <div class="section-title">
+                  <span class="section-icon">O</span> Growth Opportunities
+                </div>
+                <div>
+                  ${safeArray(growthOpportunities)
+                    .map(
+                      (opp) => `
+                    <div class="opportunity-card">
+                      <div class="opp-header">
+                        <div class="opp-title">${opp.title || ''}</div>
+                        ${opp.score != null ? `<div class="opp-score">${opp.score}/100</div>` : ''}
+                      </div>
+                      ${opp.type ? `<div class="opp-type">${opp.type}</div>` : ''}
+                      ${opp.reason ? `<div class="opp-reason">${opp.reason}</div>` : ''}
+                      ${opp.recommended_action ? `<div class="opp-action"><strong>Recommended:</strong> ${opp.recommended_action}</div>` : ''}
                     </div>
                   `,
                     )
