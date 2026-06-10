@@ -41,6 +41,9 @@ const AI_BLOCKED_COMMANDS = new Set([
   'IssueRefundCommand',
   'VoidInvoiceCommand',
   'VoidJournalEntryCommand',
+  // Submitting a draft for approval enqueues money movement → human-only.
+  'SubmitJournalDraftCommand',
+  'SubmitInvoiceCommand',
 ]);
 
 export function evaluateFinanceGovernance({
@@ -85,6 +88,27 @@ export function evaluateFinanceGovernance({
           policy: 'finance.reversal.approval_required',
           result: 'approval_required',
           reason: 'Ledger corrections must preserve an approval trail',
+        },
+      ],
+    });
+  }
+
+  // ── Submit a draft (journal/invoice) for approval — human-only, enqueues a
+  //    pending approval. AI actors are hard-blocked above (AI_BLOCKED_COMMANDS).
+  if (commandType === 'SubmitJournalDraftCommand' || commandType === 'SubmitInvoiceCommand') {
+    return createGovernanceDecision({
+      allowed: true,
+      requiresApproval: true,
+      riskLevel: amountCents >= 500000 ? 'critical' : 'medium',
+      approvalPolicy: 'finance.submit.approval_required',
+      escalationTarget: 'finance_controller',
+      explanation: 'Submitting a draft enqueues it for human approval before posting.',
+      braidTraceId,
+      policyTrace: [
+        {
+          policy: 'finance.submit.approval_required',
+          result: 'approval_required',
+          reason: 'A submitted draft must be human-approved before it posts',
         },
       ],
     });

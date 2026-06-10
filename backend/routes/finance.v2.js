@@ -279,6 +279,23 @@ function requireCoaManage(req) {
   throw err;
 }
 
+// RBAC gate for finance-DATA writes (manual journal/invoice create + submit +
+// approve + reverse). Same posture as requireCoaManage: admin/superadmin only,
+// human-only at THIS layer. AI actors are let through so the domain-layer
+// governance emits the authoritative AI-block (FINANCE_AI_BLOCKED /
+// finance.ai.no_money_movement) rather than masking it with a generic 403 — the
+// write is still refused. No granular finance-write capability exists yet; when
+// one lands, swap this body for the capability check (route wiring unchanged).
+function requireFinanceWrite(req) {
+  if (buildActor(req).type === 'ai_agent') return;
+  const role = req.user?.role;
+  if (isSuperAdmin(req) || role === 'admin') return;
+  const err = new Error('You do not have permission to post finance transactions');
+  err.statusCode = 403;
+  err.code = 'FINANCE_WRITE_FORBIDDEN';
+  throw err;
+}
+
 function sendError(res, error) {
   const statusCode = Number(error?.statusCode) || 500;
   return res.status(statusCode).json({
@@ -1086,6 +1103,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/draft-invoices', async (req, res) => {
     try {
+      requireFinanceWrite(req);
       const command = (svc) =>
         svc.createDraftInvoice({
           tenantId: req.financeTenantId,
@@ -1104,6 +1122,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.patch('/draft-invoices/:id', async (req, res) => {
     try {
+      requireFinanceWrite(req);
       const command = (svc) =>
         svc.updateDraftInvoice({
           tenantId: req.financeTenantId,
@@ -1121,8 +1140,30 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
     }
   });
 
+  // Promote a draft invoice into the approval queue (draft → pending_approval).
+  // On approval, an AR journal is generated + posted (see approveFinanceAction).
+  router.post('/draft-invoices/:id/submit', async (req, res) => {
+    try {
+      requireFinanceWrite(req);
+      const command = (svc) =>
+        svc.submitInvoiceForApproval({
+          tenantId: req.financeTenantId,
+          invoiceId: req.params.id,
+          actor: buildActor(req),
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] submit invoice failed:', error);
+      sendError(res, error);
+    }
+  });
+
   router.post('/journal-drafts', async (req, res) => {
     try {
+      requireFinanceWrite(req);
       const command = (svc) =>
         svc.createJournalDraft({
           tenantId: req.financeTenantId,
@@ -1135,6 +1176,27 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
       res.status(201).json({ status: 'success', data: result });
     } catch (error) {
       logger.error('[finance.v2] create journal draft failed:', error);
+      sendError(res, error);
+    }
+  });
+
+  // Promote a draft journal entry into the approval queue (draft → pending_approval).
+  // The entry then posts when the approval is approved.
+  router.post('/journal-drafts/:id/submit', async (req, res) => {
+    try {
+      requireFinanceWrite(req);
+      const command = (svc) =>
+        svc.submitJournalDraftForApproval({
+          tenantId: req.financeTenantId,
+          journalEntryId: req.params.id,
+          actor: buildActor(req),
+          requestId: req.headers['x-request-id'] || null,
+          braidTraceId: req.body?.braid_trace_id || null,
+        });
+      const result = await runWrite(req, command);
+      res.status(201).json({ status: 'success', data: result });
+    } catch (error) {
+      logger.error('[finance.v2] submit journal draft failed:', error);
       sendError(res, error);
     }
   });
@@ -1189,6 +1251,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/journal-entries/:id/reverse', async (req, res) => {
     try {
+      requireFinanceWrite(req);
       const command = (svc) =>
         svc.reverseJournalEntry({
           tenantId: req.financeTenantId,
@@ -1208,6 +1271,7 @@ export default function createFinanceV2Routes(pgPool, opts = {}) {
 
   router.post('/approvals/:id/approve', async (req, res) => {
     try {
+      requireFinanceWrite(req);
       const command = (svc) =>
         svc.approveFinanceAction({
           tenantId: req.financeTenantId,
