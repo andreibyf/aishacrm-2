@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **OSINT Opportunity Intelligence — route the growth scorer through LiteLLM (`aisha-summary` → vLLM)** (`backend/lib/growth/scorer.js`, `backend/__tests__/growth.scorer.test.js`): the scorer previously called `generateChatCompletion(provider/model)`, which (with `LITELLM_ENABLED` unset) went **direct to the `LLM_PROVIDER` default — Anthropic/Claude — bypassing LiteLLM and never reaching the AI server**. It now calls `callLiteLLMVirtual({ model: 'aisha-summary' })`, the virtual alias `litellm_config.yaml` maps to the self-hosted **vLLM (Qwen2.5-14B) on the AI Cloud Server** — zero marginal cost, consistent with the app's LiteLLM routing layer, and the right fit for cheap directional batch scoring. Deterministic fallback retained for any LiteLLM/parse failure. Requires the LiteLLM service reachable in the target env (`LITELLM_BASE_URL` + master key) with `LOCAL_LLM_BASE_URL` pointing at the AI server. 8 scorer unit tests (incl. asserting the `aisha-summary` alias); growth suite 122/122.
+
 ### Fixed
 
 - **OSINT Opportunity Intelligence — PR #659 review fixes, round 3** (`backend/migrations/185_growth_insights_one_running_per_tenant.sql` (NEW), `backend/lib/growth/webResearch.js`, `backend/lib/growth/insightService.js`, + tests):

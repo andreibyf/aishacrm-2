@@ -3,25 +3,27 @@
  *
  * `opportunityEngine.generateForInsight` calls an injected `scoreFn(candidate)` to
  * turn a deterministic candidate into a scored, worded opportunity. This module
- * provides the PRODUCTION scorer: it routes through the multi-provider aiEngine
- * (preferring the tenant's configured model / local vLLM) to produce a directional
- * score + reason + recommended action.
+ * provides the PRODUCTION scorer: it routes through **LiteLLM** using the
+ * `aisha-summary` virtual alias, which `litellm_config.yaml` maps to the
+ * self-hosted **vLLM (Qwen2.5-14B) on the AI Cloud Server** — zero marginal cost,
+ * the right fit for cheap, directional batch scoring, and consistent with the
+ * app's LiteLLM routing layer.
  *
- * Robust by construction: if the LLM is unavailable, returns an error, or emits
- * unparseable output, it falls back to a conservative deterministic score. The
- * engine additionally runs `sanitizeReason` on the final text (stripping invented
- * percentages from trends-sourced reasons), so honesty is enforced downstream too.
+ * Robust by construction: if LiteLLM/the model is unavailable, returns an error,
+ * or emits unparseable output, it falls back to a conservative deterministic
+ * score. The engine additionally runs `sanitizeReason` on the final text
+ * (stripping invented percentages from trends-sourced reasons), so honesty is
+ * enforced downstream too.
  *
- * aiEngine functions are injectable (`deps`) so this is unit-testable without a
- * live LLM / network.
+ * `callLiteLLMVirtual` is injectable (`deps`) so this is unit-testable without a
+ * live LiteLLM / network.
  */
 
-import {
-  selectLLMConfigForTenant as defaultSelect,
-  resolveLLMApiKey as defaultResolveKey,
-  generateChatCompletion as defaultGenerate,
-} from '../aiEngine/index.js';
+import { callLiteLLMVirtual as defaultCallLiteLLM } from '../aiEngine/index.js';
 import logger from '../logger.js';
+
+// LiteLLM virtual alias for growth scoring → vLLM/AI server (see litellm_config.yaml).
+const SCORING_MODEL = 'aisha-summary';
 
 const IMPACT = new Set(['high', 'medium', 'low']);
 
@@ -87,22 +89,10 @@ export function parseScore(content) {
  * @returns {(candidate:object)=>Promise<object>}
  */
 export function createLlmScoreFn({ tenantId, deps = {} }) {
-  const selectLLMConfigForTenant = deps.selectLLMConfigForTenant || defaultSelect;
-  const resolveLLMApiKey = deps.resolveLLMApiKey || defaultResolveKey;
-  const generateChatCompletion = deps.generateChatCompletion || defaultGenerate;
+  const callLiteLLM = deps.callLiteLLMVirtual || defaultCallLiteLLM;
 
   return async function scoreFn(candidate = {}) {
     try {
-      const llmConfig = selectLLMConfigForTenant({
-        capability: 'brain_plan_actions',
-        tenantSlugOrId: tenantId,
-      });
-      const apiKey = await resolveLLMApiKey({
-        tenantSlugOrId: tenantId,
-        provider: llmConfig.provider,
-      });
-      if (!apiKey) return fallbackScore(candidate);
-
       const userPrompt = `Opportunity candidate:
 - type: ${candidate.type}
 - subject: ${candidate.subject}
@@ -110,15 +100,13 @@ export function createLlmScoreFn({ tenantId, deps = {} }) {
 - source signal: ${candidate.signal_type}
 Score it per the rules.`;
 
-      const result = await generateChatCompletion({
-        provider: llmConfig.provider,
-        model: llmConfig.model,
+      const result = await callLiteLLM({
+        model: SCORING_MODEL,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.4,
-        apiKey,
         tenantId,
       });
 
