@@ -8,12 +8,8 @@ import assert from 'node:assert/strict';
 
 import { createLlmScoreFn, parseScore, fallbackScore } from '../lib/growth/scorer.js';
 
-function makeDeps({ apiKey = 'sk-test', generate } = {}) {
-  return {
-    selectLLMConfigForTenant: () => ({ provider: 'local', model: 'qwen' }),
-    resolveLLMApiKey: async () => apiKey,
-    generateChatCompletion: generate,
-  };
+function makeDeps({ call } = {}) {
+  return { callLiteLLMVirtual: call };
 }
 
 const GOOD_JSON =
@@ -44,9 +40,14 @@ test('fallbackScore: trends vs non-trends defaults', () => {
   assert.equal(fallbackScore({ signal_type: 'autocomplete' }).score, 55);
 });
 
-test('scoreFn: returns parsed LLM score on success', async () => {
-  const generate = async () => ({ status: 'success', content: GOOD_JSON });
-  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ generate }) });
+test('scoreFn: returns parsed score on success and routes via the aisha-summary alias', async () => {
+  const seen = {};
+  const call = async (args) => {
+    seen.model = args.model;
+    seen.tenantId = args.tenantId;
+    return { status: 'success', content: GOOD_JSON };
+  };
+  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ call }) });
   const out = await scoreFn({
     type: 'content',
     subject: 'ac financing',
@@ -54,42 +55,29 @@ test('scoreFn: returns parsed LLM score on success', async () => {
   });
   assert.equal(out.score, 82);
   assert.equal(out.reason, 'Interest appears to be rising for financing-related queries.');
+  assert.equal(seen.model, 'aisha-summary'); // → vLLM/AI server via LiteLLM
+  assert.equal(seen.tenantId, 't1'); // passed for LiteLLM spend metadata
 });
 
-test('scoreFn: no API key → deterministic fallback (no LLM call)', async () => {
-  let called = 0;
-  const generate = async () => {
-    called += 1;
-    return { status: 'success', content: GOOD_JSON };
-  };
-  const scoreFn = createLlmScoreFn({
-    tenantId: 't1',
-    deps: makeDeps({ apiKey: null, generate }),
-  });
-  const out = await scoreFn({ signal_type: 'autocomplete' });
-  assert.equal(out.score, 55); // fallback
-  assert.equal(called, 0);
-});
-
-test('scoreFn: LLM error status → fallback', async () => {
-  const generate = async () => ({ status: 'error', error: 'boom' });
-  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ generate }) });
+test('scoreFn: LiteLLM error status → deterministic fallback', async () => {
+  const call = async () => ({ status: 'error', error: 'LiteLLM HTTP 500' });
+  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ call }) });
   const out = await scoreFn({ signal_type: 'trends' });
   assert.equal(out.score, 70); // fallback
 });
 
 test('scoreFn: unparseable content → fallback', async () => {
-  const generate = async () => ({ status: 'success', content: 'sorry, no JSON here' });
-  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ generate }) });
+  const call = async () => ({ status: 'success', content: 'sorry, no JSON here' });
+  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ call }) });
   const out = await scoreFn({ signal_type: 'autocomplete' });
   assert.equal(out.score, 55);
 });
 
-test('scoreFn: a thrown LLM call is caught → fallback', async () => {
-  const generate = async () => {
+test('scoreFn: a thrown LiteLLM call is caught → fallback', async () => {
+  const call = async () => {
     throw new Error('network');
   };
-  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ generate }) });
+  const scoreFn = createLlmScoreFn({ tenantId: 't1', deps: makeDeps({ call }) });
   const out = await scoreFn({ signal_type: 'autocomplete' });
   assert.equal(out.score, 55);
 });

@@ -22,7 +22,7 @@ model_list:
 
   - model_name: local/qwen2.5-14b
     litellm_params:
-      model: 'openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ'
+      model: 'openai/qwen-14b'
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
@@ -36,7 +36,7 @@ model_list:
   # Contact/Lead profile summaries — private, fast, runs on AI cloud server
   - model_name: aisha-summary
     litellm_params:
-      model: 'openai//home/aisha/models/Qwen2.5-14B-Instruct-AWQ'
+      model: 'openai/qwen-14b'
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
