@@ -29,7 +29,7 @@ function dollarsToCents(value) {
 }
 
 const inputCls =
-  'mt-1 w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 placeholder:text-slate-500';
+  'mt-1 w-full rounded-md border border-border bg-muted px-2 py-1 text-sm text-foreground placeholder:text-muted-foreground';
 
 export default function FinanceCreatePanel({ tenantId, onCreated }) {
   const [busy, setBusy] = useState(null);
@@ -83,7 +83,9 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
   const onSimulatePosted = () => {
     const cents = positiveCents(dealAmount, 'deal');
     if (cents == null) return;
-    run('deal-posted', () => simulatePostedDealWon(tenantId, { amount_cents: cents, currency: 'usd' }));
+    run('deal-posted', () =>
+      simulatePostedDealWon(tenantId, { amount_cents: cents, currency: 'usd' }),
+    );
   };
 
   const onJournal = () => {
@@ -122,14 +124,14 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
   return (
     <Card
       data-testid="finance-create-panel"
-      className="border-amber-500/40 bg-slate-900/60 text-slate-100"
+      className="border-amber-500/40 bg-card text-foreground"
     >
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <PlusCircle className="h-4 w-4 text-amber-300" aria-hidden="true" />
+          <PlusCircle className="h-4 w-4 text-amber-700 dark:text-amber-300" aria-hidden="true" />
           Create test entries
         </CardTitle>
-        <CardDescription className="text-xs text-slate-400">
+        <CardDescription className="text-xs text-muted-foreground">
           Test mode only — these create sandbox finance records you can review across the tabs and
           clear later. Not real data.
         </CardDescription>
@@ -140,8 +142,8 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
             data-testid="finance-create-feedback"
             className={`rounded-md px-3 py-2 text-xs ${
               feedback.kind === 'success'
-                ? 'border border-emerald-700/50 bg-emerald-900/20 text-emerald-200'
-                : 'border border-red-800/50 bg-red-900/20 text-red-200'
+                ? 'border border-emerald-300 dark:border-emerald-700/50 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200'
+                : 'border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
             }`}
           >
             {feedback.message}
@@ -149,7 +151,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
         ) : null}
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Deal amount (USD)
             <input
               className={inputCls}
@@ -185,7 +187,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Debit account
             <input
               className={inputCls}
@@ -193,7 +195,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
               onChange={(e) => setDebitAcct(e.target.value)}
             />
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Credit account
             <input
               className={inputCls}
@@ -201,7 +203,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
               onChange={(e) => setCreditAcct(e.target.value)}
             />
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Amount (USD)
             <input
               className={inputCls}
@@ -216,14 +218,14 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
             onClick={onJournal}
             disabled={busy === 'journal'}
             data-testid="finance-create-journal-btn"
-            className="bg-slate-700 text-slate-100 hover:bg-slate-600"
+            className="bg-muted text-foreground hover:bg-accent"
           >
             {busy === 'journal' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Journal draft'}
           </Button>
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Customer
             <input
               className={inputCls}
@@ -231,7 +233,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
               onChange={(e) => setCustomer(e.target.value)}
             />
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Amount (USD)
             <input
               className={inputCls}
@@ -246,7 +248,7 @@ export default function FinanceCreatePanel({ tenantId, onCreated }) {
             onClick={onInvoice}
             disabled={busy === 'invoice'}
             data-testid="finance-create-invoice-btn"
-            className="bg-slate-700 text-slate-100 hover:bg-slate-600"
+            className="bg-muted text-foreground hover:bg-accent"
           >
             {busy === 'invoice' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Draft invoice'}
           </Button>

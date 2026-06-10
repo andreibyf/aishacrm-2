@@ -88,21 +88,28 @@ function Banner({ def, onDismiss }) {
     <div
       data-testid={`finance-guardrail-banner-${def.id}`}
       data-design-ref={def.designRef}
-      className="flex items-start gap-3 rounded-lg border border-amber-700/40 bg-amber-900/20 px-4 py-3 text-sm text-amber-100"
+      className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-100"
     >
-      <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" aria-hidden="true" />
+      <Icon
+        className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-300"
+        aria-hidden="true"
+      />
       <div className="flex-1">
-        <div className="font-medium text-amber-100">
+        <div className="font-medium text-amber-900 dark:text-amber-100">
           {def.title}{' '}
-          <span className="text-xs font-normal text-amber-300/80">({def.designRef})</span>
+          <span className="text-xs font-normal text-amber-700/80 dark:text-amber-300/80">
+            ({def.designRef})
+          </span>
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-amber-100/90">{def.body}</p>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-100/90">
+          {def.body}
+        </p>
       </div>
       <button
         type="button"
         onClick={() => onDismiss(def.id)}
         aria-label={`Dismiss ${def.title} for this session`}
-        className="rounded p-1 text-amber-200/70 transition hover:bg-amber-900/30 hover:text-amber-100"
+        className="rounded p-1 text-amber-700/70 transition hover:bg-amber-100 hover:text-amber-900 dark:text-amber-200/70 dark:hover:bg-amber-900/30 dark:hover:text-amber-100"
       >
         <X className="h-4 w-4" aria-hidden="true" />
       </button>

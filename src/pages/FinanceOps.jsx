@@ -112,11 +112,11 @@ function isRouteDisabledError(err) {
 function PageHeader() {
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-slate-100">
+      <div className="flex items-center gap-2 text-foreground">
         <BarChart3 className="h-5 w-5" aria-hidden="true" />
         <h1 className="text-xl font-semibold">Finance Operations</h1>
       </div>
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted-foreground">
         Read-only operator / admin view of the Finance v2 runtime, projections, ledger, draft
         invoices, journal entries, approval queue, adapter queue, audit timeline, and sandbox
         adapter status. No mutating actions are available in this slice.
@@ -127,16 +127,16 @@ function PageHeader() {
 
 function RouteDisabledState() {
   return (
-    <Card data-testid="finance-ops-route-disabled" className="border-slate-700/40 bg-slate-900/60">
+    <Card data-testid="finance-ops-route-disabled" className="border-border bg-card">
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Lock className="h-4 w-4 text-amber-300" aria-hidden="true" />
-          <CardTitle className="text-base text-slate-100">
+          <Lock className="h-4 w-4 text-amber-700 dark:text-amber-300" aria-hidden="true" />
+          <CardTitle className="text-base text-foreground">
             Finance Operations is not enabled in this environment
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="text-sm text-slate-400">
+      <CardContent className="text-sm text-muted-foreground">
         The Finance v2 route surface is not mounted (ENABLE_FINANCE_OPS is not &apos;true&apos;).
         Contact your deploy owner if Finance Operations should be available here. Retrying will not
         help — this is a process-level environment flag, not a per-tenant setting.
@@ -147,26 +147,26 @@ function RouteDisabledState() {
 
 function TenantNotEnrolledState() {
   return (
-    <Card
-      data-testid="finance-ops-tenant-not-enrolled"
-      className="border-slate-700/40 bg-slate-900/60"
-    >
+    <Card data-testid="finance-ops-tenant-not-enrolled" className="border-border bg-card">
       <CardHeader>
         <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-amber-300" aria-hidden="true" />
-          <CardTitle className="text-base text-slate-100">
+          <AlertTriangle
+            className="h-4 w-4 text-amber-700 dark:text-amber-300"
+            aria-hidden="true"
+          />
+          <CardTitle className="text-base text-foreground">
             Finance Operations is not enabled for this tenant
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="text-sm text-slate-400">
+      <CardContent className="text-sm text-muted-foreground">
         Your tenant is not enrolled in the financeOps module. Contact your administrator to enable
         it in Module Settings. (Backend expects a row in{' '}
-        <code className="rounded bg-slate-800 px-1 py-0.5 text-xs">modulesettings</code> with{' '}
-        <code className="rounded bg-slate-800 px-1 py-0.5 text-xs">
+        <code className="rounded bg-muted px-1 py-0.5 text-xs">modulesettings</code> with{' '}
+        <code className="rounded bg-muted px-1 py-0.5 text-xs">
           module_name = &apos;financeOps&apos;
         </code>{' '}
-        and <code className="rounded bg-slate-800 px-1 py-0.5 text-xs">is_enabled = true</code>.)
+        and <code className="rounded bg-muted px-1 py-0.5 text-xs">is_enabled = true</code>.)
       </CardContent>
     </Card>
   );
@@ -174,11 +174,11 @@ function TenantNotEnrolledState() {
 
 function MissingTenantState() {
   return (
-    <Card data-testid="finance-ops-missing-tenant" className="border-slate-700/40 bg-slate-900/60">
+    <Card data-testid="finance-ops-missing-tenant" className="border-border bg-card">
       <CardHeader>
-        <CardTitle className="text-base text-slate-100">No tenant selected</CardTitle>
+        <CardTitle className="text-base text-foreground">No tenant selected</CardTitle>
       </CardHeader>
-      <CardContent className="text-sm text-slate-400">
+      <CardContent className="text-sm text-muted-foreground">
         Select a tenant from the top bar to view Finance Operations state.
       </CardContent>
     </Card>
@@ -187,11 +187,16 @@ function MissingTenantState() {
 
 function GenericErrorState({ error, onRetry }) {
   return (
-    <Card data-testid="finance-ops-generic-error" className="border-red-800/50 bg-red-900/20">
+    <Card
+      data-testid="finance-ops-generic-error"
+      className="border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20"
+    >
       <CardHeader>
-        <CardTitle className="text-base text-red-100">Could not load Finance Operations</CardTitle>
+        <CardTitle className="text-base text-red-800 dark:text-red-100">
+          Could not load Finance Operations
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm text-red-200/80">
+      <CardContent className="space-y-3 text-sm text-red-700/80 dark:text-red-200/80">
         <p>
           {error?.message || 'Unknown error.'} (status {error?.status ?? '—'})
         </p>
@@ -201,7 +206,7 @@ function GenericErrorState({ error, onRetry }) {
           size="sm"
           onClick={onRetry}
           data-testid="finance-ops-generic-error-retry"
-          className="border-red-700 bg-red-900/40 text-red-100 hover:bg-red-900/60"
+          className="border-red-700 bg-red-900/40 text-red-800 dark:text-red-100 hover:bg-red-900/60"
         >
           Retry
         </Button>
@@ -345,7 +350,7 @@ export default function FinanceOpsPage() {
 
       {status?.runtime?.mode === 'test' ? (
         <div
-          className="rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm text-amber-200"
+          className="rounded-md border border-amber-500/50 bg-amber-50 dark:bg-amber-500/10 px-4 py-2 text-sm text-amber-800 dark:text-amber-200"
           data-testid="finance-ops-test-mode-banner"
           role="status"
         >
@@ -359,7 +364,7 @@ export default function FinanceOpsPage() {
 
       {loading && !status ? (
         <div
-          className="flex items-center gap-2 text-sm text-slate-400"
+          className="flex items-center gap-2 text-sm text-muted-foreground"
           data-testid="finance-ops-initial-loading"
         >
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -377,7 +382,7 @@ export default function FinanceOpsPage() {
               key={tab.id}
               value={tab.id}
               data-testid={`finance-ops-tab-${tab.id}`}
-              className="border border-slate-700/40 bg-slate-800/40 text-xs data-[state=active]:bg-slate-700 data-[state=active]:text-slate-100"
+              className="border border-border bg-muted text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground"
             >
               {tab.label}
             </TabsTrigger>

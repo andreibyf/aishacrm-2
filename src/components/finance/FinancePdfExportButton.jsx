@@ -20,7 +20,7 @@ export default function FinancePdfExportButton({ records, area, tenantId, title,
       onClick={() => downloadPdf(records, financeExportFilename(area, tenantId), { title })}
       data-testid={`finance-pdf-${area}`}
       aria-label={`Export ${area} as PDF`}
-      className={`border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700 ${className}`.trim()}
+      className={`border-border bg-muted text-foreground hover:bg-accent ${className}`.trim()}
     >
       <FileText className="h-3.5 w-3.5" aria-hidden="true" />
       <span className="ml-1.5 text-xs">Export PDF</span>

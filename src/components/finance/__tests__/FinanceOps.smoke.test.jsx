@@ -132,7 +132,11 @@ beforeEach(() => {
   mockFinance.getEvidencePack.mockResolvedValue({ pack: null });
   mockFinance.getAccounts.mockResolvedValue({ accounts: [] });
   mockFinance.getCashFlow.mockResolvedValue({
-    cash_flow: { cash_account_codes: [], periods: [], totals: { inflow_cents: 0, outflow_cents: 0, net_cents: 0 } },
+    cash_flow: {
+      cash_account_codes: [],
+      periods: [],
+      totals: { inflow_cents: 0, outflow_cents: 0, net_cents: 0 },
+    },
   });
   if (typeof window !== 'undefined') {
     try {

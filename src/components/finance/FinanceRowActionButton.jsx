@@ -42,7 +42,7 @@ export default function FinanceRowActionButton({
       disabled={disabled || busy}
       onClick={handleClick}
       data-testid={testId}
-      className="border-slate-600 bg-slate-800/60 text-xs text-slate-100 hover:bg-slate-700"
+      className="border-border bg-muted text-xs text-foreground hover:bg-accent"
     >
       {busy ? '…' : label}
     </Button>

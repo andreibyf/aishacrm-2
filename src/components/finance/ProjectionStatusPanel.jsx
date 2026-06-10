@@ -24,38 +24,43 @@ export default function ProjectionStatusPanel({ status }) {
 
   return (
     <div className="space-y-3" data-testid="finance-projection-status-panel">
-      <Card className="border-slate-700/40 bg-slate-900/60 text-slate-100">
+      <Card className="border-border bg-card text-foreground">
         <CardHeader className="flex flex-row items-start gap-3 pb-3">
-          <Database className="mt-1 h-4 w-4 flex-shrink-0 text-slate-300" aria-hidden="true" />
+          <Database
+            className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
           <div>
-            <CardTitle className="text-base font-semibold text-slate-100">
+            <CardTitle className="text-base font-semibold text-foreground">
               Projection / degraded status
             </CardTitle>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Persistence-store mode published by the Finance v2 runtime today. Per-projection
               cursor / store-type / lag is a backend gap.
             </p>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-slate-200">
+        <CardContent className="space-y-3 text-sm text-foreground">
           <div
             data-testid="finance-projection-status-persistence"
             data-persistence={persistence || 'unknown'}
-            className="flex items-center justify-between rounded-md border border-slate-700/40 bg-slate-800/40 px-3 py-2"
+            className="flex items-center justify-between rounded-md border border-border bg-muted px-3 py-2"
           >
-            <span className="text-xs uppercase tracking-wide text-slate-400">Persistence</span>
-            <span className="text-sm font-medium text-slate-100">
-              {persistence || <span className="text-slate-500">unknown</span>}
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              Persistence
+            </span>
+            <span className="text-sm font-medium text-foreground">
+              {persistence || <span className="text-muted-foreground">unknown</span>}
             </span>
           </div>
           {isDegradedFromInMemory ? (
             <div
-              className="rounded-md border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-100"
+              className="rounded-md border border-amber-300 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-100"
               data-testid="finance-projection-status-degraded-note"
             >
               This tenant is currently using temporary in-memory finance data. Persistent projection
               history is not enabled yet.
-              <span className="mt-1 block text-[10px] leading-relaxed text-amber-200/70">
+              <span className="mt-1 block text-[10px] leading-relaxed text-amber-700/70 dark:text-amber-200/70">
                 Technical: in-memory is the only supported Slice 1 mode;
                 ENABLE_FINANCE_PERSISTENT_EVENTS is fail-closed at the route level
                 (backend/routes/finance.v2.js:48). Persistent-events activation requires a separate
@@ -64,7 +69,7 @@ export default function ProjectionStatusPanel({ status }) {
             </div>
           ) : (
             <p
-              className="rounded-md border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 text-xs text-emerald-100"
+              className="rounded-md border border-emerald-300 dark:border-emerald-700/40 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-100"
               data-testid="finance-projection-status-healthy-note"
             >
               Persistence is reported as {persistence}. Projection-backed reads are active — the

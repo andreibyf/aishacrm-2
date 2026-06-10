@@ -29,7 +29,13 @@ const STMT = {
   },
 };
 
-const EMPTY = { cash_flow: { cash_account_codes: [], periods: [], totals: { inflow_cents: 0, outflow_cents: 0, net_cents: 0 } } };
+const EMPTY = {
+  cash_flow: {
+    cash_account_codes: [],
+    periods: [],
+    totals: { inflow_cents: 0, outflow_cents: 0, net_cents: 0 },
+  },
+};
 
 describe('CashFlowStatementPanel', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -38,7 +44,9 @@ describe('CashFlowStatementPanel', () => {
   it('renders the statement with totals, period, and category breakdown (formatted USD)', async () => {
     finance.getCashFlow.mockResolvedValue(STMT);
     render(<CashFlowStatementPanel tenantId={TENANT} />);
-    await waitFor(() => expect(screen.getByTestId('finance-cash-flow-statement')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('finance-cash-flow-statement')).toBeInTheDocument(),
+    );
     expect(screen.getByTestId('finance-cash-flow-period-2026-06')).toBeInTheDocument();
     expect(screen.getByText('Revenue')).toBeInTheDocument();
     expect(screen.getByTestId('finance-cash-flow-total-inflow')).toHaveTextContent('$2,500.00');
@@ -49,7 +57,9 @@ describe('CashFlowStatementPanel', () => {
     finance.getCashFlow.mockResolvedValue(EMPTY);
     render(<CashFlowStatementPanel tenantId={TENANT} />);
     await waitFor(() => expect(screen.getByTestId('finance-cash-flow-empty')).toBeInTheDocument());
-    expect(screen.getByTestId('finance-cash-flow-empty')).toHaveTextContent(/once journals are posted/i);
+    expect(screen.getByTestId('finance-cash-flow-empty')).toHaveTextContent(
+      /once journals are posted/i,
+    );
   });
 
   it('renders the error state on failure', async () => {
@@ -61,8 +71,12 @@ describe('CashFlowStatementPanel', () => {
   it('exposes no mutation control (read-only)', async () => {
     finance.getCashFlow.mockResolvedValue(STMT);
     const { container } = render(<CashFlowStatementPanel tenantId={TENANT} />);
-    await waitFor(() => expect(screen.getByTestId('finance-cash-flow-statement')).toBeInTheDocument());
-    const labels = Array.from(container.querySelectorAll('button')).map((b) => (b.textContent || '').toLowerCase());
+    await waitFor(() =>
+      expect(screen.getByTestId('finance-cash-flow-statement')).toBeInTheDocument(),
+    );
+    const labels = Array.from(container.querySelectorAll('button')).map((b) =>
+      (b.textContent || '').toLowerCase(),
+    );
     for (const verb of ['create', 'edit', 'delete', 'post', 'approve', 'reverse']) {
       expect(labels.some((l) => l.includes(verb))).toBe(false);
     }

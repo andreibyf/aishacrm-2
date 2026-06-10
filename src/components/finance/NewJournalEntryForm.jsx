@@ -76,13 +76,10 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
   };
 
   return (
-    <Card
-      data-testid="finance-new-journal-form"
-      className="border-slate-700/40 bg-slate-900/60 text-slate-100"
-    >
+    <Card data-testid="finance-new-journal-form" className="border-border bg-card text-foreground">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold text-slate-100">New journal entry</CardTitle>
-        <p className="mt-1 text-xs text-slate-400">
+        <CardTitle className="text-base font-semibold text-foreground">New journal entry</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
           Enter balanced debit/credit lines (in dollars). Creates a draft you then submit for
           approval.
         </p>
@@ -93,7 +90,7 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
           placeholder="Memo (optional)"
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
-          className="border-slate-600 bg-slate-800/60 text-slate-100"
+          className="border-border bg-muted text-foreground"
         />
 
         <div className="space-y-2">
@@ -104,13 +101,13 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
                 placeholder="Account name"
                 value={line.account_name}
                 onChange={(e) => update(idx, 'account_name', e.target.value)}
-                className="flex-1 border-slate-600 bg-slate-800/60 text-slate-100"
+                className="flex-1 border-border bg-muted text-foreground"
               />
               <select
                 aria-label={`Classification ${idx + 1}`}
                 value={line.classification}
                 onChange={(e) => update(idx, 'classification', e.target.value)}
-                className="rounded-md border border-slate-600 bg-slate-800/60 px-2 py-1.5 text-xs text-slate-100"
+                className="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-foreground"
               >
                 {CLASSIFICATIONS.map((c) => (
                   <option key={c} value={c}>
@@ -124,7 +121,7 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
                 inputMode="decimal"
                 value={line.debit}
                 onChange={(e) => update(idx, 'debit', e.target.value)}
-                className="w-24 border-slate-600 bg-slate-800/60 text-right text-slate-100"
+                className="w-24 border-border bg-muted text-right text-foreground"
               />
               <Input
                 aria-label={`Credit ${idx + 1}`}
@@ -132,7 +129,7 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
                 inputMode="decimal"
                 value={line.credit}
                 onChange={(e) => update(idx, 'credit', e.target.value)}
-                className="w-24 border-slate-600 bg-slate-800/60 text-right text-slate-100"
+                className="w-24 border-border bg-muted text-right text-foreground"
               />
               <Button
                 type="button"
@@ -141,7 +138,7 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
                 aria-label={`Remove line ${idx + 1}`}
                 onClick={() => removeLine(idx)}
                 disabled={lines.length <= 2}
-                className="h-8 w-8 p-0 text-slate-400 hover:bg-slate-700"
+                className="h-8 w-8 p-0 text-muted-foreground hover:bg-accent"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -155,7 +152,7 @@ export default function NewJournalEntryForm({ tenantId, onCreated }) {
             variant="ghost"
             size="sm"
             onClick={addLine}
-            className="text-slate-300 hover:bg-slate-700"
+            className="text-muted-foreground hover:bg-accent"
           >
             <Plus className="mr-1 h-4 w-4" /> Add line
           </Button>

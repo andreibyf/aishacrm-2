@@ -41,12 +41,12 @@ const COUNT_TILES = [
 function PostureRow({ label, value, dataTestKey }) {
   return (
     <div
-      className="flex items-center justify-between gap-3 border-b border-slate-700/40 py-2 last:border-b-0"
+      className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-b-0"
       data-testid={`runtime-overview-row-${dataTestKey}`}
     >
-      <span className="text-xs uppercase tracking-wide text-slate-400">{label}</span>
-      <span className="text-sm font-medium text-slate-100" data-value={value || 'unknown'}>
-        {value || <span className="text-slate-500">—</span>}
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground" data-value={value || 'unknown'}>
+        {value || <span className="text-muted-foreground">—</span>}
       </span>
     </div>
   );
@@ -55,11 +55,11 @@ function PostureRow({ label, value, dataTestKey }) {
 function CountTile({ label, value }) {
   return (
     <div
-      className="rounded-lg border border-slate-700/40 bg-slate-800/40 p-3 text-center"
+      className="rounded-lg border border-border bg-muted p-3 text-center"
       data-testid={`runtime-overview-count-${label.toLowerCase().replace(/\s+/g, '-')}`}
     >
-      <div className="text-2xl font-semibold text-slate-100">{value ?? 0}</div>
-      <div className="mt-1 text-xs uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="text-2xl font-semibold text-foreground">{value ?? 0}</div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -113,14 +113,13 @@ export default function RuntimeOverview({
   };
 
   return (
-    <Card
-      data-testid="finance-runtime-overview"
-      className="border-slate-700/40 bg-slate-900/60 text-slate-100"
-    >
+    <Card data-testid="finance-runtime-overview" className="border-border bg-card text-foreground">
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
         <div>
-          <CardTitle className="text-base font-semibold text-slate-100">Runtime overview</CardTitle>
-          <p className="mt-1 text-xs text-slate-400">
+          <CardTitle className="text-base font-semibold text-foreground">
+            Runtime overview
+          </CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
             Live view of the Finance v2 runtime posture for this tenant. Read-only — no mutating
             affordance exists on this card.
           </p>
@@ -133,7 +132,7 @@ export default function RuntimeOverview({
           disabled={loading}
           data-testid="finance-runtime-overview-refresh"
           aria-label="Refresh runtime status"
-          className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+          className="border-border bg-muted text-foreground hover:bg-accent"
         >
           <RefreshCcw
             className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`}
@@ -146,10 +145,10 @@ export default function RuntimeOverview({
         {error ? (
           <div
             data-testid="finance-runtime-overview-error"
-            className="rounded-md border border-red-800/50 bg-red-900/20 p-3 text-sm text-red-100"
+            className="rounded-md border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-100"
           >
             <div className="font-medium">Could not load runtime status.</div>
-            <p className="mt-1 text-xs text-red-200/80">
+            <p className="mt-1 text-xs text-red-700/80 dark:text-red-200/80">
               {error.message || 'Unknown error.'} (status {error.status ?? '—'})
             </p>
           </div>
@@ -164,7 +163,7 @@ export default function RuntimeOverview({
           <PostureRow label="Mode" value={runtime.mode} dataTestKey="mode" />
           {runtime.mode === MODE_PLACEHOLDER ? (
             <p
-              className="-mt-1 pb-2 text-[10px] text-amber-300/80"
+              className="-mt-1 pb-2 text-[10px] text-amber-600/80 dark:text-amber-300/80"
               data-testid="runtime-overview-mode-placeholder-note"
               data-design-ref={FINANCE_API_GAPS.runtimeMode.designRef}
             >
@@ -175,13 +174,13 @@ export default function RuntimeOverview({
 
           {canEditMode && onChangeMode ? (
             <div
-              className="flex items-center justify-between gap-3 border-b border-slate-700/40 py-2"
+              className="flex items-center justify-between gap-3 border-b border-border py-2"
               data-testid="runtime-overview-mode-toggle"
             >
-              <span className="text-xs uppercase tracking-wide text-slate-400">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">
                 Data mode (superadmin)
               </span>
-              <div className="inline-flex overflow-hidden rounded-md border border-slate-600">
+              <div className="inline-flex overflow-hidden rounded-md border border-border">
                 {['test', 'live'].map((m) => {
                   const active = (dataMode || runtime.mode) === m;
                   return (
@@ -195,9 +194,9 @@ export default function RuntimeOverview({
                       className={`px-3 py-1 text-xs font-medium transition-colors disabled:cursor-default ${
                         active
                           ? m === 'test'
-                            ? 'bg-amber-500/90 text-slate-900'
+                            ? 'bg-amber-500/90 text-foreground'
                             : 'bg-emerald-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          : 'bg-muted text-muted-foreground hover:bg-accent'
                       } ${modeUpdating ? 'opacity-60' : ''}`}
                     >
                       {m === 'test' ? 'Test' : 'Live'}
@@ -219,10 +218,10 @@ export default function RuntimeOverview({
 
           {pendingMode ? (
             <div
-              className="rounded-md border border-amber-700/50 bg-amber-900/20 p-2"
+              className="rounded-md border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-2"
               data-testid="runtime-overview-switch-confirm"
             >
-              <p className="text-[11px] text-amber-100">
+              <p className="text-[11px] text-amber-800 dark:text-amber-100">
                 This tenant has {dormantCount} test record{dormantCount === 1 ? '' : 's'}. Switching
                 to {pendingMode === 'test' ? 'Test' : 'Live'} keeps them (they stay until cleared).
               </p>
@@ -244,7 +243,7 @@ export default function RuntimeOverview({
                   type="button"
                   onClick={() => setPendingMode(null)}
                   data-testid="runtime-overview-switch-confirm-cancel"
-                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-700"
+                  className="rounded border border-border bg-muted px-2 py-1 text-[11px] font-medium text-foreground hover:bg-accent"
                 >
                   Cancel
                 </button>
@@ -253,7 +252,10 @@ export default function RuntimeOverview({
           ) : null}
 
           {modeError ? (
-            <p className="pb-1 text-[10px] text-red-300" data-testid="runtime-overview-mode-error">
+            <p
+              className="pb-1 text-[10px] text-red-700 dark:text-red-300"
+              data-testid="runtime-overview-mode-error"
+            >
               {modeError}
             </p>
           ) : null}
@@ -274,7 +276,7 @@ export default function RuntimeOverview({
 
         {lastRefreshedAt ? (
           <p
-            className="text-xs text-slate-500"
+            className="text-xs text-muted-foreground"
             data-testid="finance-runtime-overview-last-refreshed"
           >
             Last refreshed at {lastRefreshedAt.toLocaleTimeString()} (client clock; no server

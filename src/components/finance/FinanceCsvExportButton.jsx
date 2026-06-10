@@ -19,7 +19,7 @@ export default function FinanceCsvExportButton({ records, area, tenantId, classN
       onClick={() => downloadCsv(records, financeExportFilename(area, tenantId))}
       data-testid={`finance-export-${area}`}
       aria-label={`Export ${area} as CSV`}
-      className={`border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700 ${className}`.trim()}
+      className={`border-border bg-muted text-foreground hover:bg-accent ${className}`.trim()}
     >
       <Download className="h-3.5 w-3.5" aria-hidden="true" />
       <span className="ml-1.5 text-xs">Export CSV</span>

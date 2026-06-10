@@ -62,13 +62,10 @@ export default function NewInvoiceForm({ tenantId, onCreated }) {
   };
 
   return (
-    <Card
-      data-testid="finance-new-invoice-form"
-      className="border-slate-700/40 bg-slate-900/60 text-slate-100"
-    >
+    <Card data-testid="finance-new-invoice-form" className="border-border bg-card text-foreground">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold text-slate-100">New invoice</CardTitle>
-        <p className="mt-1 text-xs text-slate-400">
+        <CardTitle className="text-base font-semibold text-foreground">New invoice</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
           Creates a draft invoice. Submitting + approving it posts an AR journal (Dr Accounts
           Receivable / Cr Revenue / Cr Tax).
         </p>
@@ -80,14 +77,14 @@ export default function NewInvoiceForm({ tenantId, onCreated }) {
             placeholder="Customer ID"
             value={form.customer_id}
             onChange={(e) => set('customer_id', e.target.value)}
-            className="flex-1 border-slate-600 bg-slate-800/60 text-slate-100"
+            className="flex-1 border-border bg-muted text-foreground"
           />
           <Input
             aria-label="Invoice number"
             placeholder="Invoice # (optional)"
             value={form.invoice_number}
             onChange={(e) => set('invoice_number', e.target.value)}
-            className="flex-1 border-slate-600 bg-slate-800/60 text-slate-100"
+            className="flex-1 border-border bg-muted text-foreground"
           />
         </div>
         <div className="flex gap-2">
@@ -97,7 +94,7 @@ export default function NewInvoiceForm({ tenantId, onCreated }) {
             inputMode="decimal"
             value={form.subtotal}
             onChange={(e) => set('subtotal', e.target.value)}
-            className="w-32 border-slate-600 bg-slate-800/60 text-right text-slate-100"
+            className="w-32 border-border bg-muted text-right text-foreground"
           />
           <Input
             aria-label="Tax"
@@ -105,10 +102,10 @@ export default function NewInvoiceForm({ tenantId, onCreated }) {
             inputMode="decimal"
             value={form.tax}
             onChange={(e) => set('tax', e.target.value)}
-            className="w-32 border-slate-600 bg-slate-800/60 text-right text-slate-100"
+            className="w-32 border-border bg-muted text-right text-foreground"
           />
           <span
-            className="self-center text-xs text-slate-400"
+            className="self-center text-xs text-muted-foreground"
             data-testid="finance-new-invoice-total"
           >
             Total {fmt(totalCents)}
@@ -119,7 +116,7 @@ export default function NewInvoiceForm({ tenantId, onCreated }) {
           placeholder="Memo / description (optional)"
           value={form.memo}
           onChange={(e) => set('memo', e.target.value)}
-          className="border-slate-600 bg-slate-800/60 text-slate-100"
+          className="border-border bg-muted text-foreground"
         />
         <Button
           type="button"

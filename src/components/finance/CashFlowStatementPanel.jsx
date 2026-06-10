@@ -92,11 +92,11 @@ export default function CashFlowStatementPanel({ tenantId }) {
 
   return (
     <div data-testid="finance-cash-flow-panel">
-      <Card className="border-slate-700/40 bg-slate-900/60 text-slate-100">
+      <Card className="border-border bg-card text-foreground">
         <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
           <div>
             <CardTitle className="text-base font-semibold">Cash flow</CardTitle>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Read-only cash-flow statement derived from this tenant&apos;s posted journal lines on
               cash/bank accounts. Reconciles to the balance sheet&apos;s Cash line. Amounts in USD.
             </p>
@@ -116,7 +116,7 @@ export default function CashFlowStatementPanel({ tenantId }) {
               disabled={state.loading}
               data-testid="finance-cash-flow-refresh"
               aria-label="Refresh cash flow"
-              className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+              className="border-border bg-muted text-foreground hover:bg-accent"
             >
               <RefreshCcw
                 className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
@@ -130,19 +130,19 @@ export default function CashFlowStatementPanel({ tenantId }) {
           {state.error ? (
             <div
               data-testid="finance-cash-flow-error"
-              className="rounded-md border border-red-800/50 bg-red-900/20 p-3 text-sm text-red-100"
+              className="rounded-md border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-100"
             >
               <div className="font-medium">Could not load cash flow.</div>
-              <p className="mt-1 text-xs text-red-200/80">
+              <p className="mt-1 text-xs text-red-700/80 dark:text-red-200/80">
                 {state.error.message || 'Unknown error.'} (status {state.error.status ?? '—'})
               </p>
             </div>
           ) : state.loading && !stmt ? (
-            <p className="text-xs text-slate-400" data-testid="finance-cash-flow-loading">
+            <p className="text-xs text-muted-foreground" data-testid="finance-cash-flow-loading">
               Loading…
             </p>
           ) : periods.length === 0 ? (
-            <p className="text-xs text-slate-400" data-testid="finance-cash-flow-empty">
+            <p className="text-xs text-muted-foreground" data-testid="finance-cash-flow-empty">
               No posted cash movements yet — cash flow appears once journals are posted.
             </p>
           ) : (
@@ -167,20 +167,22 @@ export default function CashFlowStatementPanel({ tenantId }) {
               {periods.map((p) => (
                 <div
                   key={p.period}
-                  className="rounded-md border border-slate-700/40 p-3"
+                  className="rounded-md border border-border p-3"
                   data-testid={`finance-cash-flow-period-${p.period}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-100">{p.period}</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-sm font-medium text-foreground">{p.period}</span>
+                    <span className="text-xs text-muted-foreground">
                       in {formatCents(p.inflow_cents)} · out {formatCents(p.outflow_cents)} · net{' '}
-                      <span className="font-medium text-slate-100">{formatCents(p.net_cents)}</span>
+                      <span className="font-medium text-foreground">
+                        {formatCents(p.net_cents)}
+                      </span>
                     </span>
                   </div>
                   {asArray(p.by_category).length > 0 ? (
                     <table className="mt-2 w-full text-xs">
                       <thead>
-                        <tr className="border-b border-slate-700/60 text-left text-slate-400">
+                        <tr className="border-b border-border text-left text-muted-foreground">
                           <th className="py-1 pr-3 font-medium uppercase tracking-wide">
                             Category
                           </th>
@@ -192,13 +194,13 @@ export default function CashFlowStatementPanel({ tenantId }) {
                         {p.by_category.map((c) => (
                           <tr
                             key={c.classification}
-                            className="border-b border-slate-700/40 last:border-b-0"
+                            className="border-b border-border last:border-b-0"
                           >
-                            <td className="py-1 pr-3 text-slate-100">{c.classification}</td>
-                            <td className="py-1 pr-3 text-slate-100">
+                            <td className="py-1 pr-3 text-foreground">{c.classification}</td>
+                            <td className="py-1 pr-3 text-foreground">
                               {formatCents(c.inflow_cents)}
                             </td>
-                            <td className="py-1 pr-3 text-slate-100">
+                            <td className="py-1 pr-3 text-foreground">
                               {formatCents(c.outflow_cents)}
                             </td>
                           </tr>
@@ -218,9 +220,9 @@ export default function CashFlowStatementPanel({ tenantId }) {
 
 function Total({ label, value, testId }) {
   return (
-    <div className="rounded-md border border-slate-700/40 px-3 py-2" data-testid={testId}>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="text-sm font-semibold text-slate-100">{value}</div>
+    <div className="rounded-md border border-border px-3 py-2" data-testid={testId}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-sm font-semibold text-foreground">{value}</div>
     </div>
   );
 }

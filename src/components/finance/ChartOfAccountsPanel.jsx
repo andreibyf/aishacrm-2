@@ -97,7 +97,7 @@ function messageForError(err) {
 }
 
 const inputCls =
-  'mt-1 w-full rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 placeholder:text-slate-500 disabled:opacity-50';
+  'mt-1 w-full rounded-md border border-border bg-muted px-2 py-1 text-sm text-foreground placeholder:text-muted-foreground disabled:opacity-50';
 
 function defaultTypeFor(classification) {
   return (ACCOUNT_TYPES_BY_CLASSIFICATION[classification] || [])[0] || '';
@@ -158,19 +158,19 @@ export default function ChartOfAccountsPanel({ tenantId }) {
 
   return (
     <div data-testid="finance-chart-of-accounts-panel">
-      <Card className="border-slate-700/40 bg-slate-900/60 text-slate-100">
+      <Card className="border-border bg-card text-foreground">
         <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
           <div>
-            <CardTitle className="text-base font-semibold text-slate-100">
+            <CardTitle className="text-base font-semibold text-foreground">
               Chart of accounts
             </CardTitle>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Create, edit and deactivate accounts. System accounts keep their classification and
               code; name and type can be changed with a reason. The server enforces every rule.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={showInactive}
@@ -193,7 +193,7 @@ export default function ChartOfAccountsPanel({ tenantId }) {
               disabled={loading}
               data-testid="finance-chart-of-accounts-refresh"
               aria-label="Refresh chart of accounts"
-              className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+              className="border-border bg-muted text-foreground hover:bg-accent"
             >
               <RefreshCcw
                 className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`}
@@ -207,7 +207,7 @@ export default function ChartOfAccountsPanel({ tenantId }) {
           {error ? (
             <div
               data-testid="coa-error"
-              className="rounded-md border border-red-800/50 bg-red-900/20 px-3 py-2 text-xs text-red-200"
+              className="rounded-md border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-200"
             >
               {error}
             </div>
@@ -221,25 +221,31 @@ export default function ChartOfAccountsPanel({ tenantId }) {
           {loadError ? (
             <div
               data-testid="finance-chart-of-accounts-error"
-              className="rounded-md border border-red-800/50 bg-red-900/20 p-3 text-sm text-red-100"
+              className="rounded-md border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-100"
             >
               <div className="font-medium">Could not load chart of accounts.</div>
-              <p className="mt-1 text-xs text-red-200/80">
+              <p className="mt-1 text-xs text-red-700/80 dark:text-red-200/80">
                 {loadError.message || 'Unknown error.'} (status {loadError.status ?? '—'})
               </p>
             </div>
           ) : loading && accounts.length === 0 ? (
-            <p className="text-xs text-slate-400" data-testid="finance-chart-of-accounts-loading">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="finance-chart-of-accounts-loading"
+            >
               Loading…
             </p>
           ) : visible.length === 0 ? (
-            <p className="text-xs text-slate-400" data-testid="finance-chart-of-accounts-empty">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="finance-chart-of-accounts-empty"
+            >
               No accounts for this tenant yet.
             </p>
           ) : (
             <table className="w-full text-xs" data-testid="finance-chart-of-accounts-table">
               <thead>
-                <tr className="border-b border-slate-700/60 text-left text-slate-400">
+                <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-2 pr-3 font-medium uppercase tracking-wide">Code</th>
                   <th className="py-2 pr-3 font-medium uppercase tracking-wide">Name</th>
                   <th className="py-2 pr-3 font-medium uppercase tracking-wide">Classification</th>
@@ -310,9 +316,9 @@ function CreateAccountForm({ busy, onCreate }) {
     <form
       onSubmit={onSubmit}
       data-testid="coa-create-form"
-      className="grid grid-cols-1 gap-2 rounded-md border border-slate-700/40 bg-slate-800/30 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
+      className="grid grid-cols-1 gap-2 rounded-md border border-border bg-muted p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
     >
-      <label className="text-xs text-slate-400">
+      <label className="text-xs text-muted-foreground">
         Account name
         <input
           className={inputCls}
@@ -322,7 +328,7 @@ function CreateAccountForm({ busy, onCreate }) {
           data-testid="coa-create-name"
         />
       </label>
-      <label className="text-xs text-slate-400">
+      <label className="text-xs text-muted-foreground">
         Classification
         <select
           className={inputCls}
@@ -337,7 +343,7 @@ function CreateAccountForm({ busy, onCreate }) {
           ))}
         </select>
       </label>
-      <label className="text-xs text-slate-400">
+      <label className="text-xs text-muted-foreground">
         Account type
         <select
           className={inputCls}
@@ -401,17 +407,14 @@ function AccountRow({
   }
 
   return (
-    <tr
-      className="border-b border-slate-700/40 last:border-b-0"
-      data-testid={`coa-row-${account.id}`}
-    >
-      <td className="py-1.5 pr-3 text-slate-100">{account.account_code || '—'}</td>
-      <td className="py-1.5 pr-3 text-slate-100">{account.name || '—'}</td>
-      <td className="py-1.5 pr-3 text-slate-100">{account.classification || '—'}</td>
-      <td className="py-1.5 pr-3 text-slate-100">{account.account_type || '—'}</td>
-      <td className="py-1.5 pr-3 text-slate-100">{yesNo(isSystem)}</td>
-      <td className="py-1.5 pr-3 text-slate-100">{yesNo(isActive)}</td>
-      <td className="py-1.5 pr-3 text-slate-100">
+    <tr className="border-b border-border last:border-b-0" data-testid={`coa-row-${account.id}`}>
+      <td className="py-1.5 pr-3 text-foreground">{account.account_code || '—'}</td>
+      <td className="py-1.5 pr-3 text-foreground">{account.name || '—'}</td>
+      <td className="py-1.5 pr-3 text-foreground">{account.classification || '—'}</td>
+      <td className="py-1.5 pr-3 text-foreground">{account.account_type || '—'}</td>
+      <td className="py-1.5 pr-3 text-foreground">{yesNo(isSystem)}</td>
+      <td className="py-1.5 pr-3 text-foreground">{yesNo(isActive)}</td>
+      <td className="py-1.5 pr-3 text-foreground">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -423,7 +426,10 @@ function AccountRow({
             Edit
           </button>
           {isSystem ? (
-            <span className="text-xs text-slate-500" data-testid={`coa-row-system-${account.id}`}>
+            <span
+              className="text-xs text-muted-foreground"
+              data-testid={`coa-row-system-${account.id}`}
+            >
               System
             </span>
           ) : isActive ? (
@@ -482,7 +488,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
 
   return (
     <tr
-      className="border-b border-slate-700/40 bg-slate-800/40 last:border-b-0"
+      className="border-b border-border bg-muted last:border-b-0"
       data-testid={`coa-edit-row-${account.id}`}
     >
       <td className="py-1.5 pr-3" colSpan={7}>
@@ -491,7 +497,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
           className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
           data-testid={`coa-edit-form-${account.id}`}
         >
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Name
             <input
               className={inputCls}
@@ -500,7 +506,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
               data-testid={`coa-edit-name-${account.id}`}
             />
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Classification
             <select
               className={inputCls}
@@ -516,7 +522,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
               ))}
             </select>
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Account type
             <select
               className={inputCls}
@@ -531,7 +537,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
               ))}
             </select>
           </label>
-          <label className="text-xs text-slate-400">
+          <label className="text-xs text-muted-foreground">
             Account code
             <input
               className={inputCls}
@@ -542,7 +548,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
             />
           </label>
           {reasonRequired ? (
-            <label className="text-xs text-slate-400">
+            <label className="text-xs text-muted-foreground">
               Reason (required)
               <input
                 className={inputCls}
@@ -568,7 +574,7 @@ function EditAccountRow({ account, busy, fieldsLocked, reasonRequired, onCancel,
               onClick={onCancel}
               disabled={busy}
               data-testid={`coa-edit-cancel-${account.id}`}
-              className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+              className="border-border bg-muted text-foreground hover:bg-accent"
             >
               Cancel
             </Button>
@@ -592,7 +598,7 @@ function ReasonAction({ account, busy, action, label, onConfirm }) {
         onClick={() => setOpen(true)}
         disabled={busy}
         data-testid={`coa-${action}-${account.id}`}
-        className="text-amber-300 hover:underline disabled:opacity-50"
+        className="text-amber-700 dark:text-amber-300 hover:underline disabled:opacity-50"
       >
         {label}
       </button>
@@ -602,7 +608,7 @@ function ReasonAction({ account, busy, action, label, onConfirm }) {
   return (
     <span className="inline-flex items-center gap-1">
       <input
-        className="rounded-md border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs text-slate-100"
+        className="rounded-md border border-border bg-muted px-2 py-0.5 text-xs text-foreground"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason"
@@ -619,7 +625,7 @@ function ReasonAction({ account, busy, action, label, onConfirm }) {
           }
         }}
         data-testid={`coa-${action}-confirm-${account.id}`}
-        className="text-emerald-300 hover:underline disabled:opacity-50"
+        className="text-emerald-700 dark:text-emerald-300 hover:underline disabled:opacity-50"
       >
         Confirm
       </button>
@@ -630,7 +636,7 @@ function ReasonAction({ account, busy, action, label, onConfirm }) {
           setReason('');
         }}
         data-testid={`coa-${action}-cancel-${account.id}`}
-        className="text-slate-400 hover:underline"
+        className="text-muted-foreground hover:underline"
       >
         Cancel
       </button>

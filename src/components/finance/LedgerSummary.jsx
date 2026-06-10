@@ -66,11 +66,11 @@ function ledgerStatementRecords({ ledger, profitLoss, balanceSheet }) {
 function SummaryRow({ label, value, testId }) {
   return (
     <div
-      className="flex items-center justify-between border-b border-slate-700/40 py-1.5 last:border-b-0"
+      className="flex items-center justify-between border-b border-border py-1.5 last:border-b-0"
       {...(testId ? { 'data-testid': testId } : {})}
     >
-      <span className="text-xs text-slate-400">{label}</span>
-      <span className="text-sm font-medium text-slate-100">{value}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{value}</span>
     </div>
   );
 }
@@ -96,7 +96,7 @@ function LedgerBody({ data }) {
   return (
     <div className="space-y-2">
       {accounts.length === 0 ? (
-        <p className="text-xs text-slate-500" data-testid="ledger-section-empty">
+        <p className="text-xs text-muted-foreground" data-testid="ledger-section-empty">
           No ledger accounts available for this tenant yet.
         </p>
       ) : (
@@ -115,7 +115,7 @@ function ProfitLossBody({ data }) {
   return (
     <div className="space-y-2">
       {revenue.length === 0 && expense.length === 0 ? (
-        <p className="text-xs text-slate-500" data-testid="ledger-section-empty">
+        <p className="text-xs text-muted-foreground" data-testid="ledger-section-empty">
           No revenue or expense accounts available yet.
         </p>
       ) : null}
@@ -140,18 +140,18 @@ function BalanceSheetBody({ data }) {
   let balanceClass;
   if (!data || totals.is_balanced === undefined || totals.is_balanced === null) {
     balanceLabel = 'Unknown';
-    balanceClass = 'text-slate-400';
+    balanceClass = 'text-muted-foreground';
   } else if (totals.is_balanced === false) {
     balanceLabel = 'No — unbalanced (ledger integrity issue)';
-    balanceClass = 'text-amber-300 font-semibold';
+    balanceClass = 'text-amber-700 dark:text-amber-300 font-semibold';
   } else {
     balanceLabel = 'Yes';
-    balanceClass = 'text-slate-100';
+    balanceClass = 'text-foreground';
   }
   return (
     <div className="space-y-2">
       {assets.length === 0 && liabilities.length === 0 && equity.length === 0 ? (
-        <p className="text-xs text-slate-500" data-testid="ledger-section-empty">
+        <p className="text-xs text-muted-foreground" data-testid="ledger-section-empty">
           No assets, liabilities, or equity accounts available yet.
         </p>
       ) : null}
@@ -159,7 +159,7 @@ function BalanceSheetBody({ data }) {
       <SummaryRow label="Liabilities" value={formatCents(totals.liabilities_cents)} />
       <SummaryRow label="Equity" value={formatCents(totals.equity_cents)} />
       <div className="flex items-center justify-between py-1.5" data-testid="ledger-balance-state">
-        <span className="text-xs text-slate-400">Balanced</span>
+        <span className="text-xs text-muted-foreground">Balanced</span>
         <span className={`text-sm ${balanceClass}`}>{balanceLabel}</span>
       </div>
     </div>
@@ -169,11 +169,11 @@ function BalanceSheetBody({ data }) {
 function Section({ title, loading, error, testId, children }) {
   return (
     <div data-testid={testId} className="space-y-2">
-      <div className="text-xs uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{title}</div>
       {loading ? (
-        <p className="text-xs text-slate-500">Loading…</p>
+        <p className="text-xs text-muted-foreground">Loading…</p>
       ) : error ? (
-        <p className="text-xs text-red-300" data-testid={`${testId}-error`}>
+        <p className="text-xs text-red-700 dark:text-red-300" data-testid={`${testId}-error`}>
           {error.message || 'Failed to load.'} (status {error.status ?? '—'})
         </p>
       ) : (
@@ -228,14 +228,11 @@ export default function LedgerSummary({ tenantId }) {
   }, [fetchAll]);
 
   return (
-    <Card
-      data-testid="finance-ledger-summary"
-      className="border-slate-700/40 bg-slate-900/60 text-slate-100"
-    >
+    <Card data-testid="finance-ledger-summary" className="border-border bg-card text-foreground">
       <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
         <div>
-          <CardTitle className="text-base font-semibold text-slate-100">Ledger summary</CardTitle>
-          <p className="mt-1 text-xs text-slate-400">
+          <CardTitle className="text-base font-semibold text-foreground">Ledger summary</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
             Read-only ledger / profit &amp; loss / balance-sheet snapshot for this tenant. Amounts
             are shown in USD.
           </p>
@@ -255,7 +252,7 @@ export default function LedgerSummary({ tenantId }) {
             disabled={state.loading}
             data-testid="finance-ledger-summary-refresh"
             aria-label="Refresh ledger summary"
-            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+            className="border-border bg-muted text-foreground hover:bg-accent"
           >
             <RefreshCcw
               className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}

@@ -51,15 +51,18 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
 
   return (
     <div className="space-y-3" data-testid="finance-sandbox-adapter-panel">
-      <Card className="border-slate-700/40 bg-slate-900/60 text-slate-100">
+      <Card className="border-border bg-card text-foreground">
         <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
           <div className="flex flex-row items-start gap-3">
-            <Wrench className="mt-1 h-4 w-4 flex-shrink-0 text-slate-300" aria-hidden="true" />
+            <Wrench
+              className="mt-1 h-4 w-4 flex-shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
             <div>
-              <CardTitle className="text-base font-semibold text-slate-100">
+              <CardTitle className="text-base font-semibold text-foreground">
                 Sandbox adapter
               </CardTitle>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Read-only metadata for the accounting adapters the runtime knows about. Capability /
                 status / posture discovery only — no provider-write, sync, or credential action.
               </p>
@@ -73,7 +76,7 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
             disabled={state.loading}
             data-testid="finance-sandbox-adapter-refresh"
             aria-label="Refresh adapters"
-            className="border-slate-600 bg-slate-800/60 text-slate-100 hover:bg-slate-700"
+            className="border-border bg-muted text-foreground hover:bg-accent"
           >
             <RefreshCcw
               className={`h-3.5 w-3.5 ${state.loading ? 'animate-spin' : ''}`}
@@ -82,30 +85,35 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
             <span className="ml-1.5 text-xs">Refresh</span>
           </Button>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-slate-200">
+        <CardContent className="space-y-3 text-sm text-foreground">
           <div
             data-testid="finance-sandbox-adapter-provider-sync"
             data-provider-sync={providerSync || 'unknown'}
-            className="flex items-center justify-between rounded-md border border-slate-700/40 bg-slate-800/40 px-3 py-2"
+            className="flex items-center justify-between rounded-md border border-border bg-muted px-3 py-2"
           >
-            <span className="text-xs uppercase tracking-wide text-slate-400">Provider sync</span>
-            <span className="text-sm font-medium text-slate-100">
-              {providerSync || <span className="text-slate-500">unknown</span>}
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              Provider sync
+            </span>
+            <span className="text-sm font-medium text-foreground">
+              {providerSync || <span className="text-muted-foreground">unknown</span>}
             </span>
           </div>
 
           {state.error ? (
             <div
               data-testid="finance-sandbox-adapter-error"
-              className="rounded-md border border-red-800/50 bg-red-900/20 p-3 text-sm text-red-100"
+              className="rounded-md border border-red-300 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-100"
             >
               <div className="font-medium">Could not load adapters.</div>
-              <p className="mt-1 text-xs text-red-200/80">
+              <p className="mt-1 text-xs text-red-700/80 dark:text-red-200/80">
                 {state.error.message || 'Unknown error.'} (status {state.error.status ?? '—'})
               </p>
             </div>
           ) : state.adapters.length === 0 ? (
-            <p className="text-xs text-slate-400" data-testid="finance-sandbox-adapter-empty">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="finance-sandbox-adapter-empty"
+            >
               {state.loading ? 'Loading…' : 'No adapters registered.'}
             </p>
           ) : (
@@ -114,21 +122,21 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
                 <li
                   key={a.name}
                   data-testid={`finance-sandbox-adapter-item-${a.name}`}
-                  className="rounded-md border border-slate-700/40 bg-slate-800/30 px-3 py-2"
+                  className="rounded-md border border-border bg-muted px-3 py-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-100">{a.name}</span>
-                    <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                    <span className="text-sm font-medium text-foreground">{a.name}</span>
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {a.kind} · {a.status}
                     </span>
                   </div>
-                  <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-300">
+                  <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                     <div>
-                      <dt className="inline text-slate-500">Mode: </dt>
+                      <dt className="inline text-muted-foreground">Mode: </dt>
                       <dd className="inline">{a.mode}</dd>
                     </div>
                     <div>
-                      <dt className="inline text-slate-500">Provider writes: </dt>
+                      <dt className="inline text-muted-foreground">Provider writes: </dt>
                       <dd
                         className="inline"
                         data-testid={`finance-sandbox-adapter-writes-${a.name}`}
@@ -137,20 +145,20 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
                       </dd>
                     </div>
                     <div>
-                      <dt className="inline text-slate-500">Production allowed: </dt>
+                      <dt className="inline text-muted-foreground">Production allowed: </dt>
                       <dd className="inline">{a.production_allowed ? 'yes' : 'no'}</dd>
                     </div>
                     <div>
-                      <dt className="inline text-slate-500">Guarded to: </dt>
+                      <dt className="inline text-muted-foreground">Guarded to: </dt>
                       <dd className="inline">{a.base_url_guarded_to}</dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="inline text-slate-500">Capabilities: </dt>
+                      <dt className="inline text-muted-foreground">Capabilities: </dt>
                       <dd className="inline">{(a.capabilities || []).join(', ') || '—'}</dd>
                     </div>
                     {Array.isArray(a.unsupported) && a.unsupported.length > 0 ? (
                       <div className="col-span-2">
-                        <dt className="inline text-slate-500">Unsupported: </dt>
+                        <dt className="inline text-muted-foreground">Unsupported: </dt>
                         <dd className="inline">{a.unsupported.join(', ')}</dd>
                       </div>
                     ) : null}
@@ -161,11 +169,11 @@ export default function SandboxAdapterPanel({ status, tenantId }) {
           )}
 
           <p
-            className="rounded-md border border-slate-700/40 bg-slate-800/30 px-3 py-2 text-xs text-slate-300"
+            className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground"
             data-testid="finance-sandbox-adapter-posture-note"
           >
             Sandbox-only enforcement is structural at{' '}
-            <code className="rounded bg-slate-900/60 px-1">erpnextSandboxAdapter.js:89-128</code> —
+            <code className="rounded bg-card px-1">erpnextSandboxAdapter.js:89-128</code> —
             production endpoints are blocked at the URL guard regardless of any UI state.
             FINANCE_PROVIDER_WRITES_ENABLED default-closed posture is preserved.
           </p>
