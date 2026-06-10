@@ -18,7 +18,8 @@ The page is organized into tabs, each a different type of report:
 - **Productivity** — user activity and performance within the CRM.
 - **Forecasting** — predictive analytics based on historical data.
 - **Data Quality** — issues and inconsistencies found in your data.
-- **AI Insights** — AI-generated analysis and recommendations from your data.
+- **AI Insights (Market Intelligence)** — OSINT market & demand intelligence. Click **Generate Insight** to start a run; it works in the background (you'll get a notification when it's ready, and an approximate time is shown while it runs) and the result persists until you run a new one. Runs are limited to once every 7 days. Phrasing is always directional ("interest appears to be rising") — never raw search counts.
+- **Opportunities** — scored, directional growth opportunities (geographic, service, content, reputation) from the latest insight, each with a recommended action you can take or dismiss.
 - **Custom Query** — build and run your own tailored report.
 
 ## Viewing and filtering a report

@@ -309,6 +309,48 @@ export const TOOL_REGISTRY = {
     policy: 'READ_ONLY',
   },
 
+  // Growth Opportunities
+  get_top_growth_opportunities: {
+    file: 'growth-opportunities.braid',
+    function: 'getTopGrowthOpportunities',
+    policy: 'READ_ONLY',
+  },
+  get_growth_opportunity_detail: {
+    file: 'growth-opportunities.braid',
+    function: 'getGrowthOpportunityDetail',
+    policy: 'READ_ONLY',
+  },
+  get_latest_insight: {
+    file: 'growth-opportunities.braid',
+    function: 'getLatestInsight',
+    policy: 'READ_ONLY',
+  },
+  get_growth_dashboard: {
+    file: 'growth-opportunities.braid',
+    function: 'getGrowthDashboard',
+    policy: 'READ_ONLY',
+  },
+  get_business_profile: {
+    file: 'growth-opportunities.braid',
+    function: 'getBusinessProfile',
+    policy: 'READ_ONLY',
+  },
+  request_insight_run: {
+    file: 'growth-opportunities.braid',
+    function: 'requestInsightRun',
+    policy: 'WRITE_OPERATIONS',
+  },
+  action_growth_opportunity: {
+    file: 'growth-opportunities.braid',
+    function: 'actionGrowthOpportunity',
+    policy: 'WRITE_OPERATIONS',
+  },
+  dismiss_growth_opportunity: {
+    file: 'growth-opportunities.braid',
+    function: 'dismissGrowthOpportunity',
+    policy: 'WRITE_OPERATIONS',
+  },
+
   // Leads
   create_lead: { file: 'leads.braid', function: 'createLead', policy: 'WRITE_OPERATIONS' },
   delete_lead: { file: 'leads.braid', function: 'deleteLead', policy: 'WRITE_OPERATIONS' },
@@ -1063,6 +1105,20 @@ When users report transaction milestones, call \`update_opportunity\` with the a
 - When setting \`hoa_docs_received_date\`, confirm: "I've logged HOA docs received on [date] for [deal name]. The buyer's 3-day right of rescission clock starts today."
 - NEVER overwrite existing metadata fields without confirming with the user
 - These fields apply to opportunities (deals), NOT to leads or contacts
+
+**GROWTH / OPPORTUNITY INTELLIGENCE (OSINT market & demand)**
+
+When the user asks "where should I advertise / market", "what's trending", "which cities/regions", "what content should I create", or "where are competitors weak", answer from the GROWTH tools — NOT the sales pipeline:
+- \`getTopGrowthOpportunities\` / \`getGrowthOpportunityDetail\` — ranked, scored growth opportunities (geographic/service/content/reputation) with provenance.
+- \`getLatestInsight\` / \`getGrowthDashboard\` — the current persisted insight (report + top opportunities + demand summary).
+- \`getBusinessProfile\` — the tenant's declared market scope (services × regions).
+- \`requestInsightRun\` — kick off a NEW insight run. It is asynchronous and throttled to once per 7 days per tenant (superadmin exempt). If it returns 429, tell the user when the next run is available (\`next_available_at\`); do NOT retry. On success tell them it's running (~ETA) and they'll be notified when complete.
+- \`actionGrowthOpportunity\` / \`dismissGrowthOpportunity\` — act on or dismiss an opportunity.
+
+**Rules (mandatory):**
+- These are GROWTH opportunities (\`growth_opportunities\`), a DIFFERENT entity from sales pipeline opportunities. Never confuse the two.
+- Always phrase demand as DIRECTIONAL — "interest appears to be rising/falling", "high/low relative interest". NEVER state absolute search volumes or invented percentages; the underlying signals are relative indices, not counts.
+- If no insight exists yet or it's stale, offer to run one (respecting the 7-day throttle).
 `;
 }
 

@@ -23,6 +23,7 @@ import StatsGrid from '../components/dashboard/StatsGrid';
 import LazyWidgetLoader from '../components/dashboard/LazyWidgetLoader';
 import SortableWidget from '../components/dashboard/SortableWidget';
 import TopAccounts from '../components/dashboard/TopAccounts';
+import TopOpportunitiesWidget from '../components/dashboard/TopOpportunitiesWidget';
 
 // Lazy load chart components to reduce entry bundle size
 // These components use Recharts (~385KB) which gets split into separate chunk
@@ -69,6 +70,12 @@ const ALL_WIDGETS = [
     defaultVisibility: false, // Disabled by default - makes 3 slow API calls
   },
   {
+    id: 'topOpportunities',
+    name: 'Top Opportunities',
+    component: TopOpportunitiesWidget,
+    defaultVisibility: false, // Opt-in: depends on a generated growth insight
+  },
+  {
     id: 'conversionRates',
     name: 'Conversion Rates',
     component: ConversionRates,
@@ -105,6 +112,7 @@ const WIDGET_CONFIGS = {
   salesFunnel: { skeletonHeight: 600 },
   leadSourceChart: { skeletonHeight: 600 },
   topAccounts: { skeletonHeight: 600 },
+  topOpportunities: { skeletonHeight: 600 },
   conversionRates: { skeletonHeight: 600 },
   leadAgeReport: { skeletonHeight: 600 },
   recentActivities: { skeletonHeight: 600 },
