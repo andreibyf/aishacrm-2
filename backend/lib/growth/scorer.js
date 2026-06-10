@@ -110,9 +110,30 @@ Score it per the rules.`;
         tenantId,
       });
 
-      if (!result || result.status !== 'success') return fallbackScore(candidate);
+      if (!result || result.status !== 'success') {
+        logger.warn('[growth scorer] LiteLLM did not return success; using fallback', {
+          model: SCORING_MODEL,
+          tenantId,
+          status: result?.status,
+          error: result?.error,
+        });
+        return fallbackScore(candidate);
+      }
       const parsed = parseScore(result.content);
-      return parsed || fallbackScore(candidate);
+      if (!parsed) {
+        logger.warn('[growth scorer] LiteLLM output unparseable; using fallback', {
+          model: SCORING_MODEL,
+          tenantId,
+        });
+        return fallbackScore(candidate);
+      }
+      logger.info('[growth scorer] scored via LiteLLM', {
+        model: SCORING_MODEL,
+        tenantId,
+        type: candidate.type,
+        score: parsed.score,
+      });
+      return parsed;
     } catch (err) {
       logger.warn('[growth scorer] LLM scoring failed; using fallback', {
         message: err?.message,
