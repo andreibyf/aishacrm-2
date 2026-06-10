@@ -10,7 +10,7 @@
 
 ## 1. TL;DR — current posture
 
-- **Finance Ops console is live** (`/FinanceOps`) — 13 tabs behind the per-tenant `financeOps` module gate + RBAC. All tabs are read-only **except the Chart-of-accounts tab**, which is now an editable manager (human-only, server-authoritative; #651).
+- **Finance Ops console is live** (`/FinanceOps`) — 13 tabs behind the per-tenant `financeOps` module gate + RBAC. The Chart-of-accounts tab is an editable manager (human-only; #651). **NEW — live write path (admin/superadmin + TEST mode only):** create a manual journal entry or invoice → **Submit for approval** → **Approve** (posts to the ledger) → **Reverse**. Gated by `canWrite` in the UI and `requireFinanceWrite` (admin/superadmin, human-only) + the test-mode posture on the server; AI is blocked from approving/posting. All other tabs remain read-only, and non-admins / live mode see no write controls.
 - **The event-sourced accounting core is implemented** (double-entry journals, **journal posting on approval**, projections, audit trail, approvals, adapter jobs, **chart-of-accounts resolution + editable manager**, **Cash Flow Bridge B**) and runs in **in-memory mode by default**.
 - **Persistent durability is built but OFF by default.** `ENABLE_FINANCE_PERSISTENT_EVENTS=false` everywhere → ephemeral in-memory event store. Setting it `true` requires a Postgres pool **and** migrations 172–179 applied (the route fail-closes otherwise).
 - **No provider writes.** `FINANCE_PROVIDER_WRITES_ENABLED=false` (dominant kill switch); the ERPNext adapter is sandbox/draft-only.
