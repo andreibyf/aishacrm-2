@@ -20,6 +20,8 @@
  * raw text/snippets returned by the source.
  */
 
+import { lookup as dnsLookup } from 'dns/promises';
+
 // User-Agent required by the Wikipedia / MediaWiki API policy. Mirrors the
 // value used by backend/routes/mcp.js (market-insights handler).
 const WIKIPEDIA_USER_AGENT = 'AishaCRM/1.0 (web-research; contact@aishacrm.com)';
@@ -98,6 +100,53 @@ export function checkFetchUrl(rawUrl) {
     return { ok: false, reason: 'ipv6 literal blocked' };
   }
   if (isPrivateIpv4(host)) return { ok: false, reason: 'private address' };
+  return { ok: true };
+}
+
+/**
+ * Is a resolved IP (v4 or v6, incl. IPv4-mapped) private / loopback / link-local?
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isPrivateIp(ip) {
+  const s = String(ip || '').toLowerCase();
+  const v4 = s.startsWith('::ffff:') ? s.slice(7) : s;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) return isPrivateIpv4(v4);
+  if (s === '::1' || s === '::' || s === '0:0:0:0:0:0:0:1') return true; // loopback
+  if (s.startsWith('fc') || s.startsWith('fd')) return true; // ULA fc00::/7
+  if (s.startsWith('fe80')) return true; // link-local
+  return false;
+}
+
+/**
+ * Full SSRF check: literal-host checks (checkFetchUrl) PLUS DNS resolution so a
+ * public-looking hostname that resolves to a private/metadata IP (DNS rebinding /
+ * wildcard DNS) is rejected. Async; `lookup` is injectable for tests.
+ *
+ * @param {string} rawUrl
+ * @param {Function} [lookup] dns.promises.lookup-compatible (host,{all:true}).
+ * @returns {Promise<{ok:true}|{ok:false, reason:string}>}
+ */
+export async function assertUrlSafe(rawUrl, lookup) {
+  const literal = checkFetchUrl(rawUrl);
+  if (!literal.ok) return literal;
+
+  const host = new URL(String(rawUrl)).hostname.toLowerCase();
+  // An IPv4 literal is already validated by checkFetchUrl (private ranges blocked);
+  // a public literal needs no DNS resolution.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return { ok: true };
+
+  const resolve = typeof lookup === 'function' ? lookup : dnsLookup;
+  try {
+    const res = await resolve(host, { all: true });
+    const addrs = Array.isArray(res) ? res : [res];
+    for (const a of addrs) {
+      const ip = a && a.address ? a.address : a;
+      if (isPrivateIp(ip)) return { ok: false, reason: 'resolves to private address' };
+    }
+  } catch {
+    return { ok: false, reason: 'dns resolution failed' };
+  }
   return { ok: true };
 }
 
@@ -191,9 +240,11 @@ export async function fetchPage({ url } = {}, deps = {}) {
   const target = String(url || '').trim();
   if (!target) return { url: target, error: 'url is required' };
 
-  // SSRF guard: refuse non-http(s) and internal/private targets BEFORE launching
-  // a browser (no metadata-service / internal-host access via a user-supplied url).
-  const safe = checkFetchUrl(target);
+  // SSRF guard: refuse non-http(s) and internal/private targets (literal AND
+  // DNS-resolved) BEFORE launching a browser — no metadata-service / internal-host
+  // access via a user-supplied url or a public name that resolves to a private IP.
+  const lookupFn = typeof deps.lookup === 'function' ? deps.lookup : dnsLookup;
+  const safe = await assertUrlSafe(target, lookupFn);
   if (!safe.ok) return { url: target, error: `blocked: ${safe.reason}` };
 
   const browserFactory =
@@ -205,6 +256,16 @@ export async function fetchPage({ url } = {}, deps = {}) {
     browser = await browserFactory();
     const page = await browser.newPage();
     await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+
+    // Re-validate after navigation: a redirect could have landed on an internal
+    // host (SSRF via redirect). Block before reading any content.
+    const finalUrl = typeof page.url === 'function' ? page.url() : target;
+    if (finalUrl && finalUrl !== target) {
+      const finalSafe = await assertUrlSafe(finalUrl, lookupFn);
+      if (!finalSafe.ok) {
+        return { url: target, error: `blocked after redirect: ${finalSafe.reason}` };
+      }
+    }
 
     const title = await page.title();
     const text = await page.evaluate(

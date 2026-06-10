@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **OSINT Opportunity Intelligence — PR #659 review fixes, round 2 (Codex re-review)** (`backend/lib/growth/webResearch.js`, `backend/lib/growth/insightService.js`, `src/components/reports/GrowthProfileEditor.jsx`, + tests):
+  - **(P1, SSRF — DNS rebinding)** the literal-host SSRF guard still allowed a public hostname that DNS-resolves to a private/metadata IP. Added `assertUrlSafe` which resolves the host (injectable `lookup`) and rejects private/loopback/link-local/ULA results, plus a post-navigation re-check of the final URL (blocks redirect-to-internal). `fetchPage` now uses it before reading any content.
+  - **(P2)** the insight cooldown counted `failed` runs, so a transient failure 429-locked a non-superadmin for 7 days despite the Retry button — the cooldown lookup now only considers `running`/`complete` runs.
+  - **(P2)** `GrowthProfileEditor` projected `service_catalog` to `{name}` only, dropping `slug`/`keywords` on save (degrading opportunity matching); it now preserves all service fields.
+
 - **OSINT Opportunity Intelligence — PR #659 review fixes (CodeQL + Codex)** (`backend/migrations/184_growth_opportunities_subject_region.sql` (NEW), `backend/lib/growth/opportunityEngine.js`, `backend/lib/growth/webResearch.js`, `backend/routes/utils.js`, `backend/workers/growthInsightWorker.js`, `src/api/growth.js`, `tests/crm/growth-opportunities.spec.js`, + test additions):
   - **(P1, critical) Every real insight run would fail** — `opportunityEngine.generateForInsight` deduped against existing open opportunities by selecting `subject`/`region`, but `growth_opportunities` (migration 182) had neither column, so real PostgREST returned a schema error (the fake-supabase unit tests couldn't catch this). Migration 184 adds `subject`/`region`; the engine now persists them on insert. Applied to the dev branch.
   - **(P1, security/SSRF) `/api/utils/fetch-page` let unauthenticated callers drive Puppeteer to any URL** — added a `checkFetchUrl` SSRF guard in `webResearch.fetchPage` (rejects non-http(s), loopback, private/link-local/CGNAT ranges, the cloud-metadata IP, IPv6 literals, and `.internal`/`.local` hosts) BEFORE launching a browser, and added `authenticateRequest` to the three `/api/utils` web-research routes.

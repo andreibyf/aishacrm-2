@@ -90,7 +90,9 @@ export default function GrowthProfileEditor({ tenant, open, onClose }) {
       const profile = await getProfile(tenantId);
       setServiceCatalog(
         Array.isArray(profile?.service_catalog)
-          ? profile.service_catalog.map((s) => ({ name: s.name || '' }))
+          ? // Preserve slug/keywords (used by opportunity matching) — only `name`
+            // is edited here; spreading keeps the other fields intact on save.
+            profile.service_catalog.map((s) => ({ ...s, name: s.name || '' }))
           : [],
       );
       setTargetRegions(

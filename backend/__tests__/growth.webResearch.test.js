@@ -11,8 +11,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { searchWeb, fetchPage, companyLookup, checkFetchUrl } from '../lib/growth/webResearch.js';
+import {
+  searchWeb,
+  fetchPage,
+  companyLookup,
+  checkFetchUrl,
+  assertUrlSafe,
+} from '../lib/growth/webResearch.js';
 import { research } from '../lib/growth/researchAgent.js';
+
+/** A lookup() stub resolving any host to a public IP (keeps tests off real DNS). */
+const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -48,11 +57,16 @@ function makeThrowingFetch() {
  * A fake browser factory. `mode: 'ok'` resolves a working page;
  * `mode: 'goto-throws'` makes page.goto reject. Records whether close() ran.
  */
-function makeBrowserFactory({ mode = 'ok' } = {}) {
-  const state = { closed: false, newPageCalls: 0 };
+function makeBrowserFactory({ mode = 'ok', finalUrl } = {}) {
+  const state = { closed: false, newPageCalls: 0, gotoUrl: null };
   const page = {
-    async goto() {
+    async goto(u) {
+      state.gotoUrl = u;
       if (mode === 'goto-throws') throw new Error('nav failed');
+    },
+    url() {
+      // Default: no redirect (final url === requested). `finalUrl` simulates one.
+      return finalUrl || state.gotoUrl;
     },
     async title() {
       return 'T';
@@ -122,7 +136,7 @@ test('fetchPage extracts title + body text and closes the browser', async () => 
 
   const out = await fetchPage(
     { url: 'https://example.com' },
-    { browserFactory, nowIso: () => '2026-01-01T00:00:00.000Z' },
+    { browserFactory, nowIso: () => '2026-01-01T00:00:00.000Z', lookup: publicLookup },
   );
 
   assert.equal(out.url, 'https://example.com');
@@ -135,7 +149,10 @@ test('fetchPage extracts title + body text and closes the browser', async () => 
 test('fetchPage returns { url, error } when goto throws — and STILL closes the browser', async () => {
   const browserFactory = makeBrowserFactory({ mode: 'goto-throws' });
 
-  const out = await fetchPage({ url: 'https://bad.example' }, { browserFactory });
+  const out = await fetchPage(
+    { url: 'https://bad.example' },
+    { browserFactory, lookup: publicLookup },
+  );
 
   assert.equal(out.url, 'https://bad.example');
   assert.ok(out.error); // fail-soft error shape
@@ -311,4 +328,40 @@ test('searchWeb strips nested/split HTML completely (no residual markup)', async
   assert.ok(!out[0].snippet.includes('<'), 'no < remains');
   assert.ok(!out[0].snippet.includes('>'), 'no > remains');
   assert.ok(out[0].snippet.includes('rising demand'));
+});
+
+// ---------------------------------------------------------------------------
+// SSRF: DNS-resolution + redirect re-check
+// ---------------------------------------------------------------------------
+
+test('assertUrlSafe blocks a host that DNS-resolves to a private/metadata IP', async () => {
+  const rebind = await assertUrlSafe('https://rebind.example', async () => [
+    { address: '169.254.169.254', family: 4 },
+  ]);
+  assert.equal(rebind.ok, false);
+
+  const priv = await assertUrlSafe('https://x.example', async () => [{ address: '10.1.2.3' }]);
+  assert.equal(priv.ok, false);
+
+  const ok = await assertUrlSafe('https://good.example', publicLookup);
+  assert.equal(ok.ok, true);
+
+  const dnsFail = await assertUrlSafe('https://nope.example', async () => {
+    throw new Error('NXDOMAIN');
+  });
+  assert.equal(dnsFail.ok, false);
+
+  // literal private IP is rejected without needing DNS
+  const literal = await assertUrlSafe('http://10.0.0.5/x', publicLookup);
+  assert.equal(literal.ok, false);
+});
+
+test('fetchPage blocks a redirect that lands on an internal host', async () => {
+  const browserFactory = makeBrowserFactory({ mode: 'ok', finalUrl: 'http://169.254.169.254/' });
+  const out = await fetchPage(
+    { url: 'https://public.example' },
+    { browserFactory, lookup: publicLookup },
+  );
+  assert.match(out.error, /redirect/);
+  assert.equal(browserFactory.state.closed, true); // browser still closed
 });

@@ -69,7 +69,11 @@ describe('[CRM] GrowthProfileEditor', () => {
     });
     const [calledTenant, patch] = saveProfile.mock.calls[0];
     expect(calledTenant).toBe('tenant-123');
-    expect(patch.service_catalog).toEqual([{ name: 'Managed Services' }]);
+    // slug/keywords must be PRESERVED on save (only `name` was edited) so
+    // opportunity matching doesn't lose the aliases.
+    expect(patch.service_catalog).toEqual([
+      { slug: 'consulting', keywords: ['advisory'], name: 'Managed Services' },
+    ]);
     expect(patch.target_regions).toEqual([{ type: 'city', name: 'Austin' }]);
     expect(patch.competitors).toEqual([{ name: 'Globex', website: 'globex.com' }]);
 

@@ -64,11 +64,15 @@ export async function createInsightRun(supabase, args, deps) {
   const superadmin = isSuperadmin(user);
   const nowMs = now();
 
-  // --- Cooldown gate: latest run for this tenant -----------------------------
+  // --- Cooldown gate: latest SUCCESSFUL/in-flight run for this tenant --------
+  // Only `running`/`complete` runs start the 7-day cooldown. A `failed` run must
+  // NOT lock the tenant out — the UI offers a Retry, so a transient worker/
+  // provider failure should be immediately retryable.
   const { data: latest, error: latestError } = await supabase
     .from('growth_insights')
-    .select('id, created_at')
+    .select('id, created_at, status')
     .eq('tenant_id', tenantId)
+    .in('status', ['running', 'complete'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
