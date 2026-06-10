@@ -653,6 +653,206 @@ export function createFinanceDomainService(opts = {}) {
       };
     },
 
+    // Promote an existing DRAFT journal entry into the approval queue so it can
+    // be approved (= posted). Mirrors the simulateDealWon promotion block
+    // (append-before-mutate: a failed append leaves the entry an un-promoted
+    // draft with no phantom approval). Human-only via governance.
+    async submitJournalDraftForApproval({
+      tenantId,
+      journalEntryId,
+      actor,
+      requestId = null,
+      braidTraceId = null,
+    }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      const draftEntry = bucket.journalEntries.find((entry) => entry.id === journalEntryId);
+      ensureTenantMatch(draftEntry, tenantId);
+      if (draftEntry.status !== 'draft') {
+        const err = new Error(
+          `Journal entry ${journalEntryId} is not a draft (status: ${draftEntry.status})`,
+        );
+        err.code = 'FINANCE_JOURNAL_NOT_DRAFT';
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const amountCents = Array.isArray(draftEntry.lines)
+        ? draftEntry.lines.reduce((sum, line) => sum + Number(line.debit_cents || 0), 0)
+        : 0;
+
+      const command = createFinanceCommandEnvelope({
+        tenantId,
+        commandType: 'SubmitJournalDraftCommand',
+        actorId: normalizedActor.id,
+        actorType: normalizedActor.type,
+        requestId,
+        braidTraceId,
+        payload: { journal_entry_id: journalEntryId },
+      });
+      appendCommand(bucket, command);
+
+      const decision = evaluateFinanceGovernance({
+        commandType: command.command_type,
+        actorType: normalizedActor.type,
+        amountCents,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const error = new Error(decision.explanation || 'Finance action blocked');
+        error.statusCode = 403;
+        error.decision = decision;
+        throw error;
+      }
+
+      const updatedDraftEntry = {
+        ...draftEntry,
+        status: 'pending_approval',
+        governance_policy_snapshot: decision,
+        updated_at: now(),
+      };
+
+      const approval = buildApprovalRecord({
+        tenantId,
+        actor: normalizedActor,
+        aggregateType: 'journal_entry',
+        aggregateId: updatedDraftEntry.id,
+        decision,
+        requestId,
+      });
+      // Reject a duplicate up front (no phantom approval.requested event);
+      // pushApproval re-checks atomically after the append resolves.
+      assertNoDuplicateApproval(bucket, approval);
+
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.approval.requested',
+          aggregateType: 'approval',
+          aggregateId: approval.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            approval: clone(approval),
+            journal_entry: clone(updatedDraftEntry),
+          },
+          policyDecision: decision,
+        }),
+      );
+
+      Object.assign(draftEntry, updatedDraftEntry);
+      pushApproval(bucket, approval);
+
+      return {
+        journal_entry: clone(draftEntry),
+        approval: clone(approval),
+        governance_decision: decision,
+        approval_required: true,
+      };
+    },
+
+    // Promote a DRAFT invoice into the approval queue (draft → pending_approval).
+    // On approval, approveFinanceAction generates + posts the invoice's AR journal
+    // (see the invoice branch there). Human-only via governance. Single-append.
+    async submitInvoiceForApproval({
+      tenantId,
+      invoiceId,
+      actor,
+      requestId = null,
+      braidTraceId = null,
+    }) {
+      const bucket = getTenantBucket(store, tenantId);
+      const normalizedActor = createActor(actor);
+
+      const invoice = bucket.invoices.find((row) => row.id === invoiceId);
+      ensureTenantMatch(invoice, tenantId);
+      if (invoice.status !== 'draft') {
+        const err = new Error(`Invoice ${invoiceId} is not a draft (status: ${invoice.status})`);
+        err.code = 'FINANCE_INVOICE_NOT_DRAFT';
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const amountCents = Number(invoice.subtotal_cents || 0) + Number(invoice.tax_cents || 0);
+
+      const command = createFinanceCommandEnvelope({
+        tenantId,
+        commandType: 'SubmitInvoiceCommand',
+        actorId: normalizedActor.id,
+        actorType: normalizedActor.type,
+        requestId,
+        braidTraceId,
+        payload: { invoice_id: invoiceId },
+      });
+      appendCommand(bucket, command);
+
+      const decision = evaluateFinanceGovernance({
+        commandType: command.command_type,
+        actorType: normalizedActor.type,
+        amountCents,
+        braidTraceId,
+      });
+      if (!decision.allowed) {
+        const error = new Error(decision.explanation || 'Finance action blocked');
+        error.statusCode = 403;
+        error.decision = decision;
+        throw error;
+      }
+
+      const updatedInvoice = {
+        ...invoice,
+        status: 'pending_approval',
+        governance_policy_snapshot: decision,
+        updated_at: now(),
+      };
+
+      const approval = buildApprovalRecord({
+        tenantId,
+        actor: normalizedActor,
+        aggregateType: 'invoice',
+        aggregateId: invoiceId,
+        decision,
+        requestId,
+      });
+      assertNoDuplicateApproval(bucket, approval);
+
+      // Single append (carries approval + post-transition invoice). Reuses the
+      // shared finance.approval.requested → approvalQueueProjection adds the
+      // approval, invoiceProjection upserts the invoice (status pending_approval).
+      await appendEvent(
+        bucket,
+        createFinanceEventEnvelope({
+          tenantId,
+          eventType: 'finance.approval.requested',
+          aggregateType: 'approval',
+          aggregateId: approval.id,
+          actorId: normalizedActor.id,
+          actorType: normalizedActor.type,
+          requestId,
+          braidTraceId,
+          payload: {
+            approval: clone(approval),
+            invoice: clone(updatedInvoice),
+          },
+          policyDecision: decision,
+        }),
+      );
+
+      Object.assign(invoice, updatedInvoice);
+      pushApproval(bucket, approval);
+
+      return {
+        invoice: clone(invoice),
+        approval: clone(approval),
+        governance_decision: decision,
+        approval_required: true,
+      };
+    },
+
     async simulateDealWon({
       tenantId,
       actor,
@@ -1288,6 +1488,109 @@ export function createFinanceDomainService(opts = {}) {
             job.payload = clone(refreshedCanonical);
             job.updated_at = now();
           }
+        }
+      }
+
+      // INVOICE POSTING. When the approved approval targets an invoice, generate
+      // its AR journal (Dr Accounts Receivable / Cr Sales Revenue / Cr Tax Payable)
+      // via createJournalDraft (COA resolution + balance enforcement + auto-create
+      // events), post it (→ finance.journal.posted, so the ledger / P&L / balance
+      // sheet reflect it), then mark the invoice posted (→ finance.invoice.posted).
+      // Human-gated (approveFinanceAction is AI-blocked above). Idempotent: an
+      // already-posted invoice is left untouched. AR debit = subtotal + tax so the
+      // journal balances regardless of the invoice's stored total_cents.
+      if (approval.target_type === 'invoice') {
+        const invoice = bucket.invoices.find((inv) => inv.id === approval.target_id);
+        if (invoice && invoice.status !== 'posted') {
+          const subtotal = Number(invoice.subtotal_cents || 0);
+          const tax = Number(invoice.tax_cents || 0);
+          const arLines = [
+            {
+              account_name: 'Accounts Receivable',
+              classification: 'Asset',
+              debit_cents: subtotal + tax,
+              credit_cents: 0,
+            },
+            {
+              account_name: 'Sales Revenue',
+              classification: 'Revenue',
+              debit_cents: 0,
+              credit_cents: subtotal,
+            },
+          ];
+          if (tax > 0) {
+            arLines.push({
+              account_name: 'Tax Payable',
+              classification: 'Liability',
+              debit_cents: 0,
+              credit_cents: tax,
+            });
+          }
+
+          const arDraft = await this.createJournalDraft({
+            tenantId,
+            actor: normalizedActor,
+            payload: {
+              currency: invoice.currency || 'usd',
+              memo: `Invoice ${invoice.invoice_number || invoice.id}`,
+              source_type: 'invoice',
+              source_id: invoice.id,
+              lines: arLines,
+            },
+            requestId,
+            braidTraceId,
+          });
+
+          const arEntry = bucket.journalEntries.find((e) => e.id === arDraft.journal_entry.id);
+          const postedAr = {
+            ...clone(arEntry),
+            status: 'posted',
+            posted_at: now(),
+            posted_by: normalizedActor.id,
+            updated_at: now(),
+          };
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.journal.posted',
+              aggregateType: 'journal_entry',
+              aggregateId: arEntry.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: { journal_entry: clone(postedAr) },
+              policyDecision: decision,
+            }),
+          );
+          Object.assign(arEntry, postedAr);
+          postedEntry = postedAr;
+
+          const postedInvoice = {
+            ...clone(invoice),
+            status: 'posted',
+            posted_at: now(),
+            posted_by: normalizedActor.id,
+            journal_entry_id: arEntry.id,
+            updated_at: now(),
+          };
+          await appendEvent(
+            bucket,
+            createFinanceEventEnvelope({
+              tenantId,
+              eventType: 'finance.invoice.posted',
+              aggregateType: 'invoice',
+              aggregateId: invoice.id,
+              actorId: normalizedActor.id,
+              actorType: normalizedActor.type,
+              requestId,
+              braidTraceId,
+              payload: { invoice: clone(postedInvoice) },
+              policyDecision: decision,
+            }),
+          );
+          Object.assign(invoice, postedInvoice);
         }
       }
 

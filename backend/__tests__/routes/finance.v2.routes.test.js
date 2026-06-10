@@ -160,7 +160,7 @@ describe('finance.v2 routes', () => {
   // and enforced server-side by the domain service. The guard's purpose is to
   // catch UNPLANNED expansion, so the expected count is bumped 7 → 11 deliberately
   // and the four new routes are asserted by name below.
-  test('route surface exposes exactly the 11 finance-data mutations + the settings endpoint (no unplanned expansion)', () => {
+  test('route surface exposes exactly the 13 finance-data mutations + the settings endpoint (no unplanned expansion)', () => {
     const router = createFinanceV2Routes(null, { isFinanceModuleEnabled: async () => true });
     const mutating = [];
     for (const layer of router.stack) {
@@ -171,20 +171,24 @@ describe('finance.v2 routes', () => {
     // The superadmin Test/Live data-mode setter is a config mutation, not a
     // finance-DATA write — allowed, and excluded from the data-mutation count.
     const dataMutations = mutating.filter((m) => m !== 'PUT /settings/data-mode');
+    // 11 prior + the two submit-for-approval routes (write-UI slice) = 13.
     assert.equal(
       dataMutations.length,
-      11,
-      `expected 11 finance-data mutations, got: ${dataMutations.join(' | ')}`,
+      13,
+      `expected 13 finance-data mutations, got: ${dataMutations.join(' | ')}`,
     );
     for (const coaRoute of [
       'POST /accounts',
       'PATCH /accounts/:id',
       'POST /accounts/:id/deactivate',
       'POST /accounts/:id/reactivate',
+      // Write-UI slice: submit a draft journal / invoice for approval.
+      'POST /journal-drafts/:id/submit',
+      'POST /draft-invoices/:id/submit',
     ]) {
       assert.ok(
         mutating.includes(coaRoute),
-        `the sanctioned COA-management route ${coaRoute} must be present`,
+        `the sanctioned write route ${coaRoute} must be present`,
       );
     }
     assert.ok(
@@ -731,6 +735,66 @@ describe('finance.v2 routes', () => {
       );
       // Failed the precheck → nothing persisted (no half-applied switch).
       assert.equal(persisted, false, 'mode is not persisted when the pre-switch read fails');
+    });
+  });
+
+  describe('requireFinanceWrite RBAC gate (write-UI slice)', () => {
+    test('a non-admin human is refused finance writes (403 FINANCE_WRITE_FORBIDDEN)', async () => {
+      const { app } = buildApp({
+        user: { id: 'emp-1', role: 'user', tenant_id: TENANT_ID, tenant_uuid: TENANT_ID },
+      });
+      const res = await request(app)
+        .post('/api/v2/finance/journal-drafts')
+        .send({
+          currency: 'usd',
+          lines: [
+            { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
+            {
+              account_name: 'Sales Revenue',
+              classification: 'Revenue',
+              debit_cents: 0,
+              credit_cents: 1000,
+            },
+          ],
+        });
+      assert.equal(res.status, 403);
+      assert.equal(res.body.code || res.body.error?.code, 'FINANCE_WRITE_FORBIDDEN');
+    });
+
+    test('an admin human is allowed to create a journal draft', async () => {
+      const { app } = buildApp(); // default user is admin
+      const res = await request(app)
+        .post('/api/v2/finance/journal-drafts')
+        .send({
+          currency: 'usd',
+          lines: [
+            { account_name: 'Cash', classification: 'Asset', debit_cents: 1000, credit_cents: 0 },
+            {
+              account_name: 'Sales Revenue',
+              classification: 'Revenue',
+              debit_cents: 0,
+              credit_cents: 1000,
+            },
+          ],
+        });
+      assert.equal(res.status, 201);
+      assert.equal(res.body.data.journal_entry.status, 'draft');
+    });
+
+    test('an AI actor passes the RBAC gate but is blocked by domain governance on approve (403)', async () => {
+      const { app } = buildApp({
+        user: {
+          id: 'bot',
+          role: 'ai_agent',
+          tenant_id: TENANT_ID,
+          tenant_uuid: TENANT_ID,
+          is_ai_agent: true,
+        },
+      });
+      const res = await request(app).post('/api/v2/finance/approvals/whatever/approve').send({});
+      assert.equal(res.status, 403);
+      // Not the generic RBAC code — the authoritative AI block surfaces.
+      assert.notEqual(res.body.code || res.body.error?.code, 'FINANCE_WRITE_FORBIDDEN');
     });
   });
 });

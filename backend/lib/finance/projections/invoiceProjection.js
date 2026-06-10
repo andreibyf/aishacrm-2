@@ -16,11 +16,21 @@
 
 export const INVOICE_PROJECTION_NAME = 'finance.projection.invoices';
 
-// Both events create-or-update the same invoice aggregate; their payloads carry
-// the authoritative post-transition invoice snapshot.
-const CONSUMED_EVENTS = ['finance.invoice.draft_created', 'finance.invoice.draft_updated'];
+// These events create-or-update the same invoice aggregate; their payloads carry
+// the authoritative post-transition invoice snapshot under `payload.invoice`.
+// `finance.approval.requested` is shared with the journal flow — it carries an
+// `invoice` ONLY when an invoice was submitted for approval (a journal submit
+// carries `journal_entry` instead, so `invoiceFromEvent` safely no-ops there).
+// `finance.invoice.posted` marks the invoice posted once its AR journal posts.
+const CONSUMED_EVENTS = [
+  'finance.invoice.draft_created',
+  'finance.invoice.draft_updated',
+  'finance.approval.requested',
+  'finance.invoice.posted',
+];
 
-// The invoice snapshot lives under `payload.invoice` for both event types.
+// The invoice snapshot lives under `payload.invoice`; absent for non-invoice
+// events (e.g. a journal-entry approval.requested), where this returns null.
 function invoiceFromEvent(event) {
   const payload = event?.payload || {};
   return payload.invoice || null;

@@ -38,6 +38,10 @@ export default function FinanceTablePanel({
   fetcher,
   selectRows,
   exportArea,
+  // Optional per-row actions. `(row, { reload }) => ReactNode` renders into a
+  // trailing "Actions" column; `reload` re-fetches the panel after a mutation.
+  // Absent → the panel stays exactly read-only (no Actions column).
+  renderRowActions,
 }) {
   const [state, setState] = useState({ rows: [], loading: false, error: null });
 
@@ -126,6 +130,11 @@ export default function FinanceTablePanel({
                     {c.label}
                   </th>
                 ))}
+                {renderRowActions ? (
+                  <th className="py-2 pr-3 text-right font-medium uppercase tracking-wide">
+                    Actions
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -143,6 +152,11 @@ export default function FinanceTablePanel({
                       </td>
                     );
                   })}
+                  {renderRowActions ? (
+                    <td className="py-1.5 pr-3 text-right">
+                      {renderRowActions(row, { reload: () => load() })}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
