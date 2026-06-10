@@ -12,8 +12,13 @@ vi.mock('@/api/growth', () => ({
   saveProfile: vi.fn(),
 }));
 
+vi.mock('react-hot-toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import GrowthProfileEditor from './GrowthProfileEditor';
 import { getProfile, saveProfile } from '@/api/growth';
+import { toast } from 'react-hot-toast';
 
 const tenant = { id: 'tenant-123', name: 'Acme Corp' };
 
@@ -80,5 +85,26 @@ describe('[CRM] GrowthProfileEditor', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
     });
+    // A success toast confirms persistence (the dialog closes, so this is the
+    // only signal the user gets that the save stuck).
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success.mock.calls[0][0]).toMatch(/saved/i);
+  });
+
+  test('a save failure surfaces an error toast and keeps the dialog open', async () => {
+    const onClose = vi.fn();
+    saveProfile.mockRejectedValueOnce(new Error('network down'));
+    render(<GrowthProfileEditor tenant={tenant} open={true} onClose={onClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Consulting')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith('network down');
+    });
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

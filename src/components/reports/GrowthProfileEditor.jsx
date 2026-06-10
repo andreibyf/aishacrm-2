@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Loader2, Plus, X } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { getProfile, saveProfile } from '@/api/growth';
 
 // Renders a labelled list editor for a homogeneous array of objects.
@@ -130,10 +131,19 @@ export default function GrowthProfileEditor({ tenant, open, onClose }) {
     };
     try {
       await saveProfile(tenantId, patch);
+      // Confirm persistence — the dialog closes on save, so a toast (not an
+      // in-dialog message) is what tells the user their scope was stored.
+      const svc = patch.service_catalog.length;
+      const reg = patch.target_regions.length;
+      toast.success(
+        `Market scope saved — ${svc} ${svc === 1 ? 'service' : 'services'}, ${reg} ${reg === 1 ? 'region' : 'regions'}.`,
+      );
       onClose?.();
     } catch (err) {
       console.error('Failed to save growth profile:', err);
-      setError(err.message || 'Failed to save market scope.');
+      const message = err.message || 'Failed to save market scope.';
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }

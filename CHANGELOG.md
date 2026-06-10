@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **OSINT Opportunity Intelligence — market-scope editor gave no save confirmation** (`src/components/reports/GrowthProfileEditor.jsx`, `src/components/reports/GrowthProfileEditor.test.jsx`): the editor saved the profile then immediately closed with no feedback, and the scope is not shown elsewhere in the Reports UI, so a user could not tell whether their service catalog / regions persisted (it did). `handleSave` now fires a `react-hot-toast` success toast (`Market scope saved — N services, M regions.`) before closing, and an error toast on failure (the dialog stays open on error). Two test cases added (success toast on save; error toast + dialog-stays-open on failure).
+
 - **OSINT Opportunity Intelligence — PR #659 review fixes, round 3** (`backend/migrations/185_growth_insights_one_running_per_tenant.sql` (NEW), `backend/lib/growth/webResearch.js`, `backend/lib/growth/insightService.js`, + tests):
   - **(P1, SSRF — redirect timing)** the post-navigation redirect check ran _after_ `page.goto` had already followed the redirect (the request was sent before it was blocked). Replaced with Puppeteer **request interception** (`makeRequestGuard` + `setRequestInterception`): every request — initial navigation, redirect hops, and sub-resources — is validated via `assertUrlSafe` and aborted BEFORE it is sent. (The post-nav check remains as a backup.)
   - **(P2, race)** the cooldown check-and-insert was not atomic, so two concurrent `POST /insights` could both insert `running` rows. Migration 185 adds a partial unique index (`one running insight per tenant`); `createInsightRun` maps the resulting unique violation (23505) to **409** "a run is already in progress".
