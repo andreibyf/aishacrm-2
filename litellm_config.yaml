@@ -40,11 +40,12 @@ model_list:
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
-  # Agentic task execution (Task AiSHA) — needs strong reasoning + tool use
+  # Agentic task execution (Task AiSHA) — email drafts, lightweight tool ops via vLLM
   - model_name: aisha-task
     litellm_params:
-      model: anthropic/claude-sonnet-4-20250514
-      api_key: 'os.environ/ANTHROPIC_API_KEY'
+      model: 'openai/qwen-14b'
+      api_base: 'os.environ/LOCAL_LLM_BASE_URL'
+      api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
   # Document/image extraction — must be vision-capable (gpt-4o sees images)
   - model_name: aisha-vision
@@ -78,7 +79,7 @@ router_settings:
     # Virtual alias fallbacks — when the primary provider/model for an alias fails,
     # LiteLLM falls back to these. Provider-wildcard fallbacks below do NOT cover aliases.
     - aisha-mcp: ['openai/gpt-4o']
-    - aisha-task: ['openai/gpt-4o']
+    - aisha-task: ['groq/llama-3.3-70b-versatile']
     - aisha-summary: ['groq/llama-3.3-70b-versatile']
     - aisha-workflow: ['groq/llama-3.3-70b-versatile']
     - aisha-whatsapp: ['openai/gpt-4o']
