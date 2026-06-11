@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **LiteLLM `aisha-task` alias reverted to Claude Sonnet — restored to vLLM** (`litellm_config.yaml`): `aisha-task` had been overwritten back to `anthropic/claude-sonnet-4-20250514` by a parallel agent; restored to `openai/qwen-14b` via `LOCAL_LLM_BASE_URL` (HP Omen vLLM). Fallback also fixed from `openai/gpt-4o` (no key in dev) to `groq/llama-3.3-70b-versatile`. `LITELLM_MASTER_KEY` set to a real value in `.env` + Doppler `dev`/`dev_personal` (empty string was causing LiteLLM to reject all requests). `LOCAL_LLM_BASE_URL` updated to `192.168.7.219` (HP Omen DHCP IP changed after reboot from `.200`).
+
 - **Finance Ops console was hardcoded dark — unreadable in light theme** (`src/components/finance/*`, `src/pages/FinanceOps.jsx`): every finance panel used fixed `slate-900/slate-100/slate-400/slate-700` colors, so in light mode the cards were low-contrast and the guardrail/test-data banners were near-invisible (light text on light backgrounds). Converted all 18 finance components to the app's semantic theme tokens (`bg-card` / `text-foreground` / `text-muted-foreground` / `border-border` / `hover:bg-accent`), matching the rest of the app, and gave the colored alert/banner accents (amber/red/emerald warning/error/success boxes) explicit light-mode classes with `dark:` variants. The console now adapts to light AND dark theme. Finance FE 149/149; ESLint clean.
 
 ### Added
