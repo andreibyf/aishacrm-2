@@ -10,6 +10,12 @@ import {
   getLLMActivityStats,
   clearLLMActivity,
 } from '../lib/aiEngine/activityLogger.js';
+import {
+  getAuditLog,
+  getAuditModels,
+  getAuditStats,
+  clearAuditLog,
+} from '../lib/aiEngine/llmAuditLog.js';
 import logger from '../lib/logger.js';
 
 export default function createSystemRoutes(_pgPool) {
@@ -590,6 +596,124 @@ export default function createSystemRoutes(_pgPool) {
       });
     } catch (err) {
       logger.error('[System] LLM activity clear error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ── Per-model stats breakdown ────────────────────────────────────────────────
+
+  /**
+   * @openapi
+   * /api/system/llm-stats/by-model:
+   *   get:
+   *     summary: Per-model call counts, latency percentiles, and token totals
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Per-model stats from the in-memory activity buffer
+   */
+  router.get('/llm-stats/by-model', (req, res) => {
+    try {
+      const stats = getLLMActivityStats();
+      return res.json({
+        status: 'success',
+        data: {
+          byModel: stats.byModel,
+          generatedAt: new Date().toISOString(),
+          bufferEntries: stats.totalEntries,
+        },
+      });
+    } catch (err) {
+      logger.error('[System] LLM stats by-model error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  // ── LLM Audit Log (Kafka-style request/response capture) ────────────────────
+
+  /**
+   * @openapi
+   * /api/system/llm-audit:
+   *   get:
+   *     summary: Recent LLM request/response audit entries (in-memory ring buffer)
+   *     tags: [system]
+   *     parameters:
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, default: 100 }
+   *       - in: query
+   *         name: model
+   *         schema: { type: string }
+   *       - in: query
+   *         name: env
+   *         schema: { type: string }
+   *       - in: query
+   *         name: status
+   *         schema: { type: string }
+   *       - in: query
+   *         name: since
+   *         schema: { type: string }
+   *         description: ISO timestamp — return entries after this time
+   *     responses:
+   *       200:
+   *         description: Audit log entries
+   */
+  router.get('/llm-audit', (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+      const entries = getAuditLog({
+        limit,
+        model: req.query.model || undefined,
+        env: req.query.env || undefined,
+        status: req.query.status || undefined,
+        since: req.query.since || undefined,
+        tenantId: req.query.tenantId || undefined,
+      });
+      return res.json({
+        status: 'success',
+        data: {
+          count: entries.length,
+          entries,
+          stats: getAuditStats(),
+          models: getAuditModels(),
+        },
+      });
+    } catch (err) {
+      logger.error('[System] LLM audit error:', err);
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
+  /**
+   * @openapi
+   * /api/system/llm-audit/stats:
+   *   get:
+   *     summary: LLM audit log health stats (ring size, file errors)
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Audit stats
+   */
+  router.get('/llm-audit/stats', (req, res) => {
+    return res.json({ status: 'success', data: getAuditStats() });
+  });
+
+  /**
+   * @openapi
+   * /api/system/llm-audit:
+   *   delete:
+   *     summary: Clear LLM audit ring buffer (admin only)
+   *     tags: [system]
+   *     responses:
+   *       200:
+   *         description: Audit log cleared
+   */
+  router.delete('/llm-audit', (req, res) => {
+    try {
+      clearAuditLog();
+      return res.json({ status: 'success', message: 'LLM audit log cleared' });
+    } catch (err) {
+      logger.error('[System] LLM audit clear error:', err);
       return res.status(500).json({ status: 'error', message: err.message });
     }
   });

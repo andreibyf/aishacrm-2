@@ -14,6 +14,7 @@ import {
   getLLMActivity,
   getLLMActivityStats,
   clearLLMActivity,
+  clearModelStats,
   resolveModelRates,
   buildPersistPayload,
   getPersistCounters,
@@ -290,6 +291,146 @@ describe('persistToDatabase (fire-and-forget)', () => {
       assert.equal(counters.attempts, 1);
       assert.equal(counters.successes, 0);
       assert.equal(counters.errors, 0);
+    } finally {
+      logSpy.mock.restore();
+    }
+  });
+});
+
+// ─── byModel breakdown ────────────────────────────────────────────────────────
+
+describe('LLM Activity Logger — byModel breakdown', () => {
+  beforeEach(() => {
+    clearLLMActivity(); // also calls clearModelStats()
+    __resetPersistCountersForTest();
+    __setSupabaseClientForTest(() => null);
+  });
+
+  afterEach(() => {
+    __resetSupabaseClientForTest();
+  });
+
+  it('tracks count and latency samples per model', () => {
+    const logSpy = mock.method(console, 'log', () => {});
+    try {
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 500,
+        tenantId: 't1',
+        capability: 'task_worker',
+      });
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 1000,
+        tenantId: 't1',
+        capability: 'task_worker',
+      });
+      logLLMActivity({
+        provider: 'litellm-virtual',
+        model: 'aisha-summary',
+        status: 'success',
+        durationMs: 200,
+        tenantId: 't1',
+        capability: 'virtual',
+      });
+
+      const stats = getLLMActivityStats();
+      const { byModel } = stats;
+
+      assert.ok(byModel['aisha-task'], 'aisha-task should appear in byModel');
+      assert.equal(byModel['aisha-task'].count, 2);
+      assert.equal(byModel['aisha-task'].errors, 0);
+      assert.equal(byModel['aisha-task'].latency.avg_ms, 750);
+      assert.equal(byModel['aisha-task'].latency.p50_ms, 500);
+      assert.equal(byModel['aisha-task'].latency.p95_ms, 1000);
+
+      assert.ok(byModel['aisha-summary'], 'aisha-summary should appear in byModel');
+      assert.equal(byModel['aisha-summary'].count, 1);
+      assert.equal(byModel['aisha-summary'].latency.avg_ms, 200);
+    } finally {
+      logSpy.mock.restore();
+    }
+  });
+
+  it('counts errors per model', () => {
+    const logSpy = mock.method(console, 'log', () => {});
+    try {
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 100,
+        tenantId: 't1',
+        capability: 'task_worker',
+      });
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'error',
+        durationMs: 50,
+        error: 'timeout',
+        tenantId: 't1',
+        capability: 'task_worker',
+      });
+
+      const { byModel } = getLLMActivityStats();
+      assert.equal(byModel['aisha-task'].count, 2);
+      assert.equal(byModel['aisha-task'].errors, 1);
+      assert.equal(byModel['aisha-task'].errorRate, 0.5);
+    } finally {
+      logSpy.mock.restore();
+    }
+  });
+
+  it('tracks token totals per model', () => {
+    const logSpy = mock.method(console, 'log', () => {});
+    try {
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 100,
+        tenantId: 't1',
+        capability: 'task_worker',
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      });
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 120,
+        tenantId: 't1',
+        capability: 'task_worker',
+        usage: { prompt_tokens: 200, completion_tokens: 80, total_tokens: 280 },
+      });
+
+      const { byModel } = getLLMActivityStats();
+      assert.equal(byModel['aisha-task'].tokens.prompt, 300);
+      assert.equal(byModel['aisha-task'].tokens.completion, 130);
+      assert.equal(byModel['aisha-task'].tokens.total, 430);
+    } finally {
+      logSpy.mock.restore();
+    }
+  });
+
+  it('clears model stats when clearLLMActivity is called', () => {
+    const logSpy = mock.method(console, 'log', () => {});
+    try {
+      logLLMActivity({
+        provider: 'local',
+        model: 'aisha-task',
+        status: 'success',
+        durationMs: 100,
+        tenantId: 't1',
+        capability: 'c',
+      });
+      clearLLMActivity();
+      const { byModel } = getLLMActivityStats();
+      assert.equal(Object.keys(byModel).length, 0);
     } finally {
       logSpy.mock.restore();
     }

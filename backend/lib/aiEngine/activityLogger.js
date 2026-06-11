@@ -47,6 +47,12 @@ export function __resetSupabaseClientForTest() {
 const MAX_ENTRIES = 500;
 const activityLog = [];
 
+// Per-model latency samples (ring buffer, max 200 per model alias).
+// Key = model string (e.g. 'aisha-task', 'aisha-summary', 'local/Qwen2.5-14B-AWQ').
+// Value = { samples: number[], count, errors, promptTokens, completionTokens }
+const MODEL_SAMPLE_CAP = 200;
+const modelStats = new Map();
+
 /**
  * Model-aware cost table (USD per 1K tokens).
  * Keys are lowercased model substrings tested against `entry.model`.
@@ -253,6 +259,26 @@ export function logLLMActivity(entry) {
     activityLog.length = MAX_ENTRIES;
   }
 
+  // ── Per-model stats (for byModel breakdown in getLLMActivityStats) ──────────
+  {
+    const modelKey = logEntry.model || 'unknown';
+    let ms = modelStats.get(modelKey);
+    if (!ms) {
+      ms = { samples: [], count: 0, errors: 0, promptTokens: 0, completionTokens: 0 };
+      modelStats.set(modelKey, ms);
+    }
+    ms.count += 1;
+    if (logEntry.status === 'error') ms.errors += 1;
+    if (logEntry.durationMs != null) {
+      ms.samples.push(logEntry.durationMs);
+      if (ms.samples.length > MODEL_SAMPLE_CAP) ms.samples.shift();
+    }
+    if (logEntry.usage) {
+      ms.promptTokens += logEntry.usage.prompt_tokens || 0;
+      ms.completionTokens += logEntry.usage.completion_tokens || 0;
+    }
+  }
+
   // Structured JSON log for log aggregation tools (Loki, CloudWatch, etc.)
   const logTag =
     logEntry.status === 'success'
@@ -444,7 +470,64 @@ export function getLLMActivityStats() {
       lastError: persistCounters.lastError,
       lastErrorAt: persistCounters.lastErrorAt,
     },
+    byModel: buildByModelStats(),
   };
+}
+
+/**
+ * Compute percentile from a sorted (ascending) array.
+ * @param {number[]} sorted
+ * @param {number} p  — 0–100
+ * @returns {number|null}
+ */
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, Math.min(idx, sorted.length - 1))];
+}
+
+/**
+ * Build per-model stat summary from the modelStats ring buffers.
+ * Returns an object keyed by model alias.
+ */
+function buildByModelStats() {
+  const out = Object.create(null);
+  for (const [model, ms] of modelStats) {
+    const sorted = [...ms.samples].sort((a, b) => a - b);
+    const totalTokens = ms.promptTokens + ms.completionTokens;
+    const rates = resolveModelRates('local', model); // best-effort cost (model alias may not match provider keys)
+    const costUSD =
+      (ms.promptTokens / 1000) * rates.input + (ms.completionTokens / 1000) * rates.output;
+    out[model] = {
+      count: ms.count,
+      errors: ms.errors,
+      errorRate: ms.count > 0 ? Math.round((ms.errors / ms.count) * 1000) / 1000 : 0,
+      latency: {
+        samples: sorted.length,
+        avg_ms:
+          sorted.length > 0 ? Math.round(sorted.reduce((a, b) => a + b, 0) / sorted.length) : null,
+        p50_ms: percentile(sorted, 50),
+        p95_ms: percentile(sorted, 95),
+        p99_ms: percentile(sorted, 99),
+        min_ms: sorted.length > 0 ? sorted[0] : null,
+        max_ms: sorted.length > 0 ? sorted[sorted.length - 1] : null,
+      },
+      tokens: {
+        prompt: ms.promptTokens,
+        completion: ms.completionTokens,
+        total: totalTokens,
+      },
+      estimatedCostUSD: Math.round(costUSD * 10000) / 10000,
+    };
+  }
+  return out;
+}
+
+/**
+ * Reset per-model stats (used by tests and the clear endpoint).
+ */
+export function clearModelStats() {
+  modelStats.clear();
 }
 
 /**
@@ -459,6 +542,7 @@ export function getPersistCounters() {
  */
 export function clearLLMActivity() {
   activityLog.length = 0;
+  clearModelStats();
 }
 
 export default {
@@ -466,6 +550,7 @@ export default {
   getLLMActivity,
   getLLMActivityStats,
   clearLLMActivity,
+  clearModelStats,
   getPersistCounters,
   resolveModelRates,
   buildPersistPayload,

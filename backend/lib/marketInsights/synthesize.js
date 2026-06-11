@@ -406,7 +406,13 @@ export async function defaultCallLLM({ messages, temperature = 0.3, tenantId, bo
     body.provider && body.model ? `${body.provider}/${body.model}` : body.model || 'aisha-mcp';
 
   const startMs = Date.now();
-  const result = await callLiteLLMVirtual({ model: virtualModel, messages, temperature, tenantId });
+  const result = await callLiteLLMVirtual({
+    model: virtualModel,
+    messages,
+    temperature,
+    tenantId,
+    skipActivityLog: true,
+  });
 
   logLLMActivity({
     tenantId,

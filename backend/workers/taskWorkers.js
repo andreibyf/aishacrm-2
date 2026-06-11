@@ -24,6 +24,8 @@ import {
 import { getAgentProfile } from '../lib/agents/agentRegistry.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
+import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
+import { appendAuditEntry } from '../lib/aiEngine/llmAuditLog.js';
 
 export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
@@ -600,13 +602,77 @@ Provide a clear summary of what you did.`;
         iterations++;
         logger.debug(`[ExecuteTask] LLM iteration ${iterations}`);
 
-        const completion = await client.chat.completions.create({
-          model,
-          messages: conversation,
-          tools: allowedTools,
-          tool_choice: iterations === 1 ? 'auto' : 'auto', // Let model decide
-          temperature,
-        });
+        const _llmStart = Date.now();
+        let completion;
+        try {
+          completion = await client.chat.completions.create({
+            model,
+            messages: conversation,
+            tools: allowedTools,
+            tool_choice: iterations === 1 ? 'auto' : 'auto', // Let model decide
+            temperature,
+          });
+        } catch (llmErr) {
+          // Log to telemetry before re-throwing so the error is visible in the monitor
+          try {
+            const _dur = Date.now() - _llmStart;
+            logLLMActivity({
+              tenantId: tenantRecord?.id || 'unknown',
+              capability: 'task_worker',
+              provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+              model,
+              nodeId: `worker:${assignee}`,
+              status: 'error',
+              durationMs: _dur,
+              error: llmErr.message,
+            });
+            appendAuditEntry({
+              model,
+              provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+              tenantId: tenantRecord?.id,
+              messages: conversation,
+              tools: allowedTools,
+              durationMs: _dur,
+              status: 'error',
+              error: llmErr.message,
+            });
+          } catch (_) {
+            /* swallow telemetry errors */
+          }
+          throw llmErr;
+        }
+
+        // ── Telemetry: log each LLM iteration from the worker ────────────────
+        try {
+          const _dur = Date.now() - _llmStart;
+          const _provider = process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai';
+          logLLMActivity({
+            tenantId: tenantRecord?.id || 'unknown',
+            capability: 'task_worker',
+            provider: _provider,
+            model,
+            nodeId: `worker:${assignee}`,
+            status: 'success',
+            durationMs: _dur,
+            usage: completion?.usage,
+            toolsCalled: (completion?.choices?.[0]?.message?.tool_calls || []).map(
+              (tc) => tc.function?.name,
+            ),
+          });
+          appendAuditEntry({
+            model,
+            provider: _provider,
+            tenantId: tenantRecord?.id,
+            messages: conversation,
+            tools: allowedTools,
+            usage: completion?.usage,
+            respContent: completion?.choices?.[0]?.message?.content,
+            durationMs: _dur,
+            status: 'success',
+          });
+        } catch (_) {
+          /* swallow telemetry errors — never break the worker */
+        }
 
         logger.debug(`[ExecuteTask] LLM response:`, JSON.stringify(completion)?.slice(0, 500));
 
