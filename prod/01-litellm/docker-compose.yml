@@ -80,6 +80,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    ports:
+      # Bind port 4002 on the Hetzner host so the HP Omen AI Server
+      # (Tailscale 100.81.132.118) can reach this LiteLLM instance at
+      # http://100.105.182.29:4002. worker-prd uses this as LITELLM_BASE_URL.
+      # Binding to 0.0.0.0 is intentional — Tailscale enforces network-level
+      # access control; this port is not reachable from the public internet
+      # unless Hetzner's firewall allows it (it does not by default).
+      - "4002:4000"
     logging:
       driver: json-file
       options:

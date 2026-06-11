@@ -1,16 +1,27 @@
 import Bull from 'bull';
 import logger from '../lib/logger.js';
 
-const REDIS_URL = process.env.REDIS_MEMORY_URL || process.env.REDIS_URL || 'redis://redis-memory:6379';
+// TASK_QUEUE_REDIS_URL: points at the shared HP Omen Redis when workers run
+// on the AI server. Falls back to local redis-memory for standalone dev.
+const REDIS_URL =
+  process.env.TASK_QUEUE_REDIS_URL ||
+  process.env.REDIS_MEMORY_URL ||
+  process.env.REDIS_URL ||
+  'redis://redis-memory:6379';
 
-logger.debug('[TaskQueue] Initializing task execution queue with Redis:', REDIS_URL);
+// APP_ENV suffixes the queue name so all three CRM environments (dev / staging / prd)
+// can share one Redis on the HP Omen without cross-contaminating each other's jobs.
+const APP_ENV = process.env.APP_ENV || 'dev';
+const QUEUE_NAME = `task-execution:${APP_ENV}`;
 
-export const taskQueue = new Bull('task-execution', REDIS_URL, {
+logger.debug(`[TaskQueue] Initializing ${QUEUE_NAME} with Redis: ${REDIS_URL}`);
+
+export const taskQueue = new Bull(QUEUE_NAME, REDIS_URL, {
   defaultJobOptions: {
-    attempts: 1, // Changed from 3 - no retries to prevent task repetition
+    attempts: 1, // No retries — prevents task repetition on failure
     removeOnComplete: 100,
-    removeOnFail: 200
-  }
+    removeOnFail: 200,
+  },
 });
 
 // Event listeners

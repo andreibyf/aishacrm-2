@@ -1101,8 +1101,16 @@ server.listen(PORT, async () => {
     );
   }
 
-  // Task workers use Supabase client, not pgPool
-  startTaskWorkers();
+  // Task workers use Supabase client, not pgPool.
+  // Set TASK_WORKERS_ENABLED=false when workers run on the HP Omen AI server
+  // so the CRM backend only enqueues jobs without processing them.
+  if (process.env.TASK_WORKERS_ENABLED === 'false') {
+    logger.info(
+      '[TaskWorkers] Skipped — TASK_WORKERS_ENABLED=false. Workers are running on the AI server.',
+    );
+  } else {
+    startTaskWorkers();
+  }
 
   // Start health monitoring system for Developer AI
   if (process.env.HEALTH_MONITORING_ENABLED !== 'false') {

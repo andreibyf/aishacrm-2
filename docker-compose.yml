@@ -153,8 +153,21 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
       - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
-      - LITELLM_BASE_URL=http://litellm:4000
+      # LITELLM_BASE_URL: points at local litellm container by default.
+      # Doppler overrides this to http://100.81.132.118:4000 (HP Omen) once
+      # the AI server is running LiteLLM for all environments.
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://litellm:4000}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      # Task queue — HP Omen AI server integration
+      # APP_ENV: tags the Bull queue name (task-execution:dev / staging / prd)
+      #   so all three environments can share one Redis without cross-contaminating.
+      - APP_ENV=${APP_ENV:-dev}
+      # TASK_QUEUE_REDIS_URL: override to redis://100.81.132.118:6381 in Doppler
+      #   when task workers run on the HP Omen instead of this container.
+      - TASK_QUEUE_REDIS_URL=${TASK_QUEUE_REDIS_URL:-redis://redis-memory:6379}
+      # TASK_WORKERS_ENABLED: set to false in Doppler to disable workers here
+      #   once HP Omen workers are validated and running.
+      - TASK_WORKERS_ENABLED=${TASK_WORKERS_ENABLED:-true}
       # GitHub Issues integration - loaded from .env.local
       - REPO_OWNER=${REPO_OWNER:-andreibyf}
       - REPO_NAME=${REPO_NAME:-aishacrm-2}
