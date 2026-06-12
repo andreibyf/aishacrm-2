@@ -456,12 +456,48 @@ function findQueryTarget(targetName, entityCatalog) {
   return null;
 }
 
+// Friendly field-name synonyms → canonical column. Lets "telephone number" map
+// to `phone`, "email address" to `email`, etc. for the projection/filter fields.
+const FIELD_SYNONYMS = {
+  telephone: 'phone',
+  'telephone number': 'phone',
+  'phone number': 'phone',
+  'email address': 'email',
+  'e-mail': 'email',
+  'e-mail address': 'email',
+  'mobile number': 'mobile',
+  cell: 'mobile',
+  'cell phone': 'mobile',
+  first: 'first_name',
+  last: 'last_name',
+  'zip code': 'zip',
+  'postal code': 'zip',
+};
+
+/** Lowercase + collapse whitespace for synonym lookup. */
+function normalizeFieldName(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/** Map a free-text field name to a canonical column via synonyms or snake_case. */
+function canonicalField(raw, validFields) {
+  const norm = normalizeFieldName(raw);
+  const candidates = [FIELD_SYNONYMS[norm], norm, norm.replace(/\s+/g, '_')];
+  for (const c of candidates) {
+    if (c && validFields.has(c)) return validFields.get(c).name;
+  }
+  return null;
+}
+
 /**
  * Resolve a query frame from an LLM-parsed query result against the entity catalog.
  *
- * @param {object} queryFrame - { target, target_kind, filters, sort, limit }
- * @param {object} entityCatalog - Loaded entity-catalog.yaml
- * @returns {{ resolved: true, ... } | { resolved: false, reason: string }}
+ * @param {object} queryFrame - { target, target_kind, filters, sort, limit, fields }
+ * @param {object} entityCatalog - effective catalog (schema-derived fields)
+ * @returns {{ resolved: true, ..., fields: string[]|null } | { resolved: false, reason: string }}
  */
 function resolveQuery(queryFrame, entityCatalog) {
   if (!queryFrame || !queryFrame.target) {
@@ -565,6 +601,24 @@ function resolveQuery(queryFrame, entityCatalog) {
   const limit =
     queryFrame.limit != null ? Math.min(Math.max(1, Number(queryFrame.limit)), 500) : 100;
 
+  // Resolve optional projection. Map synonyms; DROP fields that can't be mapped
+  // rather than failing the whole report — a bad projection column shouldn't kill
+  // an otherwise valid query (it just won't be in the column list).
+  let resolvedFields = null;
+  const fieldWarnings = [];
+  if (Array.isArray(queryFrame.fields) && queryFrame.fields.length) {
+    const out = [];
+    for (const raw of queryFrame.fields) {
+      const canonical = canonicalField(raw, validFields);
+      if (canonical) {
+        if (!out.includes(canonical)) out.push(canonical);
+      } else {
+        fieldWarnings.push(`Field '${raw}' is not available on ${kind} '${target.id}' — omitted`);
+      }
+    }
+    resolvedFields = out.length ? out : null;
+  }
+
   return {
     resolved: true,
     target: target.id,
@@ -574,6 +628,8 @@ function resolveQuery(queryFrame, entityCatalog) {
     filters: resolvedFilters,
     sort: resolvedSort,
     limit,
+    fields: resolvedFields,
+    field_warnings: fieldWarnings,
   };
 }
 

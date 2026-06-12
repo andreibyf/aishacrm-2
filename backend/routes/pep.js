@@ -18,6 +18,7 @@ import { authenticateRequest } from '../middleware/authenticate.js';
 import { resolveQuery } from '../../pep/compiler/resolver.js';
 import { emitQuery, buildConfirmationString } from '../../pep/compiler/emitter.js';
 import { parseLLM } from '../../pep/compiler/llmParser.js';
+import { buildEffectiveCatalog, isDeniedColumn } from '../../pep/compiler/schemaCatalog.js';
 import { fetchEntityLabels, generateEntityLabelPrompt } from '../lib/entityLabelInjector.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,15 +50,15 @@ const entityCatalog = parseYaml(readFileSync(join(CATALOGS_DIR, 'entity-catalog.
 
 // ─── Query system prompt for Phase 3 LLM parse ───────────────────────────────
 
-function buildQuerySystemPrompt() {
-  const entityLines = (entityCatalog.entities || [])
+function buildQuerySystemPrompt(catalog) {
+  const entityLines = (catalog.entities || [])
     .filter((e) => Array.isArray(e.fields))
     .map((e) => {
       const fieldNames = e.fields.map((f) => f.name).join(', ');
       return `${e.id} (table: ${e.aisha_binding?.table}) — fields: ${fieldNames}`;
     });
 
-  const viewLines = (entityCatalog.views || []).map((v) => {
+  const viewLines = (catalog.views || []).map((v) => {
     const colNames = v.columns.map((c) => c.name).join(', ');
     return `${v.id} — columns: ${colNames}`;
   });
@@ -104,8 +105,19 @@ OUTPUT SHAPE (on success):
     { "field": "<field>", "operator": "<operator>", "value": "<value>" }
   ],
   "sort": { "field": "<field>", "direction": "asc" | "desc" } | null,
-  "limit": <number> | null
+  "limit": <number> | null,
+  "fields": ["<field>", ...] | null
 }
+
+FIELD PROJECTION (the "fields" array):
+- If the request asks for SPECIFIC columns ("only first name, last name, telephone, and email"),
+  list those columns in "fields" using the catalog field names for the identified entity.
+- Map natural phrasing to catalog field names: "telephone"/"telephone number"/"phone number" → phone,
+  "email address" → email, "mobile number"/"cell" → mobile, "first name" → first_name, "last name" → last_name.
+- If a requested projection column is not in the entity's field list, OMIT just that column from "fields"
+  — do NOT set match:false and do NOT report it as ambiguous. A projection is a display preference, not a filter.
+- If no specific columns are requested ("report of my contacts"), set "fields": null (all columns returned).
+- "fields" never affects which ENTITY is chosen — the entity comes from the explicit noun ("contacts" → Contact).
 
 VALID ENTITIES AND FIELDS:
 ${entityLines.join('\n')}
@@ -115,10 +127,15 @@ ${viewLines.join('\n')}
 
 VALID OPERATORS: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
 
-DATE RELATIVE TOKENS (use these for date values, wrapped in double braces):
-{{date: today}}, {{date: start_of_month}}, {{date: end_of_month}},
+DATE RELATIVE TOKENS (use these for date values, wrapped in double braces — never invent others):
+{{date: today}}, {{date: start_of_week}}, {{date: end_of_week}},
+{{date: start_of_last_week}}, {{date: end_of_last_week}},
+{{date: start_of_month}}, {{date: end_of_month}},
 {{date: start_of_quarter}}, {{date: end_of_quarter}}, {{date: start_of_year}},
 {{date: last_N_days}} where N is a number (e.g. {{date: last_30_days}})
+- "this week" → created between start_of_week and end_of_week.
+- "last week" / "past week" → created between start_of_last_week and end_of_last_week.
+- "last N days" → use a single gte filter with last_N_days.
 
 EMPLOYEE NAMES: if a filter references a person's name for the assigned_to field,
 use value format: "{{resolve_employee: <name>}}"
@@ -146,8 +163,20 @@ function resolveDateToken(token) {
   const quarterStart = new Date(y, quarter * 3, 1);
   const quarterEnd = new Date(y, quarter * 3 + 3, 0, 23, 59, 59, 999);
 
+  // Monday-based week boundaries (current + previous week).
+  const d0 = now.getDate();
+  const mondayOffset = (now.getDay() + 6) % 7; // days since this week's Monday
+  const startOfWeek = new Date(y, m, d0 - mondayOffset);
+  const endOfWeek = new Date(y, m, d0 - mondayOffset + 6, 23, 59, 59, 999);
+  const startOfLastWeek = new Date(y, m, d0 - mondayOffset - 7);
+  const endOfLastWeek = new Date(y, m, d0 - mondayOffset - 1, 23, 59, 59, 999);
+
   const map = {
     today: now.toISOString().split('T')[0],
+    start_of_week: startOfWeek.toISOString().split('T')[0],
+    end_of_week: endOfWeek.toISOString().split('T')[0],
+    start_of_last_week: startOfLastWeek.toISOString().split('T')[0],
+    end_of_last_week: endOfLastWeek.toISOString().split('T')[0],
     start_of_month: new Date(y, m, 1).toISOString().split('T')[0],
     end_of_month: new Date(y, m + 1, 0).toISOString().split('T')[0],
     start_of_quarter: quarterStart.toISOString().split('T')[0],
@@ -327,8 +356,11 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
     }
 
     try {
-      // Build the Phase 3 query system prompt and enrich with tenant custom labels
-      let systemPrompt = buildQuerySystemPrompt();
+      // Build the effective catalog (entity bindings from YAML, fields derived
+      // from the live schema minus the denylist), then the Phase 3 query system
+      // prompt, enriched with tenant custom labels.
+      const effCatalog = await buildEffectiveCatalog(entityCatalog);
+      let systemPrompt = buildQuerySystemPrompt(effCatalog);
 
       // Inject tenant custom entity labels (e.g., "Potential Leads" → bizdev_sources)
       try {
@@ -338,13 +370,16 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
           systemPrompt += labelPrompt;
         }
       } catch (labelErr) {
-        logger.warn({ err: labelErr.message }, '[PEP] Failed to fetch entity labels, using defaults');
+        logger.warn(
+          { err: labelErr.message },
+          '[PEP] Failed to fetch entity labels, using defaults',
+        );
       }
 
       // Use the LLM parser with the query-oriented system prompt
       const parsed = await parseLLM(
         source,
-        { entity_catalog: entityCatalog, capability_catalog: {} },
+        { entity_catalog: effCatalog, capability_catalog: {} },
         systemPrompt,
       );
 
@@ -363,9 +398,10 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         filters: parsed.filters || [],
         sort: parsed.sort || null,
         limit: parsed.limit || null,
+        fields: parsed.fields || null,
       };
 
-      const resolved = resolveQuery(queryFrame, entityCatalog);
+      const resolved = resolveQuery(queryFrame, effCatalog);
       if (!resolved.resolved) {
         return res.status(200).json({
           status: 'clarification_required',
@@ -442,10 +478,17 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
       }
 
       // Build the Supabase query
-      // tenant_id is ALWAYS injected — cannot be overridden by IR
+      // tenant_id is ALWAYS injected — cannot be overridden by IR.
+      // Projection: when the IR lists fields, select only those (+ id for the row
+      // key); otherwise select all. Denied columns are stripped from the result
+      // regardless, below.
+      const projected =
+        Array.isArray(ir.fields) && ir.fields.length
+          ? Array.from(new Set(['id', ...ir.fields.filter((f) => !isDeniedColumn(f))]))
+          : null;
       let query = supabase
         .from(ir.table || ir.target)
-        .select('*')
+        .select(projected ? projected.join(',') : '*')
         .eq('tenant_id', tenant_id);
 
       // Apply resolved filters
@@ -472,11 +515,20 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         });
       }
 
+      // Strip denied columns (metadata, tenant_id, embeddings, …) from every row
+      // so internal fields never leave the API — even when no projection was set.
+      const sanitize = (row) => {
+        const out = {};
+        for (const k of Object.keys(row)) if (!isDeniedColumn(k)) out[k] = row[k];
+        return out;
+      };
+      const rows = (data || []).map(sanitize);
+
       return res.status(200).json({
         status: 'success',
         data: {
-          rows: data || [],
-          count: (data || []).length,
+          rows,
+          count: rows.length,
           target: ir.target,
           target_kind: ir.target_kind,
           executed_at: new Date().toISOString(),
