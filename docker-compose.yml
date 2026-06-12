@@ -153,6 +153,8 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       # LLM_PROVIDER and API keys loaded from Doppler in entrypoint
       - LITELLM_ENABLED=${LITELLM_ENABLED:-false}
+      # Lite-tier quality pipeline (shadow mode) — Phase 1, off unless set
+      - LITE_QUALITY_PIPELINE_ENABLED=${LITE_QUALITY_PIPELINE_ENABLED:-false}
       # LITELLM_BASE_URL: points at local litellm container by default.
       # Doppler overrides this to http://100.81.132.118:4000 (HP Omen) once
       # the AI server is running LiteLLM for all environments.

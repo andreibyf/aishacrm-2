@@ -1,0 +1,51 @@
+# AI Gateway — private Tailscale proxy to the home AI Cloud Server.
+#
+# WHY: the AI server (vLLM :8000 + Ollama :11434) is at home behind NAT, reachable
+# only over Tailscale. The CRM's LiteLLM runs in a container on a remote VPS, and a
+# container can't reach a tailnet IP directly (Tailscale is host-level). This tiny
+# Tailscale-userspace container joins the tailnet and 1:1-proxies to the AI server,
+# so LiteLLM reaches the box *privately* (no public exposure) by docker name.
+#
+# DEPLOY: one instance per remote environment, on the SAME docker network as that
+# env's LiteLLM:
+#   - staging  -> VPS-1   (network: the one staging-litellm is on)
+#   - prod     -> Hetzner (network: the one prod's litellm is on)
+# Dev needs none — it reaches the box directly over the LAN.
+#
+# After deploy, point LiteLLM at the gateway (in each env's Doppler):
+#   LOCAL_LLM_BASE_URL        = http://ai-gateway:8000/v1
+#   LOCAL_LLM_OLLAMA_BASE_URL = http://ai-gateway:11434
+#
+# If the gateway (or the box) is down, LiteLLM's existing fallback chains still
+# route to cloud — so this does not re-introduce a hard dependency on the box.
+
+services:
+  ai-gateway:
+    image: tailscale/tailscale:latest
+    restart: unless-stopped
+    hostname: ${TS_GATEWAY_HOSTNAME:-ai-gateway-staging}
+    environment:
+      # Authenticate with the existing Tailscale OAuth client SECRET directly
+      # (the tskey-client-... value, = TAILSCALE_CLIENT_SECRET). No minted auth key
+      # to manage, and the OAuth secret is long-lived so there's no key-expiry trap.
+      # When using an OAuth secret you MUST name the tag via --advertise-tags below.
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      # Userspace networking: no /dev/net/tun, no NET_ADMIN needed.
+      - TS_USERSPACE=true
+      # 1:1 proxy target = the AI server's tailnet IP. Any port hitting this
+      # container is forwarded to 100.81.132.118:<sameport> over the tailnet,
+      # so :8000 -> vLLM and :11434 -> Ollama.
+      - TS_DEST_IP=100.81.132.118
+      - TS_EXTRA_ARGS=--advertise-tags=tag:crm --hostname=${TS_GATEWAY_HOSTNAME:-ai-gateway-staging}
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ai-gateway-state:/var/lib/tailscale
+    networks:
+      - default
+
+volumes:
+  ai-gateway-state:
+
+# NOTE: in Coolify, attach this service to the SAME network as the env's LiteLLM
+# so `ai-gateway` resolves by name. If they're on different Coolify apps, put both
+# on a shared network (or `docker network connect`).

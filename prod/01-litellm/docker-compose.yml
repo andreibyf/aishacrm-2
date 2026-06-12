@@ -102,6 +102,33 @@ services:
         aliases:
           - litellm
 
+  # AI gateway — Tailscale userspace proxy to the home AI Cloud Server.
+  # See ops/ai-server/failover.md + ops/ai-gateway/README.md. Joins this
+  # network as `ai-gateway` so LiteLLM reaches the box PRIVATELY over the
+  # tailnet at http://ai-gateway:8000 (vLLM) / http://ai-gateway:11434
+  # (Ollama). Auth = the Tailscale OAuth client secret (TS_AUTHKEY, a Coolify
+  # app env var). If the gateway/box is down, LiteLLM's fallbacks still route
+  # to cloud — no hard dependency on the box.
+  ai-gateway:
+    image: tailscale/tailscale:latest
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_USERSPACE=true
+      - TS_DEST_IP=100.81.132.118
+      - TS_EXTRA_ARGS=--advertise-tags=tag:crm --hostname=ai-gateway-prod
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ai-gateway-state:/var/lib/tailscale
+    networks:
+      aishanet:
+        aliases:
+          - ai-gateway
+
+volumes:
+  ai-gateway-state:
+
 networks:
   # External network shared with the GHCR-deployed prod stack
   # (docker-compose.prod.yml). Cloudflared + backend + frontend all live here.

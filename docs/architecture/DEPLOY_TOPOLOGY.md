@@ -21,7 +21,7 @@ Each section below states the contract. If you're touching a deploy script, CI w
 | **VPS-2**           | Services     | Zap-Hosting (lifetime)  | `147.189.168.164`                                  | `root`      | Coolify app (control plane), Cal.com, Uptime Kuma, Gitea, OneDev                              |
 | **Hetzner**         | Production   | Hetzner Cloud (monthly) | `178.156.140.86`                                   | `root`      | All prod app services                                                                         |
 | **Localhost**       | Development  | Dre's laptop            | (varies)                                           | n/a         | Local dev via Docker Compose ports 4000/4001                                                  |
-| **AI Cloud Server** | AI Inference | Home (HP Omen 35L)      | LAN: `192.168.7.200` / Tailscale: `100.81.132.118` | `aisha`     | vLLM inference server (Qwen2.5-14B), accessible via Tailscale from all envs                   |
+| **AI Cloud Server** | AI Inference | Home (HP Omen 35L)      | LAN: `192.168.7.219` / Tailscale: `100.81.132.118` | `aisha`     | vLLM (GPU, Qwen2.5-14B) on `:8000` + Ollama (CPU-only, `qwen2.5:3b`) on `:11434` lite tier; via Tailscale from all envs |
 
 **Rules:**
 
@@ -229,6 +229,8 @@ The long-term fix is migrating Coolify Services → "App from Docker Image" so n
 ---
 
 ## Production deploy path
+
+> **Correction (2026-06-12):** the prod **backend** is a Coolify app (`prod-backend-heavy`, container `backend-hr6ddpfxhw6l20tpkb18sz0u-*`) that builds from Gitea `main` and is **redeployed from the Coolify UI** — *not* a manual SSH `docker compose pull`. It runs `DOPPLER_CONFIG=prd_prd`. The GHCR-image description below applies to the older/other prod services; the backend is Coolify-managed.
 
 Production on Hetzner uses pre-built GHCR images:
 
