@@ -34,7 +34,12 @@ import {
   computeTopicMismatch,
 } from '../lib/quality/taskType.js';
 import { runQualityPipeline } from '../lib/quality/runQualityPipeline.js';
-import { routeEntryTier } from '../lib/quality/complexityRouter.js';
+import {
+  routeEntryTier,
+  aliasForTier,
+  escalationTarget,
+  CPU_TIERS,
+} from '../lib/quality/complexityRouter.js';
 
 export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
@@ -606,9 +611,9 @@ Provide a clear summary of what you did.`;
         });
         tier = routed.tier;
         entryReason = routed.reason;
-        // 'lite' → CPU/Ollama (aisha-task-lite); else GPU/vLLM (aisha-task).
-        // LiteLLM falls aisha-task-lite back to aisha-task if Ollama is down.
-        baseModel = tier === 'lite' ? 'aisha-task-lite' : 'aisha-task';
+        // tier → alias (3B/7B/coder-7B/14B-GPU). LiteLLM falls the CPU aliases
+        // back to aisha-task if Ollama is down.
+        baseModel = aliasForTier(tier);
         logger.info(
           `[ExecuteTask] Routing via LiteLLM: ${baseModel} (tier=${tier}, entry=${entryReason}, role=${roleTier})`,
         );
@@ -930,66 +935,76 @@ Provide a clear summary of what you did.`;
       let { finalResponse, toolsUsed, totalTokens, iterations } = await runAgenticLoop(baseModel);
       let model = baseModel;
 
-      // ── Lite-tier quality pipeline (Phases 1–4) ───────────────────────────────
-      // docs/plans/2026-06-11-lite-tier-supervisor-refine.md. For lite-tier tasks:
-      // gate → cheap rule-fix → surgical refine on lite → escalate to full only on
-      // a capability/relevance gap. LITE_QUALITY_MODE=shadow observes only;
-      // =active mutates the output and escalates. Off unless
-      // LITE_QUALITY_PIPELINE_ENABLED=true. Fully wrapped so a pipeline error can
-      // never break task execution.
-      let gatePass = null; // null = pipeline didn't run (full tier or flag off)
+      // ── Lite-tier quality pipeline + graduated ladder (Phases 1–4) ────────────
+      // docs/plans/2026-06-11-lite-tier-supervisor-refine.md. For CPU-tier tasks:
+      // gate → cheap rule-fix → surgical refine on the SAME CPU model → on a
+      // capability gap, step UP the ladder (3B→7B→GPU; coder→GPU) and re-run.
+      // LITE_QUALITY_MODE=shadow observes only; =active mutates + escalates. Off
+      // unless LITE_QUALITY_PIPELINE_ENABLED=true. Fully wrapped so a pipeline
+      // error can never break task execution.
+      let gatePass = null; // null = pipeline didn't run (GPU tier or flag off)
       let gateDefects = [];
       let pipelineMeta = null;
-      if (process.env.LITE_QUALITY_PIPELINE_ENABLED === 'true' && tier === 'lite') {
+      if (process.env.LITE_QUALITY_PIPELINE_ENABLED === 'true' && CPU_TIERS.has(tier)) {
         try {
           const { type: taskType, isMultiStep } = detectTaskType(description);
           const mode = process.env.LITE_QUALITY_MODE === 'active' ? 'active' : 'shadow';
-          const result = await runQualityPipeline({
-            output: finalResponse,
-            taskType,
-            isMultiStep,
-            agentProfile,
-            tenant: tenantRecord,
-            client,
-            model: baseModel,
-            taskDescription: description,
-            agent: assignee,
-            config: {
-              mode,
-              refineMaxAttempts: parseInt(process.env.LITE_REFINE_MAX_ATTEMPTS || '1', 10),
-              escalateEnabled: process.env.LITE_ESCALATE_ENABLED !== 'false',
-              refineTemperature: parseFloat(process.env.LITE_REFINE_TEMPERATURE || '0.15'),
-              limits: { maxChars: agentProfile?.metadata?.limits?.max_chars },
-            },
-          });
-          pipelineMeta = result.meta;
-          gatePass = result.meta.finalGatePass;
-          gateDefects = result.meta.defectsFound || [];
+          const qConfig = {
+            mode,
+            refineMaxAttempts: parseInt(process.env.LITE_REFINE_MAX_ATTEMPTS || '1', 10),
+            escalateEnabled: process.env.LITE_ESCALATE_ENABLED !== 'false',
+            refineTemperature: parseFloat(process.env.LITE_REFINE_TEMPERATURE || '0.15'),
+            limits: { maxChars: agentProfile?.metadata?.limits?.max_chars },
+          };
 
-          if (mode === 'active') {
-            // Apply the rule-fixed / refined lite output.
-            finalResponse = result.output;
-            // Quality escalation (distinct from LiteLLM's infra fallback): re-run
-            // the agentic loop ONCE on the full/vLLM model and take that result.
-            if (result.meta.escalated && process.env.LITE_ESCALATE_ENABLED !== 'false') {
-              logger.info(
-                `[LiteQuality] escalating ${assignee} lite→full (aisha-task): ${result.meta.escalateReason}`,
-              );
-              const esc = await runAgenticLoop('aisha-task');
-              finalResponse = esc.finalResponse;
-              toolsUsed = esc.toolsUsed;
-              totalTokens += esc.totalTokens;
-              iterations += esc.iterations;
-              model = 'aisha-task';
-            }
+          // Climb the ladder: run the pipeline on the current CPU rung; if it
+          // signals a capability gap, step to the next rung and re-run the task
+          // there. Bounded (lite→mid→full is at most 2 hops); we stop at the GPU
+          // ceiling, on a pass, or in shadow mode.
+          let guard = 0;
+          while (CPU_TIERS.has(tier) && guard++ < CPU_TIERS.size + 1) {
+            const result = await runQualityPipeline({
+              output: finalResponse,
+              taskType,
+              isMultiStep,
+              tier,
+              agentProfile,
+              tenant: tenantRecord,
+              client,
+              model, // refine/critic run on the current rung's model
+              taskDescription: description,
+              agent: assignee,
+              config: qConfig,
+            });
+            pipelineMeta = result.meta;
+            gatePass = result.meta.finalGatePass;
+            gateDefects = result.meta.defectsFound || [];
+
+            if (mode !== 'active') break; // shadow: observe only, never escalate
+            finalResponse = result.output; // apply rule-fixed / refined output
+
+            if (!(result.meta.escalated && qConfig.escalateEnabled)) break;
+            const nextTier = escalationTarget(tier);
+            logger.info(
+              `[LiteQuality] escalating ${assignee} ${tier}→${nextTier} (${result.meta.escalateReason})`,
+            );
+            tier = nextTier;
+            model = aliasForTier(tier);
+            const esc = await runAgenticLoop(model);
+            finalResponse = esc.finalResponse;
+            toolsUsed = esc.toolsUsed;
+            totalTokens += esc.totalTokens;
+            iterations += esc.iterations;
+            // Stepped onto the GPU ceiling → ship that output (no pipeline on full).
           }
 
           logger.info(
             `[LiteQuality:${mode}] agent=${assignee} type=${taskType} multiStep=${isMultiStep} ` +
-              `pass=${gatePass} ruleFixes=${(pipelineMeta.ruleFixes || []).join(',') || 'none'} ` +
-              `refine=${pipelineMeta.refineCount} escalated=${pipelineMeta.escalated}` +
-              `${pipelineMeta.escalateReason ? '(' + pipelineMeta.escalateReason + ')' : ''} ` +
-              `recommendFull=${pipelineMeta.recommendFull}`,
+              `finalTier=${tier} model=${model} pass=${gatePass} ` +
+              `ruleFixes=${(pipelineMeta?.ruleFixes || []).join(',') || 'none'} ` +
+              `refine=${pipelineMeta?.refineCount} escalated=${pipelineMeta?.escalated}` +
+              `${pipelineMeta?.escalateReason ? '(' + pipelineMeta.escalateReason + ')' : ''} ` +
+              `recommendFull=${pipelineMeta?.recommendFull}`,
           );
         } catch (qErr) {
           logger.warn(`[LiteQuality] pipeline error (non-fatal): ${qErr.message}`);

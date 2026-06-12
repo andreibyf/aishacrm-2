@@ -38,6 +38,7 @@ export async function runQualityPipeline({
   output,
   taskType = 'generic_text',
   isMultiStep = false,
+  tier = 'lite',
   agentProfile,
   tenant,
   client,
@@ -62,7 +63,7 @@ export async function runQualityPipeline({
   };
 
   const meta = {
-    tier: 'lite',
+    tier,
     mode,
     taskType,
     isMultiStep,
