@@ -14,7 +14,9 @@ const REDIS_URL =
 const APP_ENV = process.env.APP_ENV || 'dev';
 const QUEUE_NAME = `task-execution:${APP_ENV}`;
 
-logger.debug(`[TaskQueue] Initializing ${QUEUE_NAME} with Redis: ${REDIS_URL}`);
+// INFO (not debug) so the queue's Redis target is visible in staging/prod deploy
+// logs — confirms whether tasks are queued on the backend's own Redis vs elsewhere.
+logger.info(`[TaskQueue] Initializing ${QUEUE_NAME} with Redis: ${REDIS_URL}`);
 
 export const taskQueue = new Bull(QUEUE_NAME, REDIS_URL, {
   defaultJobOptions: {
