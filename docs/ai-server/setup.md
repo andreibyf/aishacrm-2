@@ -1,5 +1,7 @@
 # Local AI Inference Server Setup
 
+> Part of the [AI Server docs](./README.md) — see also [models-and-routing](./models-and-routing.md), [workers-and-deploy](./workers-and-deploy.md), [monitor](./monitor.md).
+
 **Hardware:** AMD Ryzen 7 9800X3D · RTX 5070 Ti (16 GB VRAM) · 32 GB RAM  
 **Stack:** Ubuntu 24.04 LTS → NVIDIA Driver 572+ → CUDA 12.8 → vLLM (source build, Blackwell)
 
@@ -275,11 +277,18 @@ Each environment points to the AI server via:
 
 | Config         | `LOCAL_LLM_BASE_URL`            | Notes                            |
 | -------------- | ------------------------------- | -------------------------------- |
-| `dev_personal` | `http://192.168.7.200:8000/v1`  | Direct LAN — no Tailscale needed |
+| `dev_personal` | `http://192.168.7.219:8000/v1`  | Direct LAN — no Tailscale needed |
 | `stg_stg`      | `http://100.81.132.118:8000/v1` | Via Tailscale                    |
 | `prd_prd`      | `http://100.81.132.118:8000/v1` | Via Tailscale                    |
 
 `LOCAL_LLM_API_KEY` and `SUMMARY_LLM_PROVIDER=local` / `SUMMARY_LLM_MODEL` are set in all three configs.
+
+The **lite tier** (see Phase 6.5) adds `LOCAL_LLM_OLLAMA_BASE_URL`, consumed by the `aisha-task-lite` LiteLLM alias:
+
+| Config         | `LOCAL_LLM_OLLAMA_BASE_URL`     | Notes                                     |
+| -------------- | ------------------------------- | ----------------------------------------- |
+| `dev_personal` | `http://192.168.7.219:11434`    | Direct LAN — Ollama on the AI server      |
+| `stg_stg` / `prd_prd` | _(not set yet)_          | Use `http://100.81.132.118:11434` if/when the lite tier is enabled in those envs |
 
 ### Provider routing in AiSHA
 
@@ -290,6 +299,51 @@ The `local` provider in `backend/lib/aiEngine/` reads `LOCAL_LLM_BASE_URL` and `
 | Customer data summaries | `SUMMARY_LLM_PROVIDER` + `SUMMARY_LLM_MODEL` | local / Qwen2.5-14B |
 
 Tool-calling capabilities (`MODEL_CHAT_TOOLS`, `MODEL_BRAIN_PLAN_ACTIONS`) remain on OpenAI/Anthropic. Adding per-capability provider keys to `modelRouter.js` is the path to routing more capabilities to the AI server.
+
+## Phase 6.5 — Lite tier (CPU / Ollama) for low-tool agents
+
+The GPU is saturated by vLLM (Qwen2.5-14B uses ~14.8 of 16 GB VRAM), so the **lite tier runs entirely on the CPU via Ollama _on this same machine_** — fast enough for background/low-tool agent tasks while leaving the GPU free for the full tier.
+
+> **Architecture rule:** Ollama runs **on the AI server** (this box), reached over the network by IP — exactly like vLLM. It is **NOT** a `docker-compose` service. The CRM compose stack runs on VPS/Hetzner/laptop, so an `ollama:11434` compose service would put the small models on the wrong machine. Reach it at `192.168.7.219:11434` (LAN) / `100.81.132.118:11434` (Tailscale).
+
+### 6.5.1 Install Ollama + pull the lite model
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh   # installs the systemd ollama.service
+ollama pull qwen2.5:3b                           # ~1.9 GB, general instruct, tool-calling
+```
+
+### 6.5.2 Force CPU-only + LAN bind (critical — must not contend with vLLM)
+
+Two systemd drop-ins under `/etc/systemd/system/ollama.service.d/`:
+
+```ini
+# override.conf — listen on the LAN, not just localhost
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0"
+
+# cpu-only.conf — hide the GPU so Ollama never evicts vLLM from VRAM
+[Service]
+Environment="CUDA_VISIBLE_DEVICES="
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+Verify the model loads on CPU and vLLM's VRAM is untouched:
+
+```bash
+curl -s localhost:11434/api/chat -d '{"model":"qwen2.5:3b","stream":false,"messages":[{"role":"user","content":"hi"}]}' >/dev/null
+ollama ps          # PROCESSOR column must read "100% CPU"
+nvidia-smi --query-gpu=memory.used --format=csv,noheader   # unchanged (~14.8 GB = vLLM only)
+```
+
+### 6.5.3 How AiSHA routes to it
+
+- **LiteLLM** (`litellm_config.yaml`): the `aisha-task-lite` alias → `ollama_chat/qwen2.5:3b` at `os.environ/LOCAL_LLM_OLLAMA_BASE_URL`, with a fallback to `aisha-task` (GPU) then groq — so a slow/down Ollama degrades, never hard-fails.
+- **Agent routing** (`backend/lib/agents/agentRegistry.js`): each role carries `metadata.model_tier` (`'lite' | 'full'`). `backend/workers/taskWorkers.js` picks `aisha-task-lite` for `lite`, else `aisha-task`.
+- **Tier assignment:** default is conservative — only `customer_service_manager` is `lite`; everything else is `full`. Flip any role without a code change via `AISHA_<ROLE>_MODEL_TIER=lite|full` (e.g. `AISHA_OPS_MODEL_TIER`, `AISHA_CS_MODEL_TIER`), or set all roles with `AISHA_DEFAULT_MODEL_TIER`. Per-role env wins over the global default. Widen the lite set only after measuring tool-call accuracy on the 3B CPU model.
 
 ## Phase 7 — Known Patches (Blackwell sm_120 workarounds)
 
