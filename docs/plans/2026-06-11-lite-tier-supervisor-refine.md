@@ -163,7 +163,11 @@ Per-task-type gate config lives in code (`gates.js`), not env — gates are logi
 
 Each phase is independently shippable and flag-gated; phases 1–2 carry no behavioral risk (shadow).
 
-**Implemented: phases 1–4** (2026-06-11/12, branch `feat/llm-lite-tier-routing`). Phase 1 shipped the deterministic `taskType.js` / `gates.js` / `ruleFixers.js` in shadow. Phases 2–4 add `relevanceCritic.js`, `refiner.js`, `escalator.js`, `runQualityPipeline.js` plus the `taskWorkers.js` integration: the agentic loop is now re-runnable so the orchestrator can rule-fix → refine on lite → **escalate (re-run once on `aisha-task`)**. All flag-gated behind `LITE_QUALITY_PIPELINE_ENABLED` + `LITE_QUALITY_MODE` (default `shadow`, no behavioral change until flipped to `active`). 65 unit tests across the quality dir. **Remaining: phase 5** (sampled offline Claude judge at `LITE_SUPERVISOR_SAMPLE_RATE` + monitor dashboard for pass-rate / escalation-rate / defect mix).
+**Implemented: phases 1–4** (2026-06-11/12, branch `feat/llm-lite-tier-routing`). Phase 1 shipped the deterministic `taskType.js` / `gates.js` / `ruleFixers.js` in shadow. Phases 2–4 add `relevanceCritic.js`, `refiner.js`, `escalator.js`, `runQualityPipeline.js` plus the `taskWorkers.js` integration: the agentic loop is now re-runnable so the orchestrator can rule-fix → refine on lite → **escalate (re-run once on `aisha-task`)**. All flag-gated behind `LITE_QUALITY_PIPELINE_ENABLED` + `LITE_QUALITY_MODE` (default `shadow`, no behavioral change until flipped to `active`).
+
+**Pre-flight complexity router** (2026-06-12, `complexityRouter.js`): realizes Decision 2's "route multi-step to full up front" and makes the ENTRY model task-dependent rather than purely role-based — fixing the case where a trivial "add a note" ran on the GPU because it fell to the full-tier `ops_manager`. `routeEntryTier()` is **tool-aligned** (keys off `detectIntents`/`TOOL_FACETS`, the same taxonomy as the Braid tools + the monitor, not a separate list): multi-step → full; maps to ≥1 Braid tool action → lite; untooled → role tier. Opt-in via `AISHA_COMPLEXITY_ROUTING` (default off). The escalation net still catches lite entries that prove too hard.
+
+85 unit tests across the quality dir. **Remaining: phase 5** (sampled offline Claude judge at `LITE_SUPERVISOR_SAMPLE_RATE` + monitor dashboard for pass-rate / escalation-rate / defect mix).
 
 ---
 

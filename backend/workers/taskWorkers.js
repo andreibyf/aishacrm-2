@@ -34,6 +34,7 @@ import {
   computeTopicMismatch,
 } from '../lib/quality/taskType.js';
 import { runQualityPipeline } from '../lib/quality/runQualityPipeline.js';
+import { routeEntryTier } from '../lib/quality/complexityRouter.js';
 
 export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
@@ -581,7 +582,11 @@ Provide a clear summary of what you did.`;
       // Route through LiteLLM when enabled (respects LLM_PROVIDER / per-tenant overrides),
       // fall back to direct OpenAI client for local dev without LiteLLM.
       const temperature = agentProfile.temperature || 0.2;
-      const tier = agentProfile.metadata?.model_tier || 'full';
+      const roleTier = agentProfile.metadata?.model_tier || 'full';
+      // Effective entry tier — the complexity router may override the role tier
+      // based on the task itself (opt-in via AISHA_COMPLEXITY_ROUTING).
+      let tier = roleTier;
+      let entryReason = 'role_default';
       let client;
       let baseModel;
 
@@ -590,11 +595,23 @@ Provide a clear summary of what you did.`;
           apiKey: process.env.LITELLM_MASTER_KEY || 'no-key',
           baseURL: `${(process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '')}/v1`,
         });
-        // Tier-based routing: 'lite' agents run on the CPU/Ollama path
-        // (aisha-task-lite), everything else on the GPU/vLLM path (aisha-task).
+        // Pick the ENTRY model from the task (complexity), not just the role:
+        // simple explicit action → lite (CPU), multi-step → full up front,
+        // ambiguous → role tier. Off → role tier (unchanged). The quality
+        // pipeline still escalates lite→full if a lite entry proves too hard.
+        const routed = routeEntryTier({
+          description,
+          roleTier,
+          enabled: process.env.AISHA_COMPLEXITY_ROUTING === 'true',
+        });
+        tier = routed.tier;
+        entryReason = routed.reason;
+        // 'lite' → CPU/Ollama (aisha-task-lite); else GPU/vLLM (aisha-task).
         // LiteLLM falls aisha-task-lite back to aisha-task if Ollama is down.
         baseModel = tier === 'lite' ? 'aisha-task-lite' : 'aisha-task';
-        logger.info(`[ExecuteTask] Routing via LiteLLM: ${baseModel} (tier=${tier})`);
+        logger.info(
+          `[ExecuteTask] Routing via LiteLLM: ${baseModel} (tier=${tier}, entry=${entryReason}, role=${roleTier})`,
+        );
       } else {
         client = getOpenAIClient();
         baseModel = agentProfile.model || 'gpt-4o-mini';
@@ -1002,6 +1019,8 @@ Provide a clear summary of what you did.`;
           actual_topic: topicLabel(actualFacets),
           actual_facets: actualFacets,
           tier,
+          role_tier: roleTier,
+          entry_reason: entryReason,
           tools_used: toolsUsed,
           is_multi_step: detectTaskType(description).isMultiStep,
           gate_pass: gatePass,
