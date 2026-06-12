@@ -36,7 +36,7 @@ TAR="$TAR"
 
 cd /c/Users/andre/Documents/GitHub/aishacrm-2
 
-tar czf "\$TAR" \
+tar czf "`$TAR" \
   --exclude="backend/node_modules" \
   --exclude="backend/.env*" \
   --exclude="backend/__tests__" \
@@ -52,11 +52,11 @@ tar czf "\$TAR" \
   backend/package.json backend/package-lock.json \
   shared/contracts braid-llm-kit ecosystem.config.cjs
 
-echo "  packed: \$(du -sh \$TAR | cut -f1)"
+echo "  packed: `$(du -sh `$TAR | cut -f1)"
 
-scp -i "\$KEY" -o StrictHostKeyChecking=no -o BatchMode=yes "\$TAR" "\${USER}@\${IP}:/tmp/"
-ssh -i "\$KEY" -o StrictHostKeyChecking=no -o BatchMode=yes "\${USER}@\${IP}" \
-  "cd \$DEST && tar xzf /tmp/aisha-worker.tar.gz && rm /tmp/aisha-worker.tar.gz"
+scp -i "`$KEY" -o StrictHostKeyChecking=no -o BatchMode=yes "`$TAR" "`${USER}@`${IP}:/tmp/"
+ssh -i "`$KEY" -o StrictHostKeyChecking=no -o BatchMode=yes "`${USER}@`${IP}" \
+  "cd `$DEST && tar xzf /tmp/aisha-worker.tar.gz && rm /tmp/aisha-worker.tar.gz"
 "@
 
 & $bash -c $script
