@@ -20,6 +20,7 @@
 'use strict';
 
 import { generateChatCompletion } from '../../backend/lib/aiEngine/llmClient.js';
+import { callLiteLLMVirtual } from '../../backend/lib/aiEngine/litellmClient.js';
 
 /**
  * Build compact catalog summaries for the system prompt.
@@ -103,25 +104,31 @@ export async function parseLLM(englishSource, catalogs, systemPrompt = null) {
     const summaries = buildCatalogSummaries(catalogs);
     const resolvedSystemPrompt = systemPrompt || buildSystemPrompt(summaries);
 
-    const provider = process.env.PEP_LLM_PROVIDER || 'local';
-    const model = process.env.PEP_LLM_MODEL || 'qwen2.5-coder:3b';
+    const messages = [
+      { role: 'system', content: resolvedSystemPrompt },
+      { role: 'user', content: englishSource },
+    ];
 
-    const opts = {
-      provider,
-      model,
-      messages: [
-        { role: 'system', content: resolvedSystemPrompt },
-        { role: 'user', content: englishSource },
-      ],
-      temperature: 0,
-    };
-
-    // When provider is "local", pass baseUrl for Ollama
-    if (provider === 'local') {
-      opts.baseUrl = process.env.LOCAL_LLM_BASE_URL || 'http://ollama:11434/v1';
+    let response;
+    const alias = process.env.PEP_LLM_ALIAS;
+    if (alias && process.env.LITELLM_ENABLED === 'true') {
+      // Route NL→IR compilation through a LiteLLM virtual alias — e.g.
+      // aisha-task-lite-plus → qwen2.5-coder:7b on the AI server (CPU, off-GPU),
+      // the model purpose-built for structured output. The alias's fallback chain
+      // (GPU → groq) preserves resilience for this customer-facing feature, and
+      // keeps compilation off paid cloud. callLiteLLMVirtual sends the bare alias
+      // (no provider/ prefix), which the provider/model path can't express.
+      response = await callLiteLLMVirtual({ model: alias, messages, temperature: 0 });
+    } else {
+      const provider = process.env.PEP_LLM_PROVIDER || 'local';
+      const model = process.env.PEP_LLM_MODEL || 'qwen2.5-coder:3b';
+      const opts = { provider, model, messages, temperature: 0 };
+      // When provider is "local", pass baseUrl for Ollama
+      if (provider === 'local') {
+        opts.baseUrl = process.env.LOCAL_LLM_BASE_URL || 'http://ollama:11434/v1';
+      }
+      response = await generateChatCompletion(opts);
     }
-
-    const response = await generateChatCompletion(opts);
 
     if (response.status !== 'success' || !response.content) {
       return {
