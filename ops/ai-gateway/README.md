@@ -1,63 +1,71 @@
-# AI Gateway (private Tailscale proxy to the AI Cloud Server)
+# AI Gateway (private Tailscale path to the AI Cloud Server)
 
-Lets the CRM's **staging/prod LiteLLM reach the home AI server privately**, so your
-agent team can run tasks on the box (vLLM full tier + Ollama lite tiers) instead of
-paying for cloud — without exposing the box to the public internet.
+Lets the CRM's **staging/prod LiteLLM reach the home AI server privately**, so the
+agent fleet runs on the box (vLLM full tier + Ollama lite tiers) instead of paying
+for cloud — without exposing the box to the public internet.
 
 See [`docs/ai-server/failover.md`](../../docs/ai-server/failover.md) for the why.
 
-## The problem it solves
+## The problem & the design
 
 The AI server is at home behind NAT, reachable only over **Tailscale**
-(`100.81.132.118`). The host VPSes are on the tailnet, but a **container** can't
-route to a tailnet IP (Tailscale is host-level). So staging/prod LiteLLM tries
-`100.81.132.118:8000`, fails, and silently falls back to cloud. This gateway joins
-the tailnet and proxies to the box, so LiteLLM reaches it by docker name.
+(`100.81.132.118`). Remote VPS hosts are on the tailnet, but a **container** can't
+route to a tailnet IP. So staging/prod LiteLLM tried `100.81.132.118:8000`, failed,
+and silently fell back to cloud.
+
+This stack fixes it (verified end-to-end on staging):
 
 ```
-LiteLLM (container) ──docker net──▶ ai-gateway (tailnet node) ──tailnet──▶ AI server
-   http://ai-gateway:8000/v1                                          vLLM :8000
-   http://ai-gateway:11434                                            Ollama :11434
+LiteLLM (container) ──docker net──▶ ai-gateway (Tailscale, kernel mode)
+                                        └─ socat sidecars (share its netns)
+   http://ai-gateway:8000/v1  ─────────▶  :8000 ─tailnet─▶ AI server vLLM :8000
+   http://ai-gateway:11434    ─────────▶  :11434 ─tailnet─▶ AI server Ollama :11434
 ```
 
-Private end-to-end. No public DNS, no open Ollama. If the gateway or box is down,
+- `ai-gateway` = a Tailscale node in **kernel mode** (`NET_ADMIN` + `/dev/net/tun`;
+  userspace mode can't TCP-forward). Joins the tailnet AND the env's docker network
+  as `ai-gateway`.
+- Two `socat` sidecars **share the gateway's network namespace** and forward :8000 /
+  :11434 to the box's tailnet IP (reachable from inside that netns).
+- **Not** `TS_DEST_IP` — that proxies tailnet-*inbound* traffic; we need docker→tailnet
+  *egress*, which the socat sidecars do.
+
+Private end-to-end. No public DNS, no open Ollama. If the gateway/box is down,
 LiteLLM's fallback chains still route to cloud (no hard dependency).
 
-## Auth: the existing OAuth client secret (no key to mint)
+## Auth: the Tailscale OAuth client secret (no expiry trap)
 
-The gateway authenticates to the tailnet using the **OAuth client secret you already
-have** — `TAILSCALE_CLIENT_SECRET` in `.env` (the `tskey-client-…` value). No minted
-auth key to manage, and the OAuth secret is long-lived, so there's no key-expiry trap.
-The `--advertise-tags=tag:crm` in the compose names the tag (required with OAuth auth).
-
-Set it in **Doppler** for each env that runs a gateway:
-- `stg_stg`: `TS_AUTHKEY = <TAILSCALE_CLIENT_SECRET value>`, `TS_GATEWAY_HOSTNAME = ai-gateway-staging`
-- `prd_prd`: `TS_AUTHKEY = <TAILSCALE_CLIENT_SECRET value>`, `TS_GATEWAY_HOSTNAME = ai-gateway-prod`
-
-(The OAuth client must own `tag:crm` — it's in the tailnet's `tagOwners`. Nodes auth'd
-via an OAuth secret are ephemeral, which is fine: the long-lived secret re-registers
-the node on every restart, and the gateway's *docker* name `ai-gateway` is what LiteLLM
-resolves — stable regardless of the node's churn.)
+`TS_AUTHKEY` = the **OAuth client secret** (`tskey-client-…`, your
+`TAILSCALE_CLIENT_SECRET`). It's long-lived, so unlike a 90-day auth key it can't
+strand the gateway. The OAuth client must have the **Auth Keys** write scope and own
+`tag:crm` (named via `--advertise-tags=tag:crm`). Set it as an env var on the env
+that runs the gateway.
 
 ## Deploy (per remote env)
 
-1. **Add this `docker-compose.yml` as a new Coolify app** on the right host
-   (staging→VPS-1, prod→Hetzner), on the **same network as that env's LiteLLM** so
-   the `ai-gateway` name resolves. (No public FQDN — it's internal only.)
-2. Deploy it. Confirm it joined the tailnet: it should appear in the Tailscale admin
-   console as `ai-gateway-staging` / `ai-gateway-prod` (tagged `tag:crm`).
-3. **Point LiteLLM at it** in that env's Doppler, then redeploy LiteLLM:
-   - `LOCAL_LLM_BASE_URL = http://ai-gateway:8000/v1`
-   - `LOCAL_LLM_OLLAMA_BASE_URL = http://ai-gateway:11434`
-4. **Verify** the box is now actually used: run an agent task, then check the AI
-   server monitor (`:7860` By Model / Audit) or `vllm:e2e_request_latency_seconds_count`
-   on the box — it should increment (it was stuck at cloud-only before).
+Set `TS_AUTHKEY`, `TS_GATEWAY_HOSTNAME` (`ai-gateway-staging`/`-prod`), and
+`AISHANET_NAME` (`aishacrm_aishanet-staging` for staging, `aishanet` for prod), then
+bring up this compose on the same docker network as that env's LiteLLM — either as a
+**Coolify "Docker Compose" app** (image-only, so Coolify deploys all 3 services,
+unlike a build app), or directly on the host. Then point LiteLLM at it in Doppler:
 
-## Verifying reachability from inside the env
+```
+LOCAL_LLM_BASE_URL        = http://ai-gateway:8000/v1
+LOCAL_LLM_OLLAMA_BASE_URL = http://ai-gateway:11434
+```
+and redeploy the LiteLLM app.
+
+> **Current state:** staging is deployed as standalone `docker run` containers
+> (`ai-gateway-staging` + `ai-gw-8000` + `ai-gw-11434`, `--restart unless-stopped`)
+> and verified — `aisha-task` via LiteLLM hits the box's vLLM (counter climbs). They
+> should be re-deployed from this compose (Coolify app) for clean management. Prod is
+> pending (needs this stack deployed on Hetzner).
+
+## Verify
 
 From the LiteLLM container (or any container on the same network):
 ```sh
-wget -qO- --timeout=5 http://ai-gateway:8000/health || echo UNREACHABLE
+wget -qO- --timeout=8 http://ai-gateway:8000/health    # vLLM reachable (rc 0)
 ```
-`UNREACHABLE` ⇒ the gateway isn't joined to the tailnet (check `TS_AUTHKEY`/tag) or
-isn't on the same docker network as the caller.
+Then run an agent task and watch the box's `vllm:e2e_request_latency_seconds_count`
+(on the AI server) climb — it was stuck at cloud-only before.
