@@ -30,6 +30,42 @@ export const ROLES = Object.values(AgentRoles);
  * @param {string} [tenant_id] - Optional tenant ID for scoped agent
  * @returns {Object} Full agent profile conforming to Agent schema
  */
+// Per-role env var that overrides the agent's execution tier ('lite' | 'full').
+// Mirrors the AISHA_*_MODEL naming already used for per-role model overrides.
+const MODEL_TIER_ENV = {
+  [AgentRoles.OPS_MANAGER]: 'AISHA_OPS_MODEL_TIER',
+  [AgentRoles.SALES_MANAGER]: 'AISHA_SALES_MODEL_TIER',
+  [AgentRoles.CLIENT_SERVICES_EXPERT]: 'AISHA_CS_EXPERT_MODEL_TIER',
+  [AgentRoles.PROJECT_MANAGER]: 'AISHA_PM_MODEL_TIER',
+  [AgentRoles.MARKETING_MANAGER]: 'AISHA_MKT_MODEL_TIER',
+  [AgentRoles.CUSTOMER_SERVICE_MANAGER]: 'AISHA_CS_MODEL_TIER',
+};
+
+// Built-in per-role tier default. Conservative pilot: only the customer service
+// manager (mechanical CRUD + notes, no reasoning-heavy ops) runs on the lite
+// (CPU/Ollama) tier out of the box. The lite tier falls back to the GPU tier in
+// LiteLLM, so a struggling small model degrades rather than fails. Widen the
+// lite set per role via the AISHA_*_MODEL_TIER env vars after measuring
+// tool-call accuracy — no code change required.
+const MODEL_TIER_DEFAULT = {
+  [AgentRoles.CUSTOMER_SERVICE_MANAGER]: 'lite',
+};
+
+/**
+ * Resolve an agent role's execution tier.
+ * Precedence: per-role env → global AISHA_DEFAULT_MODEL_TIER env → per-role
+ * built-in default → 'full'. Only 'lite' and 'full' are honored; anything else
+ * falls through to 'full'.
+ */
+function resolveModelTier(role) {
+  const raw =
+    process.env[MODEL_TIER_ENV[role]] ||
+    process.env.AISHA_DEFAULT_MODEL_TIER ||
+    MODEL_TIER_DEFAULT[role] ||
+    'full';
+  return raw === 'lite' ? 'lite' : 'full';
+}
+
 export function getDefaultAgentProfile(role, tenant_id = null) {
   const id = generateAgentId(role, tenant_id);
   const escalation_rules = DefaultEscalationRules[role] || [];
@@ -47,6 +83,10 @@ export function getDefaultAgentProfile(role, tenant_id = null) {
       avatar: '🤖',
       color: '#6366f1',
       capabilities: [],
+      // Execution tier: 'lite' → aisha-task-lite (CPU/Ollama), 'full' → aisha-task
+      // (GPU/vLLM). Consumed by taskWorkers when LITELLM_ENABLED. Spread into every
+      // role via ...base.metadata; override per role with AISHA_*_MODEL_TIER.
+      model_tier: resolveModelTier(role),
       limits: {
         max_tokens_per_request: 4096,
         max_requests_per_minute: 60,

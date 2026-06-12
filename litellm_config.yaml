@@ -47,6 +47,38 @@ model_list:
       api_base: 'os.environ/LOCAL_LLM_BASE_URL'
       api_key: 'os.environ/LOCAL_LLM_API_KEY'
 
+  # Lite agentic task tier — low-tool / low-reasoning agent roles (model_tier:'lite').
+  # Runs on the SAME AI Server (HP Omen) as vLLM, but on the CPU via Ollama, so it
+  # never contends for the GPU's VRAM (vLLM owns ~14.8/16 GB). Ollama is forced
+  # CPU-only on that box (CUDA_VISIBLE_DEVICES=""). NOT a docker-compose service —
+  # the CRM compose stack runs on VPS/Hetzner, not the AI Server.
+  - model_name: aisha-task-lite
+    litellm_params:
+      model: 'ollama_chat/qwen2.5:3b'
+      api_base: 'os.environ/LOCAL_LLM_OLLAMA_BASE_URL'
+
+  # Lite-PLUS tier — bigger CPU model (Qwen2.5-Coder-7B) on the SAME AI Server.
+  # Still CPU-only (no GPU contention); intended as the middle escalation rung
+  # (lite 3B → lite-plus 7B → full 14B GPU) and for structured/JSON-heavy tasks.
+  # Slower than 3B on CPU (~8-15s) — async/background use, not interactive.
+  - model_name: aisha-task-lite-plus
+    litellm_params:
+      model: 'ollama_chat/qwen2.5-coder:7b'
+      api_base: 'os.environ/LOCAL_LLM_OLLAMA_BASE_URL'
+
+  # General 7B (CPU) — a general-purpose alternative to the coder model for prose.
+  - model_name: aisha-lite-7b
+    litellm_params:
+      model: 'ollama_chat/qwen2.5:7b'
+      api_base: 'os.environ/LOCAL_LLM_OLLAMA_BASE_URL'
+
+  # Heavy CPU tier — full Qwen2.5-14B on CPU (~20-40s). Free but slow; for
+  # non-urgent background work where the GPU 14B is busy. Async only.
+  - model_name: aisha-cpu-14b
+    litellm_params:
+      model: 'ollama_chat/qwen2.5:14b'
+      api_base: 'os.environ/LOCAL_LLM_OLLAMA_BASE_URL'
+
   # Document/image extraction — must be vision-capable (gpt-4o sees images)
   - model_name: aisha-vision
     litellm_params:
@@ -80,6 +112,12 @@ router_settings:
     # LiteLLM falls back to these. Provider-wildcard fallbacks below do NOT cover aliases.
     - aisha-mcp: ['openai/gpt-4o']
     - aisha-task: ['groq/llama-3.3-70b-versatile']
+    # Lite tier degrades to the GPU tier first (still private/local), then groq.
+    # So a slow/down Ollama never hard-fails a task.
+    - aisha-task-lite: ['aisha-task', 'groq/llama-3.3-70b-versatile']
+    - aisha-task-lite-plus: ['aisha-task', 'groq/llama-3.3-70b-versatile']
+    - aisha-lite-7b: ['aisha-task', 'groq/llama-3.3-70b-versatile']
+    - aisha-cpu-14b: ['aisha-task', 'groq/llama-3.3-70b-versatile']
     - aisha-summary: ['groq/llama-3.3-70b-versatile']
     - aisha-workflow: ['groq/llama-3.3-70b-versatile']
     - aisha-whatsapp: ['openai/gpt-4o']

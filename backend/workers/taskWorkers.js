@@ -26,6 +26,14 @@ import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
 import { appendAuditEntry } from '../lib/aiEngine/llmAuditLog.js';
+import {
+  detectTaskType,
+  detectIntents,
+  facetsFromTools,
+  topicLabel,
+  computeTopicMismatch,
+} from '../lib/quality/taskType.js';
+import { runGates } from '../lib/quality/gates.js';
 
 export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
@@ -574,6 +582,10 @@ Provide a clear summary of what you did.`;
       let iterations = 0;
       const MAX_ITERATIONS = 5;
       let finalResponse = null;
+      // Tools actually invoked across the agentic loop + total tokens — feeds the
+      // request monitor's "actual topic" (tools) and the topic-mismatch signal.
+      const toolsUsed = [];
+      let totalTokens = 0;
 
       // Route through LiteLLM when enabled (respects LLM_PROVIDER / per-tenant overrides),
       // fall back to direct OpenAI client for local dev without LiteLLM.
@@ -586,8 +598,13 @@ Provide a clear summary of what you did.`;
           apiKey: process.env.LITELLM_MASTER_KEY || 'no-key',
           baseURL: `${(process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '')}/v1`,
         });
-        model = 'aisha-task';
-        logger.info(`[ExecuteTask] Routing via LiteLLM: ${model}`);
+        // Tier-based routing: 'lite' agents run on the CPU/Ollama path
+        // (aisha-task-lite), everything else on the GPU/vLLM path (aisha-task).
+        // LiteLLM falls aisha-task-lite back to aisha-task if Ollama is down.
+        model = agentProfile.metadata?.model_tier === 'lite' ? 'aisha-task-lite' : 'aisha-task';
+        logger.info(
+          `[ExecuteTask] Routing via LiteLLM: ${model} (tier=${agentProfile.metadata?.model_tier || 'full'})`,
+        );
       } else {
         client = getOpenAIClient();
         model = agentProfile.model || 'gpt-4o-mini';
@@ -687,9 +704,15 @@ Provide a clear summary of what you did.`;
 
         const assistantMessage = choice.message;
         conversation.push(assistantMessage);
+        totalTokens += completion?.usage?.total_tokens || 0;
 
         // Check for tool calls
         const toolCalls = assistantMessage.tool_calls || [];
+
+        // Record the tools this turn invoked (for the request monitor's topic signal).
+        for (const tc of toolCalls) {
+          if (tc.function?.name) toolsUsed.push(tc.function.name);
+        }
 
         if (toolCalls.length === 0) {
           // No more tools to call - we're done
@@ -880,6 +903,75 @@ Provide a clear summary of what you did.`;
         finalResponse = `Task executed with ${iterations} iterations. Check tool execution logs for details.`;
       }
 
+      // ── Lite-tier quality pipeline — SHADOW MODE (observe only) ──────────────
+      // Phase 1 of docs/plans/2026-06-11-lite-tier-supervisor-refine.md. For
+      // lite-tier agents only, run task typing + deterministic gates and LOG the
+      // result. We never mutate finalResponse here; rule-fix/refine/escalate are
+      // later phases. Off unless LITE_QUALITY_PIPELINE_ENABLED=true. Fully
+      // wrapped so a gating error can never break task execution.
+      let gatePass = null; // null = pipeline didn't run (full tier or flag off)
+      let gateDefects = [];
+      if (
+        process.env.LITE_QUALITY_PIPELINE_ENABLED === 'true' &&
+        agentProfile?.metadata?.model_tier === 'lite'
+      ) {
+        try {
+          const { type: taskType, isMultiStep } = detectTaskType(description);
+          const gateResult = runGates(finalResponse, {
+            taskType,
+            taskDescription: description,
+            agentProfile,
+            limits: {},
+          });
+          gatePass = gateResult.pass;
+          gateDefects = gateResult.defects;
+          const defectSummary =
+            gateResult.defects.map((d) => `${d.gate}/${d.severity}`).join(',') || 'none';
+          logger.info(
+            `[LiteQuality:shadow] agent=${assignee} type=${taskType} multiStep=${isMultiStep} ` +
+              `model=${model} pass=${gateResult.pass} defects=${defectSummary}`,
+          );
+        } catch (qErr) {
+          logger.warn(`[LiteQuality:shadow] gate error (non-fatal): ${qErr.message}`);
+        }
+      }
+
+      // ── Request-monitor meta — ALWAYS computed (cheap, deterministic) ─────────
+      // Attached to the Bull job's return value so the AI-server monitor can read
+      // requested topic (from the description), actual topic (from the tools that
+      // fired), and a mismatch flag straight off the queue. Never throws.
+      let monitorMeta = null;
+      try {
+        const requestedIntents = detectIntents(description);
+        const actualFacets = facetsFromTools(toolsUsed);
+        const { mismatch, reasons } = computeTopicMismatch({
+          requestedIntents,
+          actualFacets,
+          gatePass,
+        });
+        monitorMeta = {
+          env: process.env.APP_ENV || 'dev',
+          agent: assignee,
+          role: agentRole,
+          model,
+          tier: agentProfile?.metadata?.model_tier || 'full',
+          requested_topic: topicLabel(requestedIntents),
+          requested_intents: requestedIntents,
+          actual_topic: topicLabel(actualFacets),
+          actual_facets: actualFacets,
+          tools_used: toolsUsed,
+          is_multi_step: detectTaskType(description).isMultiStep,
+          gate_pass: gatePass,
+          gate_defects: gateDefects.map((d) => ({ gate: d.gate, severity: d.severity })),
+          mismatch,
+          mismatch_reasons: reasons,
+          iterations,
+          total_tokens: totalTokens,
+        };
+      } catch (mErr) {
+        logger.warn(`[RequestMonitor] meta build error (non-fatal): ${mErr.message}`);
+      }
+
       // 8. Emit run_completed / task_completed
       emitRunFinished({
         run_id,
@@ -919,7 +1011,7 @@ Provide a clear summary of what you did.`;
       }
 
       logger.info(`[ExecuteTask] Task ${task_id} completed successfully`);
-      return { status: 'completed', result: finalResponse };
+      return { status: 'completed', result: finalResponse, meta: monitorMeta };
     } catch (err) {
       logger.error(`[ExecuteTask] Error: ${err.message}`, err);
 
