@@ -36,6 +36,17 @@ services:
       - TS_STATE_DIR=/var/lib/tailscale
     volumes:
       - ai-gateway-state:/var/lib/tailscale
+    healthcheck:
+      # The node must be authenticated AND connected to the tailnet. `tailscale status`
+      # exits non-zero when logged out (a missing/expired/invalid TS_AUTHKEY — the exact
+      # failure that took this red before) or while still coming up. Run-state alone
+      # misses "container up but not on the tailnet", so this gives Coolify/Dockhand a
+      # real liveness signal. start_period covers first-time auth + tailnet join.
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     networks:
       aishanet:
         aliases:
