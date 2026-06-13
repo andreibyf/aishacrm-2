@@ -19,6 +19,28 @@ import { getBackendUrl } from './backendUrl';
 
 const FINANCE_BASE_PATH = '/api/v2/finance';
 
+/**
+ * Tenant scoping (`x-tenant-id`) + the Supabase Bearer token the rest of the app
+ * sends. Finance previously used the `aisha_access` cookie alone, which works in dev
+ * (backend injects a mock superadmin when auth is absent) but 401s in staging/prod.
+ * Sending the Bearer authenticates Finance like every other client; cookie auth is
+ * kept (`credentials: 'include'`) as a fallback. Mirrors `finance.js` `buildHeaders`.
+ */
+async function buildHeaders(tenantId, extra = {}) {
+  const headers = { ...extra, 'x-tenant-id': tenantId };
+  try {
+    const { getAuthorizationHeader } = await import('@/api/functions');
+    const auth = await getAuthorizationHeader();
+    if (auth) headers.Authorization = auth;
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[finance] auth header lookup failed:', error?.message);
+    }
+    /* fall back to cookie auth (credentials:'include') */
+  }
+  return headers;
+}
+
 async function mutate(path, { tenantId, method = 'POST', body, signal } = {}) {
   if (!tenantId) {
     const err = new Error('finance writes client: tenant_id is required');
@@ -31,7 +53,7 @@ async function mutate(path, { tenantId, method = 'POST', body, signal } = {}) {
     method,
     credentials: 'include',
     signal,
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+    headers: await buildHeaders(tenantId, { 'Content-Type': 'application/json' }),
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));

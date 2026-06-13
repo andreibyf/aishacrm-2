@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Finance Ops — "Authentication required (401)" in staging/prod** (`src/api/finance.js`, `src/api/financeWrites.js`): the Finance clients authenticated with the `aisha_access` cookie + `x-tenant-id` only — **no `Authorization` Bearer**, unlike every other app client (which sends the Supabase session token via `getAuthorizationHeader()`). In dev this was masked because `validateTenant.js` injects a mock superadmin when auth is absent (`NODE_ENV === 'development'`); in staging/prod there's no such fallback, so the Finance request reached `validateTenantAccess` with no `req.user` → `authenticateRequest` falls through to anonymous → **401 "Authentication required"** while the rest of the app worked. Both clients now attach the Bearer token (a shared `buildHeaders` helper) alongside the existing `x-tenant-id` + `credentials:'include'` cookie fallback, authenticating Finance identically to every other feature. 4 new regression tests (Bearer attached when a session exists; cookie-only when not); existing 43 finance client tests unaffected.
+
 ### Security
 
 - **PEP — escape backslashes in PostgREST `or()` clause values** (`backend/routes/pep.js`): `filterToOrClause`'s value-quoter escaped `"`→`\"` but left literal backslashes untouched, so a value containing `\` could combine with the escaping to break out of the quoted segment (CodeQL: incomplete string escaping, alert 822). Now escapes `\`→`\\` before quotes and quotes any value containing a backslash. Tenant isolation is still ANDed separately, so this hardens the free-text OR path against malformed/crafted filter values. 23 pep filter/query tests pass.
