@@ -52,6 +52,29 @@ import { getBackendUrl } from './backendUrl';
 const FINANCE_BASE_PATH = '/api/v2/finance';
 
 /**
+ * Build request headers: tenant scoping (`x-tenant-id`) + the Supabase Bearer token
+ * that every other app client sends (`src/api/functions` `getAuthorizationHeader`).
+ *
+ * Finance previously authenticated with the `aisha_access` cookie alone. That works
+ * in dev — the backend injects a mock superadmin when auth is absent
+ * (`validateTenant.js`, `NODE_ENV === 'development'`) — but 401s in staging/prod,
+ * where there's no such fallback and the request carries no Bearer like the rest of
+ * the app does. Sending the Bearer authenticates Finance identically to every other
+ * client; `credentials: 'include'` is kept so cookie auth still works as a fallback.
+ */
+async function buildHeaders(tenantId, extra = {}) {
+  const headers = { ...extra, 'x-tenant-id': tenantId };
+  try {
+    const { getAuthorizationHeader } = await import('@/api/functions');
+    const auth = await getAuthorizationHeader();
+    if (auth) headers.Authorization = auth;
+  } catch {
+    /* no Supabase session — fall back to cookie auth (credentials:'include') */
+  }
+  return headers;
+}
+
+/**
  * Internal request helper. Throws structured errors on non-2xx.
  * Returns the unwrapped `data` field on success.
  *
@@ -76,9 +99,7 @@ async function request(path, { tenantId, signal } = {}) {
     method: 'GET',
     credentials: 'include',
     signal,
-    headers: {
-      'x-tenant-id': tenantId,
-    },
+    headers: await buildHeaders(tenantId),
   });
 
   // Parse JSON even on error so we can surface backend error codes/messages.
@@ -168,7 +189,7 @@ async function mutate(path, { tenantId, method = 'PUT', body, signal } = {}) {
     method,
     credentials: 'include',
     signal,
-    headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
+    headers: await buildHeaders(tenantId, { 'Content-Type': 'application/json' }),
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
