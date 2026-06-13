@@ -64,9 +64,10 @@ describe('routeEntryTier — enabled (task-dependent)', () => {
     assert.equal(route('log a call with the customer').tier, 'lite');
   });
 
-  it('keeps parallel actions joined by "and" on lite (difficulty handled by escalation)', () => {
-    const r = route('create an appointment and add a note');
-    assert.equal(r.tier, 'lite');
+  it('routes multi-tool tasks ("note + activity") to full — the 3B mis-tools and loops', () => {
+    const r = route('create a note and set up a meeting for tomorrow');
+    assert.equal(r.tier, 'full');
+    assert.match(r.reason, /^multi_tool:/);
     assert.ok(r.intents.includes('note'));
     assert.ok(r.intents.includes('activity'));
   });

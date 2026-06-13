@@ -56,11 +56,11 @@ const STRUCTURED_RE =
  * Decide the ENTRY tier for a task.
  *
  * Precedence when enabled:
- *   1. multi-step / sequenced   → 'full' (GPU) up front (not lite-appropriate)
- *   2. structured / JSON output → 'coder' (code-tuned 7B)
- *   3. maps to ≥1 Braid action  → 'lite' (3B; parallel "email + note" stays lite —
- *                                  difficulty is handled by the escalation ladder)
- *   4. maps to no tool action   → the role's configured tier (unchanged)
+ *   1. multi-step / sequenced     → 'full' (GPU) up front (not lite-appropriate)
+ *   2. structured / JSON output   → 'coder' (code-tuned 7B)
+ *   3. ≥2 distinct tool actions   → 'full' (multi-tool orchestration breaks the 3B)
+ *   4. exactly 1 tool action      → 'lite' (3B handles a single action well)
+ *   5. maps to no tool action     → the role's configured tier (unchanged)
  *
  * When disabled, always returns the role tier (no behavioral change).
  *
@@ -81,8 +81,17 @@ export function routeEntryTier({ description, roleTier = 'full', enabled = false
     return { tier: 'coder', reason: 'structured', intents };
   }
 
-  if (intents.length > 0) {
-    return { tier: 'lite', reason: `tooled:${intents.join('+')}`, intents };
+  // Multiple distinct tool actions ("note + activity") overwhelm the 3B — it
+  // mis-selects tools among the full agent toolset (~126 tools) and loops to the
+  // iteration cap without completing. Multi-tool orchestration needs the full
+  // model (verified: the 14B calls both tools cleanly in 2 iterations; the 3B
+  // does not). This overrides the earlier "parallel stays lite" assumption.
+  if (intents.length >= 2) {
+    return { tier: 'full', reason: `multi_tool:${intents.join('+')}`, intents };
+  }
+
+  if (intents.length === 1) {
+    return { tier: 'lite', reason: `tooled:${intents[0]}`, intents };
   }
 
   return { tier: roleTier, reason: 'untooled_role_default', intents };
