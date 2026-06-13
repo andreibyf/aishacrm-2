@@ -44,6 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | [DATABASE_REFERENCE.md](./docs/reference/DATABASE_REFERENCE.md)                                            | **⭐ LIVE REFERENCE** — All tables, columns, RLS policies (prod vs dev)                              |
 | [IDENTITY_MODEL.md](./docs/architecture/IDENTITY_MODEL.md)                                                 | **Contract** — users vs employees vs team_members; rules that prevent 4VD-44/53/54-class bugs        |
 | [DEPLOY_TOPOLOGY.md](./docs/architecture/DEPLOY_TOPOLOGY.md)                                               | VPS-1/VPS-2/Hetzner roles, Coolify app↔FQDN map, VPS-1 cap, Coolify v4 mutation quirks               |
+| [MODEL_ROUTING_MATRIX.md](./docs/architecture/MODEL_ROUTING_MATRIX.md)                                     | **Which model handles each task** — two routers, lite-tier ladder, orchestrate-vs-generate, cost ranges |
 | [PARALLEL_AGENTS.md](./docs/contributing/PARALLEL_AGENTS.md)                                               | **For AI agents** — fetch-before-claim, no force-push of main, Linear as cross-agent source of truth |
 
 **⚠️ IMPORTANT**: Before making ANY changes, read [COPILOT_PLAYBOOK.md](./docs/developer-docs/COPILOT_PLAYBOOK.md) for operational procedures, migration workflows, and critical lessons learned.
