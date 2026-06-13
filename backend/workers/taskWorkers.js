@@ -627,6 +627,10 @@ Provide a clear summary of what you did.`;
         `[ExecuteTask] Calling LLM with ${allowedTools.length} tools for agent ${assignee}`,
       );
 
+      // Task category for the monitor's Intent column — the requested topic from
+      // the description (email / note / activity / …), tagged on every LLM call.
+      const taskTopic = topicLabel(detectIntents(description));
+
       // The agentic loop, extracted so the quality pipeline can ESCALATE a lite
       // task by re-running it once on the full model. `model` here is the active
       // alias for this run; telemetry/monitor read it per-run.
@@ -665,6 +669,7 @@ Provide a clear summary of what you did.`;
                 provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
                 model,
                 nodeId: `worker:${assignee}`,
+                intent: taskTopic,
                 status: 'error',
                 durationMs: _dur,
                 error: llmErr.message,
@@ -695,6 +700,7 @@ Provide a clear summary of what you did.`;
               provider: _provider,
               model,
               nodeId: `worker:${assignee}`,
+              intent: taskTopic,
               status: 'success',
               durationMs: _dur,
               usage: completion?.usage,
@@ -1009,6 +1015,30 @@ Provide a clear summary of what you did.`;
         } catch (qErr) {
           logger.warn(`[LiteQuality] pipeline error (non-fatal): ${qErr.message}`);
         }
+      }
+
+      // ── Task-summary row for the LLM Monitor — one display-only entry per task
+      // carrying the quality outcome (gate pass/fail, escalation, final tier) and
+      // the aggregated tools. skipModelStats so it doesn't double-count per-model
+      // request counts; no usage so it doesn't double-count tokens.
+      try {
+        logLLMActivity({
+          tenantId: tenantRecord?.id || 'unknown',
+          capability: 'task_summary',
+          provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+          model,
+          nodeId: `task:${assignee}`,
+          intent: taskTopic,
+          status: 'success',
+          toolsCalled: toolsUsed,
+          tier,
+          gatePass,
+          escalated: pipelineMeta?.escalated ?? false,
+          escalateReason: pipelineMeta?.escalateReason || null,
+          skipModelStats: true,
+        });
+      } catch (_) {
+        /* telemetry must never break task execution */
       }
 
       // ── Request-monitor meta — ALWAYS computed (cheap, deterministic) ─────────

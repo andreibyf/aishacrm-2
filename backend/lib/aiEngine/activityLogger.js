@@ -250,6 +250,11 @@ export function logLLMActivity(entry) {
     intent: entry.intent || null,
     taskId: entry.taskId || null,
     requestId: entry.requestId || null,
+    // Lite-tier quality outcome (set on a task-summary entry; null on per-call rows).
+    tier: entry.tier || null,
+    gatePass: entry.gatePass ?? null,
+    escalated: entry.escalated ?? null,
+    escalateReason: entry.escalateReason || null,
   };
 
   activityLog.unshift(logEntry); // Add to front (newest first)
@@ -260,7 +265,9 @@ export function logLLMActivity(entry) {
   }
 
   // ── Per-model stats (for byModel breakdown in getLLMActivityStats) ──────────
-  {
+  // Task-summary rows (skipModelStats) are display-only — they carry the quality
+  // outcome but must not double-count toward per-model request counts.
+  if (!entry.skipModelStats) {
     const modelKey = logEntry.model || 'unknown';
     let ms = modelStats.get(modelKey);
     if (!ms) {
