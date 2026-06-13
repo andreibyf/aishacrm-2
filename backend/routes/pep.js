@@ -233,16 +233,18 @@ async function resolveEmployeeToken(token, tenantId, supabase) {
 
   let query = supabase
     .from('employees')
-    .select('id, first_name, last_name, full_name')
+    .select('id, first_name, last_name')
     .eq('tenant_id', tenantId)
     .limit(5);
 
   if (parts.length === 1) {
-    // Single name — search first or last
+    // Single name — match first or last
     query = query.or(`first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`);
   } else {
-    // Two-part name
-    query = query.ilike('full_name', `%${name}%`);
+    // Multi-part name — match first + last (employees has no full_name column).
+    const first = parts[0];
+    const last = parts.slice(1).join(' ');
+    query = query.ilike('first_name', `%${first}%`).ilike('last_name', `%${last}%`);
   }
 
   const { data, error } = await query;
