@@ -269,13 +269,32 @@ async function resolveEmployeeToken(token, tenantId, supabase) {
 
 // ─── Supabase operator mapping ────────────────────────────────────────────────
 
+// Escape LIKE/ILIKE wildcards so a literal value isn't treated as a pattern.
+function escapeLike(v) {
+  return String(v).replace(/([\\%_])/g, '\\$1');
+}
+
+// A value is free text (→ case-insensitive match) only when it's a string that
+// is NOT a uuid, date, or number — ilike on uuid/date/numeric columns errors,
+// and exact match is correct for those.
+function isFreeText(value) {
+  return (
+    typeof value === 'string' &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) &&
+    !/^\d{4}-\d{2}-\d{2}/.test(value) &&
+    !/^-?\d+(\.\d+)?$/.test(value)
+  );
+}
+
 function applyFilter(query, filter) {
   const { field, operator, value } = filter;
+  // Free-text equality is case-insensitive so "job title owner" matches "Owner".
+  const textEq = isFreeText(value);
   switch (operator) {
     case 'eq':
-      return query.eq(field, value);
+      return textEq ? query.ilike(field, escapeLike(value)) : query.eq(field, value);
     case 'neq':
-      return query.neq(field, value);
+      return textEq ? query.not(field, 'ilike', escapeLike(value)) : query.neq(field, value);
     case 'gt':
       return query.gt(field, value);
     case 'gte':
@@ -285,7 +304,7 @@ function applyFilter(query, filter) {
     case 'lte':
       return query.lte(field, value);
     case 'contains':
-      return query.ilike(field, `%${value}%`);
+      return query.ilike(field, `%${escapeLike(value)}%`);
     case 'in':
       return query.in(field, Array.isArray(value) ? value : [value]);
     case 'is_null':
@@ -296,6 +315,8 @@ function applyFilter(query, filter) {
       return query;
   }
 }
+
+export { isFreeText, applyFilter };
 
 // ─── Router ──────────────────────────────────────────────────────────────────
 
