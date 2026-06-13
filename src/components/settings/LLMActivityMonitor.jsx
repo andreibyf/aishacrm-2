@@ -183,7 +183,9 @@ export default function LLMActivityMonitor() {
       const res = await fetch(`${BACKEND_URL}/api/system/llm-stats/by-model`);
       if (!res.ok) throw new Error('Failed to fetch by-model stats');
       const data = await res.json();
-      setByModelData(data.data || null);
+      // The endpoint wraps the map as { byModel, generatedAt, bufferEntries };
+      // the table iterates model→stats, so unwrap to the byModel map.
+      setByModelData(data.data?.byModel || null);
     } catch (err) {
       console.error('[LLMActivityMonitor] By-model error:', err);
     }
@@ -196,15 +198,13 @@ export default function LLMActivityMonitor() {
       if (auditFilters.model) params.set('model', auditFilters.model);
       if (auditFilters.status) params.set('status', auditFilters.status);
 
-      const [auditRes, modelsRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/system/llm-audit?${params}`),
-        fetch(`${BACKEND_URL}/api/system/llm-audit?limit=0`), // models come in the meta
-      ]);
-      if (!auditRes.ok) throw new Error('Failed to fetch audit log');
-      const auditData = await auditRes.json();
-      setAuditEntries(auditData.data || []);
-      setAuditModels(auditData.models || []);
-      setAuditStats(auditData.stats || null);
+      const res = await fetch(`${BACKEND_URL}/api/system/llm-audit?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch audit log');
+      const auditData = await res.json();
+      // Endpoint wraps as data: { count, entries, stats, models } — unwrap each.
+      setAuditEntries(auditData.data?.entries || []);
+      setAuditModels(auditData.data?.models || []);
+      setAuditStats(auditData.data?.stats || null);
     } catch (err) {
       console.error('[LLMActivityMonitor] Audit error:', err);
     }
@@ -502,6 +502,7 @@ export default function LLMActivityMonitor() {
                     <th className="px-3 py-2 text-left font-medium">Model</th>
                     <th className="px-3 py-2 text-left font-medium">Capability</th>
                     <th className="px-3 py-2 text-left font-medium">Intent</th>
+                    <th className="px-3 py-2 text-left font-medium">Quality</th>
                     <th className="px-3 py-2 text-left font-medium">Tools Called</th>
                     <th className="px-3 py-2 text-left font-medium">Node ID</th>
                     <th className="px-3 py-2 text-left font-medium">Tenant</th>
@@ -512,7 +513,7 @@ export default function LLMActivityMonitor() {
                 <tbody className="divide-y divide-border">
                   {entries.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
                         <div>No LLM activity recorded yet.</div>
                         <div className="text-xs mt-1">
@@ -561,6 +562,28 @@ export default function LLMActivityMonitor() {
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {entry.gatePass == null && !entry.escalated ? (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {entry.gatePass === true && (
+                                  <Badge className="bg-green-700 text-white text-xs">pass</Badge>
+                                )}
+                                {entry.gatePass === false && (
+                                  <Badge className="bg-amber-700 text-white text-xs">fail</Badge>
+                                )}
+                                {entry.escalated && (
+                                  <Badge
+                                    className="bg-purple-700 text-white text-xs"
+                                    title={entry.escalateReason || 'escalated'}
+                                  >
+                                    ↑ {entry.tier || 'full'}
+                                  </Badge>
+                                )}
+                              </div>
                             )}
                           </td>
                           <td className="px-3 py-2">
@@ -697,29 +720,29 @@ export default function LLMActivityMonitor() {
                             </span>
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.avg_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.avg_ms)}`}
                           >
-                            {formatDuration(m.latency.avg_ms)}
+                            {formatDuration(m.latency?.avg_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p50_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p50_ms)}`}
                           >
-                            {formatDuration(m.latency.p50_ms)}
+                            {formatDuration(m.latency?.p50_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p95_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p95_ms)}`}
                           >
-                            {formatDuration(m.latency.p95_ms)}
+                            {formatDuration(m.latency?.p95_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p99_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p99_ms)}`}
                           >
-                            {formatDuration(m.latency.p99_ms)}
+                            {formatDuration(m.latency?.p99_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.max_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.max_ms)}`}
                           >
-                            {formatDuration(m.latency.max_ms)}
+                            {formatDuration(m.latency?.max_ms)}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-blue-400">
                             {m.tokens.prompt?.toLocaleString() ?? '-'}

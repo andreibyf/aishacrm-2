@@ -196,6 +196,15 @@ export default function BraidSDKMonitor() {
   const [selectedTool, setSelectedTool] = useState(null);
   const [period, setPeriod] = useState('24h');
   const isMountedRef = useRef(true);
+  const detailRef = useRef(null);
+
+  // The tool detail panel renders below the (up to 15-row) list, so a click on a
+  // top row would otherwise show nothing visible — scroll it into view.
+  useEffect(() => {
+    if (selectedTool && detailRef.current) {
+      detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedTool]);
 
   useEffect(() => {
     return () => {
@@ -582,7 +591,7 @@ export default function BraidSDKMonitor() {
 
           {/* Tool Detail Panel */}
           {selectedTool && (
-            <Card className="mt-4">
+            <Card className="mt-4" ref={detailRef}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">
