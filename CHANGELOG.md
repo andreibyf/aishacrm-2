@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **PEP — escape backslashes in PostgREST `or()` clause values** (`backend/routes/pep.js`): `filterToOrClause`'s value-quoter escaped `"`→`\"` but left literal backslashes untouched, so a value containing `\` could combine with the escaping to break out of the quoted segment (CodeQL: incomplete string escaping, alert 822). Now escapes `\`→`\\` before quotes and quotes any value containing a backslash. Tenant isolation is still ANDed separately, so this hardens the free-text OR path against malformed/crafted filter values. 23 pep filter/query tests pass.
+
 ### Fixed
 
 - **Task worker — stop the lite-tier duplicate-tool loop (per-run idempotency)** (`backend/lib/agents/toolCallDedup.js` (new), `backend/workers/taskWorkers.js`, + tests): after the entity-binding fix let note creation succeed, a single "create a note" task created **three identical notes** — the 3B re-issued the same `create_note` at iterations 2/3/4 (not recognizing it was done), and the agentic loop executed each one, stalling ~40s per turn until `MAX_ITERATIONS`. Added a per-run `MutationGuard`: it records each successful **mutating** call's signature (tool name + key-order-stable args, **excluding system/injected keys** — `tenant_id`, `created_by`, `id`, timestamps) and, on an identical later call, **skips re-execution** (no duplicate record) and returns an "already completed — do not repeat" result to nudge the model to finish. (Excluding `tenant_id` was essential: weak models set it `null` on the first call then the real id afterward — Braid overrides it anyway — so including it made two identical creates look different and let the duplicate through; caught via live signature instrumentation.) When an entire iteration's mutating calls are all duplicates, the loop **ends early** instead of burning iterations. Reads/searches are never deduped (repeating them is harmless/may be intentional). Scoped to the task worker — NOT the shared `executeBraidTool` — so multi-entity AiSHA chat is unaffected. 8 unit tests; ESLint clean.

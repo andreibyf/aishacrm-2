@@ -379,7 +379,10 @@ function filterToOrClause(filter) {
   const { field, operator, value } = filter;
   const q = (v) => {
     const s = String(v);
-    return /[,()"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
+    // Quote values containing structural chars; escape backslashes BEFORE quotes so a
+    // literal backslash can't combine with the escaping to break out of the value
+    // (CodeQL: incomplete string escaping).
+    return /[,()"\\]/.test(s) ? `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : s;
   };
   const textEq = isFreeText(value);
   switch (operator) {
