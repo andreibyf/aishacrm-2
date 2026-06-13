@@ -198,15 +198,13 @@ export default function LLMActivityMonitor() {
       if (auditFilters.model) params.set('model', auditFilters.model);
       if (auditFilters.status) params.set('status', auditFilters.status);
 
-      const [auditRes, modelsRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/system/llm-audit?${params}`),
-        fetch(`${BACKEND_URL}/api/system/llm-audit?limit=0`), // models come in the meta
-      ]);
-      if (!auditRes.ok) throw new Error('Failed to fetch audit log');
-      const auditData = await auditRes.json();
-      setAuditEntries(auditData.data || []);
-      setAuditModels(auditData.models || []);
-      setAuditStats(auditData.stats || null);
+      const res = await fetch(`${BACKEND_URL}/api/system/llm-audit?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch audit log');
+      const auditData = await res.json();
+      // Endpoint wraps as data: { count, entries, stats, models } — unwrap each.
+      setAuditEntries(auditData.data?.entries || []);
+      setAuditModels(auditData.data?.models || []);
+      setAuditStats(auditData.data?.stats || null);
     } catch (err) {
       console.error('[LLMActivityMonitor] Audit error:', err);
     }
