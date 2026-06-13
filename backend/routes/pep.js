@@ -602,12 +602,18 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
 
       // Build the Supabase query
       // tenant_id is ALWAYS injected — cannot be overridden by IR.
-      // Projection: when the IR lists fields, select only those (+ id for the row
-      // key); otherwise select all. Denied columns are stripped from the result
-      // regardless, below.
+      // Projection: when the IR lists fields, select only those; add `id` for the
+      // row key ONLY for entity targets (views may have no `id` column — e.g.
+      // v_account_related_people uses person_id/account_id). Otherwise select all.
+      // Denied columns are stripped from the result regardless, below.
       const projected =
         Array.isArray(ir.fields) && ir.fields.length
-          ? Array.from(new Set(['id', ...ir.fields.filter((f) => !isDeniedColumn(f))]))
+          ? Array.from(
+              new Set([
+                ...(ir.target_kind === 'entity' ? ['id'] : []),
+                ...ir.fields.filter((f) => !isDeniedColumn(f)),
+              ]),
+            )
           : null;
       let query = supabase
         .from(ir.table || ir.target)
