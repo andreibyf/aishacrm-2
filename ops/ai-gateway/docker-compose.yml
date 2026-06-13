@@ -1,24 +1,7 @@
-# AI Gateway — private Tailscale egress proxy to the home AI Cloud Server.
-#
-# WHY: the AI server (vLLM :8000 + Ollama :11434) is at home behind NAT, reachable
-# only over Tailscale. A container on a remote VPS can't route to a tailnet IP
-# (Tailscale is host-level), so staging/prod LiteLLM silently served from cloud.
-# This stack joins the tailnet and forwards LiteLLM's requests to the box.
-#
-# HOW IT WORKS (verified):
-#   - `ai-gateway` is a Tailscale node in KERNEL mode (needs NET_ADMIN + /dev/net/tun;
-#     userspace mode can't do plain TCP forwarding). It joins the tailnet AND the
-#     env's docker network with the alias `ai-gateway`.
-#   - Two `socat` sidecars SHARE the gateway's network namespace and listen on
-#     :8000 / :11434, forwarding to the box's tailnet IP (100.81.132.118). They can
-#     reach it because they're inside the gateway's (tailnet-connected) netns.
-#   NOTE: Tailscale's TS_DEST_IP is the WRONG tool here — it proxies tailnet-INBOUND
-#   traffic to a dest; we need docker→tailnet EGRESS, which the socat sidecars do.
-#
-# DEPLOY: one stack per remote env (staging on VPS-1, prod on Hetzner), on the SAME
-# external network as that env's LiteLLM. Set the network + env vars below. LiteLLM
-# then reaches the box at http://ai-gateway:8000/v1 and http://ai-gateway:11434.
-# If the gateway/box is down, LiteLLM's cloud fallbacks still apply.
+# AI Gateway: Tailscale egress proxy so staging/prod LiteLLM can reach the home AI
+# box (vLLM + Ollama) over the tailnet. Design, rationale, and deploy steps live in
+# README.md in this directory. Kept comment-light on purpose: Coolify's compose
+# reader shells the file, so shell metacharacters in comments break the repo-read.
 
 services:
   ai-gateway:
@@ -29,19 +12,13 @@ services:
     devices:
       - /dev/net/tun
     environment:
-      # Tailscale OAuth client SECRET (tskey-client-…) — long-lived, no expiry trap.
       - TS_AUTHKEY=${TS_AUTHKEY}
-      - TS_USERSPACE=false # kernel mode, required for TCP forwarding
+      - TS_USERSPACE=false
       - TS_EXTRA_ARGS=--advertise-tags=tag:crm --hostname=${TS_GATEWAY_HOSTNAME:-ai-gateway}
       - TS_STATE_DIR=/var/lib/tailscale
     volumes:
       - ai-gateway-state:/var/lib/tailscale
     healthcheck:
-      # The node must be authenticated AND connected to the tailnet. `tailscale status`
-      # exits non-zero when logged out (a missing/expired/invalid TS_AUTHKEY — the exact
-      # failure that took this red before) or while still coming up. Run-state alone
-      # misses "container up but not on the tailnet", so this gives Coolify/Dockhand a
-      # real liveness signal. start_period covers first-time auth + tailnet join.
       test: ["CMD", "tailscale", "status"]
       interval: 30s
       timeout: 10s
@@ -55,7 +32,7 @@ services:
   ai-gw-vllm:
     image: alpine/socat
     restart: unless-stopped
-    network_mode: "service:ai-gateway" # share the gateway's tailnet-connected netns
+    network_mode: "service:ai-gateway"
     command: TCP-LISTEN:8000,fork,reuseaddr TCP:100.81.132.118:8000
     depends_on:
       - ai-gateway
@@ -72,8 +49,6 @@ volumes:
   ai-gateway-state:
 
 networks:
-  # The env's existing LiteLLM network. Set ${AISHANET_NAME} to the real docker
-  # network name: staging = aishacrm_aishanet-staging, prod = aishanet.
   aishanet:
     external: true
     name: ${AISHANET_NAME}
