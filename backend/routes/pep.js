@@ -140,6 +140,9 @@ DATE RELATIVE TOKENS (use these for date values, wrapped in double braces — ne
 EMPLOYEE NAMES: if a filter references a person's name for the assigned_to field,
 use value format: "{{resolve_employee: <name>}}"
 
+TEAM NAMES: if a filter references a team name (e.g. "Sales Team A") for the
+assigned_to_team field, use value format: "{{resolve_team: <name>}}"
+
 ENTITY RELATIONSHIPS:
 ${relationshipSummary}
 
@@ -216,6 +219,11 @@ function resolveFilterValue(value, _tenantId, _supabase) {
     return { resolved: true, value, needsEmployeeLookup: true };
   }
 
+  // Team token — deferred (needs async lookup against the teams table)
+  if (value.startsWith('{{resolve_team:')) {
+    return { resolved: true, value, needsTeamLookup: true };
+  }
+
   return { resolved: true, value };
 }
 
@@ -266,6 +274,39 @@ async function resolveEmployeeToken(token, tenantId, supabase) {
     };
   }
 
+  return { resolved: true, value: data[0].id };
+}
+
+// Resolve a {{resolve_team: <name>}} token to a teams.id. assigned_to_team is a
+// uuid FK, so a report "in Sales Team A" needs the team name → id lookup.
+async function resolveTeamToken(token, tenantId, supabase) {
+  if (!token.startsWith('{{resolve_team:') || !token.endsWith('}}')) {
+    return { resolved: false, reason: `Invalid team token: ${token}` };
+  }
+  const name = token.slice(15, -2).trim(); // slice off '{{resolve_team:' and '}}'
+  if (!name) return { resolved: false, reason: `Empty team name in token: ${token}` };
+
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name')
+    .eq('tenant_id', tenantId)
+    .ilike('name', `%${name}%`)
+    .limit(5);
+
+  if (error) {
+    logger.warn({ err: error }, '[PEP] Team lookup failed');
+    return { resolved: false, reason: `Team lookup failed: ${error.message}` };
+  }
+  if (!data || data.length === 0) {
+    return { resolved: false, reason: `Could not find team: ${name}` };
+  }
+  if (data.length > 1) {
+    const names = data.map((t) => t.name).join(', ');
+    return {
+      resolved: false,
+      reason: `Ambiguous team name "${name}" — matches: ${names}. Please be more specific.`,
+    };
+  }
   return { resolved: true, value: data[0].id };
 }
 
@@ -495,6 +536,15 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
             return res.status(400).json({ status: 'error', message: empResult.reason });
           }
           resolvedValue = empResult.value;
+        }
+
+        // Team token needs async lookup
+        if (valResult.needsTeamLookup) {
+          const teamResult = await resolveTeamToken(filter.value, tenant_id, supabase);
+          if (!teamResult.resolved) {
+            return res.status(400).json({ status: 'error', message: teamResult.reason });
+          }
+          resolvedValue = teamResult.value;
         }
 
         resolvedFilters.push({ ...filter, value: resolvedValue });
