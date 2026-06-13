@@ -32,8 +32,11 @@ async function buildHeaders(tenantId, extra = {}) {
     const { getAuthorizationHeader } = await import('@/api/functions');
     const auth = await getAuthorizationHeader();
     if (auth) headers.Authorization = auth;
-  } catch {
-    /* no Supabase session — fall back to cookie auth (credentials:'include') */
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[finance] auth header lookup failed:', error?.message);
+    }
+    /* fall back to cookie auth (credentials:'include') */
   }
   return headers;
 }
