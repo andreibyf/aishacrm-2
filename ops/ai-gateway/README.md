@@ -60,6 +60,12 @@ and redeploy the LiteLLM app.
 > and verified — `aisha-task` via LiteLLM hits the box's vLLM (counter climbs). They
 > should be re-deployed from this compose (Coolify app) for clean management. Prod is
 > pending (needs this stack deployed on Hetzner).
+>
+> **Healthcheck:** the compose defines one on `ai-gateway` (`tailscale status`), so
+> Coolify/Dockhand surfaces "up but not on the tailnet" (e.g. a bad/expired `TS_AUTHKEY`)
+> instead of only run-state. The standalone container has no probe — add it on the next
+> `docker run` with:
+> `--health-cmd "tailscale status" --health-interval 30s --health-timeout 10s --health-retries 3 --health-start-period 45s`
 
 ## Verify
 
