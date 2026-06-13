@@ -1,51 +1,68 @@
-# AI Gateway — private Tailscale proxy to the home AI Cloud Server.
+# AI Gateway — private Tailscale egress proxy to the home AI Cloud Server.
 #
 # WHY: the AI server (vLLM :8000 + Ollama :11434) is at home behind NAT, reachable
-# only over Tailscale. The CRM's LiteLLM runs in a container on a remote VPS, and a
-# container can't reach a tailnet IP directly (Tailscale is host-level). This tiny
-# Tailscale-userspace container joins the tailnet and 1:1-proxies to the AI server,
-# so LiteLLM reaches the box *privately* (no public exposure) by docker name.
+# only over Tailscale. A container on a remote VPS can't route to a tailnet IP
+# (Tailscale is host-level), so staging/prod LiteLLM silently served from cloud.
+# This stack joins the tailnet and forwards LiteLLM's requests to the box.
 #
-# DEPLOY: one instance per remote environment, on the SAME docker network as that
-# env's LiteLLM:
-#   - staging  -> VPS-1   (network: the one staging-litellm is on)
-#   - prod     -> Hetzner (network: the one prod's litellm is on)
-# Dev needs none — it reaches the box directly over the LAN.
+# HOW IT WORKS (verified):
+#   - `ai-gateway` is a Tailscale node in KERNEL mode (needs NET_ADMIN + /dev/net/tun;
+#     userspace mode can't do plain TCP forwarding). It joins the tailnet AND the
+#     env's docker network with the alias `ai-gateway`.
+#   - Two `socat` sidecars SHARE the gateway's network namespace and listen on
+#     :8000 / :11434, forwarding to the box's tailnet IP (100.81.132.118). They can
+#     reach it because they're inside the gateway's (tailnet-connected) netns.
+#   NOTE: Tailscale's TS_DEST_IP is the WRONG tool here — it proxies tailnet-INBOUND
+#   traffic to a dest; we need docker→tailnet EGRESS, which the socat sidecars do.
 #
-# After deploy, point LiteLLM at the gateway (in each env's Doppler):
-#   LOCAL_LLM_BASE_URL        = http://ai-gateway:8000/v1
-#   LOCAL_LLM_OLLAMA_BASE_URL = http://ai-gateway:11434
-#
-# If the gateway (or the box) is down, LiteLLM's existing fallback chains still
-# route to cloud — so this does not re-introduce a hard dependency on the box.
+# DEPLOY: one stack per remote env (staging on VPS-1, prod on Hetzner), on the SAME
+# external network as that env's LiteLLM. Set the network + env vars below. LiteLLM
+# then reaches the box at http://ai-gateway:8000/v1 and http://ai-gateway:11434.
+# If the gateway/box is down, LiteLLM's cloud fallbacks still apply.
 
 services:
   ai-gateway:
     image: tailscale/tailscale:latest
     restart: unless-stopped
-    hostname: ${TS_GATEWAY_HOSTNAME:-ai-gateway-staging}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
     environment:
-      # Authenticate with the existing Tailscale OAuth client SECRET directly
-      # (the tskey-client-... value, = TAILSCALE_CLIENT_SECRET). No minted auth key
-      # to manage, and the OAuth secret is long-lived so there's no key-expiry trap.
-      # When using an OAuth secret you MUST name the tag via --advertise-tags below.
+      # Tailscale OAuth client SECRET (tskey-client-…) — long-lived, no expiry trap.
       - TS_AUTHKEY=${TS_AUTHKEY}
-      # Userspace networking: no /dev/net/tun, no NET_ADMIN needed.
-      - TS_USERSPACE=true
-      # 1:1 proxy target = the AI server's tailnet IP. Any port hitting this
-      # container is forwarded to 100.81.132.118:<sameport> over the tailnet,
-      # so :8000 -> vLLM and :11434 -> Ollama.
-      - TS_DEST_IP=100.81.132.118
-      - TS_EXTRA_ARGS=--advertise-tags=tag:crm --hostname=${TS_GATEWAY_HOSTNAME:-ai-gateway-staging}
+      - TS_USERSPACE=false # kernel mode, required for TCP forwarding
+      - TS_EXTRA_ARGS=--advertise-tags=tag:crm --hostname=${TS_GATEWAY_HOSTNAME:-ai-gateway}
       - TS_STATE_DIR=/var/lib/tailscale
     volumes:
       - ai-gateway-state:/var/lib/tailscale
     networks:
-      - default
+      aishanet:
+        aliases:
+          - ai-gateway
+
+  ai-gw-vllm:
+    image: alpine/socat
+    restart: unless-stopped
+    network_mode: "service:ai-gateway" # share the gateway's tailnet-connected netns
+    command: TCP-LISTEN:8000,fork,reuseaddr TCP:100.81.132.118:8000
+    depends_on:
+      - ai-gateway
+
+  ai-gw-ollama:
+    image: alpine/socat
+    restart: unless-stopped
+    network_mode: "service:ai-gateway"
+    command: TCP-LISTEN:11434,fork,reuseaddr TCP:100.81.132.118:11434
+    depends_on:
+      - ai-gateway
 
 volumes:
   ai-gateway-state:
 
-# NOTE: in Coolify, attach this service to the SAME network as the env's LiteLLM
-# so `ai-gateway` resolves by name. If they're on different Coolify apps, put both
-# on a shared network (or `docker network connect`).
+networks:
+  # The env's existing LiteLLM network. Set ${AISHANET_NAME} to the real docker
+  # network name: staging = aishacrm_aishanet-staging, prod = aishanet.
+  aishanet:
+    external: true
+    name: ${AISHANET_NAME}
