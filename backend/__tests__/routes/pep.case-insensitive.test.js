@@ -5,7 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isFreeText, applyFilter } from '../../routes/pep.js';
+import { isFreeText, applyFilter, filterToOrClause } from '../../routes/pep.js';
 
 describe('isFreeText', () => {
   it('treats plain strings as free text', () => {
@@ -67,5 +67,37 @@ describe('applyFilter — case-insensitive text equality', () => {
   it('contains stays ILIKE with wildcards', () => {
     const q = applyFilter(mockQuery(), { field: 'email', operator: 'contains', value: 'acme' });
     assert.deepEqual(q._calls.at(-1), ['ilike', 'email', '%acme%']);
+  });
+});
+
+describe('filterToOrClause (OR logic)', () => {
+  it('renders comparisons and case-insensitive text for a PostgREST or() clause', () => {
+    assert.equal(
+      filterToOrClause({ field: 'amount', operator: 'lt', value: '50000' }),
+      'amount.lt.50000',
+    );
+    assert.equal(
+      filterToOrClause({ field: 'stage', operator: 'eq', value: 'Proposal' }),
+      'stage.ilike.Proposal', // free-text eq → ilike
+    );
+    assert.equal(
+      filterToOrClause({
+        field: 'assigned_to',
+        operator: 'eq',
+        value: '123e4567-e89b-12d3-a456-426614174000',
+      }),
+      'assigned_to.eq.123e4567-e89b-12d3-a456-426614174000', // uuid stays exact
+    );
+    assert.equal(
+      filterToOrClause({ field: 'email', operator: 'contains', value: 'acme' }),
+      'email.ilike.%acme%',
+    );
+  });
+
+  it('quotes values that contain structural characters', () => {
+    assert.equal(
+      filterToOrClause({ field: 'name', operator: 'eq', value: 'Acme, Inc' }),
+      'name.ilike."Acme, Inc"',
+    );
   });
 });

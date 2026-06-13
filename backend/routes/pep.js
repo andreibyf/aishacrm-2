@@ -106,8 +106,21 @@ OUTPUT SHAPE (on success):
   ],
   "sort": { "field": "<field>", "direction": "asc" | "desc" } | null,
   "limit": <number> | null,
-  "fields": ["<field>", ...] | null
+  "fields": ["<field>", ...] | null,
+  "filter_join": "and" | "or"
 }
+
+FILTER LOGIC (the "filter_join"):
+- "and" (default): a row must match ALL filters ("contacts in Texas AND created this month").
+- "or": a row matches ANY filter ("under $50000 OR in the Proposal stage" → filter_join:"or").
+- Read the connective in the request literally — "or" → "or", "and"/comma → "and".
+
+COMPARISON WORDS → operators:
+- "under" / "below" / "less than" / "fewer than" → lt
+- "over" / "above" / "more than" / "greater than" → gt
+- "at most" / "up to" / "no more than" / "or less" → lte
+- "at least" / "no less than" / "or more" → gte
+- "is" / "equals" / "=" → eq
 
 FIELD PROJECTION (the "fields" array):
 - If the request asks for SPECIFIC columns ("only first name, last name, telephone, and email"),
@@ -359,7 +372,43 @@ function applyFilter(query, filter) {
   }
 }
 
-export { isFreeText, applyFilter };
+// Render a resolved filter as a PostgREST or() clause (`field.op.value`),
+// mirroring applyFilter's case-insensitive text handling. Used when filter_join
+// is 'or'. Values containing structural chars are double-quoted.
+function filterToOrClause(filter) {
+  const { field, operator, value } = filter;
+  const q = (v) => {
+    const s = String(v);
+    return /[,()"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s;
+  };
+  const textEq = isFreeText(value);
+  switch (operator) {
+    case 'eq':
+      return textEq ? `${field}.ilike.${q(value)}` : `${field}.eq.${q(value)}`;
+    case 'neq':
+      return textEq ? `${field}.not.ilike.${q(value)}` : `${field}.neq.${q(value)}`;
+    case 'gt':
+      return `${field}.gt.${q(value)}`;
+    case 'gte':
+      return `${field}.gte.${q(value)}`;
+    case 'lt':
+      return `${field}.lt.${q(value)}`;
+    case 'lte':
+      return `${field}.lte.${q(value)}`;
+    case 'contains':
+      return `${field}.ilike.${q(`%${value}%`)}`;
+    case 'in':
+      return `${field}.in.(${(Array.isArray(value) ? value : [value]).map(q).join(',')})`;
+    case 'is_null':
+      return `${field}.is.null`;
+    case 'is_not_null':
+      return `${field}.not.is.null`;
+    default:
+      return null;
+  }
+}
+
+export { isFreeText, applyFilter, filterToOrClause };
 
 // ─── Router ──────────────────────────────────────────────────────────────────
 
@@ -463,6 +512,7 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         sort: parsed.sort || null,
         limit: parsed.limit || null,
         fields: parsed.fields || null,
+        filter_join: parsed.filter_join || 'and',
       };
 
       const resolved = resolveQuery(queryFrame, effCatalog);
@@ -564,9 +614,15 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         .select(projected ? projected.join(',') : '*')
         .eq('tenant_id', tenant_id);
 
-      // Apply resolved filters
-      for (const filter of resolvedFilters) {
-        query = applyFilter(query, filter);
+      // Apply resolved filters. filter_join 'or' → a single PostgREST or() clause
+      // (ANDed with the tenant_id above); otherwise chain each filter as AND.
+      if (ir.filter_join === 'or' && resolvedFilters.length > 1) {
+        const orClause = resolvedFilters.map(filterToOrClause).filter(Boolean).join(',');
+        if (orClause) query = query.or(orClause);
+      } else {
+        for (const filter of resolvedFilters) {
+          query = applyFilter(query, filter);
+        }
       }
 
       // Apply sort

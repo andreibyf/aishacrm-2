@@ -294,6 +294,7 @@ function emitQuery(resolvedQuery, sourceText) {
             : null,
         sort: resolvedQuery.sort || null,
         limit: resolvedQuery.limit,
+        filter_join: resolvedQuery.filter_join === 'or' ? 'or' : 'and',
         assign: 'results',
       },
     ],

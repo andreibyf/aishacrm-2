@@ -183,6 +183,7 @@ export async function parseLLM(englishSource, catalogs, systemPrompt = null) {
         sort: parsed.sort || null,
         limit: parsed.limit || null,
         fields: Array.isArray(parsed.fields) ? parsed.fields : null,
+        filter_join: parsed.filter_join === 'or' ? 'or' : 'and',
         raw: englishSource,
       };
     }

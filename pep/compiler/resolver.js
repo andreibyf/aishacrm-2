@@ -630,6 +630,7 @@ function resolveQuery(queryFrame, entityCatalog) {
     limit,
     fields: resolvedFields,
     field_warnings: fieldWarnings,
+    filter_join: queryFrame.filter_join === 'or' ? 'or' : 'and',
   };
 }
 
