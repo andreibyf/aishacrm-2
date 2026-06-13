@@ -1,6 +1,6 @@
 # Lite-tier quality pipeline: gate → classify → refine → escalate
 
-**Status:** Draft (plan only — no code yet)
+**Status:** Phases 1–4 implemented on `feat/llm-lite-tier-routing` (ships dark, `LITE_QUALITY_MODE=shadow` by default). Phase 5 (sampled offline supervision + dashboard) remains.
 **Depends on:** `feat/llm-lite-tier-routing` (lite tier: `aisha-task-lite` → `qwen2.5:3b` CPU/Ollama; `model_tier` in `agentRegistry.js`; selection in `taskWorkers.js`)
 **Author:** Claude (2026-06-11), at Dre's request
 
@@ -162,6 +162,12 @@ Per-task-type gate config lives in code (`gates.js`), not env — gates are logi
 5. **Sampled supervision + dashboards.** Offline Claude judge at sample rate; extend the LLM monitor UI with pipeline metrics (pass-rate, escalation-rate, defect mix).
 
 Each phase is independently shippable and flag-gated; phases 1–2 carry no behavioral risk (shadow).
+
+**Implemented: phases 1–4** (2026-06-11/12, branch `feat/llm-lite-tier-routing`). Phase 1 shipped the deterministic `taskType.js` / `gates.js` / `ruleFixers.js` in shadow. Phases 2–4 add `relevanceCritic.js`, `refiner.js`, `escalator.js`, `runQualityPipeline.js` plus the `taskWorkers.js` integration: the agentic loop is now re-runnable so the orchestrator can rule-fix → refine on lite → **escalate (re-run once on `aisha-task`)**. All flag-gated behind `LITE_QUALITY_PIPELINE_ENABLED` + `LITE_QUALITY_MODE` (default `shadow`, no behavioral change until flipped to `active`).
+
+**Pre-flight complexity router + 3-rung ladder** (2026-06-12, `complexityRouter.js`): realizes Decision 2 ("multi-step → full up front") and the `3B→7B→14B-GPU` ladder, making model selection task-dependent and graduated rather than binary role-based. `routeEntryTier()` is **tool-aligned** (keys off `detectIntents`/`TOOL_FACETS`, same taxonomy as the Braid tools + the monitor): multi-step → full (GPU); structured/JSON → coder-7B; ≥1 Braid tool action → lite (3B); untooled → role tier. `TIER_ALIAS`/`escalationTarget` define the ladder — a CPU rung that hits a capability gap re-runs the task on the next rung up (3B→7B→GPU; coder→GPU), keeping work off the GPU until the CPU tiers genuinely can't do it (bounded ≤2 hops). `taskWorkers` runs the pipeline on every CPU tier and climbs the ladder in a bounded loop. Opt-in via `AISHA_COMPLEXITY_ROUTING` (default off). `nomic-embed-text` is embeddings-only; `qwen2.5:14b`-CPU is a manual async tier (no cheap auto-select signal).
+
+89 unit tests across the quality dir. **Remaining: phase 5** (sampled offline Claude judge at `LITE_SUPERVISOR_SAMPLE_RATE` + monitor dashboard for pass-rate / escalation-rate / defect mix).
 
 ---
 

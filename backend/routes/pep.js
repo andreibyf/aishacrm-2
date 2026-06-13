@@ -18,6 +18,7 @@ import { authenticateRequest } from '../middleware/authenticate.js';
 import { resolveQuery } from '../../pep/compiler/resolver.js';
 import { emitQuery, buildConfirmationString } from '../../pep/compiler/emitter.js';
 import { parseLLM } from '../../pep/compiler/llmParser.js';
+import { buildEffectiveCatalog, isDeniedColumn } from '../../pep/compiler/schemaCatalog.js';
 import { fetchEntityLabels, generateEntityLabelPrompt } from '../lib/entityLabelInjector.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,15 +50,15 @@ const entityCatalog = parseYaml(readFileSync(join(CATALOGS_DIR, 'entity-catalog.
 
 // ─── Query system prompt for Phase 3 LLM parse ───────────────────────────────
 
-function buildQuerySystemPrompt() {
-  const entityLines = (entityCatalog.entities || [])
+function buildQuerySystemPrompt(catalog) {
+  const entityLines = (catalog.entities || [])
     .filter((e) => Array.isArray(e.fields))
     .map((e) => {
       const fieldNames = e.fields.map((f) => f.name).join(', ');
       return `${e.id} (table: ${e.aisha_binding?.table}) — fields: ${fieldNames}`;
     });
 
-  const viewLines = (entityCatalog.views || []).map((v) => {
+  const viewLines = (catalog.views || []).map((v) => {
     const colNames = v.columns.map((c) => c.name).join(', ');
     return `${v.id} — columns: ${colNames}`;
   });
@@ -104,8 +105,32 @@ OUTPUT SHAPE (on success):
     { "field": "<field>", "operator": "<operator>", "value": "<value>" }
   ],
   "sort": { "field": "<field>", "direction": "asc" | "desc" } | null,
-  "limit": <number> | null
+  "limit": <number> | null,
+  "fields": ["<field>", ...] | null,
+  "filter_join": "and" | "or"
 }
+
+FILTER LOGIC (the "filter_join"):
+- "and" (default): a row must match ALL filters ("contacts in Texas AND created this month").
+- "or": a row matches ANY filter ("under $50000 OR in the Proposal stage" → filter_join:"or").
+- Read the connective in the request literally — "or" → "or", "and"/comma → "and".
+
+COMPARISON WORDS → operators:
+- "under" / "below" / "less than" / "fewer than" → lt
+- "over" / "above" / "more than" / "greater than" → gt
+- "at most" / "up to" / "no more than" / "or less" → lte
+- "at least" / "no less than" / "or more" → gte
+- "is" / "equals" / "=" → eq
+
+FIELD PROJECTION (the "fields" array):
+- If the request asks for SPECIFIC columns ("only first name, last name, telephone, and email"),
+  list those columns in "fields" using the catalog field names for the identified entity.
+- Map natural phrasing to catalog field names: "telephone"/"telephone number"/"phone number" → phone,
+  "email address" → email, "mobile number"/"cell" → mobile, "first name" → first_name, "last name" → last_name.
+- If a requested projection column is not in the entity's field list, OMIT just that column from "fields"
+  — do NOT set match:false and do NOT report it as ambiguous. A projection is a display preference, not a filter.
+- If no specific columns are requested ("report of my contacts"), set "fields": null (all columns returned).
+- "fields" never affects which ENTITY is chosen — the entity comes from the explicit noun ("contacts" → Contact).
 
 VALID ENTITIES AND FIELDS:
 ${entityLines.join('\n')}
@@ -115,13 +140,21 @@ ${viewLines.join('\n')}
 
 VALID OPERATORS: eq, neq, gt, gte, lt, lte, contains, in, is_null, is_not_null
 
-DATE RELATIVE TOKENS (use these for date values, wrapped in double braces):
-{{date: today}}, {{date: start_of_month}}, {{date: end_of_month}},
+DATE RELATIVE TOKENS (use these for date values, wrapped in double braces — never invent others):
+{{date: today}}, {{date: start_of_week}}, {{date: end_of_week}},
+{{date: start_of_last_week}}, {{date: end_of_last_week}},
+{{date: start_of_month}}, {{date: end_of_month}},
 {{date: start_of_quarter}}, {{date: end_of_quarter}}, {{date: start_of_year}},
 {{date: last_N_days}} where N is a number (e.g. {{date: last_30_days}})
+- "this week" → created between start_of_week and end_of_week.
+- "last week" / "past week" → created between start_of_last_week and end_of_last_week.
+- "last N days" → use a single gte filter with last_N_days.
 
 EMPLOYEE NAMES: if a filter references a person's name for the assigned_to field,
 use value format: "{{resolve_employee: <name>}}"
+
+TEAM NAMES: if a filter references a team name (e.g. "Sales Team A") for the
+assigned_to_team field, use value format: "{{resolve_team: <name>}}"
 
 ENTITY RELATIONSHIPS:
 ${relationshipSummary}
@@ -146,8 +179,20 @@ function resolveDateToken(token) {
   const quarterStart = new Date(y, quarter * 3, 1);
   const quarterEnd = new Date(y, quarter * 3 + 3, 0, 23, 59, 59, 999);
 
+  // Monday-based week boundaries (current + previous week).
+  const d0 = now.getDate();
+  const mondayOffset = (now.getDay() + 6) % 7; // days since this week's Monday
+  const startOfWeek = new Date(y, m, d0 - mondayOffset);
+  const endOfWeek = new Date(y, m, d0 - mondayOffset + 6, 23, 59, 59, 999);
+  const startOfLastWeek = new Date(y, m, d0 - mondayOffset - 7);
+  const endOfLastWeek = new Date(y, m, d0 - mondayOffset - 1, 23, 59, 59, 999);
+
   const map = {
     today: now.toISOString().split('T')[0],
+    start_of_week: startOfWeek.toISOString().split('T')[0],
+    end_of_week: endOfWeek.toISOString().split('T')[0],
+    start_of_last_week: startOfLastWeek.toISOString().split('T')[0],
+    end_of_last_week: endOfLastWeek.toISOString().split('T')[0],
     start_of_month: new Date(y, m, 1).toISOString().split('T')[0],
     end_of_month: new Date(y, m + 1, 0).toISOString().split('T')[0],
     start_of_quarter: quarterStart.toISOString().split('T')[0],
@@ -187,6 +232,11 @@ function resolveFilterValue(value, _tenantId, _supabase) {
     return { resolved: true, value, needsEmployeeLookup: true };
   }
 
+  // Team token — deferred (needs async lookup against the teams table)
+  if (value.startsWith('{{resolve_team:')) {
+    return { resolved: true, value, needsTeamLookup: true };
+  }
+
   return { resolved: true, value };
 }
 
@@ -204,16 +254,18 @@ async function resolveEmployeeToken(token, tenantId, supabase) {
 
   let query = supabase
     .from('employees')
-    .select('id, first_name, last_name, full_name')
+    .select('id, first_name, last_name')
     .eq('tenant_id', tenantId)
     .limit(5);
 
   if (parts.length === 1) {
-    // Single name — search first or last
+    // Single name — match first or last
     query = query.or(`first_name.ilike.%${parts[0]}%,last_name.ilike.%${parts[0]}%`);
   } else {
-    // Two-part name
-    query = query.ilike('full_name', `%${name}%`);
+    // Multi-part name — match first + last (employees has no full_name column).
+    const first = parts[0];
+    const last = parts.slice(1).join(' ');
+    query = query.ilike('first_name', `%${first}%`).ilike('last_name', `%${last}%`);
   }
 
   const { data, error } = await query;
@@ -238,15 +290,67 @@ async function resolveEmployeeToken(token, tenantId, supabase) {
   return { resolved: true, value: data[0].id };
 }
 
+// Resolve a {{resolve_team: <name>}} token to a teams.id. assigned_to_team is a
+// uuid FK, so a report "in Sales Team A" needs the team name → id lookup.
+async function resolveTeamToken(token, tenantId, supabase) {
+  if (!token.startsWith('{{resolve_team:') || !token.endsWith('}}')) {
+    return { resolved: false, reason: `Invalid team token: ${token}` };
+  }
+  const name = token.slice(15, -2).trim(); // slice off '{{resolve_team:' and '}}'
+  if (!name) return { resolved: false, reason: `Empty team name in token: ${token}` };
+
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name')
+    .eq('tenant_id', tenantId)
+    .ilike('name', `%${name}%`)
+    .limit(5);
+
+  if (error) {
+    logger.warn({ err: error }, '[PEP] Team lookup failed');
+    return { resolved: false, reason: `Team lookup failed: ${error.message}` };
+  }
+  if (!data || data.length === 0) {
+    return { resolved: false, reason: `Could not find team: ${name}` };
+  }
+  if (data.length > 1) {
+    const names = data.map((t) => t.name).join(', ');
+    return {
+      resolved: false,
+      reason: `Ambiguous team name "${name}" — matches: ${names}. Please be more specific.`,
+    };
+  }
+  return { resolved: true, value: data[0].id };
+}
+
 // ─── Supabase operator mapping ────────────────────────────────────────────────
+
+// Escape LIKE/ILIKE wildcards so a literal value isn't treated as a pattern.
+function escapeLike(v) {
+  return String(v).replace(/([\\%_])/g, '\\$1');
+}
+
+// A value is free text (→ case-insensitive match) only when it's a string that
+// is NOT a uuid, date, or number — ilike on uuid/date/numeric columns errors,
+// and exact match is correct for those.
+function isFreeText(value) {
+  return (
+    typeof value === 'string' &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) &&
+    !/^\d{4}-\d{2}-\d{2}/.test(value) &&
+    !/^-?\d+(\.\d+)?$/.test(value)
+  );
+}
 
 function applyFilter(query, filter) {
   const { field, operator, value } = filter;
+  // Free-text equality is case-insensitive so "job title owner" matches "Owner".
+  const textEq = isFreeText(value);
   switch (operator) {
     case 'eq':
-      return query.eq(field, value);
+      return textEq ? query.ilike(field, escapeLike(value)) : query.eq(field, value);
     case 'neq':
-      return query.neq(field, value);
+      return textEq ? query.not(field, 'ilike', escapeLike(value)) : query.neq(field, value);
     case 'gt':
       return query.gt(field, value);
     case 'gte':
@@ -256,7 +360,7 @@ function applyFilter(query, filter) {
     case 'lte':
       return query.lte(field, value);
     case 'contains':
-      return query.ilike(field, `%${value}%`);
+      return query.ilike(field, `%${escapeLike(value)}%`);
     case 'in':
       return query.in(field, Array.isArray(value) ? value : [value]);
     case 'is_null':
@@ -267,6 +371,47 @@ function applyFilter(query, filter) {
       return query;
   }
 }
+
+// Render a resolved filter as a PostgREST or() clause (`field.op.value`),
+// mirroring applyFilter's case-insensitive text handling. Used when filter_join
+// is 'or'. Values containing structural chars are double-quoted.
+function filterToOrClause(filter) {
+  const { field, operator, value } = filter;
+  const q = (v) => {
+    const s = String(v);
+    // Quote values containing structural chars; escape backslashes BEFORE quotes so a
+    // literal backslash can't combine with the escaping to break out of the value
+    // (CodeQL: incomplete string escaping).
+    return /[,()"\\]/.test(s) ? `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : s;
+  };
+  const textEq = isFreeText(value);
+  switch (operator) {
+    case 'eq':
+      return textEq ? `${field}.ilike.${q(value)}` : `${field}.eq.${q(value)}`;
+    case 'neq':
+      return textEq ? `${field}.not.ilike.${q(value)}` : `${field}.neq.${q(value)}`;
+    case 'gt':
+      return `${field}.gt.${q(value)}`;
+    case 'gte':
+      return `${field}.gte.${q(value)}`;
+    case 'lt':
+      return `${field}.lt.${q(value)}`;
+    case 'lte':
+      return `${field}.lte.${q(value)}`;
+    case 'contains':
+      return `${field}.ilike.${q(`%${value}%`)}`;
+    case 'in':
+      return `${field}.in.(${(Array.isArray(value) ? value : [value]).map(q).join(',')})`;
+    case 'is_null':
+      return `${field}.is.null`;
+    case 'is_not_null':
+      return `${field}.not.is.null`;
+    default:
+      return null;
+  }
+}
+
+export { isFreeText, applyFilter, filterToOrClause };
 
 // ─── Router ──────────────────────────────────────────────────────────────────
 
@@ -327,8 +472,11 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
     }
 
     try {
-      // Build the Phase 3 query system prompt and enrich with tenant custom labels
-      let systemPrompt = buildQuerySystemPrompt();
+      // Build the effective catalog (entity bindings from YAML, fields derived
+      // from the live schema minus the denylist), then the Phase 3 query system
+      // prompt, enriched with tenant custom labels.
+      const effCatalog = await buildEffectiveCatalog(entityCatalog);
+      let systemPrompt = buildQuerySystemPrompt(effCatalog);
 
       // Inject tenant custom entity labels (e.g., "Potential Leads" → bizdev_sources)
       try {
@@ -338,13 +486,16 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
           systemPrompt += labelPrompt;
         }
       } catch (labelErr) {
-        logger.warn({ err: labelErr.message }, '[PEP] Failed to fetch entity labels, using defaults');
+        logger.warn(
+          { err: labelErr.message },
+          '[PEP] Failed to fetch entity labels, using defaults',
+        );
       }
 
       // Use the LLM parser with the query-oriented system prompt
       const parsed = await parseLLM(
         source,
-        { entity_catalog: entityCatalog, capability_catalog: {} },
+        { entity_catalog: effCatalog, capability_catalog: {} },
         systemPrompt,
       );
 
@@ -363,9 +514,11 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         filters: parsed.filters || [],
         sort: parsed.sort || null,
         limit: parsed.limit || null,
+        fields: parsed.fields || null,
+        filter_join: parsed.filter_join || 'and',
       };
 
-      const resolved = resolveQuery(queryFrame, entityCatalog);
+      const resolved = resolveQuery(queryFrame, effCatalog);
       if (!resolved.resolved) {
         return res.status(200).json({
           status: 'clarification_required',
@@ -438,19 +591,47 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
           resolvedValue = empResult.value;
         }
 
+        // Team token needs async lookup
+        if (valResult.needsTeamLookup) {
+          const teamResult = await resolveTeamToken(filter.value, tenant_id, supabase);
+          if (!teamResult.resolved) {
+            return res.status(400).json({ status: 'error', message: teamResult.reason });
+          }
+          resolvedValue = teamResult.value;
+        }
+
         resolvedFilters.push({ ...filter, value: resolvedValue });
       }
 
       // Build the Supabase query
-      // tenant_id is ALWAYS injected — cannot be overridden by IR
+      // tenant_id is ALWAYS injected — cannot be overridden by IR.
+      // Projection: when the IR lists fields, select only those; add `id` for the
+      // row key ONLY for entity targets (views may have no `id` column — e.g.
+      // v_account_related_people uses person_id/account_id). Otherwise select all.
+      // Denied columns are stripped from the result regardless, below.
+      const projected =
+        Array.isArray(ir.fields) && ir.fields.length
+          ? Array.from(
+              new Set([
+                ...(ir.target_kind === 'entity' ? ['id'] : []),
+                ...ir.fields.filter((f) => !isDeniedColumn(f)),
+              ]),
+            )
+          : null;
       let query = supabase
         .from(ir.table || ir.target)
-        .select('*')
+        .select(projected ? projected.join(',') : '*')
         .eq('tenant_id', tenant_id);
 
-      // Apply resolved filters
-      for (const filter of resolvedFilters) {
-        query = applyFilter(query, filter);
+      // Apply resolved filters. filter_join 'or' → a single PostgREST or() clause
+      // (ANDed with the tenant_id above); otherwise chain each filter as AND.
+      if (ir.filter_join === 'or' && resolvedFilters.length > 1) {
+        const orClause = resolvedFilters.map(filterToOrClause).filter(Boolean).join(',');
+        if (orClause) query = query.or(orClause);
+      } else {
+        for (const filter of resolvedFilters) {
+          query = applyFilter(query, filter);
+        }
       }
 
       // Apply sort
@@ -472,11 +653,20 @@ export default function createPepRoutes(_pgPool, _supabaseOverride = null) {
         });
       }
 
+      // Strip denied columns (metadata, tenant_id, embeddings, …) from every row
+      // so internal fields never leave the API — even when no projection was set.
+      const sanitize = (row) => {
+        const out = {};
+        for (const k of Object.keys(row)) if (!isDeniedColumn(k)) out[k] = row[k];
+        return out;
+      };
+      const rows = (data || []).map(sanitize);
+
       return res.status(200).json({
         status: 'success',
         data: {
-          rows: data || [],
-          count: (data || []).length,
+          rows,
+          count: rows.length,
           target: ir.target,
           target_kind: ir.target_kind,
           executed_at: new Date().toISOString(),

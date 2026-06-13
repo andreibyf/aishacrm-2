@@ -287,8 +287,14 @@ function emitQuery(resolvedQuery, sourceText) {
           operator: f.operator,
           value: f.value,
         })),
+        // Optional column projection (null = all non-denied fields).
+        fields:
+          Array.isArray(resolvedQuery.fields) && resolvedQuery.fields.length
+            ? resolvedQuery.fields
+            : null,
         sort: resolvedQuery.sort || null,
         limit: resolvedQuery.limit,
+        filter_join: resolvedQuery.filter_join === 'or' ? 'or' : 'and',
         assign: 'results',
       },
     ],

@@ -22,6 +22,8 @@ import {
   TOOL_ACCESS_TOKEN,
 } from '../lib/braidIntegration-v2.js';
 import { getAgentProfile } from '../lib/agents/agentRegistry.js';
+import { bindOriginatingEntity } from '../lib/agents/entityBinding.js';
+import { MutationGuard, isMutatingTool } from '../lib/agents/toolCallDedup.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
@@ -33,7 +35,13 @@ import {
   topicLabel,
   computeTopicMismatch,
 } from '../lib/quality/taskType.js';
-import { runGates } from '../lib/quality/gates.js';
+import { runQualityPipeline } from '../lib/quality/runQualityPipeline.js';
+import {
+  routeEntryTier,
+  aliasForTier,
+  escalationTarget,
+  CPU_TIERS,
+} from '../lib/quality/complexityRouter.js';
 
 export function startTaskWorkers() {
   logger.info('[TaskWorkers] Starting Ops Dispatch and Execute workers');
@@ -578,361 +586,515 @@ Provide a clear summary of what you did.`;
         { role: 'user', content: description },
       ];
 
-      let conversation = [...messages];
-      let iterations = 0;
-      const MAX_ITERATIONS = 5;
-      let finalResponse = null;
-      // Tools actually invoked across the agentic loop + total tokens — feeds the
-      // request monitor's "actual topic" (tools) and the topic-mismatch signal.
-      const toolsUsed = [];
-      let totalTokens = 0;
-
       // Route through LiteLLM when enabled (respects LLM_PROVIDER / per-tenant overrides),
       // fall back to direct OpenAI client for local dev without LiteLLM.
       const temperature = agentProfile.temperature || 0.2;
+      const roleTier = agentProfile.metadata?.model_tier || 'full';
+      // Effective entry tier — the complexity router may override the role tier
+      // based on the task itself (opt-in via AISHA_COMPLEXITY_ROUTING).
+      let tier = roleTier;
+      let entryReason = 'role_default';
       let client;
-      let model;
+      let baseModel;
 
       if (process.env.LITELLM_ENABLED === 'true') {
         client = new OpenAI({
           apiKey: process.env.LITELLM_MASTER_KEY || 'no-key',
           baseURL: `${(process.env.LITELLM_BASE_URL || 'http://litellm:4000').replace(/\/$/, '')}/v1`,
         });
-        // Tier-based routing: 'lite' agents run on the CPU/Ollama path
-        // (aisha-task-lite), everything else on the GPU/vLLM path (aisha-task).
-        // LiteLLM falls aisha-task-lite back to aisha-task if Ollama is down.
-        model = agentProfile.metadata?.model_tier === 'lite' ? 'aisha-task-lite' : 'aisha-task';
+        // Pick the ENTRY model from the task (complexity), not just the role:
+        // simple explicit action → lite (CPU), multi-step → full up front,
+        // ambiguous → role tier. Off → role tier (unchanged). The quality
+        // pipeline still escalates lite→full if a lite entry proves too hard.
+        const routed = routeEntryTier({
+          description,
+          roleTier,
+          enabled: process.env.AISHA_COMPLEXITY_ROUTING === 'true',
+        });
+        tier = routed.tier;
+        entryReason = routed.reason;
+        // tier → alias (3B/7B/coder-7B/14B-GPU). LiteLLM falls the CPU aliases
+        // back to aisha-task if Ollama is down.
+        baseModel = aliasForTier(tier);
         logger.info(
-          `[ExecuteTask] Routing via LiteLLM: ${model} (tier=${agentProfile.metadata?.model_tier || 'full'})`,
+          `[ExecuteTask] Routing via LiteLLM: ${baseModel} (tier=${tier}, entry=${entryReason}, role=${roleTier})`,
         );
       } else {
         client = getOpenAIClient();
-        model = agentProfile.model || 'gpt-4o-mini';
-        logger.info(`[ExecuteTask] Routing direct OpenAI: ${model}`);
+        baseModel = agentProfile.model || 'gpt-4o-mini';
+        logger.info(`[ExecuteTask] Routing direct OpenAI: ${baseModel}`);
       }
 
       logger.info(
         `[ExecuteTask] Calling LLM with ${allowedTools.length} tools for agent ${assignee}`,
       );
 
-      while (iterations < MAX_ITERATIONS) {
-        iterations++;
-        logger.debug(`[ExecuteTask] LLM iteration ${iterations}`);
+      // The agentic loop, extracted so the quality pipeline can ESCALATE a lite
+      // task by re-running it once on the full model. `model` here is the active
+      // alias for this run; telemetry/monitor read it per-run.
+      const runAgenticLoop = async (activeModel) => {
+        const model = activeModel;
+        let conversation = [...messages];
+        let iterations = 0;
+        const MAX_ITERATIONS = 5;
+        let finalResponse = null;
+        // Tools actually invoked across the agentic loop + total tokens — feeds the
+        // request monitor's "actual topic" (tools) and the topic-mismatch signal.
+        const toolsUsed = [];
+        let totalTokens = 0;
+        // Per-run idempotency: weak models re-issue an identical mutating call after it
+        // already succeeded. Guard prevents duplicate writes and lets us stop early when
+        // an iteration is nothing but already-done work.
+        const mutationGuard = new MutationGuard();
 
-        const _llmStart = Date.now();
-        let completion;
-        try {
-          completion = await client.chat.completions.create({
-            model,
-            messages: conversation,
-            tools: allowedTools,
-            tool_choice: iterations === 1 ? 'auto' : 'auto', // Let model decide
-            temperature,
-          });
-        } catch (llmErr) {
-          // Log to telemetry before re-throwing so the error is visible in the monitor
+        while (iterations < MAX_ITERATIONS) {
+          iterations++;
+          logger.debug(`[ExecuteTask] LLM iteration ${iterations}`);
+
+          const _llmStart = Date.now();
+          let completion;
+          try {
+            completion = await client.chat.completions.create({
+              model,
+              messages: conversation,
+              tools: allowedTools,
+              tool_choice: iterations === 1 ? 'auto' : 'auto', // Let model decide
+              temperature,
+            });
+          } catch (llmErr) {
+            // Log to telemetry before re-throwing so the error is visible in the monitor
+            try {
+              const _dur = Date.now() - _llmStart;
+              logLLMActivity({
+                tenantId: tenantRecord?.id || 'unknown',
+                capability: 'task_worker',
+                provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+                model,
+                nodeId: `worker:${assignee}`,
+                status: 'error',
+                durationMs: _dur,
+                error: llmErr.message,
+              });
+              appendAuditEntry({
+                model,
+                provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+                tenantId: tenantRecord?.id,
+                messages: conversation,
+                tools: allowedTools,
+                durationMs: _dur,
+                status: 'error',
+                error: llmErr.message,
+              });
+            } catch (_) {
+              /* swallow telemetry errors */
+            }
+            throw llmErr;
+          }
+
+          // ── Telemetry: log each LLM iteration from the worker ────────────────
           try {
             const _dur = Date.now() - _llmStart;
+            const _provider = process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai';
             logLLMActivity({
               tenantId: tenantRecord?.id || 'unknown',
               capability: 'task_worker',
-              provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+              provider: _provider,
               model,
               nodeId: `worker:${assignee}`,
-              status: 'error',
+              status: 'success',
               durationMs: _dur,
-              error: llmErr.message,
+              usage: completion?.usage,
+              toolsCalled: (completion?.choices?.[0]?.message?.tool_calls || []).map(
+                (tc) => tc.function?.name,
+              ),
             });
             appendAuditEntry({
               model,
-              provider: process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai',
+              provider: _provider,
               tenantId: tenantRecord?.id,
               messages: conversation,
               tools: allowedTools,
+              usage: completion?.usage,
+              respContent: completion?.choices?.[0]?.message?.content,
               durationMs: _dur,
-              status: 'error',
-              error: llmErr.message,
+              status: 'success',
             });
           } catch (_) {
-            /* swallow telemetry errors */
+            /* swallow telemetry errors — never break the worker */
           }
-          throw llmErr;
-        }
 
-        // ── Telemetry: log each LLM iteration from the worker ────────────────
-        try {
-          const _dur = Date.now() - _llmStart;
-          const _provider = process.env.LITELLM_ENABLED === 'true' ? 'litellm-virtual' : 'openai';
-          logLLMActivity({
-            tenantId: tenantRecord?.id || 'unknown',
-            capability: 'task_worker',
-            provider: _provider,
-            model,
-            nodeId: `worker:${assignee}`,
-            status: 'success',
-            durationMs: _dur,
-            usage: completion?.usage,
-            toolsCalled: (completion?.choices?.[0]?.message?.tool_calls || []).map(
-              (tc) => tc.function?.name,
-            ),
-          });
-          appendAuditEntry({
-            model,
-            provider: _provider,
-            tenantId: tenantRecord?.id,
-            messages: conversation,
-            tools: allowedTools,
-            usage: completion?.usage,
-            respContent: completion?.choices?.[0]?.message?.content,
-            durationMs: _dur,
-            status: 'success',
-          });
-        } catch (_) {
-          /* swallow telemetry errors — never break the worker */
-        }
+          logger.debug(`[ExecuteTask] LLM response:`, JSON.stringify(completion)?.slice(0, 500));
 
-        logger.debug(`[ExecuteTask] LLM response:`, JSON.stringify(completion)?.slice(0, 500));
+          const choice = completion?.choices?.[0];
+          if (!choice) {
+            logger.error(
+              `[ExecuteTask] No choice in completion. Full response:`,
+              JSON.stringify(completion)?.slice(0, 1000),
+            );
+            throw new Error('No completion choice returned from LLM');
+          }
 
-        const choice = completion?.choices?.[0];
-        if (!choice) {
-          logger.error(
-            `[ExecuteTask] No choice in completion. Full response:`,
-            JSON.stringify(completion)?.slice(0, 1000),
-          );
-          throw new Error('No completion choice returned from LLM');
-        }
+          const assistantMessage = choice.message;
+          conversation.push(assistantMessage);
+          totalTokens += completion?.usage?.total_tokens || 0;
 
-        const assistantMessage = choice.message;
-        conversation.push(assistantMessage);
-        totalTokens += completion?.usage?.total_tokens || 0;
+          // Check for tool calls
+          const toolCalls = assistantMessage.tool_calls || [];
 
-        // Check for tool calls
-        const toolCalls = assistantMessage.tool_calls || [];
+          // Record the tools this turn invoked (for the request monitor's topic signal).
+          for (const tc of toolCalls) {
+            if (tc.function?.name) toolsUsed.push(tc.function.name);
+          }
 
-        // Record the tools this turn invoked (for the request monitor's topic signal).
-        for (const tc of toolCalls) {
-          if (tc.function?.name) toolsUsed.push(tc.function.name);
-        }
+          if (toolCalls.length === 0) {
+            // No more tools to call - we're done
+            finalResponse = assistantMessage.content;
+            break;
+          }
 
-        if (toolCalls.length === 0) {
-          // No more tools to call - we're done
-          finalResponse = assistantMessage.content;
-          break;
-        }
+          // Execute tool calls
+          logger.info(`[ExecuteTask] Executing ${toolCalls.length} tool calls`);
 
-        // Execute tool calls
-        logger.info(`[ExecuteTask] Executing ${toolCalls.length} tool calls`);
+          // Per-iteration idempotency tally: if every mutating call this turn is a
+          // duplicate of already-completed work, the model is stuck repeating itself.
+          let iterationMutations = 0;
+          let iterationDuplicates = 0;
 
-        for (const toolCall of toolCalls) {
-          const toolName = toolCall.function?.name;
-          const toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function?.name;
+            let toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
 
-          logger.info(`[ExecuteTask] Tool: ${toolName}`, toolArgs);
-
-          // Emit tool call started
-          emitToolCallStarted({
-            run_id,
-            trace_id: run_id,
-            span_id: randomUUID(),
-            tenant_id: tenantRecord.id,
-            agent_id: assignee,
-            tool_name: toolName,
-            input_summary: JSON.stringify(toolArgs).slice(0, 200),
-          });
-
-          let toolResult;
-          try {
-            // SPECIAL HANDLING: delegate_task (agent-to-agent handoff)
-            if (toolName === 'delegate_task') {
-              const {
-                to_agent,
-                task_description,
-                handoff_type = 'delegate',
-                context = {},
-              } = toolArgs;
-
-              if (!to_agent || !task_description) {
-                throw new Error('delegate_task requires to_agent and task_description');
+            // Single-entity safety net: this task was launched from one specific entity
+            // (entity_type/entity_id from /from-intent). Weak lite-tier models often emit
+            // a placeholder like "<account_id>" instead of the real UUID, which the API
+            // rejects. Bind the authoritative originating id when the model's value is
+            // missing/invalid (a valid model-supplied UUID is preserved). Scoped to the
+            // worker on purpose — never applied to multi-entity AiSHA chat.
+            if (entity_type && entity_id) {
+              const { args: boundArgs, bound } = bindOriginatingEntity(
+                toolName,
+                toolArgs,
+                entity_type,
+                entity_id,
+              );
+              if (bound) {
+                logger.info(
+                  `[ExecuteTask] Bound originating entity for ${toolName}: entity_id ` +
+                    `${JSON.stringify(toolArgs.entity_id)} → ${entity_id} (${entity_type})`,
+                );
+                toolArgs = boundArgs;
               }
+            }
 
-              // Create new task in ops-dispatch queue for target agent
-              const delegatedTaskId = `task:${randomUUID()}`;
-              const delegatedRunId = randomUUID(); // New run for delegated task
-              const targetAgentId = `${to_agent}:${tenantRecord.tenant_id || 'dev'}`;
-
-              // Determine whether this is a peer subtask (working agent delegating)
-              // or an ops handoff (ops_manager orchestrating).
-              const fromRole = assignee.split(':')[0];
-              const isOpsHandoff = fromRole === 'ops_manager';
-
-              if (isOpsHandoff) {
-                // Standard Ops → Agent handoff
-                emitHandoff({
-                  run_id,
-                  trace_id: run_id,
-                  span_id: randomUUID(),
-                  tenant_id: tenantRecord.id,
-                  from_agent_id: assignee,
-                  to_agent_id: targetAgentId,
-                  task_id: delegatedTaskId,
-                  handoff_type,
-                  payload_ref: null,
-                  summary: task_description.slice(0, 100),
-                });
-              } else {
-                // Peer-to-peer subtask: working agent spawns parallel sub-work
-                // Emit subtask_assigned — viz draws direct arrow between agents
-                emitSubtaskAssigned({
-                  run_id,
-                  trace_id: run_id,
-                  span_id: randomUUID(),
-                  tenant_id: tenantRecord.id,
-                  agent_id: assignee,
-                  from_agent_id: assignee,
-                  to_agent_id: targetAgentId,
-                  task_id: delegatedTaskId,
-                  reason: handoff_type.toUpperCase(),
-                  input_summary: task_description.slice(0, 200),
-                });
-              }
-
-              // Emit task_enqueued so the sub-task appears in the inbox
-              emitTaskEnqueued({
-                run_id: delegatedRunId,
+            // Per-run idempotency: if this exact mutating call already succeeded this
+            // run, do NOT execute it again (prevents duplicate records, e.g. three
+            // identical notes) and feed the model a clear "already done" signal so it
+            // stops. Reads are never deduped. Scoped to the worker; chat is untouched.
+            if (isMutatingTool(toolName)) iterationMutations++;
+            const dupCheck = mutationGuard.check(toolName, toolArgs);
+            if (dupCheck.duplicate) {
+              iterationDuplicates++;
+              logger.info(
+                `[ExecuteTask] Skipping duplicate ${toolName} — already completed this run`,
+              );
+              const dupResult = {
+                tag: 'Ok',
+                value: {
+                  duplicate_skipped: true,
+                  message:
+                    `This ${toolName} was already completed earlier in this task. Do NOT ` +
+                    `call it again. If the task is complete, reply with a final summary ` +
+                    `and no further tool calls.`,
+                },
+              };
+              emitToolCallFinished({
+                run_id,
                 trace_id: run_id,
                 span_id: randomUUID(),
                 tenant_id: tenantRecord.id,
-                task_id: delegatedTaskId,
-                input_summary: task_description.slice(0, 200),
-                agent_name: targetAgentId,
+                agent_id: assignee,
+                tool_name: toolName,
+                status: 'duplicate',
+                output_summary: 'duplicate skipped (already completed this run)',
               });
-
-              await taskQueue.add('ops-dispatch', {
-                task_id: delegatedTaskId,
-                run_id: delegatedRunId,
-                description: task_description,
-                context: {
-                  ...context,
-                  delegated_from: assignee,
-                  handoff_type,
-                  parent_task_id: task_id,
-                  parent_run_id: run_id,
-                },
-                tenant_id: tenantRecord.id,
-                force_assignee: targetAgentId,
+              conversation.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(dupResult),
               });
-
-              toolResult = {
-                tag: 'Ok',
-                value: {
-                  task_id: delegatedTaskId,
-                  delegated_to: to_agent,
-                  status: 'delegated',
-                  message: `Task successfully delegated to ${to_agent}`,
-                },
-              };
-
-              logger.info(`[ExecuteTask] Delegated task to ${to_agent}:`, delegatedTaskId);
-            } else {
-              // Use TOOL_ACCESS_TOKEN with agent info appended (same pattern as sidepanel)
-              const dynamicAccessToken = {
-                ...TOOL_ACCESS_TOKEN,
-                user_role: 'agent',
-                user_email: `agent:${assignee}`,
-                user_name: agentProfile.display_name,
-              };
-
-              // Execute the Braid tool with system token
-              toolResult = await executeBraidTool(
-                toolName,
-                toolArgs,
-                tenantRecord,
-                `agent:${assignee}`, // userId - agent as executor
-                dynamicAccessToken,
-              );
+              continue;
             }
 
-            // Check if tool execution was successful
-            const toolSucceeded = toolResult?.tag !== 'Err';
+            logger.info(`[ExecuteTask] Tool: ${toolName}`, toolArgs);
 
-            // Emit tool call finished
-            emitToolCallFinished({
+            // Emit tool call started
+            emitToolCallStarted({
               run_id,
               trace_id: run_id,
               span_id: randomUUID(),
               tenant_id: tenantRecord.id,
               agent_id: assignee,
               tool_name: toolName,
-              status: toolSucceeded ? 'success' : 'error',
-              output_summary: JSON.stringify(toolResult).slice(0, 200),
+              input_summary: JSON.stringify(toolArgs).slice(0, 200),
             });
 
-            logger.info(
-              `[ExecuteTask] Tool ${toolName} ${toolSucceeded ? 'succeeded' : 'failed'}:`,
-              toolSucceeded ? toolResult : toolResult.error,
-            );
-          } catch (toolError) {
-            logger.error(`[ExecuteTask] Tool ${toolName} failed:`, toolError);
-            toolResult = { error: toolError.message };
+            let toolResult;
+            try {
+              // SPECIAL HANDLING: delegate_task (agent-to-agent handoff)
+              if (toolName === 'delegate_task') {
+                const {
+                  to_agent,
+                  task_description,
+                  handoff_type = 'delegate',
+                  context = {},
+                } = toolArgs;
 
-            // Emit tool call finished (error)
-            emitToolCallFinished({
-              run_id,
-              trace_id: run_id,
-              span_id: randomUUID(),
-              tenant_id: tenantRecord.id,
-              agent_id: assignee,
-              tool_name: toolName,
-              status: 'error',
-              output_summary: toolError.message.slice(0, 200),
+                if (!to_agent || !task_description) {
+                  throw new Error('delegate_task requires to_agent and task_description');
+                }
+
+                // Create new task in ops-dispatch queue for target agent
+                const delegatedTaskId = `task:${randomUUID()}`;
+                const delegatedRunId = randomUUID(); // New run for delegated task
+                const targetAgentId = `${to_agent}:${tenantRecord.tenant_id || 'dev'}`;
+
+                // Determine whether this is a peer subtask (working agent delegating)
+                // or an ops handoff (ops_manager orchestrating).
+                const fromRole = assignee.split(':')[0];
+                const isOpsHandoff = fromRole === 'ops_manager';
+
+                if (isOpsHandoff) {
+                  // Standard Ops → Agent handoff
+                  emitHandoff({
+                    run_id,
+                    trace_id: run_id,
+                    span_id: randomUUID(),
+                    tenant_id: tenantRecord.id,
+                    from_agent_id: assignee,
+                    to_agent_id: targetAgentId,
+                    task_id: delegatedTaskId,
+                    handoff_type,
+                    payload_ref: null,
+                    summary: task_description.slice(0, 100),
+                  });
+                } else {
+                  // Peer-to-peer subtask: working agent spawns parallel sub-work
+                  // Emit subtask_assigned — viz draws direct arrow between agents
+                  emitSubtaskAssigned({
+                    run_id,
+                    trace_id: run_id,
+                    span_id: randomUUID(),
+                    tenant_id: tenantRecord.id,
+                    agent_id: assignee,
+                    from_agent_id: assignee,
+                    to_agent_id: targetAgentId,
+                    task_id: delegatedTaskId,
+                    reason: handoff_type.toUpperCase(),
+                    input_summary: task_description.slice(0, 200),
+                  });
+                }
+
+                // Emit task_enqueued so the sub-task appears in the inbox
+                emitTaskEnqueued({
+                  run_id: delegatedRunId,
+                  trace_id: run_id,
+                  span_id: randomUUID(),
+                  tenant_id: tenantRecord.id,
+                  task_id: delegatedTaskId,
+                  input_summary: task_description.slice(0, 200),
+                  agent_name: targetAgentId,
+                });
+
+                await taskQueue.add('ops-dispatch', {
+                  task_id: delegatedTaskId,
+                  run_id: delegatedRunId,
+                  description: task_description,
+                  context: {
+                    ...context,
+                    delegated_from: assignee,
+                    handoff_type,
+                    parent_task_id: task_id,
+                    parent_run_id: run_id,
+                  },
+                  tenant_id: tenantRecord.id,
+                  force_assignee: targetAgentId,
+                });
+
+                toolResult = {
+                  tag: 'Ok',
+                  value: {
+                    task_id: delegatedTaskId,
+                    delegated_to: to_agent,
+                    status: 'delegated',
+                    message: `Task successfully delegated to ${to_agent}`,
+                  },
+                };
+
+                logger.info(`[ExecuteTask] Delegated task to ${to_agent}:`, delegatedTaskId);
+              } else {
+                // Use TOOL_ACCESS_TOKEN with agent info appended (same pattern as sidepanel)
+                const dynamicAccessToken = {
+                  ...TOOL_ACCESS_TOKEN,
+                  user_role: 'agent',
+                  user_email: `agent:${assignee}`,
+                  user_name: agentProfile.display_name,
+                };
+
+                // Execute the Braid tool with system token
+                toolResult = await executeBraidTool(
+                  toolName,
+                  toolArgs,
+                  tenantRecord,
+                  `agent:${assignee}`, // userId - agent as executor
+                  dynamicAccessToken,
+                );
+              }
+
+              // Check if tool execution was successful
+              const toolSucceeded = toolResult?.tag !== 'Err';
+
+              // Remember successful mutations so an identical later call is skipped.
+              if (toolSucceeded) mutationGuard.record(toolName, toolArgs, toolResult);
+
+              // Emit tool call finished
+              emitToolCallFinished({
+                run_id,
+                trace_id: run_id,
+                span_id: randomUUID(),
+                tenant_id: tenantRecord.id,
+                agent_id: assignee,
+                tool_name: toolName,
+                status: toolSucceeded ? 'success' : 'error',
+                output_summary: JSON.stringify(toolResult).slice(0, 200),
+              });
+
+              logger.info(
+                `[ExecuteTask] Tool ${toolName} ${toolSucceeded ? 'succeeded' : 'failed'}:`,
+                toolSucceeded ? toolResult : toolResult.error,
+              );
+            } catch (toolError) {
+              logger.error(`[ExecuteTask] Tool ${toolName} failed:`, toolError);
+              toolResult = { error: toolError.message };
+
+              // Emit tool call finished (error)
+              emitToolCallFinished({
+                run_id,
+                trace_id: run_id,
+                span_id: randomUUID(),
+                tenant_id: tenantRecord.id,
+                agent_id: assignee,
+                tool_name: toolName,
+                status: 'error',
+                output_summary: toolError.message.slice(0, 200),
+              });
+            }
+
+            // Add tool result to conversation
+            conversation.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(toolResult),
             });
           }
 
-          // Add tool result to conversation
-          conversation.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(toolResult),
-          });
+          // If every mutating call this iteration was a duplicate of already-completed
+          // work, the model is looping on finished work — stop now instead of burning
+          // iterations (and avoid the ~40s-per-turn stall the user observed).
+          if (iterationMutations > 0 && iterationDuplicates === iterationMutations) {
+            logger.info(
+              `[ExecuteTask] All ${iterationMutations} mutating call(s) this turn were ` +
+                `duplicates — ending loop early; work already completed`,
+            );
+            finalResponse = finalResponse || assistantMessage.content || 'Task completed.';
+            break;
+          }
+
+          // Continue loop to let LLM process tool results
         }
 
-        // Continue loop to let LLM process tool results
-      }
+        if (!finalResponse) {
+          finalResponse = `Task executed with ${iterations} iterations. Check tool execution logs for details.`;
+        }
+        return { finalResponse, toolsUsed, totalTokens, iterations };
+      };
 
-      if (!finalResponse) {
-        finalResponse = `Task executed with ${iterations} iterations. Check tool execution logs for details.`;
-      }
+      // Initial run on the role's entry-tier model.
+      let { finalResponse, toolsUsed, totalTokens, iterations } = await runAgenticLoop(baseModel);
+      let model = baseModel;
 
-      // ── Lite-tier quality pipeline — SHADOW MODE (observe only) ──────────────
-      // Phase 1 of docs/plans/2026-06-11-lite-tier-supervisor-refine.md. For
-      // lite-tier agents only, run task typing + deterministic gates and LOG the
-      // result. We never mutate finalResponse here; rule-fix/refine/escalate are
-      // later phases. Off unless LITE_QUALITY_PIPELINE_ENABLED=true. Fully
-      // wrapped so a gating error can never break task execution.
-      let gatePass = null; // null = pipeline didn't run (full tier or flag off)
+      // ── Lite-tier quality pipeline + graduated ladder (Phases 1–4) ────────────
+      // docs/plans/2026-06-11-lite-tier-supervisor-refine.md. For CPU-tier tasks:
+      // gate → cheap rule-fix → surgical refine on the SAME CPU model → on a
+      // capability gap, step UP the ladder (3B→7B→GPU; coder→GPU) and re-run.
+      // LITE_QUALITY_MODE=shadow observes only; =active mutates + escalates. Off
+      // unless LITE_QUALITY_PIPELINE_ENABLED=true. Fully wrapped so a pipeline
+      // error can never break task execution.
+      let gatePass = null; // null = pipeline didn't run (GPU tier or flag off)
       let gateDefects = [];
-      if (
-        process.env.LITE_QUALITY_PIPELINE_ENABLED === 'true' &&
-        agentProfile?.metadata?.model_tier === 'lite'
-      ) {
+      let pipelineMeta = null;
+      if (process.env.LITE_QUALITY_PIPELINE_ENABLED === 'true' && CPU_TIERS.has(tier)) {
         try {
           const { type: taskType, isMultiStep } = detectTaskType(description);
-          const gateResult = runGates(finalResponse, {
-            taskType,
-            taskDescription: description,
-            agentProfile,
-            limits: {},
-          });
-          gatePass = gateResult.pass;
-          gateDefects = gateResult.defects;
-          const defectSummary =
-            gateResult.defects.map((d) => `${d.gate}/${d.severity}`).join(',') || 'none';
+          const mode = process.env.LITE_QUALITY_MODE === 'active' ? 'active' : 'shadow';
+          const qConfig = {
+            mode,
+            refineMaxAttempts: parseInt(process.env.LITE_REFINE_MAX_ATTEMPTS || '1', 10),
+            escalateEnabled: process.env.LITE_ESCALATE_ENABLED !== 'false',
+            refineTemperature: parseFloat(process.env.LITE_REFINE_TEMPERATURE || '0.15'),
+            limits: { maxChars: agentProfile?.metadata?.limits?.max_chars },
+          };
+
+          // Climb the ladder: run the pipeline on the current CPU rung; if it
+          // signals a capability gap, step to the next rung and re-run the task
+          // there. Bounded (lite→mid→full is at most 2 hops); we stop at the GPU
+          // ceiling, on a pass, or in shadow mode.
+          let guard = 0;
+          while (CPU_TIERS.has(tier) && guard++ < CPU_TIERS.size + 1) {
+            const result = await runQualityPipeline({
+              output: finalResponse,
+              taskType,
+              isMultiStep,
+              tier,
+              agentProfile,
+              tenant: tenantRecord,
+              client,
+              model, // refine/critic run on the current rung's model
+              taskDescription: description,
+              agent: assignee,
+              config: qConfig,
+            });
+            pipelineMeta = result.meta;
+            gatePass = result.meta.finalGatePass;
+            gateDefects = result.meta.defectsFound || [];
+
+            if (mode !== 'active') break; // shadow: observe only, never escalate
+            finalResponse = result.output; // apply rule-fixed / refined output
+
+            if (!(result.meta.escalated && qConfig.escalateEnabled)) break;
+            const nextTier = escalationTarget(tier);
+            logger.info(
+              `[LiteQuality] escalating ${assignee} ${tier}→${nextTier} (${result.meta.escalateReason})`,
+            );
+            tier = nextTier;
+            model = aliasForTier(tier);
+            const esc = await runAgenticLoop(model);
+            finalResponse = esc.finalResponse;
+            toolsUsed = esc.toolsUsed;
+            totalTokens += esc.totalTokens;
+            iterations += esc.iterations;
+            // Stepped onto the GPU ceiling → ship that output (no pipeline on full).
+          }
+
           logger.info(
-            `[LiteQuality:shadow] agent=${assignee} type=${taskType} multiStep=${isMultiStep} ` +
-              `model=${model} pass=${gateResult.pass} defects=${defectSummary}`,
+            `[LiteQuality:${mode}] agent=${assignee} type=${taskType} multiStep=${isMultiStep} ` +
+              `finalTier=${tier} model=${model} pass=${gatePass} ` +
+              `ruleFixes=${(pipelineMeta?.ruleFixes || []).join(',') || 'none'} ` +
+              `refine=${pipelineMeta?.refineCount} escalated=${pipelineMeta?.escalated}` +
+              `${pipelineMeta?.escalateReason ? '(' + pipelineMeta.escalateReason + ')' : ''} ` +
+              `recommendFull=${pipelineMeta?.recommendFull}`,
           );
         } catch (qErr) {
-          logger.warn(`[LiteQuality:shadow] gate error (non-fatal): ${qErr.message}`);
+          logger.warn(`[LiteQuality] pipeline error (non-fatal): ${qErr.message}`);
         }
       }
 
@@ -954,11 +1116,13 @@ Provide a clear summary of what you did.`;
           agent: assignee,
           role: agentRole,
           model,
-          tier: agentProfile?.metadata?.model_tier || 'full',
           requested_topic: topicLabel(requestedIntents),
           requested_intents: requestedIntents,
           actual_topic: topicLabel(actualFacets),
           actual_facets: actualFacets,
+          tier,
+          role_tier: roleTier,
+          entry_reason: entryReason,
           tools_used: toolsUsed,
           is_multi_step: detectTaskType(description).isMultiStep,
           gate_pass: gatePass,
@@ -967,6 +1131,13 @@ Provide a clear summary of what you did.`;
           mismatch_reasons: reasons,
           iterations,
           total_tokens: totalTokens,
+          // Quality-pipeline outcome (null/empty/false when the pipeline didn't run).
+          quality_mode: pipelineMeta?.mode || null,
+          rule_fixes: pipelineMeta?.ruleFixes || [],
+          refine_count: pipelineMeta?.refineCount ?? null,
+          escalated: pipelineMeta?.escalated ?? false,
+          escalate_reason: pipelineMeta?.escalateReason || null,
+          recommend_full: pipelineMeta?.recommendFull ?? false,
         };
       } catch (mErr) {
         logger.warn(`[RequestMonitor] meta build error (non-fatal): ${mErr.message}`);
