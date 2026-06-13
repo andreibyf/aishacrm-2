@@ -22,6 +22,8 @@ import {
   TOOL_ACCESS_TOKEN,
 } from '../lib/braidIntegration-v2.js';
 import { getAgentProfile } from '../lib/agents/agentRegistry.js';
+import { bindOriginatingEntity } from '../lib/agents/entityBinding.js';
+import { MutationGuard, isMutatingTool } from '../lib/agents/toolCallDedup.js';
 import { getSupabaseClient } from '../lib/supabase-db.js';
 import { resolveCanonicalTenant } from '../lib/tenantCanonicalResolver.js';
 import { logLLMActivity } from '../lib/aiEngine/activityLogger.js';
@@ -640,6 +642,10 @@ Provide a clear summary of what you did.`;
         // request monitor's "actual topic" (tools) and the topic-mismatch signal.
         const toolsUsed = [];
         let totalTokens = 0;
+        // Per-run idempotency: weak models re-issue an identical mutating call after it
+        // already succeeded. Guard prevents duplicate writes and lets us stop early when
+        // an iteration is nothing but already-done work.
+        const mutationGuard = new MutationGuard();
 
         while (iterations < MAX_ITERATIONS) {
           iterations++;
@@ -749,9 +755,75 @@ Provide a clear summary of what you did.`;
           // Execute tool calls
           logger.info(`[ExecuteTask] Executing ${toolCalls.length} tool calls`);
 
+          // Per-iteration idempotency tally: if every mutating call this turn is a
+          // duplicate of already-completed work, the model is stuck repeating itself.
+          let iterationMutations = 0;
+          let iterationDuplicates = 0;
+
           for (const toolCall of toolCalls) {
             const toolName = toolCall.function?.name;
-            const toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
+            let toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
+
+            // Single-entity safety net: this task was launched from one specific entity
+            // (entity_type/entity_id from /from-intent). Weak lite-tier models often emit
+            // a placeholder like "<account_id>" instead of the real UUID, which the API
+            // rejects. Bind the authoritative originating id when the model's value is
+            // missing/invalid (a valid model-supplied UUID is preserved). Scoped to the
+            // worker on purpose — never applied to multi-entity AiSHA chat.
+            if (entity_type && entity_id) {
+              const { args: boundArgs, bound } = bindOriginatingEntity(
+                toolName,
+                toolArgs,
+                entity_type,
+                entity_id,
+              );
+              if (bound) {
+                logger.info(
+                  `[ExecuteTask] Bound originating entity for ${toolName}: entity_id ` +
+                    `${JSON.stringify(toolArgs.entity_id)} → ${entity_id} (${entity_type})`,
+                );
+                toolArgs = boundArgs;
+              }
+            }
+
+            // Per-run idempotency: if this exact mutating call already succeeded this
+            // run, do NOT execute it again (prevents duplicate records, e.g. three
+            // identical notes) and feed the model a clear "already done" signal so it
+            // stops. Reads are never deduped. Scoped to the worker; chat is untouched.
+            if (isMutatingTool(toolName)) iterationMutations++;
+            const dupCheck = mutationGuard.check(toolName, toolArgs);
+            if (dupCheck.duplicate) {
+              iterationDuplicates++;
+              logger.info(
+                `[ExecuteTask] Skipping duplicate ${toolName} — already completed this run`,
+              );
+              const dupResult = {
+                tag: 'Ok',
+                value: {
+                  duplicate_skipped: true,
+                  message:
+                    `This ${toolName} was already completed earlier in this task. Do NOT ` +
+                    `call it again. If the task is complete, reply with a final summary ` +
+                    `and no further tool calls.`,
+                },
+              };
+              emitToolCallFinished({
+                run_id,
+                trace_id: run_id,
+                span_id: randomUUID(),
+                tenant_id: tenantRecord.id,
+                agent_id: assignee,
+                tool_name: toolName,
+                status: 'duplicate',
+                output_summary: 'duplicate skipped (already completed this run)',
+              });
+              conversation.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(dupResult),
+              });
+              continue;
+            }
 
             logger.info(`[ExecuteTask] Tool: ${toolName}`, toolArgs);
 
@@ -881,6 +953,9 @@ Provide a clear summary of what you did.`;
               // Check if tool execution was successful
               const toolSucceeded = toolResult?.tag !== 'Err';
 
+              // Remember successful mutations so an identical later call is skipped.
+              if (toolSucceeded) mutationGuard.record(toolName, toolArgs, toolResult);
+
               // Emit tool call finished
               emitToolCallFinished({
                 run_id,
@@ -920,6 +995,18 @@ Provide a clear summary of what you did.`;
               tool_call_id: toolCall.id,
               content: JSON.stringify(toolResult),
             });
+          }
+
+          // If every mutating call this iteration was a duplicate of already-completed
+          // work, the model is looping on finished work — stop now instead of burning
+          // iterations (and avoid the ~40s-per-turn stall the user observed).
+          if (iterationMutations > 0 && iterationDuplicates === iterationMutations) {
+            logger.info(
+              `[ExecuteTask] All ${iterationMutations} mutating call(s) this turn were ` +
+                `duplicates — ending loop early; work already completed`,
+            );
+            finalResponse = finalResponse || assistantMessage.content || 'Task completed.';
+            break;
           }
 
           // Continue loop to let LLM process tool results
