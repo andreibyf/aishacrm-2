@@ -183,7 +183,9 @@ export default function LLMActivityMonitor() {
       const res = await fetch(`${BACKEND_URL}/api/system/llm-stats/by-model`);
       if (!res.ok) throw new Error('Failed to fetch by-model stats');
       const data = await res.json();
-      setByModelData(data.data || null);
+      // The endpoint wraps the map as { byModel, generatedAt, bufferEntries };
+      // the table iterates model→stats, so unwrap to the byModel map.
+      setByModelData(data.data?.byModel || null);
     } catch (err) {
       console.error('[LLMActivityMonitor] By-model error:', err);
     }
@@ -720,29 +722,29 @@ export default function LLMActivityMonitor() {
                             </span>
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.avg_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.avg_ms)}`}
                           >
-                            {formatDuration(m.latency.avg_ms)}
+                            {formatDuration(m.latency?.avg_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p50_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p50_ms)}`}
                           >
-                            {formatDuration(m.latency.p50_ms)}
+                            {formatDuration(m.latency?.p50_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p95_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p95_ms)}`}
                           >
-                            {formatDuration(m.latency.p95_ms)}
+                            {formatDuration(m.latency?.p95_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.p99_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.p99_ms)}`}
                           >
-                            {formatDuration(m.latency.p99_ms)}
+                            {formatDuration(m.latency?.p99_ms)}
                           </td>
                           <td
-                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency.max_ms)}`}
+                            className={`px-3 py-2 text-right font-mono ${latencyClass(m.latency?.max_ms)}`}
                           >
-                            {formatDuration(m.latency.max_ms)}
+                            {formatDuration(m.latency?.max_ms)}
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-blue-400">
                             {m.tokens.prompt?.toLocaleString() ?? '-'}
