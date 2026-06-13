@@ -33,6 +33,12 @@ LiteLLM (container) ──docker net──▶ ai-gateway (Tailscale, kernel mode
 Private end-to-end. No public DNS, no open Ollama. If the gateway/box is down,
 LiteLLM's fallback chains still route to cloud (no hard dependency).
 
+> **Maintenance note:** keep `docker-compose.yml` **comment-light**. Coolify's
+> "Docker Compose" build pack *shells* the file when reading it from the repo, so
+> backticks or `$()` in YAML comments break the repo-read with
+> `bash: syntax error near unexpected token`. All the design detail lives in this
+> README instead — don't move it back into the compose as backtick'd comments.
+
 ## Auth: the Tailscale OAuth client secret (no expiry trap)
 
 `TS_AUTHKEY` = the **OAuth client secret** (`tskey-client-…`, your
